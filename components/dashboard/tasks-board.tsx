@@ -6,6 +6,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { Textarea } from "@/components/ui/textarea";
+import { TaskGithubControls } from "@/components/tasks/task-github-controls";
+import { effectiveGithubDefaultRepos } from "@/lib/github-workspace-helpers";
 import { api } from "@/convex/_generated/api";
 import type { Doc, Id } from "@/convex/_generated/dataModel";
 
@@ -13,6 +15,7 @@ export type DashboardTaskRow = Doc<"assessmentTasks"> & {
   assessmentTitle: string;
   workspaceName: string;
   assigneeName: string | null;
+  githubIssueUrl: string | null;
 };
 import {
   closestCorners,
@@ -268,6 +271,15 @@ export function TasksBoard() {
   const [editDescription, setEditDescription] = useState("");
   const [editPriority, setEditPriority] = useState(3);
   const [editDue, setEditDue] = useState("");
+
+  const workspaceForEdit = useQuery(
+    api.workspaces.get,
+    editTask ? { workspaceId: editTask.workspaceId } : "skip",
+  );
+  const assessmentAccessForEdit = useQuery(
+    api.assessments.getMyAccess,
+    editTask ? { assessmentId: editTask.assessmentId } : "skip",
+  );
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
@@ -607,6 +619,14 @@ export function TasksBoard() {
                   onChange={(e) => setEditDue(e.target.value)}
                 />
               </div>
+              <TaskGithubControls
+                taskId={editTask._id}
+                canEdit={assessmentAccessForEdit?.canEdit ?? false}
+                githubIssueUrl={editTask.githubIssueUrl ?? null}
+                workspaceDefaultRepos={effectiveGithubDefaultRepos(
+                  workspaceForEdit ?? null,
+                )}
+              />
               <div className="flex flex-wrap gap-2 pt-2">
                 <Button type="button" onClick={() => void saveEdit()}>
                   Lagre

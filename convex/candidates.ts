@@ -1,11 +1,163 @@
 import { v } from "convex/values";
-import { mutation, query } from "./_generated/server";
+import {
+  internalMutation,
+  internalQuery,
+  mutation,
+  query,
+} from "./_generated/server";
 import { getAuthUserId } from "@convex-dev/auth/server";
-import type { Id } from "./_generated/dataModel";
+import type { Doc, Id } from "./_generated/dataModel";
 import {
   requireUserId,
   requireWorkspaceMember,
 } from "./lib/access";
+
+export const getCandidateForGithub = internalQuery({
+  args: { candidateId: v.id("candidates") },
+  handler: async (ctx, args) => {
+    const candidate = await ctx.db.get(args.candidateId);
+    if (!candidate) {
+      return null;
+    }
+    const workspace = await ctx.db.get(candidate.workspaceId);
+    return { candidate, workspace };
+  },
+});
+
+export const assertMemberForWorkspace = internalQuery({
+  args: {
+    workspaceId: v.id("workspaces"),
+    userId: v.id("users"),
+  },
+  handler: async (ctx, args) => {
+    await requireWorkspaceMember(ctx, args.workspaceId, args.userId, "member");
+    return true;
+  },
+});
+
+/** Data til rik Markdown for GitHub-prosjekt-utkast (PVV + ROS + notater). */
+export const getCandidateGithubSyncContext = internalQuery({
+  args: { candidateId: v.id("candidates") },
+  handler: async (ctx, args) => {
+    const candidate = await ctx.db.get(args.candidateId);
+    if (!candidate) {
+      return null;
+    }
+    const workspace = await ctx.db.get(candidate.workspaceId);
+    if (!workspace) {
+      return null;
+    }
+    let orgUnitName: string | null = null;
+    if (candidate.orgUnitId) {
+      const ou = await ctx.db.get(candidate.orgUnitId);
+      orgUnitName = ou?.name ?? null;
+    }
+    const assessments = await ctx.db
+      .query("assessments")
+      .withIndex("by_workspace", (q) =>
+        q.eq("workspaceId", candidate.workspaceId),
+      )
+      .collect();
+    const linkedAssessments: Array<{
+      assessmentId: Id<"assessments">;
+      title: string;
+      pipelineStatus: string | undefined;
+      rosStatus: string | undefined;
+      rosNotes: string | undefined;
+      rosUrl: string | undefined;
+      processDescriptionShort: string | undefined;
+      notes: Array<{ body: string; createdAt: number; authorLabel: string }>;
+    }> = [];
+    for (const a of assessments) {
+      const draft = await ctx.db
+        .query("assessmentDrafts")
+        .withIndex("by_assessment", (q) => q.eq("assessmentId", a._id))
+        .first();
+      if (draft?.payload?.candidateId !== candidate.code) {
+        continue;
+      }
+      const pd = draft.payload.processDescription?.trim();
+      const noteRows = await ctx.db
+        .query("assessmentNotes")
+        .withIndex("by_assessment", (q) => q.eq("assessmentId", a._id))
+        .collect();
+      noteRows.sort((x, y) => y.createdAt - x.createdAt);
+      const notes: Array<{
+        body: string;
+        createdAt: number;
+        authorLabel: string;
+      }> = [];
+      for (const n of noteRows.slice(0, 15)) {
+        const u = await ctx.db.get(n.authorUserId);
+        notes.push({
+          body: n.body,
+          createdAt: n.createdAt,
+          authorLabel: u?.name ?? u?.email ?? "Bruker",
+        });
+      }
+      linkedAssessments.push({
+        assessmentId: a._id,
+        title: a.title,
+        pipelineStatus: a.pipelineStatus,
+        rosStatus: a.rosStatus,
+        rosNotes: a.rosNotes,
+        rosUrl: a.rosUrl,
+        processDescriptionShort:
+          pd && pd.length > 0 ? pd.slice(0, 2000) : undefined,
+        notes,
+      });
+    }
+    const rosAnalyses = await ctx.db
+      .query("rosAnalyses")
+      .withIndex("by_candidate", (q) => q.eq("candidateId", args.candidateId))
+      .collect();
+    const rosOut = rosAnalyses.map((r: Doc<"rosAnalyses">) => ({
+      _id: r._id,
+      notes: r.notes,
+      methodologyStatement: r.methodologyStatement,
+      contextSummary: r.contextSummary,
+      scopeAndCriteria: r.scopeAndCriteria,
+      updatedAt: r.updatedAt,
+    }));
+    return {
+      candidate,
+      workspaceName: workspace.name,
+      workspaceId: candidate.workspaceId,
+      orgUnitName,
+      linkedAssessments,
+      rosAnalyses: rosOut,
+    };
+  },
+});
+
+export const setGithubProjectItem = internalMutation({
+  args: {
+    candidateId: v.id("candidates"),
+    itemNodeId: v.union(v.string(), v.null()),
+    statusOptionId: v.optional(v.union(v.string(), v.null())),
+  },
+  handler: async (ctx, args) => {
+    const now = Date.now();
+    if (args.itemNodeId === null) {
+      await ctx.db.patch(args.candidateId, {
+        githubProjectItemNodeId: undefined,
+        githubProjectStatusOptionId: undefined,
+        updatedAt: now,
+      });
+      return;
+    }
+    await ctx.db.patch(args.candidateId, {
+      githubProjectItemNodeId: args.itemNodeId,
+      updatedAt: now,
+      ...(args.statusOptionId !== undefined
+        ? {
+            githubProjectStatusOptionId:
+              args.statusOptionId === null ? undefined : args.statusOptionId,
+          }
+        : {}),
+    });
+  },
+});
 
 export const listByWorkspace = query({
   args: { workspaceId: v.id("workspaces") },

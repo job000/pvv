@@ -154,7 +154,28 @@ export default defineSchema({
     organizationNumber: v.optional(v.string()),
     /** Valgfri HER-id eller annen institusjons-ID for integrasjoner */
     institutionIdentifier: v.optional(v.string()),
+    /** @deprecated Bruk githubDefaultRepoFullNames. Beholdes for eldre data. */
+    githubDefaultRepoFullName: v.optional(v.string()),
+    /** Standard GitHub-repoer for nye issues (én eller flere; første brukes som standard ved opprettelse) */
+    githubDefaultRepoFullNames: v.optional(v.array(v.string())),
+    /** GitHub Project (ny) — GraphQL node-ID (PVT_kw…) for automatisk å legge til opprettede issues */
+    githubProjectNodeId: v.optional(v.string()),
+    /** Når true: nye prosesser i registeret kan automatisk legges inn som utkast i prosjektet */
+    githubAutoRegisterProcessOnCreate: v.optional(v.boolean()),
+    /** Single-select option-id for Status (må matche prosjektets felt) */
+    githubAutoRegisterProcessStatusOptionId: v.optional(v.string()),
   }).index("by_owner", ["ownerUserId"]),
+
+  /**
+   * GitHub PAT per arbeidsområde (fine-grained eller klassisk).
+   * Leses kun av interne actions — eksponeres aldri i queries til klient.
+   */
+  workspaceGithubSecrets: defineTable({
+    workspaceId: v.id("workspaces"),
+    token: v.string(),
+    updatedAt: v.number(),
+    updatedByUserId: v.id("users"),
+  }).index("by_workspace", ["workspaceId"]),
 
   /** Brukerpreferanser (f.eks. standard arbeidsområde etter innlogging) */
   userSettings: defineTable({
@@ -266,6 +287,10 @@ export default defineSchema({
     linkHintBusinessOwner: v.optional(v.string()),
     linkHintSystems: v.optional(v.string()),
     linkHintComplianceNotes: v.optional(v.string()),
+    /** GitHub Projects v2: kort/utkast koblet til arbeidsområdets prosjekt */
+    githubProjectItemNodeId: v.optional(v.string()),
+    /** Siste valgte status (single select option id) i prosjektet */
+    githubProjectStatusOptionId: v.optional(v.string()),
     createdByUserId: v.id("users"),
     createdAt: v.number(),
     updatedAt: v.number(),
@@ -388,10 +413,16 @@ export default defineSchema({
     /** Global rekkefølge på tvers (lavere = høyere i listen) */
     dashboardRank: v.optional(v.number()),
     createdAt: v.number(),
+    /** Knytting til GitHub-issue (`eier/repo` + nummer, repo normalisert til små bokstaver) */
+    githubRepoFullName: v.optional(v.string()),
+    githubIssueNumber: v.optional(v.number()),
+    githubIssueNodeId: v.optional(v.string()),
+    githubLastSyncedAt: v.optional(v.number()),
   })
     .index("by_assessment", ["assessmentId"])
     .index("by_workspace", ["workspaceId"])
-    .index("by_assignee", ["assigneeUserId"]),
+    .index("by_assignee", ["assigneeUserId"])
+    .index("by_github_issue", ["githubRepoFullName", "githubIssueNumber"]),
 
   /** Korte team-notater på vurderingen (samarbeid / hvem sa hva) */
   assessmentNotes: defineTable({

@@ -1,5 +1,6 @@
 "use client";
 
+import { TaskGithubControls } from "@/components/tasks/task-github-controls";
 import { UserAvatar } from "@/components/user-avatar";
 import { AssessmentVersionsBlock } from "@/components/assessment-wizard/assessment-versions-block";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -28,6 +29,7 @@ import {
   ASSESSMENT_COLLAB_ROLE_DESC_NB,
   ASSESSMENT_COLLAB_ROLE_LABEL_NB,
 } from "@/lib/role-labels-nb";
+import { effectiveGithubDefaultRepos } from "@/lib/github-workspace-helpers";
 import { formatUserFacingError } from "@/lib/user-facing-error";
 import { cn } from "@/lib/utils";
 import { useMutation, useQuery } from "convex/react";
@@ -74,6 +76,7 @@ export function AssessmentCollaborationPanel({
   const workspaceMembers = useQuery(api.workspaces.listMembers, {
     workspaceId,
   });
+  const workspace = useQuery(api.workspaces.get, { workspaceId });
   const assessmentTasks = useQuery(api.assessmentTasks.listByAssessment, {
     assessmentId,
   });
@@ -447,10 +450,11 @@ export function AssessmentCollaborationPanel({
                   <li
                     key={t._id}
                     className={cn(
-                      "flex flex-col gap-3 rounded-2xl border bg-card p-4 shadow-xs sm:flex-row sm:items-start sm:justify-between",
+                      "flex flex-col gap-3 rounded-2xl border bg-card p-4 shadow-xs",
                       t.status === "done" && "opacity-80",
                     )}
                   >
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                     <div className="flex min-w-0 flex-1 gap-3">
                       <UserAvatar
                         name={t.assigneeName ?? "Ikke tildelt"}
@@ -537,6 +541,16 @@ export function AssessmentCollaborationPanel({
                     >
                       {t.status === "done" ? "Gjenåpne" : "Marker fullført"}
                     </Button>
+                    </div>
+                    <TaskGithubControls
+                      taskId={t._id}
+                      canEdit={canEdit}
+                      githubIssueUrl={t.githubIssueUrl ?? null}
+                      workspaceDefaultRepos={effectiveGithubDefaultRepos(
+                        workspace ?? null,
+                      )}
+                      compact
+                    />
                   </li>
                 );
               })}

@@ -20,10 +20,15 @@ async function enrichTask(ctx: QueryCtx, row: Doc<"assessmentTasks">) {
     ? await ctx.db.get(row.assigneeUserId)
     : null;
   const creator = await ctx.db.get(row.createdByUserId);
+  const githubIssueUrl =
+    row.githubRepoFullName !== undefined && row.githubIssueNumber != null
+      ? `https://github.com/${row.githubRepoFullName}/issues/${row.githubIssueNumber}`
+      : null;
   return {
     ...row,
     assigneeName: assignee?.name ?? assignee?.email ?? null,
     creatorName: creator?.name ?? creator?.email ?? null,
+    githubIssueUrl,
   };
 }
 
@@ -72,6 +77,7 @@ export const listMineAcrossWorkspaces = query({
         assessmentTitle: string;
         workspaceName: string;
         assigneeName: string | null;
+        githubIssueUrl: string | null;
       }
     > = [];
 
@@ -90,6 +96,10 @@ export const listMineAcrossWorkspaces = query({
         const assignee = t.assigneeUserId
           ? await ctx.db.get(t.assigneeUserId)
           : null;
+        const githubIssueUrl =
+          t.githubRepoFullName !== undefined && t.githubIssueNumber != null
+            ? `https://github.com/${t.githubRepoFullName}/issues/${t.githubIssueNumber}`
+            : null;
         enriched.push({
           ...t,
           assessmentTitle: assessment.title,
@@ -97,6 +107,7 @@ export const listMineAcrossWorkspaces = query({
           assigneeName: assignee
             ? assignee.name ?? assignee.email ?? null
             : null,
+          githubIssueUrl,
         });
       }
     }

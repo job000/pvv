@@ -7,6 +7,7 @@ import {
   requireUserId,
   requireWorkspaceMember,
 } from "./lib/access";
+import { normalizeGithubRepoFullName } from "./lib/github";
 
 async function deleteAssessmentCascade(
   ctx: MutationCtx,
@@ -208,6 +209,17 @@ export const update = mutation({
     notes: v.optional(v.union(v.string(), v.null())),
     organizationNumber: v.optional(v.union(v.string(), v.null())),
     institutionIdentifier: v.optional(v.union(v.string(), v.null())),
+    githubDefaultRepoFullName: v.optional(v.union(v.string(), v.null())),
+    githubDefaultRepoFullNames: v.optional(
+      v.union(v.array(v.string()), v.null()),
+    ),
+    githubProjectNodeId: v.optional(v.union(v.string(), v.null())),
+    githubAutoRegisterProcessOnCreate: v.optional(
+      v.union(v.boolean(), v.null()),
+    ),
+    githubAutoRegisterProcessStatusOptionId: v.optional(
+      v.union(v.string(), v.null()),
+    ),
   },
   handler: async (ctx, args) => {
     const userId = await requireUserId(ctx);
@@ -217,6 +229,11 @@ export const update = mutation({
       notes?: string;
       organizationNumber?: string;
       institutionIdentifier?: string;
+      githubDefaultRepoFullName?: string;
+      githubDefaultRepoFullNames?: string[];
+      githubProjectNodeId?: string;
+      githubAutoRegisterProcessOnCreate?: boolean;
+      githubAutoRegisterProcessStatusOptionId?: string;
     } = {};
     if (args.name !== undefined) {
       patch.name = args.name.trim() || "Uten navn";
@@ -235,6 +252,52 @@ export const update = mutation({
         args.institutionIdentifier === null
           ? undefined
           : args.institutionIdentifier.trim() || undefined;
+    }
+    if (args.githubDefaultRepoFullNames !== undefined) {
+      if (args.githubDefaultRepoFullNames === null) {
+        patch.githubDefaultRepoFullNames = undefined;
+        patch.githubDefaultRepoFullName = undefined;
+      } else {
+        const seen = new Set<string>();
+        const out: string[] = [];
+        for (const raw of args.githubDefaultRepoFullNames) {
+          const t = raw.trim();
+          if (!t) continue;
+          const n = normalizeGithubRepoFullName(t);
+          if (!seen.has(n)) {
+            seen.add(n);
+            out.push(n);
+          }
+          if (out.length >= 40) break;
+        }
+        patch.githubDefaultRepoFullNames = out.length > 0 ? out : undefined;
+        patch.githubDefaultRepoFullName = undefined;
+      }
+    }
+    if (args.githubDefaultRepoFullName !== undefined) {
+      const raw = args.githubDefaultRepoFullName;
+      patch.githubDefaultRepoFullName =
+        raw === null || raw.trim() === ""
+          ? undefined
+          : normalizeGithubRepoFullName(raw);
+    }
+    if (args.githubProjectNodeId !== undefined) {
+      const raw = args.githubProjectNodeId;
+      patch.githubProjectNodeId =
+        raw === null || raw.trim() === "" ? undefined : raw.trim();
+    }
+    if (args.githubAutoRegisterProcessOnCreate !== undefined) {
+      patch.githubAutoRegisterProcessOnCreate =
+        args.githubAutoRegisterProcessOnCreate === null
+          ? undefined
+          : args.githubAutoRegisterProcessOnCreate;
+    }
+    if (args.githubAutoRegisterProcessStatusOptionId !== undefined) {
+      const raw = args.githubAutoRegisterProcessStatusOptionId;
+      patch.githubAutoRegisterProcessStatusOptionId =
+        raw === null || raw.trim() === ""
+          ? undefined
+          : raw.trim();
     }
     await ctx.db.patch(args.workspaceId, patch);
     return null;
@@ -314,6 +377,16 @@ export const remove = mutation({
       .collect();
     for (const inv of pendingInvites) {
       await ctx.db.delete(inv._id);
+    }
+
+    const githubSecret = await ctx.db
+      .query("workspaceGithubSecrets")
+      .withIndex("by_workspace", (q) =>
+        q.eq("workspaceId", args.workspaceId),
+      )
+      .first();
+    if (githubSecret) {
+      await ctx.db.delete(githubSecret._id);
     }
 
     const members = await ctx.db
