@@ -3,6 +3,7 @@
 import { RosJournalPanel } from "@/components/ros/ros-journal-panel";
 import { RosMatrix } from "@/components/ros/ros-matrix";
 import { RosMethodologyGuide } from "@/components/ros/ros-methodology-guide";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -12,6 +13,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
@@ -20,15 +22,133 @@ import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import { useMutation, useQuery } from "convex/react";
 import {
+  flattenCellItemsMatrixToLegacyNotes,
+  resizeCellItemsMatrix,
+  type RosCellItem,
+  type RosCellItemMatrix,
+} from "@/lib/ros-cell-items";
+import {
+  parseLabelLines,
+  resizeNumberMatrix,
+} from "@/lib/ros-matrix-resize";
+import { downloadRosAnalysisPdf } from "@/lib/ros-pdf";
+import {
+  FileDown,
   History,
   Link2,
   ListTodo,
   Plus,
+  Sparkles,
   Trash2,
   Undo2,
 } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
+
+function RosPvvLinkFields({
+  linkId,
+  flags,
+  highlightForPvv,
+  pvvLinkNote,
+  suggestedFlags,
+  onSave,
+}: {
+  linkId: Id<"rosAnalysisAssessments">;
+  flags?: string[];
+  highlightForPvv?: boolean;
+  pvvLinkNote?: string;
+  suggestedFlags: string[];
+  onSave: (patch: {
+    flags?: string[];
+    highlightForPvv?: boolean;
+    pvvLinkNote?: string | null;
+  }) => Promise<void>;
+}) {
+  const [flagsText, setFlagsText] = useState(() => flags?.join(", ") ?? "");
+  const [highlight, setHighlight] = useState(() => Boolean(highlightForPvv));
+  const [note, setNote] = useState(() => pvvLinkNote ?? "");
+
+  useEffect(() => {
+    setFlagsText(flags?.join(", ") ?? "");
+    setHighlight(Boolean(highlightForPvv));
+    setNote(pvvLinkNote ?? "");
+  }, [linkId, flags, highlightForPvv, pvvLinkNote]);
+
+  return (
+    <div className="bg-muted/20 space-y-3 rounded-lg border p-3 text-sm">
+      <div className="flex flex-wrap items-center gap-2">
+        <Checkbox
+          id={`pvv-hi-${linkId}`}
+          checked={highlight}
+          onCheckedChange={(c) => {
+            const v = Boolean(c);
+            setHighlight(v);
+            void onSave({ highlightForPvv: v });
+          }}
+        />
+        <Label htmlFor={`pvv-hi-${linkId}`} className="cursor-pointer font-normal">
+          Viktig for PVV (synlig på vurderingen)
+        </Label>
+      </div>
+      <div className="space-y-1.5">
+        <Label htmlFor={`pvv-flags-${linkId}`}>Flagg (kommaseparert)</Label>
+        <Input
+          id={`pvv-flags-${linkId}`}
+          value={flagsText}
+          onChange={(e) => setFlagsText(e.target.value)}
+          onBlur={(e) => {
+            const v = e.currentTarget.value;
+            void onSave({
+              flags: v
+                .split(",")
+                .map((s) => s.trim())
+                .filter(Boolean),
+            });
+          }}
+          placeholder="f.eks. rest_risk_elevated, residual_high_or_critical"
+        />
+        {suggestedFlags.length > 0 ? (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="mt-1"
+            onClick={() => {
+              const merged = [
+                ...new Set([
+                  ...flagsText
+                    .split(",")
+                    .map((s) => s.trim())
+                    .filter(Boolean),
+                  ...suggestedFlags,
+                ]),
+              ];
+              setFlagsText(merged.join(", "));
+              void onSave({ flags: merged });
+            }}
+          >
+            <Sparkles className="mr-2 size-3.5" />
+            Slå inn forslag fra oppsummering
+          </Button>
+        ) : null}
+      </div>
+      <div className="space-y-1.5">
+        <Label htmlFor={`pvv-note-${linkId}`}>Notat til PVV (ROS → personvern)</Label>
+        <Textarea
+          id={`pvv-note-${linkId}`}
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
+          onBlur={(e) => {
+            const v = e.currentTarget.value.trim();
+            void onSave({ pvvLinkNote: v === "" ? null : v });
+          }}
+          rows={2}
+          className="min-h-0"
+        />
+      </div>
+    </div>
+  );
+}
 
 function formatTs(ms: number) {
   try {
@@ -49,6 +169,8 @@ export function RosAnalysisEditor({
   analysisId: Id<"rosAnalyses">;
 }) {
   const data = useQuery(api.ros.getAnalysis, { analysisId });
+  const workspace = useQuery(api.workspaces.get, { workspaceId });
+  const journalEntries = useQuery(api.ros.listJournalEntries, { analysisId });
   const allAssessments = useQuery(api.ros.listAssessmentsForWorkspace, {
     workspaceId,
   });
@@ -60,6 +182,7 @@ export function RosAnalysisEditor({
   const removeAnalysis = useMutation(api.ros.removeAnalysis);
   const linkAssessment = useMutation(api.ros.linkAssessment);
   const unlinkAssessment = useMutation(api.ros.unlinkAssessment);
+  const updateRosAssessmentLink = useMutation(api.ros.updateRosAssessmentLink);
   const migrateLegacyAssessmentToLinks = useMutation(
     api.ros.migrateLegacyAssessmentToLinks,
   );
@@ -74,7 +197,12 @@ export function RosAnalysisEditor({
   const [title, setTitle] = useState("");
   const [notes, setNotes] = useState("");
   const [matrix, setMatrix] = useState<number[][]>([]);
-  const [cellNotes, setCellNotes] = useState<string[][]>([]);
+  const [cellItemsMatrix, setCellItemsMatrix] =
+    useState<RosCellItemMatrix>([]);
+  const [matrixAfter, setMatrixAfter] = useState<number[][]>([]);
+  const [cellItemsAfterMatrix, setCellItemsAfterMatrix] =
+    useState<RosCellItemMatrix>([]);
+  const [matrixView, setMatrixView] = useState<"before" | "after">("before");
   const [jumpRequest, setJumpRequest] = useState<{
     row: number;
     col: number;
@@ -97,16 +225,78 @@ export function RosAnalysisEditor({
     null,
   );
 
+  const [useSeparateAfterAxes, setUseSeparateAfterAxes] = useState(false);
+  const [rowAxisTitleAfter, setRowAxisTitleAfter] = useState("");
+  const [colAxisTitleAfter, setColAxisTitleAfter] = useState("");
+  const [rowLabelsAfterText, setRowLabelsAfterText] = useState("");
+  const [colLabelsAfterText, setColLabelsAfterText] = useState("");
+
   useEffect(() => {
     if (!data) return;
     setTitle(data.title);
     setNotes(data.notes ?? "");
     setMatrix(data.matrixValues.map((r) => [...r]));
-    setCellNotes(data.cellNotes.map((r) => [...r]));
+    setCellItemsMatrix(
+      (data.cellItems ?? []).map((r) =>
+        r.map((c) => c.map((it) => ({ ...it }))),
+      ),
+    );
+    setMatrixAfter(data.matrixValuesAfter.map((r) => [...r]));
+    setCellItemsAfterMatrix(
+      (data.cellItemsAfter ?? []).map((r) =>
+        r.map((c) => c.map((it) => ({ ...it }))),
+      ),
+    );
+    setUseSeparateAfterAxes(data.afterAxis.separateLayout);
+    setRowAxisTitleAfter(data.afterAxis.rowAxisTitle);
+    setColAxisTitleAfter(data.afterAxis.colAxisTitle);
+    setRowLabelsAfterText(data.afterAxis.rowLabels.join("\n"));
+    setColLabelsAfterText(data.afterAxis.colLabels.join("\n"));
     setDirty(false);
   // Synk kun ved server-oppdatering (id/tidsstempel), ikke ved hver query-referanse
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data?._id, data?.updatedAt]);
+
+  const effectiveAfterRowLabels = useMemo(() => {
+    if (!data) return [];
+    if (useSeparateAfterAxes) {
+      const p = parseLabelLines(rowLabelsAfterText);
+      return p.length >= 2 ? p : data.afterAxis.rowLabels;
+    }
+    return data.rowLabels;
+  }, [data, useSeparateAfterAxes, rowLabelsAfterText]);
+
+  const effectiveAfterColLabels = useMemo(() => {
+    if (!data) return [];
+    if (useSeparateAfterAxes) {
+      const p = parseLabelLines(colLabelsAfterText);
+      return p.length >= 2 ? p : data.afterAxis.colLabels;
+    }
+    return data.colLabels;
+  }, [data, useSeparateAfterAxes, colLabelsAfterText]);
+
+  const syncAfterMatrixToParsedLabels = useCallback(() => {
+    if (!useSeparateAfterAxes || !data) return;
+    const rl = parseLabelLines(rowLabelsAfterText);
+    const cl = parseLabelLines(colLabelsAfterText);
+    if (rl.length < 2 || cl.length < 2) return;
+    setMatrixAfter((prev) => resizeNumberMatrix(prev, rl.length, cl.length));
+    setCellItemsAfterMatrix((prev) =>
+      resizeCellItemsMatrix(
+        prev,
+        prev.length,
+        prev[0]?.length ?? 0,
+        rl.length,
+        cl.length,
+      ),
+    );
+    setDirty(true);
+  }, [
+    useSeparateAfterAxes,
+    data,
+    rowLabelsAfterText,
+    colLabelsAfterText,
+  ]);
 
   const linkedIds = useMemo(() => {
     if (!data?.linkedAssessments) return new Set<string>();
@@ -120,48 +310,172 @@ export function RosAnalysisEditor({
 
   const onCellChange = useCallback(
     (row: number, col: number, next: number) => {
-      setMatrix((prev) => {
-        const copy = prev.map((r) => [...r]);
-        if (!copy[row]) return prev;
-        copy[row][col] = next;
-        return copy;
-      });
+      if (matrixView === "after") {
+        setMatrixAfter((prev) => {
+          const copy = prev.map((r) => [...r]);
+          if (!copy[row]) return prev;
+          copy[row][col] = next;
+          return copy;
+        });
+      } else {
+        setMatrix((prev) => {
+          const copy = prev.map((r) => [...r]);
+          if (!copy[row]) return prev;
+          copy[row][col] = next;
+          return copy;
+        });
+      }
       setDirty(true);
+    },
+    [matrixView],
+  );
+
+  const onCellItemsChange = useCallback(
+    (row: number, col: number, items: RosCellItem[]) => {
+      if (matrixView === "after") {
+        setCellItemsAfterMatrix((prev) => {
+          const copy = prev.map((r) => r.map((c) => [...c]));
+          if (!copy[row]) return prev;
+          copy[row][col] = items;
+          return copy;
+        });
+      } else {
+        setCellItemsMatrix((prev) => {
+          const copy = prev.map((r) => r.map((c) => [...c]));
+          if (!copy[row]) return prev;
+          copy[row][col] = items;
+          return copy;
+        });
+      }
+      setDirty(true);
+    },
+    [matrixView],
+  );
+
+  const handleJumpToCell = useCallback(
+    (row: number, col: number, phase?: "before" | "after") => {
+      setMatrixView(phase ?? "before");
+      setJumpRequest({ row, col, nonce: Date.now() });
     },
     [],
   );
 
-  const onCellNoteChange = useCallback(
-    (row: number, col: number, text: string) => {
-      setCellNotes((prev) => {
-        const copy = prev.map((r) => [...r]);
-        if (!copy[row]) return prev;
-        copy[row][col] = text;
-        return copy;
-      });
-      setDirty(true);
-    },
-    [],
-  );
+  const copyBeforeToAfter = useCallback(() => {
+    if (!data) return;
+    if (useSeparateAfterAxes) {
+      const rl = parseLabelLines(rowLabelsAfterText);
+      const cl = parseLabelLines(colLabelsAfterText);
+      if (rl.length < 2 || cl.length < 2) {
+        window.alert(
+          "Angi minst to rader og to kolonner i etter-akser før du kopierer.",
+        );
+        return;
+      }
+      const m = resizeNumberMatrix(matrix, rl.length, cl.length);
+      const ci = resizeCellItemsMatrix(
+        cellItemsMatrix,
+        matrix.length,
+        matrix[0]?.length ?? 0,
+        rl.length,
+        cl.length,
+      );
+      setMatrixAfter(m);
+      setCellItemsAfterMatrix(ci);
+    } else {
+      setMatrixAfter(matrix.map((r) => [...r]));
+      setCellItemsAfterMatrix(
+        cellItemsMatrix.map((r) =>
+          r.map((c) => c.map((it) => ({ ...it }))),
+        ),
+      );
+    }
+    setDirty(true);
+  }, [
+    data,
+    matrix,
+    cellItemsMatrix,
+    useSeparateAfterAxes,
+    rowLabelsAfterText,
+    colLabelsAfterText,
+  ]);
 
-  const handleJumpToCell = useCallback((row: number, col: number) => {
-    setJumpRequest({ row, col, nonce: Date.now() });
-  }, []);
+  const activeMatrix = matrixView === "after" ? matrixAfter : matrix;
 
   const matrixStats = useMemo(() => {
     let max = 0;
     let highOrCritical = 0;
-    for (const row of matrix) {
+    for (const row of activeMatrix) {
       for (const v of row) {
         if (v > max) max = v;
         if (v >= 4) highOrCritical += 1;
       }
     }
     return { max, highOrCritical };
-  }, [matrix]);
+  }, [activeMatrix]);
+
+  const statsFor = useCallback((m: number[][]) => {
+    let max = 0;
+    let highOrCritical = 0;
+    for (const row of m) {
+      for (const v of row) {
+        if (v > max) max = v;
+        if (v >= 4) highOrCritical += 1;
+      }
+    }
+    return { max, highOrCritical };
+  }, []);
+
+  const beforeStats = useMemo(() => statsFor(matrix), [matrix, statsFor]);
+  const afterStats = useMemo(() => statsFor(matrixAfter), [matrixAfter, statsFor]);
+
+  const afterMatrixInvalid =
+    matrixView === "after" &&
+    useSeparateAfterAxes &&
+    (effectiveAfterRowLabels.length < 2 || effectiveAfterColLabels.length < 2);
+
+  const matrixRowAxisTitle =
+    !data || matrixView === "before" || !useSeparateAfterAxes
+      ? data?.rowAxisTitle ?? ""
+      : rowAxisTitleAfter;
+  const matrixColAxisTitle =
+    !data || matrixView === "before" || !useSeparateAfterAxes
+      ? data?.colAxisTitle ?? ""
+      : colAxisTitleAfter;
+  const matrixRowLabels =
+    !data || matrixView === "before" || !useSeparateAfterAxes
+      ? data?.rowLabels ?? []
+      : effectiveAfterRowLabels;
+  const matrixColLabels =
+    !data || matrixView === "before" || !useSeparateAfterAxes
+      ? data?.colLabels ?? []
+      : effectiveAfterColLabels;
 
   async function save() {
     if (!data) return;
+    const targetRows = useSeparateAfterAxes
+      ? parseLabelLines(rowLabelsAfterText).length
+      : data.rowLabels.length;
+    const targetCols = useSeparateAfterAxes
+      ? parseLabelLines(colLabelsAfterText).length
+      : data.colLabels.length;
+    if (useSeparateAfterAxes && (targetRows < 2 || targetCols < 2)) {
+      window.alert(
+        "Etter-tiltak med egne akser krever minst to rader og to kolonner (én etikett per linje).",
+      );
+      return;
+    }
+    const matrixAfterToSave = resizeNumberMatrix(
+      matrixAfter,
+      targetRows,
+      targetCols,
+    );
+    const cellItemsAfterToSave = resizeCellItemsMatrix(
+      cellItemsAfterMatrix,
+      matrixAfter.length,
+      matrixAfter[0]?.length ?? 0,
+      targetRows,
+      targetCols,
+    );
     setSaving(true);
     try {
       await updateAnalysis({
@@ -169,12 +483,88 @@ export function RosAnalysisEditor({
         title: title.trim(),
         notes: notes.trim() || null,
         matrixValues: matrix,
-        cellNotes,
+        cellItems: cellItemsMatrix,
+        matrixValuesAfter: matrixAfterToSave,
+        cellItemsAfter: cellItemsAfterToSave,
+        rowAxisTitleAfter: useSeparateAfterAxes
+          ? rowAxisTitleAfter.trim()
+          : undefined,
+        colAxisTitleAfter: useSeparateAfterAxes
+          ? colAxisTitleAfter.trim()
+          : undefined,
+        rowLabelsAfter: useSeparateAfterAxes
+          ? parseLabelLines(rowLabelsAfterText)
+          : [],
+        colLabelsAfter: useSeparateAfterAxes
+          ? parseLabelLines(colLabelsAfterText)
+          : [],
       });
       setDirty(false);
     } finally {
       setSaving(false);
     }
+  }
+
+  function exportPdf() {
+    if (!data) return;
+    const pdfRows = useSeparateAfterAxes
+      ? parseLabelLines(rowLabelsAfterText).length
+      : data.rowLabels.length;
+    const pdfCols = useSeparateAfterAxes
+      ? parseLabelLines(colLabelsAfterText).length
+      : data.colLabels.length;
+    if (useSeparateAfterAxes && (pdfRows < 2 || pdfCols < 2)) {
+      window.alert(
+        "Angi minst to rader og to kolonner for etter-matrisen før PDF-eksport.",
+      );
+      return;
+    }
+    const mvAfterPdf = resizeNumberMatrix(matrixAfter, pdfRows, pdfCols);
+    const cellItemsAfterPdf = resizeCellItemsMatrix(
+      cellItemsAfterMatrix,
+      matrixAfter.length,
+      matrixAfter[0]?.length ?? 0,
+      pdfRows,
+      pdfCols,
+    );
+    downloadRosAnalysisPdf({
+      title: title.trim() || data.title,
+      workspaceName: workspace?.name ?? null,
+      candidateName: data.candidateName,
+      candidateCode: data.candidateCode,
+      rowAxisTitle: data.rowAxisTitle,
+      colAxisTitle: data.colAxisTitle,
+      rowLabels: data.rowLabels,
+      colLabels: data.colLabels,
+      matrixValues: matrix,
+      cellNotes: flattenCellItemsMatrixToLegacyNotes(cellItemsMatrix),
+      matrixValuesAfter: mvAfterPdf,
+      cellNotesAfter: flattenCellItemsMatrixToLegacyNotes(cellItemsAfterPdf),
+      afterRowLabels: useSeparateAfterAxes
+        ? parseLabelLines(rowLabelsAfterText)
+        : data.rowLabels,
+      afterColLabels: useSeparateAfterAxes
+        ? parseLabelLines(colLabelsAfterText)
+        : data.colLabels,
+      afterRowAxisTitle: useSeparateAfterAxes
+        ? rowAxisTitleAfter.trim()
+        : data.rowAxisTitle,
+      afterColAxisTitle: useSeparateAfterAxes
+        ? colAxisTitleAfter.trim()
+        : data.colAxisTitle,
+      afterSeparateLayout: useSeparateAfterAxes,
+      analysisNotes: notes.trim() || null,
+      linkedPvvTitles: data.linkedAssessments.map((l) => l.title),
+      journalEntries: (journalEntries ?? []).map((e) => ({
+        body: e.body,
+        authorName: e.authorName,
+        createdAt: e.createdAt,
+        linkedRow: e.linkedRow,
+        linkedCol: e.linkedCol,
+        matrixPhase: e.matrixPhase,
+      })),
+      generatedAt: new Date(),
+    });
   }
 
   async function onAddPv() {
@@ -315,6 +705,15 @@ export function RosAnalysisEditor({
           <Button
             type="button"
             variant="outline"
+            title="Laster ned PDF med tittel, notat, PVV-koblinger, risikologg (siste 40) og matrise slik den vises nå (inkl. ulagrede celler)."
+            onClick={exportPdf}
+          >
+            <FileDown className="mr-2 size-4" aria-hidden />
+            Eksporter PDF
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
             onClick={() => {
               if (
                 typeof window !== "undefined" &&
@@ -376,13 +775,46 @@ export function RosAnalysisEditor({
 
       <Card>
         <CardHeader>
+          <CardTitle className="text-base">Oppsummering før / etter tiltak</CardTitle>
+          <CardDescription>
+            Automatisk ut fra matrisene. Bruk flagg og notat under PVV-koblinger
+            for å synliggjøre hva som er viktig i PVV fra ROS (og omvendt).
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <ul className="list-inside list-disc space-y-1 text-sm leading-relaxed">
+            {data.rosSummary.summaryLines.map((line, i) => (
+              <li key={i}>{line}</li>
+            ))}
+          </ul>
+          {!data.rosSummary.sameLayout ? (
+            <p className="text-muted-foreground text-sm leading-relaxed">
+              Før- og etter-matrisen har ulike akser eller dimensjoner — detaljert
+              celle-for-celle-sammenligning er begrenset; oppsummeringen viser blant
+              annet høyeste nivå og høy risiko per matrise.
+            </p>
+          ) : null}
+          {data.rosSummary.suggestedLinkFlags.length > 0 ? (
+            <p className="text-muted-foreground text-xs leading-relaxed">
+              <span className="text-foreground font-medium">Forslag til flagg</span>{" "}
+              på koblingene under:{" "}
+              {data.rosSummary.suggestedLinkFlags.join(", ")} — legg inn under hver
+              PVV-kobling ved behov.
+            </p>
+          ) : null}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
           <CardTitle className="flex items-center gap-2 text-base">
             <Link2 className="size-4" />
             PVV-vurderinger (mange-til-mange)
           </CardTitle>
           <CardDescription>
             Koble én eller flere PVV-vurderinger i arbeidsområdet til denne
-            ROS-analysen.
+            ROS-analysen. Marker hva som er viktig for PVV, og noter koblingen
+            mellom ROS og personvern.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -422,28 +854,43 @@ export function RosAnalysisEditor({
               Ingen PVV koblet ennå — velg under.
             </p>
           ) : (
-            <ul className="space-y-2">
+            <ul className="space-y-4">
               {data.linkedAssessments.map((l) => (
                 <li
                   key={l.linkId}
-                  className="flex flex-wrap items-center justify-between gap-2 rounded-lg border px-3 py-2"
+                  className="space-y-3 rounded-lg border px-3 py-3"
                 >
-                  <Link
-                    href={`/w/${workspaceId}/a/${l.assessmentId}`}
-                    className="text-primary font-medium hover:underline"
-                  >
-                    {l.title}
-                  </Link>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="text-destructive"
-                    onClick={() => void onUnlink(l.linkId)}
-                  >
-                    <Trash2 className="size-3.5" />
-                    Fjern
-                  </Button>
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <Link
+                      href={`/w/${workspaceId}/a/${l.assessmentId}`}
+                      className="text-primary font-medium hover:underline"
+                    >
+                      {l.title}
+                    </Link>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="text-destructive"
+                      onClick={() => void onUnlink(l.linkId)}
+                    >
+                      <Trash2 className="size-3.5" />
+                      Fjern
+                    </Button>
+                  </div>
+                  <RosPvvLinkFields
+                    linkId={l.linkId}
+                    flags={l.flags}
+                    highlightForPvv={l.highlightForPvv}
+                    pvvLinkNote={l.pvvLinkNote}
+                    suggestedFlags={data.rosSummary.suggestedLinkFlags}
+                    onSave={async (patch) => {
+                      await updateRosAssessmentLink({
+                        linkId: l.linkId,
+                        ...patch,
+                      });
+                    }}
+                  />
                 </li>
               ))}
             </ul>
@@ -737,57 +1184,257 @@ export function RosAnalysisEditor({
         </CardContent>
       </Card>
 
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Etter tiltak — egne akser (valgfritt)</CardTitle>
+          <CardDescription>
+            Du kan bruke <strong className="text-foreground">eget rutenett</strong> for
+            restrisiko (andre etiketter enn «før tiltak»). Gjenbrukbare lister med
+            beskrivelser administreres under{" "}
+            <Link
+              href={`/w/${workspaceId}/ros/akser`}
+              className="text-primary font-medium underline-offset-4 hover:underline"
+            >
+              ROS-akser
+            </Link>
+            .
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-start gap-3">
+            <Checkbox
+              id="ros-separate-after"
+              checked={useSeparateAfterAxes}
+              onCheckedChange={(c) => {
+                const checked = Boolean(c);
+                if (checked && data) {
+                  setRowLabelsAfterText(data.rowLabels.join("\n"));
+                  setColLabelsAfterText(data.colLabels.join("\n"));
+                  setRowAxisTitleAfter(data.rowAxisTitle);
+                  setColAxisTitleAfter(data.colAxisTitle);
+                  setMatrixAfter(matrix.map((r) => [...r]));
+                  setCellItemsAfterMatrix(
+                    cellItemsMatrix.map((r) =>
+                      r.map((c) => c.map((it) => ({ ...it }))),
+                    ),
+                  );
+                }
+                setUseSeparateAfterAxes(checked);
+                setDirty(true);
+              }}
+            />
+            <div className="space-y-1">
+              <Label htmlFor="ros-separate-after" className="cursor-pointer font-normal">
+                Eget rutenett for etter tiltak (ulikt «før»)
+              </Label>
+              <p className="text-muted-foreground text-xs leading-relaxed">
+                Når avkrysset får du egne aksetitler og rader/kolonner for
+                etter-matrisen. Oppsummeringen over tilpasses automatisk.
+              </p>
+            </div>
+          </div>
+          {useSeparateAfterAxes ? (
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="ros-after-row-axis">Radakse (etter)</Label>
+                <Input
+                  id="ros-after-row-axis"
+                  value={rowAxisTitleAfter}
+                  onChange={(e) => {
+                    setRowAxisTitleAfter(e.target.value);
+                    setDirty(true);
+                  }}
+                  onBlur={syncAfterMatrixToParsedLabels}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="ros-after-col-axis">Kolonneakse (etter)</Label>
+                <Input
+                  id="ros-after-col-axis"
+                  value={colAxisTitleAfter}
+                  onChange={(e) => {
+                    setColAxisTitleAfter(e.target.value);
+                    setDirty(true);
+                  }}
+                  onBlur={syncAfterMatrixToParsedLabels}
+                />
+              </div>
+              <div className="space-y-2 sm:col-span-2">
+                <Label htmlFor="ros-after-rows">Rader (én etikett per linje)</Label>
+                <Textarea
+                  id="ros-after-rows"
+                  value={rowLabelsAfterText}
+                  onChange={(e) => {
+                    setRowLabelsAfterText(e.target.value);
+                    setDirty(true);
+                  }}
+                  onBlur={syncAfterMatrixToParsedLabels}
+                  rows={5}
+                  className="min-h-[5rem] font-mono text-sm"
+                />
+              </div>
+              <div className="space-y-2 sm:col-span-2">
+                <Label htmlFor="ros-after-cols">Kolonner (én etikett per linje)</Label>
+                <Textarea
+                  id="ros-after-cols"
+                  value={colLabelsAfterText}
+                  onChange={(e) => {
+                    setColLabelsAfterText(e.target.value);
+                    setDirty(true);
+                  }}
+                  onBlur={syncAfterMatrixToParsedLabels}
+                  rows={5}
+                  className="min-h-[5rem] font-mono text-sm"
+                />
+              </div>
+            </div>
+          ) : null}
+        </CardContent>
+      </Card>
+
       <Card className="overflow-hidden border-primary/15">
         <CardHeader className="border-b border-border/50 bg-muted/20">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div>
               <CardTitle className="text-base">Risikomatrise</CardTitle>
               <CardDescription>
-                {data.rowAxisTitle} (rader) × {data.colAxisTitle} (kolonner). Klikk en
-                celle for nivå 0–5 og valgfritt tekstnotat i samme popup. Ikon på cellen
-                viser om det finnes notat. Lagre øverst for å skrive til server og
-                loggføre nivåendringer.
+                {matrixView === "after" && useSeparateAfterAxes ? (
+                  <>
+                    <span className="text-foreground font-medium">
+                      {matrixRowAxisTitle}
+                    </span>{" "}
+                    (rader) ×{" "}
+                    <span className="text-foreground font-medium">
+                      {matrixColAxisTitle}
+                    </span>{" "}
+                    (kolonner) — <strong className="text-foreground">etter tiltak</strong>{" "}
+                    med eget rutenett.
+                  </>
+                ) : (
+                  <>
+                    {data.rowAxisTitle} (rader) × {data.colAxisTitle} (kolonner).
+                  </>
+                )}{" "}
+                Vurder{" "}
+                <strong className="text-foreground">før tiltak</strong> (utgangspunkt) og{" "}
+                <strong className="text-foreground">etter tiltak</strong> (rest) i fanene
+                under. Klikk en celle for nivå 0–5 og valgfritt notat. Lagre øverst for å
+                skrive til server og loggføre nivåendringer.
               </CardDescription>
             </div>
             {matrix.length > 0 ? (
-              <div className="flex flex-wrap gap-2 text-xs">
-                <Badge variant="secondary" className="font-normal">
-                  Høyeste nivå i matrise:{" "}
-                  <span className="text-foreground font-semibold tabular-nums">
-                    {matrixStats.max}
-                  </span>
-                </Badge>
-                {matrixStats.highOrCritical > 0 ? (
-                  <Badge
-                    variant="outline"
-                    className="border-orange-500/40 bg-orange-500/10 font-normal"
-                  >
-                    {matrixStats.highOrCritical} celle
-                    {matrixStats.highOrCritical === 1 ? "" : "r"} med nivå 4–5
-                  </Badge>
-                ) : (
+              <div className="flex flex-col items-end gap-2 text-xs">
+                <div className="flex flex-wrap justify-end gap-2">
                   <Badge variant="outline" className="font-normal">
-                    Ingen celler på nivå 4–5
+                    Før: max{" "}
+                    <span className="text-foreground font-semibold tabular-nums">
+                      {beforeStats.max}
+                    </span>
                   </Badge>
-                )}
+                  <Badge variant="outline" className="font-normal">
+                    Etter: max{" "}
+                    <span className="text-foreground font-semibold tabular-nums">
+                      {afterStats.max}
+                    </span>
+                  </Badge>
+                </div>
+                <div className="flex flex-wrap justify-end gap-2">
+                  <Badge variant="secondary" className="font-normal">
+                    Aktiv fane — høyeste:{" "}
+                    <span className="text-foreground font-semibold tabular-nums">
+                      {matrixStats.max}
+                    </span>
+                  </Badge>
+                  {matrixStats.highOrCritical > 0 ? (
+                    <Badge
+                      variant="outline"
+                      className="border-orange-500/40 bg-orange-500/10 font-normal"
+                    >
+                      {matrixStats.highOrCritical} celle
+                      {matrixStats.highOrCritical === 1 ? "" : "r"} med nivå 4–5
+                    </Badge>
+                  ) : (
+                    <Badge variant="outline" className="font-normal">
+                      Ingen celler på nivå 4–5 (aktiv fane)
+                    </Badge>
+                  )}
+                </div>
               </div>
             ) : null}
           </div>
         </CardHeader>
-        <CardContent className="pt-6">
+        <CardContent className="space-y-4 pt-6">
           {matrix.length > 0 ? (
-            <RosMatrix
-              rowAxisTitle={data.rowAxisTitle}
-              colAxisTitle={data.colAxisTitle}
-              rowLabels={data.rowLabels}
-              colLabels={data.colLabels}
-              matrixValues={matrix}
-              cellNotes={cellNotes}
-              onCellNoteChange={onCellNoteChange}
-              onCellChange={onCellChange}
-              jumpRequest={jumpRequest}
-              onJumpHandled={() => setJumpRequest(null)}
-            />
+            <>
+              <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+                <div
+                  className="bg-muted/40 inline-flex rounded-lg border p-1"
+                  role="tablist"
+                  aria-label="Velg matrise: før eller etter tiltak"
+                >
+                  <Button
+                    type="button"
+                    role="tab"
+                    aria-selected={matrixView === "before"}
+                    variant={matrixView === "before" ? "secondary" : "ghost"}
+                    size="sm"
+                    className="rounded-md"
+                    onClick={() => setMatrixView("before")}
+                  >
+                    Før tiltak
+                  </Button>
+                  <Button
+                    type="button"
+                    role="tab"
+                    aria-selected={matrixView === "after"}
+                    variant={matrixView === "after" ? "secondary" : "ghost"}
+                    size="sm"
+                    className="rounded-md"
+                    onClick={() => setMatrixView("after")}
+                  >
+                    Etter tiltak (rest)
+                  </Button>
+                </div>
+                {matrixView === "after" ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={copyBeforeToAfter}
+                  >
+                    Kopier nivåer og notater fra «før tiltak»
+                  </Button>
+                ) : null}
+              </div>
+              {afterMatrixInvalid ? (
+                <Alert>
+                  <AlertTitle>Ugyldig etter-matrise</AlertTitle>
+                  <AlertDescription>
+                    Angi minst to rader og to kolonner (én etikett per linje) i
+                    «Etter tiltak — egne akser», eller fjern avkryssingen for å bruke
+                    samme rutenett som før tiltak.
+                  </AlertDescription>
+                </Alert>
+              ) : (
+                <RosMatrix
+                  key={`${matrixView}-${useSeparateAfterAxes}`}
+                  rowAxisTitle={matrixRowAxisTitle}
+                  colAxisTitle={matrixColAxisTitle}
+                  rowLabels={matrixRowLabels}
+                  colLabels={matrixColLabels}
+                  matrixValues={matrixView === "after" ? matrixAfter : matrix}
+                  cellItems={
+                    matrixView === "after"
+                      ? cellItemsAfterMatrix
+                      : cellItemsMatrix
+                  }
+                  onCellItemsChange={onCellItemsChange}
+                  onCellChange={onCellChange}
+                  jumpRequest={jumpRequest}
+                  onJumpHandled={() => setJumpRequest(null)}
+                />
+              )}
+            </>
           ) : null}
         </CardContent>
       </Card>
@@ -796,6 +1443,9 @@ export function RosAnalysisEditor({
         analysisId={analysisId}
         rowLabels={data.rowLabels}
         colLabels={data.colLabels}
+        afterRowLabels={effectiveAfterRowLabels}
+        afterColLabels={effectiveAfterColLabels}
+        afterSeparate={useSeparateAfterAxes}
         onJumpToCell={handleJumpToCell}
       />
     </div>

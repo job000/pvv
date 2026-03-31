@@ -8,12 +8,27 @@ import {
   DialogHeader,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
 import { legendItems, cnCell } from "@/lib/ros-risk-colors";
+import {
+  ROS_CELL_FLAG_REQUIRES_ACTION,
+  ROS_CELL_FLAG_WATCH,
+  newRosCellItemId,
+  type RosCellItem,
+  type RosCellItemMatrix,
+} from "@/lib/ros-cell-items";
 import { RISK_LEVEL_HINTS } from "@/lib/ros-defaults";
 import { cn } from "@/lib/utils";
-import { FileText, Grid3x3, MousePointerClick, Palette } from "lucide-react";
+import {
+  FileText,
+  Grid3x3,
+  MousePointerClick,
+  Palette,
+  Plus,
+  Trash2,
+} from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 type Props = {
@@ -22,17 +37,28 @@ type Props = {
   rowLabels: string[];
   colLabels: string[];
   matrixValues: number[][];
-  /** Fritekst per celle — lagres med analysens «Lagre endringer». */
-  cellNotes?: string[][];
-  onCellNoteChange?: (row: number, col: number, text: string) => void;
+  /** Flere risiko-/begrunnelse-punkter per celle */
+  cellItems: RosCellItemMatrix;
+  onCellItemsChange?: (row: number, col: number, items: RosCellItem[]) => void;
   onCellChange?: (row: number, col: number, next: number) => void;
   readOnly?: boolean;
-  /** Ekstern «hopp til celle» (f.eks. fra logg) — øk nonce for nytt hopp til samme celle. */
   jumpRequest?: { row: number; col: number; nonce: number } | null;
   onJumpHandled?: () => void;
 };
 
 type PickerTarget = { row: number; col: number };
+
+function toggleFlag(
+  flags: string[] | undefined,
+  flag: string,
+  on: boolean,
+): string[] | undefined {
+  const s = new Set(flags ?? []);
+  if (on) s.add(flag);
+  else s.delete(flag);
+  const a = [...s];
+  return a.length ? a : undefined;
+}
 
 export function RosMatrix({
   rowAxisTitle,
@@ -40,8 +66,8 @@ export function RosMatrix({
   rowLabels,
   colLabels,
   matrixValues,
-  cellNotes,
-  onCellNoteChange,
+  cellItems,
+  onCellItemsChange,
   onCellChange,
   readOnly = false,
   jumpRequest,
@@ -52,15 +78,26 @@ export function RosMatrix({
   const lastJumpNonce = useRef<number | null>(null);
   const riskLegend = useMemo(() => legendItems(), []);
 
-  const notesGrid = useMemo(() => {
-    if (!cellNotes) {
-      return matrixValues.map((row) => row.map(() => ""));
-    }
-    return cellNotes;
-  }, [cellNotes, matrixValues]);
+  const pickerItems =
+    picker === null
+      ? []
+      : (cellItems[picker.row]?.[picker.col] ?? []);
 
-  const pickerCellNote =
-    picker === null ? "" : (notesGrid[picker.row]?.[picker.col] ?? "");
+  const hasCellContent = useCallback(
+    (i: number, j: number) => {
+      const items = cellItems[i]?.[j] ?? [];
+      return items.some(
+        (it) =>
+          it.text.trim().length > 0 ||
+          (it.flags?.some(
+            (f) =>
+              f === ROS_CELL_FLAG_WATCH ||
+              f === ROS_CELL_FLAG_REQUIRES_ACTION,
+          ) ?? false),
+      );
+    },
+    [cellItems],
+  );
 
   useEffect(() => {
     if (!jumpRequest) {
@@ -107,6 +144,28 @@ export function RosMatrix({
     onCellChange(picker.row, picker.col, level);
   }
 
+  function updateItemAt(
+    row: number,
+    col: number,
+    next: RosCellItem[],
+  ) {
+    onCellItemsChange?.(row, col, next);
+  }
+
+  function patchItem(
+    row: number,
+    col: number,
+    id: string,
+    patch: Partial<RosCellItem>,
+  ) {
+    const items = cellItems[row]?.[col] ?? [];
+    updateItemAt(
+      row,
+      col,
+      items.map((it) => (it.id === id ? { ...it, ...patch } : it)),
+    );
+  }
+
   const pickerRowLabel =
     picker !== null ? rowLabels[picker.row] ?? `Rad ${picker.row + 1}` : "";
   const pickerColLabel =
@@ -121,12 +180,10 @@ export function RosMatrix({
             Slik bruker du matrisen
           </p>
           <p className="text-foreground text-sm leading-relaxed">
-            <strong>Vurderingen legges inn her</strong> — ikke i en egen liste først.{" "}
-            <strong>Klikk en celle</strong> (rad × kolonne); popup med farger for nivå{" "}
-            <span className="text-muted-foreground">
-              0–5. Ofte er én risiko = ett kryss der sannsynlighet og konsekvens møtes;
-              celler dere ikke bruker, kan stå på 0 (ikke vurdert).
-            </span>
+            <strong>Vurderingen legges inn her</strong> — klikk en celle og sett
+            nivå. Du kan legge <strong>flere risiko-/begrunnelse-punkter</strong> i
+            samme celle (f.eks. flere trusler i samme kryss). Bruk flagg for varsel
+            eller «krever handling» der dere vil følge opp i oversikten.
           </p>
         </div>
         <div
@@ -178,9 +235,7 @@ export function RosMatrix({
                 </th>
                 {colLabels.map((_, j) => {
                   const v = matrixValues[i]?.[j] ?? 0;
-                  const hasNote = Boolean(
-                    (notesGrid[i]?.[j] ?? "").trim(),
-                  );
+                  const hasNote = hasCellContent(i, j);
                   const isPicked =
                     picker?.row === i && picker?.col === j && interactive;
                   return (
@@ -244,7 +299,7 @@ export function RosMatrix({
           size="2xl"
           titleId="ros-cell-picker-title"
           descriptionId="ros-cell-picker-desc"
-          className="max-h-[min(90vh,32rem)]"
+          className="max-h-[min(92vh,40rem)] overflow-y-auto"
         >
           <DialogHeader>
             <p
@@ -262,29 +317,129 @@ export function RosMatrix({
               <strong className="text-foreground">{pickerRowLabel}</strong>
               <span className="text-muted-foreground/80"> × </span>
               <strong className="text-foreground">{pickerColLabel}</strong>.
+              Du kan legge flere punkter i samme celle — hvert punkt kan ha eget
+              varsel/handling.
             </p>
           </DialogHeader>
           <DialogBody>
-            {onCellNoteChange && picker ? (
-              <div className="mb-4 space-y-2">
-                <Label htmlFor="ros-cell-note" className="text-foreground">
-                  Celle-notat (tekst)
-                </Label>
-                <Textarea
-                  id="ros-cell-note"
-                  value={pickerCellNote}
-                  onChange={(e) => {
-                    if (!picker || !onCellNoteChange) return;
-                    onCellNoteChange(picker.row, picker.col, e.target.value);
-                  }}
-                  rows={3}
-                  placeholder="Begrunnelse, referanse, hva som er vurdert …"
-                  className="min-h-[4.5rem] resize-y text-sm"
-                />
+            {onCellItemsChange && picker ? (
+              <div className="mb-4 space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <Label className="text-foreground">
+                    Risiko- og begrunnelse-punkter (flere per celle)
+                  </Label>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => {
+                      updateItemAt(picker.row, picker.col, [
+                        ...pickerItems,
+                        { id: newRosCellItemId(), text: "" },
+                      ]);
+                    }}
+                  >
+                    <Plus className="mr-1.5 size-4" />
+                    Legg til punkt
+                  </Button>
+                </div>
+                {pickerItems.length === 0 ? (
+                  <p className="text-muted-foreground text-sm">
+                    Ingen punkter ennå — trykk «Legg til punkt» eller skriv i feltet
+                    som opprettes.
+                  </p>
+                ) : null}
+                <ul className="space-y-4">
+                  {pickerItems.map((it, idx) => (
+                    <li
+                      key={it.id}
+                      className="bg-muted/25 space-y-2 rounded-xl border p-3"
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <span className="text-muted-foreground text-xs font-medium">
+                          Punkt {idx + 1}
+                        </span>
+                        <Button
+                          type="button"
+                          size="icon"
+                          variant="ghost"
+                          className="text-destructive size-8 shrink-0"
+                          aria-label="Fjern punkt"
+                          onClick={() => {
+                            updateItemAt(
+                              picker.row,
+                              picker.col,
+                              pickerItems.filter((x) => x.id !== it.id),
+                            );
+                          }}
+                        >
+                          <Trash2 className="size-4" />
+                        </Button>
+                      </div>
+                      <Textarea
+                        value={it.text}
+                        onChange={(e) =>
+                          patchItem(picker.row, picker.col, it.id, {
+                            text: e.target.value,
+                          })
+                        }
+                        placeholder="Beskriv risiko, scenario, referanse …"
+                        rows={2}
+                        className="min-h-[3rem] resize-y text-sm"
+                      />
+                      <div className="flex flex-wrap gap-4">
+                        <div className="flex items-center gap-2">
+                          <Checkbox
+                            id={`ros-watch-${it.id}`}
+                            checked={it.flags?.includes(ROS_CELL_FLAG_WATCH) ?? false}
+                            onCheckedChange={(c) =>
+                              patchItem(picker.row, picker.col, it.id, {
+                                flags: toggleFlag(
+                                  it.flags,
+                                  ROS_CELL_FLAG_WATCH,
+                                  Boolean(c),
+                                ),
+                              })
+                            }
+                          />
+                          <Label
+                            htmlFor={`ros-watch-${it.id}`}
+                            className="cursor-pointer text-sm font-normal"
+                          >
+                            Varsel (vis i oversikt)
+                          </Label>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Checkbox
+                            id={`ros-act-${it.id}`}
+                            checked={
+                              it.flags?.includes(ROS_CELL_FLAG_REQUIRES_ACTION) ??
+                              false
+                            }
+                            onCheckedChange={(c) =>
+                              patchItem(picker.row, picker.col, it.id, {
+                                flags: toggleFlag(
+                                  it.flags,
+                                  ROS_CELL_FLAG_REQUIRES_ACTION,
+                                  Boolean(c),
+                                ),
+                              })
+                            }
+                          />
+                          <Label
+                            htmlFor={`ros-act-${it.id}`}
+                            className="cursor-pointer text-sm font-normal"
+                          >
+                            Krever handling
+                          </Label>
+                        </div>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
                 <p className="text-muted-foreground text-[11px] leading-relaxed">
-                  Lagres sammen med resten av analysen når du trykker «Lagre
-                  endringer» øverst på siden. Nivåendringer loggføres automatisk i
-                  risikologgen under.
+                  Lagres med «Lagre endringer» på analysesiden. Oversikten ROS kan
+                  filtrere på høy risiko og flaggde punkter.
                 </p>
               </div>
             ) : null}
@@ -319,8 +474,7 @@ export function RosMatrix({
             </div>
             <p className="text-muted-foreground mt-4 text-[11px] leading-relaxed">
               Cellefargen oppdateres med en gang lokalt. «Lagre endringer» sender
-              matrise, notater og celle-notat til server og skriver nivåendringer
-              til loggen.
+              matrise og punkter til server og loggfører nivåendringer.
             </p>
           </DialogBody>
           <DialogFooter>
@@ -363,7 +517,7 @@ export function RosMatrix({
         />
         <span>
           {interactive
-            ? "Verdiene er veiledende for prioritering og må dokumenteres i notat eller rapport i tråd med deres metode."
+            ? "Verdiene er veiledende for prioritering og må dokumenteres i tråd med deres metode."
             : "Matrise i visningsmodus."}
         </span>
       </p>

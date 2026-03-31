@@ -1,5 +1,6 @@
 "use client";
 
+import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import {
   Card,
@@ -46,6 +47,9 @@ export function AssessmentContextCard({
       : "skip",
   );
   const workspace = useQuery(api.workspaces.get, { workspaceId });
+  const rosContextLinks = useQuery(api.ros.getRosContextForAssessment, {
+    assessmentId,
+  });
 
   const setOrg = useMutation(api.assessments.setAssessmentOrgUnit);
   const setCompliance = useMutation(api.assessments.updateAssessmentCompliance);
@@ -251,6 +255,60 @@ export function AssessmentContextCard({
               />
             </div>
           </div>
+          {rosContextLinks && rosContextLinks.length > 0 ? (
+            <div className="bg-muted/25 space-y-3 rounded-xl border p-4">
+              <p className="text-foreground text-sm font-medium">
+                Koblede ROS-analyser (arbeidsområdet)
+              </p>
+              <p className="text-muted-foreground text-xs leading-relaxed">
+                Her ser du automatisk oppsummering fra matrisene og flagg som er
+                satt på koblingen — nyttig både for PVV og for å spore hva som er
+                viktig å vite fra ROS i personvernvurderingen.
+              </p>
+              <ul className="space-y-4">
+                {rosContextLinks.map((ctx) => (
+                  <li
+                    key={ctx.linkId}
+                    className="border-border/60 space-y-2 border-b pb-3 last:border-0 last:pb-0"
+                  >
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Link
+                        href={`/w/${workspaceId}/ros/a/${ctx.rosAnalysisId}`}
+                        className="text-primary text-sm font-medium underline-offset-4 hover:underline"
+                      >
+                        {ctx.title}
+                      </Link>
+                      {ctx.highlightForPvv ? (
+                        <Badge variant="secondary" className="text-[10px] font-normal">
+                          Viktig for PVV
+                        </Badge>
+                      ) : null}
+                      {ctx.separateAfterLayout ? (
+                        <Badge variant="outline" className="text-[10px] font-normal">
+                          Eget rutenett etter tiltak
+                        </Badge>
+                      ) : null}
+                    </div>
+                    {ctx.flags && ctx.flags.length > 0 ? (
+                      <p className="text-muted-foreground text-xs">
+                        Flagg: {ctx.flags.join(", ")}
+                      </p>
+                    ) : null}
+                    {ctx.pvvLinkNote ? (
+                      <p className="text-foreground text-sm leading-relaxed">
+                        {ctx.pvvLinkNote}
+                      </p>
+                    ) : null}
+                    <ul className="text-muted-foreground list-inside list-disc space-y-0.5 text-xs leading-relaxed">
+                      {ctx.rosSummary.summaryLines.map((line, i) => (
+                        <li key={i}>{line}</li>
+                      ))}
+                    </ul>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
           <div className="flex flex-wrap gap-2">
             <Button
               type="button"

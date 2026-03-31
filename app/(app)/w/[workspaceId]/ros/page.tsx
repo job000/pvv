@@ -29,8 +29,16 @@ export default function RosPage() {
             prosesskandidater
           </Link>{" "}
           fra samme arbeidsområde — slik følger dere én rød tråd fra vurdering
-          til risiko. Fanen <strong>Oversikt</strong> viser søylediagram,
-          nøkkeltall og sammenligning på tvers av alle analyser.
+          til risiko. Under{" "}
+          <Link
+            href={`/w/${workspaceId}/ros/akser`}
+            className="text-primary font-medium underline-offset-4 hover:underline"
+          >
+            ROS-akser
+          </Link>{" "}
+          vedlikeholder dere gjenbrukbare etikettlister med beskrivelser. Fanen{" "}
+          <strong>Oversikt</strong> viser søylediagram, nøkkeltall og sammenligning
+          på tvers av alle analyser.
         </p>
       </header>
       <RosWorkspace workspaceId={workspaceId} />

@@ -20,6 +20,60 @@ export function cellRiskClass(level: number): string {
   }
 }
 
+/**
+ * Fyll-, tekst- og kantfarger for PDF-eksport (matcher semantikk fra cellRiskClass).
+ */
+export function pdfRiskLevelStyle(level: number): {
+  fill: [number, number, number];
+  text: [number, number, number];
+  stroke: [number, number, number];
+} {
+  switch (level) {
+    case 0:
+      return {
+        fill: [243, 244, 246],
+        text: [55, 65, 81],
+        stroke: [156, 163, 175],
+      };
+    case 1:
+      return {
+        fill: [209, 250, 229],
+        text: [6, 78, 59],
+        stroke: [16, 185, 129],
+      };
+    case 2:
+      return {
+        fill: [236, 252, 203],
+        text: [63, 98, 18],
+        stroke: [132, 204, 22],
+      };
+    case 3:
+      return {
+        fill: [254, 243, 199],
+        text: [146, 64, 14],
+        stroke: [245, 158, 11],
+      };
+    case 4:
+      return {
+        fill: [255, 237, 213],
+        text: [154, 52, 18],
+        stroke: [249, 115, 22],
+      };
+    case 5:
+      return {
+        fill: [254, 226, 226],
+        text: [127, 29, 29],
+        stroke: [239, 68, 68],
+      };
+    default:
+      return {
+        fill: [243, 244, 246],
+        text: [55, 65, 81],
+        stroke: [156, 163, 175],
+      };
+  }
+}
+
 export function legendItems(): Array<{ level: number; label: string }> {
   return [
     { level: 0, label: "Ikke vurdert" },

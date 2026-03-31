@@ -368,6 +368,32 @@ export default defineSchema({
   }).index("by_workspace", ["workspaceId"]),
 
   /**
+   * Gjenbrukbare akse-/etikett-lister (sannsynlighet, konsekvens, tiltak …)
+   * med beskrivelse per punkt — CRUD per arbeidsområde.
+   */
+  rosAxisLists: defineTable({
+    workspaceId: v.id("workspaces"),
+    name: v.string(),
+    description: v.optional(v.string()),
+    /** Kort kode (unik per workspace), f.eks. sannsynlighet_v2 */
+    code: v.string(),
+    createdByUserId: v.id("users"),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_workspace", ["workspaceId"])
+    .index("by_workspace_code", ["workspaceId", "code"]),
+
+  rosAxisListItems: defineTable({
+    listId: v.id("rosAxisLists"),
+    label: v.string(),
+    description: v.optional(v.string()),
+    sortOrder: v.number(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_list", ["listId"]),
+
+  /**
    * Utfylt ROS-analyse med matrise (0–5 per celle). Kobles til kandidat.
    * @deprecated assessmentId — bruk rosAnalysisAssessments for PVV-kobling (mange-til-mange).
    */
@@ -379,10 +405,52 @@ export default defineSchema({
     colAxisTitle: v.string(),
     rowLabels: v.array(v.string()),
     colLabels: v.array(v.string()),
-    /** 0 = ikke vurdert, 1–5 = risikonivå */
+    /** 0 = ikke vurdert, 1–5 = risikonivå — utgangspunkt / før tiltak */
     matrixValues: v.array(v.array(v.number())),
-    /** Fritekst per celle (samme dimensjon som matrixValues) — begrunnelse, referanser */
+    /** Fritekst per celle (samme dimensjon som matrixValues) — avledet fra cellItems ved lagring */
     cellNotes: v.optional(v.array(v.array(v.string()))),
+    /**
+     * Flere risiko-/begrunnelse-punkter per celle (før tiltak).
+     * cellNotes er sammenslått tekst for PDF/eldre visning.
+     */
+    cellItems: v.optional(
+      v.array(
+        v.array(
+          v.array(
+            v.object({
+              id: v.string(),
+              text: v.string(),
+              flags: v.optional(v.array(v.string())),
+            }),
+          ),
+        ),
+      ),
+    ),
+    /** Restrisiko etter planlagte/gjennomførte tiltak */
+    matrixValuesAfter: v.optional(v.array(v.array(v.number()))),
+    cellNotesAfter: v.optional(v.array(v.array(v.string()))),
+    /** Flere punkter per celle (etter tiltak) — cellNotesAfter avledet ved lagring */
+    cellItemsAfter: v.optional(
+      v.array(
+        v.array(
+          v.array(
+            v.object({
+              id: v.string(),
+              text: v.string(),
+              flags: v.optional(v.array(v.string())),
+            }),
+          ),
+        ),
+      ),
+    ),
+    /**
+     * Valgfritt eget rutenett for «etter tiltak» (ulike akser/etiketter enn før).
+     * Mangler → samme dimensjon som før-matrisen.
+     */
+    rowAxisTitleAfter: v.optional(v.string()),
+    colAxisTitleAfter: v.optional(v.string()),
+    rowLabelsAfter: v.optional(v.array(v.string())),
+    colLabelsAfter: v.optional(v.array(v.string())),
     candidateId: v.id("candidates"),
     assessmentId: v.optional(v.id("assessments")),
     notes: v.optional(v.string()),
@@ -403,6 +471,10 @@ export default defineSchema({
     workspaceId: v.id("workspaces"),
     rosAnalysisId: v.id("rosAnalyses"),
     body: v.string(),
+    /** Hvilken matrise cellekoblingen gjelder (mangler = før tiltak, eldre data) */
+    matrixPhase: v.optional(
+      v.union(v.literal("before"), v.literal("after")),
+    ),
     linkedRow: v.optional(v.number()),
     linkedCol: v.optional(v.number()),
     createdByUserId: v.id("users"),
@@ -417,6 +489,12 @@ export default defineSchema({
     rosAnalysisId: v.id("rosAnalyses"),
     assessmentId: v.id("assessments"),
     note: v.optional(v.string()),
+    /** Manuelt / semantisk flagg for sporbarhet PVV ↔ ROS */
+    flags: v.optional(v.array(v.string())),
+    /** Synlig i PVV som «krever oppmerksomhet» */
+    highlightForPvv: v.optional(v.boolean()),
+    /** Kort notat til PVV-kontekst (følger koblingen) */
+    pvvLinkNote: v.optional(v.string()),
     createdByUserId: v.id("users"),
     createdAt: v.number(),
   })
@@ -436,6 +514,38 @@ export default defineSchema({
     colLabels: v.array(v.string()),
     matrixValues: v.array(v.array(v.number())),
     cellNotes: v.optional(v.array(v.array(v.string()))),
+    cellItems: v.optional(
+      v.array(
+        v.array(
+          v.array(
+            v.object({
+              id: v.string(),
+              text: v.string(),
+              flags: v.optional(v.array(v.string())),
+            }),
+          ),
+        ),
+      ),
+    ),
+    matrixValuesAfter: v.optional(v.array(v.array(v.number()))),
+    cellNotesAfter: v.optional(v.array(v.array(v.string()))),
+    cellItemsAfter: v.optional(
+      v.array(
+        v.array(
+          v.array(
+            v.object({
+              id: v.string(),
+              text: v.string(),
+              flags: v.optional(v.array(v.string())),
+            }),
+          ),
+        ),
+      ),
+    ),
+    rowAxisTitleAfter: v.optional(v.string()),
+    colAxisTitleAfter: v.optional(v.string()),
+    rowLabelsAfter: v.optional(v.array(v.string())),
+    colLabelsAfter: v.optional(v.array(v.string())),
     notes: v.optional(v.string()),
     createdByUserId: v.id("users"),
     createdAt: v.number(),

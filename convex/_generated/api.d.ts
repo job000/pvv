@@ -23,6 +23,7 @@ import type * as orgUnits from "../orgUnits.js";
 import type * as reminderInternal from "../reminderInternal.js";
 import type * as reminders from "../reminders.js";
 import type * as ros from "../ros.js";
+import type * as rosAxisLists from "../rosAxisLists.js";
 import type * as sprints from "../sprints.js";
 import type * as workspaces from "../workspaces.js";
 
@@ -48,6 +49,7 @@ declare const fullApi: ApiFromModules<{
   reminderInternal: typeof reminderInternal;
   reminders: typeof reminders;
   ros: typeof ros;
+  rosAxisLists: typeof rosAxisLists;
   sprints: typeof sprints;
   workspaces: typeof workspaces;
 }>;

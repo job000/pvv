@@ -13,6 +13,18 @@ import {
   requireWorkspaceMember,
 } from "./lib/access";
 import {
+  cellHasAttention,
+  flattenCellItemsMatrixToLegacyNotes,
+  normalizeCellItems,
+  resizeCellItemsMatrix,
+  type RosCellItem,
+  type RosCellItemMatrix,
+} from "../lib/ros-cell-items";
+import {
+  computeRosSummary,
+  type RosSummary,
+} from "../lib/ros-summary";
+import {
   DEFAULT_ROS_COL_AXIS,
   DEFAULT_ROS_COL_LABELS,
   DEFAULT_ROS_ROW_AXIS,
@@ -73,6 +85,31 @@ function assertNotesShape(
   }
 }
 
+function assertCellItemsShape(
+  items: RosCellItemMatrix,
+  rowCount: number,
+  colCount: number,
+) {
+  if (items.length !== rowCount) {
+    throw new Error("Celle-punkter matcher ikke antall rader.");
+  }
+  for (const row of items) {
+    if (row.length !== colCount) {
+      throw new Error("Celle-punkter matcher ikke antall kolonner.");
+    }
+    for (const cell of row) {
+      for (const it of cell) {
+        if (!it.id?.trim()) {
+          throw new Error("Hvert punkt må ha en id.");
+        }
+        if (it.text.length > 8000) {
+          throw new Error("Cellepunkt er for langt.");
+        }
+      }
+    }
+  }
+}
+
 function assertMatrixShape(
   values: number[][],
   rowCount: number,
@@ -91,6 +128,90 @@ function assertMatrixShape(
       }
     }
   }
+}
+
+function hasSeparateAfterLayout(row: Doc<"rosAnalyses">): boolean {
+  const rl = trimLabels(row.rowLabelsAfter ?? []);
+  const cl = trimLabels(row.colLabelsAfter ?? []);
+  return rl.length >= MIN_DIM && cl.length >= MIN_DIM;
+}
+
+/** Dimensjon og etiketter for «etter tiltak»-matrise (egen layout eller lik som før). */
+function afterDimensions(row: Doc<"rosAnalyses">): {
+  rows: number;
+  cols: number;
+  rowLabels: string[];
+  colLabels: string[];
+  rowAxisTitle: string;
+  colAxisTitle: string;
+} {
+  if (hasSeparateAfterLayout(row)) {
+    const rl = trimLabels(row.rowLabelsAfter!);
+    const cl = trimLabels(row.colLabelsAfter!);
+    return {
+      rows: rl.length,
+      cols: cl.length,
+      rowLabels: rl,
+      colLabels: cl,
+      rowAxisTitle: (row.rowAxisTitleAfter ?? row.rowAxisTitle).trim(),
+      colAxisTitle: (row.colAxisTitleAfter ?? row.colAxisTitle).trim(),
+    };
+  }
+  return {
+    rows: row.rowLabels.length,
+    cols: row.colLabels.length,
+    rowLabels: row.rowLabels,
+    colLabels: row.colLabels,
+    rowAxisTitle: row.rowAxisTitle,
+    colAxisTitle: row.colAxisTitle,
+  };
+}
+
+function resizeNumberMatrix(
+  old: number[][] | undefined,
+  oldR: number,
+  oldC: number,
+  newR: number,
+  newC: number,
+): number[][] {
+  const prev = old ?? emptyMatrix(oldR, oldC);
+  const out: number[][] = [];
+  for (let i = 0; i < newR; i++) {
+    const row: number[] = [];
+    for (let j = 0; j < newC; j++) {
+      const v =
+        i < oldR && j < oldC && prev[i]?.[j] !== undefined
+          ? (prev[i]![j] ?? 0)
+          : 0;
+      row.push(Math.min(5, Math.max(0, Math.round(v))));
+    }
+    out.push(row);
+  }
+  return out;
+}
+
+/** Restrisiko-matrise: tom 0-matrise hvis felt mangler (eldre dokumenter). */
+function normalizedAfterMatrices(row: Doc<"rosAnalyses">): {
+  matrixValuesAfter: number[][];
+  cellNotesAfter: string[][];
+  cellItemsAfter: RosCellItemMatrix;
+} {
+  const { rows, cols } = afterDimensions(row);
+  const base = emptyMatrix(rows, cols);
+  const raw = row.matrixValuesAfter;
+  let matrixValuesAfter: number[][];
+  if (!raw || raw.length !== rows || !raw[0] || raw[0].length !== cols) {
+    matrixValuesAfter = base.map((r) => [...r]);
+  } else {
+    matrixValuesAfter = raw.map((r) => [...r]);
+  }
+  const cellItemsAfter = normalizeCellItems(
+    matrixValuesAfter,
+    row.cellNotesAfter,
+    row.cellItemsAfter as RosCellItemMatrix | undefined,
+  );
+  const cellNotesAfter = flattenCellItemsMatrixToLegacyNotes(cellItemsAfter);
+  return { matrixValuesAfter, cellNotesAfter, cellItemsAfter };
 }
 
 function clampRosPriority(p: number | undefined): number {
@@ -184,7 +305,13 @@ export const listAnalyses = query({
 
 /** Aggregerer matrisedata for oversikt og sammenligning på tvers av ROS-analyser. */
 export const workspaceDashboard = query({
-  args: { workspaceId: v.id("workspaces") },
+  args: {
+    workspaceId: v.id("workspaces"),
+    /** Minste celle-nivå som vises som «oppmerksomhet» (standard 4 = høy/kritisk). */
+    minAlertLevel: v.optional(v.number()),
+    /** Ta med celler der et punkt er flagget for varsel/handling selv om nivå er lavere. */
+    includeTaggedRiskItems: v.optional(v.boolean()),
+  },
   handler: async (ctx, args) => {
     const userId = await getAuthUserId(ctx);
     if (!userId) {
@@ -198,6 +325,15 @@ export const workspaceDashboard = query({
       )
       .order("desc")
       .collect();
+
+    const minAlertLevel = Math.min(
+      5,
+      Math.max(0, Math.round(args.minAlertLevel ?? 4)),
+    );
+    const includeTagged =
+      args.includeTaggedRiskItems === undefined
+        ? true
+        : args.includeTaggedRiskItems;
 
     const workspaceCounts = [0, 0, 0, 0, 0, 0] as [
       number,
@@ -223,6 +359,56 @@ export const workspaceDashboard = query({
       highRiskCells: number;
       counts: [number, number, number, number, number, number];
     }> = [];
+
+    const attentionItems: Array<{
+      analysisId: Id<"rosAnalyses">;
+      title: string;
+      candidateName: string;
+      candidateCode: string;
+      phase: "before" | "after";
+      rowIndex: number;
+      colIndex: number;
+      rowLabel: string;
+      colLabel: string;
+      level: number;
+      reasons: Array<"level_ge_4" | "watch" | "requires_action">;
+      flaggedTexts: string[];
+    }> = [];
+
+    function pushAttention(
+      r: Doc<"rosAnalyses">,
+      candName: string,
+      candCode: string,
+      phase: "before" | "after",
+      i: number,
+      j: number,
+      rowLabels: string[],
+      colLabels: string[],
+      level: number,
+      items: RosCellItem[],
+    ) {
+      const { reasons, flaggedTexts } = cellHasAttention(level, items);
+      if (reasons.length === 0) return;
+      const highEnough = level >= minAlertLevel;
+      const tagged =
+        includeTagged &&
+        reasons.some((x) => x === "watch" || x === "requires_action");
+      if (!highEnough && !tagged) return;
+      attentionItems.push({
+        analysisId: r._id,
+        title: r.title,
+        candidateName: candName,
+        candidateCode: candCode,
+        phase,
+        rowIndex: i,
+        colIndex: j,
+        rowLabel: rowLabels[i] ?? `Rad ${i + 1}`,
+        colLabel: colLabels[j] ?? `Kol ${j + 1}`,
+        level,
+        reasons,
+        flaggedTexts,
+      });
+    }
 
     for (const r of rows) {
       const cand = await ctx.db.get(r.candidateId);
@@ -253,10 +439,32 @@ export const workspaceDashboard = query({
       let sumAssessed = 0;
       let highRiskCells = 0;
       let cellCount = 0;
-      for (const row of r.matrixValues) {
-        for (const raw of row) {
+      const afterNorm = normalizedAfterMatrices(r);
+      const afterM = afterNorm.matrixValuesAfter;
+      const beforeM = r.matrixValues;
+      const cellItemsBefore = normalizeCellItems(
+        beforeM,
+        r.cellNotes,
+        r.cellItems as RosCellItemMatrix | undefined,
+      );
+      const rowsB = beforeM.length;
+      const colsB = beforeM[0]?.length ?? 0;
+      const rowsA = afterM.length;
+      const colsA = afterM[0]?.length ?? 0;
+      const rMax = Math.max(rowsB, rowsA);
+      const cMax = Math.max(colsB, colsA);
+      for (let i = 0; i < rMax; i++) {
+        for (let j = 0; j < cMax; j++) {
           cellCount++;
-          const v = Math.min(5, Math.max(0, Math.round(raw)));
+          const b =
+            i < rowsB && j < (beforeM[i]?.length ?? 0)
+              ? Math.min(5, Math.max(0, Math.round(beforeM[i]![j] ?? 0)))
+              : 0;
+          const a =
+            i < rowsA && j < (afterM[i]?.length ?? 0)
+              ? Math.min(5, Math.max(0, Math.round(afterM[i]![j] ?? 0)))
+              : 0;
+          const v = Math.max(b, a);
           counts[v]++;
           workspaceCounts[v]++;
           if (v > maxLevel) maxLevel = v;
@@ -265,6 +473,50 @@ export const workspaceDashboard = query({
             sumAssessed += v;
             if (v >= 4) highRiskCells++;
           }
+        }
+      }
+
+      for (let i = 0; i < rowsB; i++) {
+        for (let j = 0; j < colsB; j++) {
+          const level = Math.min(
+            5,
+            Math.max(0, Math.round(beforeM[i]![j] ?? 0)),
+          );
+          const items = cellItemsBefore[i]?.[j] ?? [];
+          pushAttention(
+            r,
+            cand?.name ?? "—",
+            cand?.code ?? "",
+            "before",
+            i,
+            j,
+            r.rowLabels,
+            r.colLabels,
+            level,
+            items,
+          );
+        }
+      }
+      const dimAfter = afterDimensions(r);
+      for (let i = 0; i < rowsA; i++) {
+        for (let j = 0; j < colsA; j++) {
+          const level = Math.min(
+            5,
+            Math.max(0, Math.round(afterM[i]![j] ?? 0)),
+          );
+          const items = afterNorm.cellItemsAfter[i]?.[j] ?? [];
+          pushAttention(
+            r,
+            cand?.name ?? "—",
+            cand?.code ?? "",
+            "after",
+            i,
+            j,
+            dimAfter.rowLabels,
+            dimAfter.colLabels,
+            level,
+            items,
+          );
         }
       }
       if (maxLevel > maxAcrossAll) maxAcrossAll = maxLevel;
@@ -291,6 +543,8 @@ export const workspaceDashboard = query({
       .map((c, i) => (i > 0 ? c : 0))
       .reduce((a, b) => a + b, 0);
 
+    attentionItems.sort((x, y) => y.level - x.level);
+
     return {
       analysisCount: analyses.length,
       totalCells,
@@ -299,6 +553,9 @@ export const workspaceDashboard = query({
       maxAcrossAll,
       workspaceCounts,
       analyses,
+      attentionItems,
+      minAlertLevel,
+      includeTaggedRiskItems: includeTagged,
     };
   },
 });
@@ -327,6 +584,9 @@ export const getAnalysis = query({
       assessmentId: Id<"assessments">;
       title: string;
       note: string | undefined;
+      flags: string[] | undefined;
+      highlightForPvv: boolean | undefined;
+      pvvLinkNote: string | undefined;
     }> = [];
     for (const l of links) {
       const a = await ctx.db.get(l.assessmentId);
@@ -338,6 +598,9 @@ export const getAnalysis = query({
         assessmentId: l.assessmentId,
         title: a.title,
         note: l.note,
+        flags: l.flags,
+        highlightForPvv: l.highlightForPvv,
+        pvvLinkNote: l.pvvLinkNote,
       });
     }
     let legacyAssessmentTitle: string | null = null;
@@ -345,9 +608,35 @@ export const getAnalysis = query({
       const a = await ctx.db.get(row.assessmentId);
       legacyAssessmentTitle = a?.title ?? null;
     }
+    const { matrixValuesAfter, cellNotesAfter, cellItemsAfter } =
+      normalizedAfterMatrices(row);
+    const cellItems = normalizeCellItems(
+      row.matrixValues,
+      row.cellNotes,
+      row.cellItems as RosCellItemMatrix | undefined,
+    );
+    const cellNotes = flattenCellItemsMatrixToLegacyNotes(cellItems);
+    const rosSummary = computeRosSummary({
+      matrixBefore: row.matrixValues,
+      matrixAfter: matrixValuesAfter,
+    });
+    const dimAfter = afterDimensions(row);
+    const afterAxis = {
+      separateLayout: hasSeparateAfterLayout(row),
+      rowAxisTitle: dimAfter.rowAxisTitle,
+      colAxisTitle: dimAfter.colAxisTitle,
+      rowLabels: dimAfter.rowLabels,
+      colLabels: dimAfter.colLabels,
+    };
     return {
       ...row,
-      cellNotes: normalizeCellNotes(row.matrixValues, row.cellNotes),
+      cellNotes,
+      cellItems,
+      matrixValuesAfter,
+      cellNotesAfter,
+      cellItemsAfter,
+      rosSummary,
+      afterAxis,
       candidateName: cand?.name ?? "—",
       candidateCode: cand?.code ?? "",
       linkedAssessments,
@@ -608,6 +897,14 @@ export const createAnalysis = mutation({
       tpl.colLabels.length,
     );
     const now = Date.now();
+    const matrixValuesAfter = emptyMatrix(
+      tpl.rowLabels.length,
+      tpl.colLabels.length,
+    );
+    const cellNotesAfter = emptyStringMatrix(
+      tpl.rowLabels.length,
+      tpl.colLabels.length,
+    );
     const analysisId = await ctx.db.insert("rosAnalyses", {
       workspaceId: args.workspaceId,
       templateId: args.templateId,
@@ -618,6 +915,8 @@ export const createAnalysis = mutation({
       colLabels: [...tpl.colLabels],
       matrixValues,
       cellNotes,
+      matrixValuesAfter,
+      cellNotesAfter,
       candidateId: args.candidateId,
       assessmentId: undefined,
       notes: args.notes?.trim() || undefined,
@@ -647,11 +946,26 @@ export const createAnalysis = mutation({
   },
 });
 
+const rosCellItemV = v.object({
+  id: v.string(),
+  text: v.string(),
+  flags: v.optional(v.array(v.string())),
+});
+const rosCellItemsMatrixV = v.array(v.array(v.array(rosCellItemV)));
+
 export const updateAnalysis = mutation({
   args: {
     analysisId: v.id("rosAnalyses"),
     matrixValues: v.optional(v.array(v.array(v.number()))),
     cellNotes: v.optional(v.array(v.array(v.string()))),
+    cellItems: v.optional(rosCellItemsMatrixV),
+    matrixValuesAfter: v.optional(v.array(v.array(v.number()))),
+    cellNotesAfter: v.optional(v.array(v.array(v.string()))),
+    cellItemsAfter: v.optional(rosCellItemsMatrixV),
+    rowAxisTitleAfter: v.optional(v.string()),
+    colAxisTitleAfter: v.optional(v.string()),
+    rowLabelsAfter: v.optional(v.array(v.string())),
+    colLabelsAfter: v.optional(v.array(v.string())),
     title: v.optional(v.string()),
     notes: v.optional(v.union(v.string(), v.null())),
   },
@@ -659,6 +973,85 @@ export const updateAnalysis = mutation({
     const userId = await requireUserId(ctx);
     const row = await requireRosAnalysisEdit(ctx, args.analysisId, userId);
     const patch: Record<string, unknown> = { updatedAt: Date.now() };
+
+    if (args.rowAxisTitleAfter !== undefined) {
+      patch.rowAxisTitleAfter = args.rowAxisTitleAfter.trim();
+    }
+    if (args.colAxisTitleAfter !== undefined) {
+      patch.colAxisTitleAfter = args.colAxisTitleAfter.trim();
+    }
+    if (args.rowLabelsAfter !== undefined || args.colLabelsAfter !== undefined) {
+      const rl = trimLabels(args.rowLabelsAfter ?? row.rowLabelsAfter ?? []);
+      const cl = trimLabels(args.colLabelsAfter ?? row.colLabelsAfter ?? []);
+      if (rl.length < MIN_DIM || cl.length < MIN_DIM) {
+        patch.rowLabelsAfter = undefined;
+        patch.colLabelsAfter = undefined;
+        patch.rowAxisTitleAfter = undefined;
+        patch.colAxisTitleAfter = undefined;
+        const oldDim = afterDimensions(row);
+        const br = row.rowLabels.length;
+        const bc = row.colLabels.length;
+        const prevMv = normalizedAfterMatrices(row).matrixValuesAfter;
+        const prevItems = normalizeCellItems(
+          prevMv,
+          row.cellNotesAfter,
+          row.cellItemsAfter as RosCellItemMatrix | undefined,
+        );
+        patch.matrixValuesAfter = resizeNumberMatrix(
+          prevMv,
+          oldDim.rows,
+          oldDim.cols,
+          br,
+          bc,
+        );
+        patch.cellItemsAfter = resizeCellItemsMatrix(
+          prevItems,
+          oldDim.rows,
+          oldDim.cols,
+          br,
+          bc,
+        );
+        patch.cellNotesAfter = flattenCellItemsMatrixToLegacyNotes(
+          patch.cellItemsAfter as RosCellItemMatrix,
+        );
+      } else {
+        validateLabelArrays(rl, cl);
+        patch.rowLabelsAfter = rl;
+        patch.colLabelsAfter = cl;
+        const oldDim = afterDimensions(row);
+        const newR = rl.length;
+        const newC = cl.length;
+        if (oldDim.rows !== newR || oldDim.cols !== newC) {
+          const prevMv = normalizedAfterMatrices(row).matrixValuesAfter;
+          const prevItems = normalizeCellItems(
+            prevMv,
+            row.cellNotesAfter,
+            row.cellItemsAfter as RosCellItemMatrix | undefined,
+          );
+          patch.matrixValuesAfter = resizeNumberMatrix(
+            prevMv,
+            oldDim.rows,
+            oldDim.cols,
+            newR,
+            newC,
+          );
+          patch.cellItemsAfter = resizeCellItemsMatrix(
+            prevItems,
+            oldDim.rows,
+            oldDim.cols,
+            newR,
+            newC,
+          );
+          patch.cellNotesAfter = flattenCellItemsMatrixToLegacyNotes(
+            patch.cellItemsAfter as RosCellItemMatrix,
+          );
+        }
+      }
+    }
+
+    const preview = { ...row, ...patch } as Doc<"rosAnalyses">;
+    const dimAfter = afterDimensions(preview);
+
     if (args.matrixValues !== undefined) {
       assertMatrixShape(
         args.matrixValues,
@@ -677,7 +1070,8 @@ export const updateAnalysis = mutation({
             await ctx.db.insert("rosAnalysisJournalEntries", {
               workspaceId: row.workspaceId,
               rosAnalysisId: args.analysisId,
-              body: `Nivå endret · ${rl.slice(0, 120)} × ${cl.slice(0, 120)}: ${o} → ${n}`,
+              body: `Før tiltak · Nivå endret · ${rl.slice(0, 120)} × ${cl.slice(0, 120)}: ${o} → ${n}`,
+              matrixPhase: "before",
               linkedRow: i,
               linkedCol: j,
               createdByUserId: userId,
@@ -688,7 +1082,21 @@ export const updateAnalysis = mutation({
       }
       patch.matrixValues = args.matrixValues;
     }
-    if (args.cellNotes !== undefined) {
+    if (args.cellItems !== undefined) {
+      const mv = (args.matrixValues ?? row.matrixValues) as number[][];
+      assertMatrixShape(mv, row.rowLabels.length, row.colLabels.length);
+      assertCellItemsShape(
+        args.cellItems as RosCellItemMatrix,
+        row.rowLabels.length,
+        row.colLabels.length,
+      );
+      patch.cellItems = (args.cellItems as RosCellItemMatrix).map((r) =>
+        r.map((c) => c.map((x) => ({ ...x }))),
+      );
+      patch.cellNotes = flattenCellItemsMatrixToLegacyNotes(
+        args.cellItems as RosCellItemMatrix,
+      );
+    } else if (args.cellNotes !== undefined) {
       const mv = (args.matrixValues ?? row.matrixValues) as number[][];
       assertNotesShape(
         args.cellNotes,
@@ -697,6 +1105,64 @@ export const updateAnalysis = mutation({
       );
       assertMatrixShape(mv, row.rowLabels.length, row.colLabels.length);
       patch.cellNotes = args.cellNotes.map((r) => [...r]);
+    }
+    if (args.matrixValuesAfter !== undefined) {
+      assertMatrixShape(
+        args.matrixValuesAfter,
+        dimAfter.rows,
+        dimAfter.cols,
+      );
+      const { matrixValuesAfter: prevAfter } = normalizedAfterMatrices(row);
+      const newM = args.matrixValuesAfter;
+      for (let i = 0; i < newM.length; i++) {
+        for (let j = 0; j < (newM[i]?.length ?? 0); j++) {
+          const o = prevAfter[i]?.[j] ?? 0;
+          const n = newM[i][j];
+          if (o !== n) {
+            const rl = dimAfter.rowLabels[i] ?? `Rad ${i + 1}`;
+            const cl = dimAfter.colLabels[j] ?? `Kol ${j + 1}`;
+            await ctx.db.insert("rosAnalysisJournalEntries", {
+              workspaceId: row.workspaceId,
+              rosAnalysisId: args.analysisId,
+              body: `Etter tiltak · Nivå endret · ${rl.slice(0, 120)} × ${cl.slice(0, 120)}: ${o} → ${n}`,
+              matrixPhase: "after",
+              linkedRow: i,
+              linkedCol: j,
+              createdByUserId: userId,
+              createdAt: Date.now(),
+            });
+          }
+        }
+      }
+      patch.matrixValuesAfter = args.matrixValuesAfter;
+    }
+    if (args.cellItemsAfter !== undefined) {
+      const mv = (args.matrixValuesAfter ??
+        (patch.matrixValuesAfter as number[][] | undefined) ??
+        normalizedAfterMatrices(preview).matrixValuesAfter) as number[][];
+      assertMatrixShape(mv, dimAfter.rows, dimAfter.cols);
+      assertCellItemsShape(
+        args.cellItemsAfter as RosCellItemMatrix,
+        dimAfter.rows,
+        dimAfter.cols,
+      );
+      patch.cellItemsAfter = (args.cellItemsAfter as RosCellItemMatrix).map(
+        (r) => r.map((c) => c.map((x) => ({ ...x }))),
+      );
+      patch.cellNotesAfter = flattenCellItemsMatrixToLegacyNotes(
+        args.cellItemsAfter as RosCellItemMatrix,
+      );
+    } else if (args.cellNotesAfter !== undefined) {
+      const mv = (args.matrixValuesAfter ??
+        (patch.matrixValuesAfter as number[][] | undefined) ??
+        normalizedAfterMatrices(preview).matrixValuesAfter) as number[][];
+      assertNotesShape(
+        args.cellNotesAfter,
+        dimAfter.rows,
+        dimAfter.cols,
+      );
+      assertMatrixShape(mv, dimAfter.rows, dimAfter.cols);
+      patch.cellNotesAfter = args.cellNotesAfter.map((r) => [...r]);
     }
     if (args.title !== undefined) {
       const t = args.title.trim();
@@ -716,6 +1182,9 @@ export const appendJournalEntry = mutation({
   args: {
     analysisId: v.id("rosAnalyses"),
     body: v.string(),
+    matrixPhase: v.optional(
+      v.union(v.literal("before"), v.literal("after")),
+    ),
     linkedRow: v.optional(v.number()),
     linkedCol: v.optional(v.number()),
   },
@@ -734,19 +1203,27 @@ export const appendJournalEntry = mutation({
     if (hasR && hasC) {
       const i = args.linkedRow!;
       const j = args.linkedCol!;
-      if (
-        i < 0 ||
-        j < 0 ||
-        i >= row.rowLabels.length ||
-        j >= row.colLabels.length
-      ) {
-        throw new Error("Ugyldig cellekobling.");
+      if (args.matrixPhase === "after") {
+        const dim = afterDimensions(row);
+        if (i < 0 || j < 0 || i >= dim.rows || j >= dim.cols) {
+          throw new Error("Ugyldig cellekobling.");
+        }
+      } else {
+        if (
+          i < 0 ||
+          j < 0 ||
+          i >= row.rowLabels.length ||
+          j >= row.colLabels.length
+        ) {
+          throw new Error("Ugyldig cellekobling.");
+        }
       }
     }
     await ctx.db.insert("rosAnalysisJournalEntries", {
       workspaceId: row.workspaceId,
       rosAnalysisId: args.analysisId,
       body: text,
+      matrixPhase: args.matrixPhase,
       linkedRow: args.linkedRow,
       linkedCol: args.linkedCol,
       createdByUserId: userId,
@@ -822,6 +1299,9 @@ export const linkAssessment = mutation({
     analysisId: v.id("rosAnalyses"),
     assessmentId: v.id("assessments"),
     note: v.optional(v.string()),
+    flags: v.optional(v.array(v.string())),
+    highlightForPvv: v.optional(v.boolean()),
+    pvvLinkNote: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const userId = await requireUserId(ctx);
@@ -850,9 +1330,100 @@ export const linkAssessment = mutation({
       rosAnalysisId: args.analysisId,
       assessmentId: args.assessmentId,
       note: args.note?.trim() || undefined,
+      flags: args.flags,
+      highlightForPvv: args.highlightForPvv,
+      pvvLinkNote: args.pvvLinkNote?.trim() || undefined,
       createdByUserId: userId,
       createdAt: now,
     });
+  },
+});
+
+export const updateRosAssessmentLink = mutation({
+  args: {
+    linkId: v.id("rosAnalysisAssessments"),
+    note: v.optional(v.union(v.string(), v.null())),
+    flags: v.optional(v.array(v.string())),
+    highlightForPvv: v.optional(v.boolean()),
+    pvvLinkNote: v.optional(v.union(v.string(), v.null())),
+  },
+  handler: async (ctx, args) => {
+    const userId = await requireUserId(ctx);
+    const link = await ctx.db.get(args.linkId);
+    if (!link) {
+      throw new Error("Kobling finnes ikke.");
+    }
+    await requireRosAnalysisEdit(ctx, link.rosAnalysisId, userId);
+    const patch: Record<string, unknown> = {};
+    if (args.note !== undefined) {
+      patch.note = args.note === null ? undefined : args.note.trim() || undefined;
+    }
+    if (args.flags !== undefined) {
+      patch.flags = args.flags;
+    }
+    if (args.highlightForPvv !== undefined) {
+      patch.highlightForPvv = args.highlightForPvv;
+    }
+    if (args.pvvLinkNote !== undefined) {
+      patch.pvvLinkNote =
+        args.pvvLinkNote === null ? undefined : args.pvvLinkNote.trim() || undefined;
+    }
+    await ctx.db.patch(args.linkId, patch);
+    return null;
+  },
+});
+
+/** PVV-siden: sammendrag av koblede ROS-analyser (risiko, flagg, notat). */
+export const getRosContextForAssessment = query({
+  args: { assessmentId: v.id("assessments") },
+  handler: async (ctx, args) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) {
+      return [];
+    }
+    const a = await ctx.db.get(args.assessmentId);
+    if (!a) {
+      return [];
+    }
+    await requireWorkspaceMember(ctx, a.workspaceId, userId, "viewer");
+    const links = await ctx.db
+      .query("rosAnalysisAssessments")
+      .withIndex("by_assessment", (q) => q.eq("assessmentId", args.assessmentId))
+      .collect();
+    const out: Array<{
+      linkId: Id<"rosAnalysisAssessments">;
+      rosAnalysisId: Id<"rosAnalyses">;
+      title: string;
+      note: string | undefined;
+      flags: string[] | undefined;
+      highlightForPvv: boolean | undefined;
+      pvvLinkNote: string | undefined;
+      rosSummary: RosSummary;
+      separateAfterLayout: boolean;
+    }> = [];
+    for (const l of links) {
+      const ros = await ctx.db.get(l.rosAnalysisId);
+      if (!ros || ros.workspaceId !== a.workspaceId) {
+        continue;
+      }
+      const { matrixValuesAfter } = normalizedAfterMatrices(ros);
+      const rosSummary = computeRosSummary({
+        matrixBefore: ros.matrixValues,
+        matrixAfter: matrixValuesAfter,
+      });
+      out.push({
+        linkId: l._id,
+        rosAnalysisId: ros._id,
+        title: ros.title,
+        note: l.note,
+        flags: l.flags,
+        highlightForPvv: l.highlightForPvv,
+        pvvLinkNote: l.pvvLinkNote,
+        rosSummary,
+        separateAfterLayout: hasSeparateAfterLayout(ros),
+      });
+    }
+    return out;
   },
 });
 
@@ -946,6 +1517,12 @@ export const createVersion = mutation({
       .first();
     const next = (last?.version ?? 0) + 1;
     const now = Date.now();
+    const after = normalizedAfterMatrices(analysis);
+    const cellItemsSnap = normalizeCellItems(
+      analysis.matrixValues,
+      analysis.cellNotes,
+      analysis.cellItems as RosCellItemMatrix | undefined,
+    );
     return await ctx.db.insert("rosAnalysisVersions", {
       workspaceId: analysis.workspaceId,
       rosAnalysisId: args.analysisId,
@@ -960,6 +1537,22 @@ export const createVersion = mutation({
         analysis.matrixValues,
         analysis.cellNotes,
       ).map((r) => [...r]),
+      cellItems: cellItemsSnap.map((r) =>
+        r.map((c) => c.map((x) => ({ ...x }))),
+      ),
+      matrixValuesAfter: after.matrixValuesAfter.map((r) => [...r]),
+      cellNotesAfter: after.cellNotesAfter.map((r) => [...r]),
+      cellItemsAfter: after.cellItemsAfter.map((r) =>
+        r.map((c) => c.map((x) => ({ ...x }))),
+      ),
+      rowAxisTitleAfter: analysis.rowAxisTitleAfter,
+      colAxisTitleAfter: analysis.colAxisTitleAfter,
+      rowLabelsAfter: analysis.rowLabelsAfter
+        ? [...analysis.rowLabelsAfter]
+        : undefined,
+      colLabelsAfter: analysis.colLabelsAfter
+        ? [...analysis.colLabelsAfter]
+        : undefined,
       notes: analysis.notes,
       createdByUserId: userId,
       createdAt: now,
@@ -985,6 +1578,38 @@ export const restoreVersion = mutation({
       throw new Error("Fant ikke denne versjonen.");
     }
     const now = Date.now();
+    const current = await ctx.db.get(args.analysisId);
+    const pseudo = {
+      ...current!,
+      rowAxisTitle: ver.rowAxisTitle,
+      colAxisTitle: ver.colAxisTitle,
+      rowLabels: ver.rowLabels,
+      colLabels: ver.colLabels,
+      rowAxisTitleAfter: ver.rowAxisTitleAfter,
+      colAxisTitleAfter: ver.colAxisTitleAfter,
+      rowLabelsAfter: ver.rowLabelsAfter,
+      colLabelsAfter: ver.colLabelsAfter,
+    } as Doc<"rosAnalyses">;
+    const dim = afterDimensions(pseudo);
+    const mvAfter =
+      ver.matrixValuesAfter &&
+      ver.matrixValuesAfter.length === dim.rows &&
+      (ver.matrixValuesAfter[0]?.length ?? 0) === dim.cols
+        ? ver.matrixValuesAfter.map((r) => [...r])
+        : emptyMatrix(dim.rows, dim.cols);
+    const cellNotesAfter = normalizeCellNotes(mvAfter, ver.cellNotesAfter).map(
+      (r) => [...r],
+    );
+    const cellItems = normalizeCellItems(
+      ver.matrixValues,
+      ver.cellNotes,
+      ver.cellItems as RosCellItemMatrix | undefined,
+    );
+    const cellItemsAfter = normalizeCellItems(
+      mvAfter,
+      ver.cellNotesAfter,
+      ver.cellItemsAfter as RosCellItemMatrix | undefined,
+    );
     await ctx.db.patch(args.analysisId, {
       rowAxisTitle: ver.rowAxisTitle,
       colAxisTitle: ver.colAxisTitle,
@@ -994,6 +1619,20 @@ export const restoreVersion = mutation({
       cellNotes: normalizeCellNotes(ver.matrixValues, ver.cellNotes).map((r) => [
         ...r,
       ]),
+      cellItems: cellItems.map((r) => r.map((c) => c.map((x) => ({ ...x })))),
+      matrixValuesAfter: mvAfter,
+      cellNotesAfter,
+      cellItemsAfter: cellItemsAfter.map((r) =>
+        r.map((c) => c.map((x) => ({ ...x }))),
+      ),
+      rowAxisTitleAfter: ver.rowAxisTitleAfter,
+      colAxisTitleAfter: ver.colAxisTitleAfter,
+      rowLabelsAfter: ver.rowLabelsAfter
+        ? [...ver.rowLabelsAfter]
+        : undefined,
+      colLabelsAfter: ver.colLabelsAfter
+        ? [...ver.colLabelsAfter]
+        : undefined,
       notes: ver.notes,
       updatedAt: now,
     });

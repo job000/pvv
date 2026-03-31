@@ -13,8 +13,16 @@ import type { Id } from "@/convex/_generated/dataModel";
 import { cellRiskClass, legendItems } from "@/lib/ros-risk-colors";
 import { cn } from "@/lib/utils";
 import { useQuery } from "convex/react";
-import { BarChart3, BookOpen, ExternalLink, Layers } from "lucide-react";
+import { Label } from "@/components/ui/label";
+import {
+  AlertTriangle,
+  BarChart3,
+  BookOpen,
+  ExternalLink,
+  Layers,
+} from "lucide-react";
 import Link from "next/link";
+import { useState } from "react";
 
 function formatTs(ms: number) {
   try {
@@ -79,7 +87,13 @@ export function RosDashboardPanel({
 }: {
   workspaceId: Id<"workspaces">;
 }) {
-  const data = useQuery(api.ros.workspaceDashboard, { workspaceId });
+  const [minAlertLevel, setMinAlertLevel] = useState(4);
+  const [includeTagged, setIncludeTagged] = useState(true);
+  const data = useQuery(api.ros.workspaceDashboard, {
+    workspaceId,
+    minAlertLevel,
+    includeTaggedRiskItems: includeTagged,
+  });
 
   if (data === undefined) {
     return (
@@ -198,6 +212,119 @@ export function RosDashboardPanel({
           </CardContent>
         </Card>
       </div>
+
+      <Card className="border-amber-500/20 bg-amber-500/[0.06]">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <AlertTriangle className="size-4 text-amber-700 dark:text-amber-400" />
+            Oppmerksomhet (høy risiko og flaggde punkter)
+          </CardTitle>
+          <CardDescription>
+            Liste over celler som enten har nivå fra valgt terskel og oppover, eller
+            der et risiko-punkt er markert med varsel / krever handling — på tvers av
+            alle ROS-analyser.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
+            <div className="space-y-1.5">
+              <Label htmlFor="ros-dash-min">Min. nivå for «høy risiko»</Label>
+              <select
+                id="ros-dash-min"
+                className="border-input bg-background flex h-10 rounded-lg border px-2 text-sm"
+                value={minAlertLevel}
+                onChange={(e) =>
+                  setMinAlertLevel(Number(e.target.value) || 4)
+                }
+              >
+                {[3, 4, 5].map((n) => (
+                  <option key={n} value={n}>
+                    {n} og høyere
+                  </option>
+                ))}
+              </select>
+            </div>
+            <label className="flex cursor-pointer items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                className="size-4 rounded border"
+                checked={includeTagged}
+                onChange={(e) => setIncludeTagged(e.target.checked)}
+              />
+              Ta med celler med flaggde punkter selv om nivå er lavere
+            </label>
+          </div>
+          {(data.attentionItems ?? []).length === 0 ? (
+            <p className="text-muted-foreground text-sm">
+              Ingen treff med gjeldende filter — eller ingen analyser ennå.
+            </p>
+          ) : (
+            <ul className="max-h-[28rem] space-y-3 overflow-y-auto pr-1">
+              {(data.attentionItems ?? []).map((it, idx) => (
+                <li
+                  key={`${it.analysisId}-${it.phase}-${it.rowIndex}-${it.colIndex}-${idx}`}
+                  className="bg-card rounded-xl border p-3 text-sm shadow-sm"
+                >
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <div className="min-w-0 space-y-1">
+                      <p className="font-medium leading-snug">{it.title}</p>
+                      <p className="text-muted-foreground text-xs">
+                        {it.candidateName}{" "}
+                        <span className="font-mono">({it.candidateCode})</span>
+                        {" · "}
+                        {it.phase === "before" ? "Før tiltak" : "Etter tiltak"}
+                        {" · "}
+                        {it.rowLabel} × {it.colLabel}
+                      </p>
+                    </div>
+                    <span
+                      className={cn(
+                        "inline-flex shrink-0 rounded-md border px-2 py-0.5 text-xs font-bold tabular-nums",
+                        cellRiskClass(it.level),
+                      )}
+                    >
+                      Nivå {it.level}
+                    </span>
+                  </div>
+                  <p className="text-muted-foreground mt-2 text-xs">
+                    {it.reasons
+                      .map((r) =>
+                        r === "level_ge_4"
+                          ? `Celle-nivå ≥ ${data.minAlertLevel}`
+                          : r === "watch"
+                            ? "Varsel"
+                            : r === "requires_action"
+                              ? "Krever handling"
+                              : r,
+                      )
+                      .join(" · ")}
+                  </p>
+                  {it.flaggedTexts.length > 0 ? (
+                    <ul className="text-muted-foreground mt-1 list-inside list-disc text-xs">
+                      {it.flaggedTexts.map((t, i) => (
+                        <li key={i}>{t}</li>
+                      ))}
+                    </ul>
+                  ) : null}
+                  <div className="mt-2">
+                    <Link
+                      href={`/w/${workspaceId}/ros/a/${it.analysisId}`}
+                      className={buttonVariants({
+                        variant: "outline",
+                        size: "sm",
+                        className: "inline-flex gap-1",
+                      })}
+                    >
+                      Åpne analyse
+                      <ExternalLink className="size-3.5 opacity-70" />
+                    </Link>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>

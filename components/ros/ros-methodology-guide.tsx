@@ -147,12 +147,18 @@ export function RosMethodologyGuide({
           detaljerte scoringen ligger i ROS-matrisen her.
         </p>
         <p>
-          <strong className="text-foreground">Etter tiltak eller endring:</strong> bruk{" "}
-          <strong className="text-foreground">Versjonskontroll</strong> på
-          ROS-analysen: lagre et øyeblikksbilde <em>før</em> større endringer, oppdater
-          matrisen når tiltak er satt inn, og lagre ny versjon — da dokumenterer dere
-          «før og etter» i tid. Alternativt kan dere opprette en ny ROS-analyse for
-          «etter»-bildet hvis dere vil skille prosjekter.
+          <strong className="text-foreground">To matriser i samme analyse:</strong> under
+          risikomatrisen kan du bytte fane mellom{" "}
+          <strong className="text-foreground">«Før tiltak»</strong> (utgangspunkt) og{" "}
+          <strong className="text-foreground">«Etter tiltak (rest)»</strong> (restrisiko
+          etter planlagte eller gjennomførte tiltak). Du kan kopiere nivåer fra før til
+          etter som utgangspunkt og justere restmatrisen.
+        </p>
+        <p>
+          <strong className="text-foreground">Versjonskontroll</strong> kan fortsatt brukes
+          til øyeblikksbilder i tid: lagre versjon før større endringer, oppdater
+          matrisene, lagre ny versjon. Alternativt kan dere opprette en egen ROS-analyse
+          om dere vil skille prosjekter helt.
         </p>
         <p className="flex items-start gap-2">
           <GitBranch className="text-muted-foreground mt-0.5 size-4 shrink-0" />

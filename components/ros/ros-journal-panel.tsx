@@ -14,6 +14,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import { useMutation, useQuery } from "convex/react";
+import { Badge } from "@/components/ui/badge";
 import { Crosshair, ScrollText, Trash2 } from "lucide-react";
 import { useCallback, useState } from "react";
 
@@ -32,12 +33,21 @@ export function RosJournalPanel({
   analysisId,
   rowLabels,
   colLabels,
+  afterRowLabels,
+  afterColLabels,
+  afterSeparate,
   onJumpToCell,
 }: {
   analysisId: Id<"rosAnalyses">;
   rowLabels: string[];
   colLabels: string[];
-  onJumpToCell: (row: number, col: number) => void;
+  /** Når «etter tiltak» har eget rutenett — må matche dimensjonen til etter-matrisen */
+  afterRowLabels?: string[];
+  afterColLabels?: string[];
+  /** Om etter-matrisen bruker egne akser (ulikt «før») */
+  afterSeparate?: boolean;
+  /** matrixPhase styrer hvilken fane som åpnes ved «Hopp til celle» */
+  onJumpToCell: (row: number, col: number, matrixPhase?: "before" | "after") => void;
 }) {
   const entries = useQuery(api.ros.listJournalEntries, { analysisId });
   const append = useMutation(api.ros.appendJournalEntry);
@@ -46,7 +56,17 @@ export function RosJournalPanel({
   const [body, setBody] = useState("");
   const [linkRow, setLinkRow] = useState("");
   const [linkCol, setLinkCol] = useState("");
+  const [linkPhase, setLinkPhase] = useState<"before" | "after" | "">("");
   const [busy, setBusy] = useState(false);
+
+  const effRowLabels =
+    linkPhase === "after" && afterSeparate
+      ? (afterRowLabels ?? rowLabels)
+      : rowLabels;
+  const effColLabels =
+    linkPhase === "after" && afterSeparate
+      ? (afterColLabels ?? colLabels)
+      : colLabels;
 
   const submitManual = useCallback(async () => {
     const t = body.trim();
@@ -64,8 +84,8 @@ export function RosJournalPanel({
         !Number.isNaN(ci) &&
         ri >= 1 &&
         ci >= 1 &&
-        ri <= rowLabels.length &&
-        ci <= colLabels.length
+        ri <= effRowLabels.length &&
+        ci <= effColLabels.length
       ) {
         r = ri - 1;
         c = ci - 1;
@@ -73,16 +93,28 @@ export function RosJournalPanel({
       await append({
         analysisId,
         body: t,
+        matrixPhase:
+          linkPhase === "" ? undefined : linkPhase,
         linkedRow: r,
         linkedCol: c,
       });
       setBody("");
       setLinkRow("");
       setLinkCol("");
+      setLinkPhase("");
     } finally {
       setBusy(false);
     }
-  }, [analysisId, append, body, linkRow, linkCol, rowLabels.length, colLabels.length]);
+  }, [
+    analysisId,
+    append,
+    body,
+    linkRow,
+    linkCol,
+    linkPhase,
+    effRowLabels.length,
+    effColLabels.length,
+  ]);
 
   return (
     <Card className="border-border/60 overflow-hidden">
@@ -119,9 +151,28 @@ export function RosJournalPanel({
               className="min-h-[4rem]"
             />
           </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="ros-journal-phase">Cellekobling gjelder (valgfritt)</Label>
+            <select
+              id="ros-journal-phase"
+              className="border-input bg-background flex h-10 w-full rounded-lg border px-2 text-sm"
+              value={linkPhase}
+              onChange={(e) =>
+                setLinkPhase(
+                  e.target.value === ""
+                    ? ""
+                    : (e.target.value as "before" | "after"),
+                )
+              }
+            >
+              <option value="">Ikke angitt (eldre stil / generelt)</option>
+              <option value="before">Før tiltak-matrise</option>
+              <option value="after">Etter tiltak-matrise</option>
+            </select>
+          </div>
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="space-y-1.5">
-              <Label htmlFor="ros-journal-r">Koble til rad (valgfritt, 1–{rowLabels.length})</Label>
+              <Label htmlFor="ros-journal-r">Koble til rad (valgfritt, 1–{effRowLabels.length})</Label>
               <Input
                 id="ros-journal-r"
                 inputMode="numeric"
@@ -131,7 +182,7 @@ export function RosJournalPanel({
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="ros-journal-c">Koble til kolonne (valgfritt, 1–{colLabels.length})</Label>
+              <Label htmlFor="ros-journal-c">Koble til kolonne (valgfritt, 1–{effColLabels.length})</Label>
               <Input
                 id="ros-journal-c"
                 inputMode="numeric"
@@ -161,8 +212,19 @@ export function RosJournalPanel({
                 className="border-border/50 bg-card rounded-xl border px-3 py-2.5 text-sm shadow-sm"
               >
                 <div className="text-muted-foreground flex flex-wrap items-center justify-between gap-2 text-[11px]">
-                  <span>
-                    {formatTs(e.createdAt)} · {e.authorName}
+                  <span className="flex flex-wrap items-center gap-2">
+                    {e.matrixPhase === "after" ? (
+                      <Badge variant="secondary" className="text-[10px] font-normal">
+                        Etter tiltak
+                      </Badge>
+                    ) : e.matrixPhase === "before" ? (
+                      <Badge variant="outline" className="text-[10px] font-normal">
+                        Før tiltak
+                      </Badge>
+                    ) : null}
+                    <span>
+                      {formatTs(e.createdAt)} · {e.authorName}
+                    </span>
                   </span>
                   <div className="flex flex-wrap items-center gap-1">
                     {e.linkedRow !== undefined &&
@@ -173,7 +235,11 @@ export function RosJournalPanel({
                         size="sm"
                         className="h-7 gap-1 text-xs"
                         onClick={() =>
-                          onJumpToCell(e.linkedRow!, e.linkedCol!)
+                          onJumpToCell(
+                            e.linkedRow!,
+                            e.linkedCol!,
+                            e.matrixPhase,
+                          )
                         }
                       >
                         <Crosshair className="size-3" />
