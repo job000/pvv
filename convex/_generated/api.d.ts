@@ -16,6 +16,7 @@ import type * as auth from "../auth.js";
 import type * as candidates from "../candidates.js";
 import type * as crons from "../crons.js";
 import type * as http from "../http.js";
+import type * as leveransePrefs from "../leveransePrefs.js";
 import type * as lib_access from "../lib/access.js";
 import type * as lib_payloadSnapshot from "../lib/payloadSnapshot.js";
 import type * as lib_rpaScoring from "../lib/rpaScoring.js";
@@ -42,6 +43,7 @@ declare const fullApi: ApiFromModules<{
   candidates: typeof candidates;
   crons: typeof crons;
   http: typeof http;
+  leveransePrefs: typeof leveransePrefs;
   "lib/access": typeof lib_access;
   "lib/payloadSnapshot": typeof lib_payloadSnapshot;
   "lib/rpaScoring": typeof lib_rpaScoring;

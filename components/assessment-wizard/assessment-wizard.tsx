@@ -3,8 +3,9 @@
 import { AssessmentCollaborationPanel } from "@/components/assessment-wizard/assessment-collaboration-panel";
 import { AssessmentContextCard } from "@/components/assessment-wizard/assessment-context-card";
 import { AssessmentExportPanel } from "@/components/assessment-wizard/assessment-export-panel";
-import { HfRequirementsSection } from "@/components/assessment-wizard/hf-requirements-section";
-import { ProcessProfileSection } from "@/components/assessment-wizard/process-profile-section";
+import { AssessmentProcessSlide } from "@/components/assessment-wizard/assessment-process-slide";
+import { AssessmentWizardSchemaHelp } from "@/components/assessment-wizard/assessment-wizard-schema-help";
+import { AssessmentWizardMeta } from "@/components/assessment-wizard/assessment-wizard-meta";
 import { LikertField } from "@/components/rpa-assessment/likert-field";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -15,6 +16,14 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import {
+  Dialog,
+  DialogBody,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+} from "@/components/ui/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -35,6 +44,7 @@ import {
 } from "@/lib/assessment-pipeline";
 import { cn } from "@/lib/utils";
 import { payloadToSnapshot } from "@/convex/lib/payloadSnapshot";
+import { ASSESSMENT_WIZARD_STEP_LABELS } from "@/lib/assessment-wizard-steps";
 import { clampLikert5, computeAllResults } from "@/lib/rpa-assessment/scoring";
 import { useMutation, useQuery } from "convex/react";
 import useEmblaCarousel from "embla-carousel-react";
@@ -43,24 +53,34 @@ import {
   ChevronRight,
   ClipboardCopy,
   Share2,
-  Users,
 } from "lucide-react";
-import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-const SLIDE_LABELS = [
-  "Prosess",
-  "Organisasjon",
-  "Viktighet",
-  "Trygghet",
-  "Automatisering",
-  "Omfang og teknikk",
-  "Tall og kost",
-  "Samarbeid",
-  "Oppsummering",
-] as const;
+const SAMARBEID_SLIDE_INDEX =
+  ASSESSMENT_WIZARD_STEP_LABELS.indexOf("Samarbeid");
 
-const SAMARBEID_SLIDE_INDEX = SLIDE_LABELS.indexOf("Samarbeid");
+/** Én kilde til utkast-form — brukes ved første lasting og etter gjenoppretting fra versjon. */
+function normalizeDraftPayload(raw: AssessmentPayload): AssessmentPayload {
+  return {
+    ...raw,
+    processDescription: raw.processDescription ?? "",
+    processGoal: raw.processGoal ?? "",
+    processActors: raw.processActors ?? "",
+    processSystems: raw.processSystems ?? "",
+    processFlowSummary: raw.processFlowSummary ?? "",
+    processVolumeNotes: raw.processVolumeNotes ?? "",
+    processConstraints: raw.processConstraints ?? "",
+    processFollowUp: raw.processFollowUp ?? "",
+    processScope: raw.processScope ?? "unsure",
+    hfOperationsSupportLevel: raw.hfOperationsSupportLevel ?? "unsure",
+    hfSecurityInformationNotes: raw.hfSecurityInformationNotes ?? "",
+    hfOrganizationalBreadthNotes: raw.hfOrganizationalBreadthNotes ?? "",
+    hfEconomicRationaleNotes: raw.hfEconomicRationaleNotes ?? "",
+    hfCriticalManualGapNotes: raw.hfCriticalManualGapNotes ?? "",
+    hfOperationsSupportNotes: raw.hfOperationsSupportNotes ?? "",
+  };
+}
 
 const KPI_DEFAULTS = {
   baselineHours: 800,
@@ -90,6 +110,7 @@ export function AssessmentWizard({ assessmentId }: Props) {
   const collaborators = useQuery(api.assessments.listCollaborators, {
     assessmentId,
   });
+  const versions = useQuery(api.assessments.listVersions, { assessmentId });
   const candidates = useQuery(
     api.candidates.listByWorkspace,
     data?.assessment
@@ -97,8 +118,28 @@ export function AssessmentWizard({ assessmentId }: Props) {
       : "skip",
   );
   const saveDraft = useMutation(api.assessments.saveDraft);
+  const updateAssessmentTitle = useMutation(api.assessments.updateAssessmentTitle);
 
   const [payload, setPayload] = useState<AssessmentPayload | null>(null);
+  const [titleDraft, setTitleDraft] = useState("");
+  const [saveError, setSaveError] = useState<string | null>(null);
+  /** Synk med serverens utkastrevisjon — kreves for lagring uten stille overskriving */
+  const [draftRevision, setDraftRevision] = useState<number | null>(null);
+  const [draftConflict, setDraftConflict] = useState<{
+    serverRevision: number;
+    serverPayload: AssessmentPayload;
+    updatedAt: number;
+    updatedByUserId: Id<"users">;
+    updatedByName: string | null;
+  } | null>(null);
+  const [leaveWizardOpen, setLeaveWizardOpen] = useState(false);
+  const router = useRouter();
+  const payloadRef = useRef<AssessmentPayload | null>(null);
+  const draftRevisionRef = useRef<number | null>(null);
+  /** Seriell kø — hindrer to auto-lagre med samme revisjon (falsk «konflikt» mot seg selv) */
+  const saveQueueTailRef = useRef(Promise.resolve());
+  const canEditRef = useRef(false);
+  if (payload) payloadRef.current = payload;
   const [emblaRef, emblaApi] = useEmblaCarousel({
     align: "center",
     loop: false,
@@ -108,28 +149,31 @@ export function AssessmentWizard({ assessmentId }: Props) {
   const [slide, setSlide] = useState(0);
 
   useEffect(() => {
-    if (data?.draft?.payload) {
-      const raw = data.draft.payload as AssessmentPayload;
-      setPayload({
-        ...raw,
-        processDescription: raw.processDescription ?? "",
-        processGoal: raw.processGoal ?? "",
-        processActors: raw.processActors ?? "",
-        processSystems: raw.processSystems ?? "",
-        processFlowSummary: raw.processFlowSummary ?? "",
-        processVolumeNotes: raw.processVolumeNotes ?? "",
-        processConstraints: raw.processConstraints ?? "",
-        processFollowUp: raw.processFollowUp ?? "",
-        processScope: raw.processScope ?? "unsure",
-        hfOperationsSupportLevel: raw.hfOperationsSupportLevel ?? "unsure",
-        hfSecurityInformationNotes: raw.hfSecurityInformationNotes ?? "",
-        hfOrganizationalBreadthNotes: raw.hfOrganizationalBreadthNotes ?? "",
-        hfEconomicRationaleNotes: raw.hfEconomicRationaleNotes ?? "",
-        hfCriticalManualGapNotes: raw.hfCriticalManualGapNotes ?? "",
-        hfOperationsSupportNotes: raw.hfOperationsSupportNotes ?? "",
-      });
+    setPayload(null);
+    setDraftRevision(null);
+    draftRevisionRef.current = null;
+    setDraftConflict(null);
+    saveQueueTailRef.current = Promise.resolve();
+  }, [assessmentId]);
+
+  /** Ikke synk `data.draft` inn etter hver lagring — det overskriver tastatur mens du skriver. */
+  useEffect(() => {
+    const draftPayload = data?.draft?.payload;
+    if (!draftPayload) return;
+    setPayload((prev) => {
+      if (prev !== null) return prev;
+      const r = data?.draft?.revision ?? 0;
+      draftRevisionRef.current = r;
+      setDraftRevision(r);
+      return normalizeDraftPayload(draftPayload as AssessmentPayload);
+    });
+  }, [data?.draft?.payload, data?.draft?._id, data?.draft?.revision]);
+
+  useEffect(() => {
+    if (data?.assessment) {
+      setTitleDraft(data.assessment.title);
     }
-  }, [data?.draft?.payload, data?.draft?._id]);
+  }, [data?.assessment?.title, assessmentId]);
 
   const computed = useMemo(() => {
     if (!payload) return null;
@@ -139,23 +183,203 @@ export function AssessmentWizard({ assessmentId }: Props) {
   }, [payload]);
 
   const canEdit = access?.canEdit ?? false;
+  canEditRef.current = canEdit;
   const readOnly = !canEdit;
 
+  const serverDraftRevisionLive = data?.draft?.revision ?? 0;
+  const isBehindServer =
+    canEdit &&
+    draftRevision !== null &&
+    serverDraftRevisionLive > draftRevision &&
+    draftConflict === null;
+
   const persist = useCallback(
-    async (p: AssessmentPayload) => {
+    (p: AssessmentPayload) => {
       if (!canEdit) return;
-      await saveDraft({ assessmentId, payload: p });
+      saveQueueTailRef.current = saveQueueTailRef.current
+        .catch(() => undefined)
+        .then(async () => {
+          const rev = draftRevisionRef.current;
+          if (rev === null) return;
+          try {
+            let result = await saveDraft({
+              assessmentId,
+              expectedRevision: rev,
+              payload: p,
+            });
+            if (
+              !result.ok &&
+              access?.userId &&
+              result.conflict.updatedByUserId === access.userId
+            ) {
+              result = await saveDraft({
+                assessmentId,
+                expectedRevision: result.conflict.serverRevision,
+                payload: p,
+              });
+            }
+            if (result.ok) {
+              draftRevisionRef.current = result.revision;
+              setDraftRevision(result.revision);
+              setSaveError((prev) =>
+                prev?.startsWith("Skjema:") ? null : prev,
+              );
+              setDraftConflict(null);
+            } else {
+              setDraftConflict({
+                serverRevision: result.conflict.serverRevision,
+                serverPayload:
+                  result.conflict.serverPayload as AssessmentPayload,
+                updatedAt: result.conflict.updatedAt,
+                updatedByUserId: result.conflict.updatedByUserId,
+                updatedByName: result.conflict.updatedByName,
+              });
+            }
+          } catch (e) {
+            setSaveError(
+              e instanceof Error
+                ? `Skjema: ${e.message}`
+                : "Skjema: Kunne ikke lagre. Sjekk nettverket og prøv igjen.",
+            );
+          }
+        });
     },
-    [assessmentId, canEdit, saveDraft],
+    [access?.userId, assessmentId, canEdit, saveDraft],
   );
 
+  const applyLiveServerDraft = useCallback(() => {
+    const draftPayload = data?.draft?.payload;
+    if (!draftPayload) return;
+    const r = data?.draft?.revision ?? 0;
+    setPayload(normalizeDraftPayload(draftPayload as AssessmentPayload));
+    draftRevisionRef.current = r;
+    setDraftRevision(r);
+  }, [data?.draft?.payload, data?.draft?.revision]);
+
+  const resolveConflictLoadServer = useCallback(() => {
+    if (!draftConflict) return;
+    setPayload(normalizeDraftPayload(draftConflict.serverPayload));
+    draftRevisionRef.current = draftConflict.serverRevision;
+    setDraftRevision(draftConflict.serverRevision);
+    setDraftConflict(null);
+  }, [draftConflict]);
+
+  const resolveConflictOverwrite = useCallback(async () => {
+    if (!draftConflict || !payloadRef.current || !canEdit) return;
+    try {
+      const result = await saveDraft({
+        assessmentId,
+        expectedRevision: draftConflict.serverRevision,
+        payload: payloadRef.current,
+      });
+      if (result.ok) {
+        draftRevisionRef.current = result.revision;
+        setDraftRevision(result.revision);
+        setDraftConflict(null);
+        setSaveError(null);
+      } else {
+        setDraftConflict({
+          serverRevision: result.conflict.serverRevision,
+          serverPayload:
+            result.conflict.serverPayload as AssessmentPayload,
+          updatedAt: result.conflict.updatedAt,
+          updatedByUserId: result.conflict.updatedByUserId,
+          updatedByName: result.conflict.updatedByName,
+        });
+      }
+    } catch (e) {
+      setSaveError(
+        e instanceof Error
+          ? `Skjema: ${e.message}`
+          : "Skjema: Kunne ikke lagre. Sjekk nettverket og prøv igjen.",
+      );
+    }
+  }, [assessmentId, canEdit, draftConflict, saveDraft]);
+
   useEffect(() => {
-    if (!payload || !canEdit) return;
+    if (!canEdit || !data?.assessment) return;
+    const server = data.assessment.title;
+    const trimmed = titleDraft.trim();
+    if (trimmed === server || trimmed === "") return;
     const t = setTimeout(() => {
-      void persist(payload);
-    }, 700);
+      void updateAssessmentTitle({ assessmentId, title: trimmed })
+        .then(() => {
+          setSaveError((prev) =>
+            prev?.startsWith("Navn:") ? null : prev,
+          );
+        })
+        .catch((e: unknown) => {
+          setSaveError(
+            e instanceof Error
+              ? `Navn: ${e.message}`
+              : "Navn: Kunne ikke lagre tittel.",
+          );
+        });
+    }, 550);
     return () => clearTimeout(t);
-  }, [payload, persist, canEdit]);
+  }, [
+    titleDraft,
+    canEdit,
+    data?.assessment?._id,
+    data?.assessment?.title,
+    assessmentId,
+    updateAssessmentTitle,
+  ]);
+
+  useEffect(() => {
+    if (!canEditRef.current || !payloadRef.current) return;
+    const t = setTimeout(() => {
+      void persist(payloadRef.current!);
+    }, 700);
+    return () => {
+      clearTimeout(t);
+      if (canEditRef.current && payloadRef.current) {
+        void persist(payloadRef.current);
+      }
+    };
+  }, [payload, persist]);
+
+  useEffect(() => {
+    const flush = () => {
+      if (
+        document.visibilityState === "hidden" &&
+        canEditRef.current &&
+        payloadRef.current
+      ) {
+        void persist(payloadRef.current);
+      }
+    };
+    const onPageHide = () => {
+      if (canEditRef.current && payloadRef.current) {
+        void persist(payloadRef.current);
+      }
+    };
+    document.addEventListener("visibilitychange", flush);
+    window.addEventListener("pagehide", onPageHide);
+    return () => {
+      document.removeEventListener("visibilitychange", flush);
+      window.removeEventListener("pagehide", onPageHide);
+    };
+  }, [persist]);
+
+  const openTeamAndVersions = useCallback(() => {
+    emblaApi?.scrollTo(SAMARBEID_SLIDE_INDEX);
+    requestAnimationFrame(() => {
+      document.getElementById("versjoner")?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    });
+  }, [emblaApi]);
+
+  const milestoneCount = versions?.length ?? 0;
+
+  const goToVurderingerList = useCallback(() => {
+    setLeaveWizardOpen(false);
+    const wid = data?.assessment.workspaceId;
+    if (!wid) return;
+    router.push(`/w/${wid}/vurderinger`);
+  }, [router, data?.assessment.workspaceId]);
 
   useEffect(() => {
     if (!emblaApi) return;
@@ -206,25 +430,92 @@ export function AssessmentWizard({ assessmentId }: Props) {
 
   const { assessment } = data;
 
+  const draftConflictIsSelf =
+    draftConflict !== null &&
+    access?.userId !== undefined &&
+    draftConflict.updatedByUserId === access.userId;
+
   return (
     <div className="space-y-4 pb-24">
+      {isBehindServer ? (
+        <Alert className="border-amber-500/35 bg-amber-500/[0.06]">
+          <AlertTitle className="text-amber-950 dark:text-amber-100">
+            Nyere utkast på serveren
+          </AlertTitle>
+          <AlertDescription className="flex flex-col gap-3 text-amber-950/90 sm:flex-row sm:items-center sm:justify-between dark:text-amber-50/90">
+            <span>
+              Noen andre har lagret mens du redigerer. Last inn siste utkast for
+              å se endringene, eller fortsett her og lagre — da får du valg hvis
+              det kolliderer.
+            </span>
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              className="shrink-0"
+              onClick={applyLiveServerDraft}
+            >
+              Last inn siste utkast
+            </Button>
+          </AlertDescription>
+        </Alert>
+      ) : null}
+      {saveError ? (
+        <Alert variant="destructive" className="border-destructive/40">
+          <AlertTitle>Lagring feilet</AlertTitle>
+          <AlertDescription>{saveError}</AlertDescription>
+        </Alert>
+      ) : null}
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="font-heading text-xl font-semibold sm:text-2xl">
-            {assessment.title}
-          </h1>
-          <p className="text-muted-foreground text-xs sm:text-sm">
-            {canEdit ? "Endringer lagres automatisk." : "Kun visning."}
-            {access?.collaboratorRole
-              ? ` · Rolle: ${access.collaboratorRole}`
-              : ""}
-          </p>
+        <div className="min-w-0 flex-1 space-y-1.5">
+          {canEdit ? (
+            <>
+              <Label
+                htmlFor="assessment-display-title"
+                className="text-muted-foreground text-xs font-medium"
+              >
+                Navn på vurderingen (vises i lister)
+              </Label>
+              <Input
+                id="assessment-display-title"
+                value={titleDraft}
+                onChange={(e) => setTitleDraft(e.target.value)}
+                placeholder="Navn på saken"
+                autoComplete="off"
+                className="font-heading h-auto max-w-2xl border-0 border-b border-border/60 bg-transparent px-0 py-1 text-xl font-semibold shadow-none focus-visible:border-primary focus-visible:ring-0 sm:text-2xl"
+              />
+              <p className="text-muted-foreground max-w-2xl text-[11px] leading-snug">
+                Dette er det som står på kort i oversikten. «Prosessnavn» under
+                steget Prosess er et eget felt i skjemaet og endrer ikke navnet
+                her — med mindre du kopierer det selv.
+              </p>
+            </>
+          ) : (
+            <>
+              <h1 className="font-heading text-xl font-semibold sm:text-2xl">
+                {assessment.title}
+              </h1>
+              <p className="text-muted-foreground text-xs sm:text-sm">
+                Kun visning.
+                {access?.collaboratorRole
+                  ? ` · Rolle: ${access.collaboratorRole}`
+                  : ""}
+              </p>
+            </>
+          )}
+          {canEdit ? (
+            <p className="text-muted-foreground text-xs sm:text-sm">
+              Skjema lagres automatisk mens du jobber — også når du bytter fane
+              eller går ut av siden (så langt nettleseren tillater). Flere kan
+              redigere samtidig: hvis noen lagrer før deg, får du valg om å hente
+              siste utkast eller overskrive med dine endringer.
+              {access?.collaboratorRole
+                ? ` · Rolle: ${access.collaboratorRole}`
+                : ""}
+            </p>
+          ) : null}
         </div>
         <div className="flex flex-wrap gap-2">
-          <Badge variant="outline" className="gap-1">
-            <Users className="size-3" />
-            {collaborators?.length ?? 0} personer
-          </Badge>
           {access?.shareWithWorkspace ? (
             <Badge variant="secondary" className="gap-1">
               <Share2 className="size-3" />
@@ -234,31 +525,67 @@ export function AssessmentWizard({ assessmentId }: Props) {
         </div>
       </div>
 
+      <AssessmentWizardMeta
+        collaborators={collaborators}
+        versions={versions}
+        draftUpdatedAt={data?.draft?.updatedAt}
+        onOpenTeamAndVersions={openTeamAndVersions}
+      />
+
       <AssessmentExportPanel
         assessmentId={assessmentId}
         workspaceId={assessment.workspaceId}
         canEdit={canEdit}
       />
 
-      <div className="rounded-2xl border border-border/60 bg-gradient-to-r from-muted/40 via-card to-muted/30 p-1.5 shadow-sm">
-        <div className="flex gap-1 overflow-x-auto pb-0.5">
-          {SLIDE_LABELS.map((label, i) => (
+      <div className="flex flex-col gap-3 rounded-2xl border border-border/60 bg-gradient-to-r from-muted/40 via-card to-muted/30 p-3 shadow-sm sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+        <nav
+          className="flex flex-1 flex-wrap items-center justify-center gap-2 sm:justify-start"
+          aria-label="Hovedsteg i veiviseren"
+        >
+          {ASSESSMENT_WIZARD_STEP_LABELS.map((label, i) => (
             <button
               key={label}
               type="button"
+              aria-label={`Gå til ${label}`}
+              aria-current={slide === i ? "step" : undefined}
               onClick={() => emblaApi?.scrollTo(i)}
-              className={`shrink-0 rounded-xl px-3 py-2 text-xs font-medium transition-all ${
+              className={cn(
+                "size-2.5 rounded-full transition-all",
                 slide === i
-                  ? "bg-primary text-primary-foreground shadow-sm"
-                  : "text-muted-foreground hover:bg-background/80 hover:text-foreground"
-              }`}
-            >
-              <span className="tabular-nums text-[10px] opacity-80">
-                {i + 1}
-              </span>{" "}
-              {label}
-            </button>
+                  ? "bg-primary ring-primary ring-offset-background scale-125 ring-2 ring-offset-2"
+                  : i < slide
+                    ? "bg-primary/45 hover:bg-primary/60"
+                    : "bg-muted-foreground/25 hover:bg-muted-foreground/40",
+              )}
+            />
           ))}
+        </nav>
+        <div className="flex min-w-0 flex-col items-stretch gap-2 sm:flex-row sm:items-center sm:gap-2">
+          <p className="text-foreground text-center text-sm font-medium sm:min-w-0 sm:flex-1 sm:text-left">
+            <span className="text-muted-foreground font-normal">
+              Steg {slide + 1} av {ASSESSMENT_WIZARD_STEP_LABELS.length} ·{" "}
+            </span>
+            <span className="break-words">
+              {ASSESSMENT_WIZARD_STEP_LABELS[slide]}
+            </span>
+          </p>
+          <AssessmentWizardSchemaHelp />
+          <label htmlFor="wizard-step-jump" className="sr-only">
+            Hopp til steg
+          </label>
+          <select
+            id="wizard-step-jump"
+            className="border-input bg-background h-9 w-full min-w-0 shrink-0 rounded-lg border px-2 text-sm shadow-xs sm:w-[min(100%,14rem)]"
+            value={slide}
+            onChange={(e) => emblaApi?.scrollTo(Number(e.target.value))}
+          >
+            {ASSESSMENT_WIZARD_STEP_LABELS.map((label, i) => (
+              <option key={label} value={i}>
+                {i + 1}. {label}
+              </option>
+            ))}
+          </select>
         </div>
       </div>
 
@@ -269,121 +596,20 @@ export function AssessmentWizard({ assessmentId }: Props) {
               <CardHeader className="space-y-2 pb-2">
                 <CardTitle className="text-xl sm:text-2xl">Prosess</CardTitle>
                 <CardDescription className="text-sm leading-relaxed">
-                  Koble til kandidat, dokumenter prosessen, og fyll ut krav som
-                  helseforetak typisk trenger (sikkerhet, bredde, økonomi,
-                  kritikalitet, drift). Deretter: organisasjon og ROS/PDD.
+                  Grunnlag, beskrivelse og valgfrie kravtekster i faner — mindre
+                  scrolling. Deretter: organisasjon og ROS/PDD.
                 </CardDescription>
               </CardHeader>
-              <CardContent className="space-y-8">
-                <div className="rounded-xl border border-dashed border-primary/25 bg-muted/20 p-4 sm:p-5">
-                  <p className="text-muted-foreground mb-4 text-xs font-medium uppercase tracking-wide">
-                    Kandidat og referanse
-                  </p>
-                  <div className="grid gap-5 sm:grid-cols-2">
-                    {candidates && candidates.length > 0 ? (
-                      <div className="space-y-2 sm:col-span-2">
-                        <Label htmlFor="pick-candidate">
-                          Registrert kandidat
-                        </Label>
-                        <select
-                          key={candidatePickerKey}
-                          id="pick-candidate"
-                          className="border-input bg-background h-10 w-full rounded-lg border px-3 text-sm shadow-xs outline-none"
-                          defaultValue=""
-                          onChange={(e) => {
-                            const id = e.target.value as Id<"candidates">;
-                            if (!id) return;
-                            const cand = candidates.find((x) => x._id === id);
-                            if (cand) {
-                              update("candidateId", cand.code);
-                              update("processName", cand.name);
-                            }
-                            setCandidatePickerKey((k) => k + 1);
-                          }}
-                          disabled={!canEdit}
-                        >
-                          <option value="">Velg fra arbeidsområdet …</option>
-                          {candidates.map((c) => (
-                            <option key={c._id} value={c._id}>
-                              {c.name} ({c.code})
-                            </option>
-                          ))}
-                        </select>
-                        <p className="text-muted-foreground text-xs">
-                          Administreres under arbeidsområdet — eller fyll inn
-                          manuelt under.
-                        </p>
-                      </div>
-                    ) : null}
-                    <div className="space-y-2">
-                      <Label>Prosessnavn</Label>
-                      <Input
-                        value={payload.processName}
-                        onChange={(e) =>
-                          update("processName", e.target.value)
-                        }
-                        disabled={!canEdit}
-                        className="h-10"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="candidate-ref">Referanse / ID</Label>
-                      <Input
-                        id="candidate-ref"
-                        value={payload.candidateId}
-                        onChange={(e) =>
-                          update("candidateId", e.target.value)
-                        }
-                        disabled={!canEdit}
-                        className="h-10"
-                      />
-                    </div>
-                  </div>
-                  <div className="mt-5 space-y-2">
-                    <Label>Hvor strekker prosessen seg?</Label>
-                    <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
-                      {(
-                        [
-                          ["single", "Én hovedenhet"],
-                          ["multi", "Flere enheter / på tvers"],
-                          ["unsure", "Ikke avklart"],
-                        ] as const
-                      ).map(([value, label]) => (
-                        <Button
-                          key={value}
-                          type="button"
-                          variant={
-                            (payload.processScope ?? "unsure") === value
-                              ? "secondary"
-                              : "outline"
-                          }
-                          size="sm"
-                          className="h-auto min-h-10 justify-start whitespace-normal px-4 py-2.5 text-left"
-                          disabled={!canEdit}
-                          onClick={() => update("processScope", value)}
-                        >
-                          {label}
-                        </Button>
-                      ))}
-                    </div>
-                    <p className="text-muted-foreground text-xs">
-                      Styrer veiledning i neste steg — ikke i poengberegning.
-                    </p>
-                  </div>
-                </div>
-
-                <ProcessProfileSection
+              <CardContent className="pt-0">
+                <AssessmentProcessSlide
                   payload={payload}
                   canEdit={canEdit}
                   update={update}
-                />
-
-                <Separator className="my-2" />
-
-                <HfRequirementsSection
-                  payload={payload}
-                  canEdit={canEdit}
-                  update={update}
+                  candidates={candidates}
+                  candidatePickerKey={candidatePickerKey}
+                  bumpCandidatePickerKey={() =>
+                    setCandidatePickerKey((k) => k + 1)
+                  }
                 />
               </CardContent>
             </Slide>
@@ -407,7 +633,7 @@ export function AssessmentWizard({ assessmentId }: Props) {
                 </CardDescription>
               </CardHeader>
               <CardContent className="px-0 pb-4">
-                <div className="border-border/50 border-b px-6 py-8 sm:px-8 last:border-b-0">
+                <div className="border-border/50 border-b px-6 py-5 sm:px-8 last:border-b-0">
                   <LikertField
                     id="cbi"
                     label="Hvor stort er tapet hvis denne prosessen stopper eller feiler?"
@@ -419,7 +645,7 @@ export function AssessmentWizard({ assessmentId }: Props) {
                     disabled={readOnly}
                   />
                 </div>
-                <div className="border-border/50 border-b px-6 py-8 sm:px-8 last:border-b-0">
+                <div className="border-border/50 border-b px-6 py-5 sm:px-8 last:border-b-0">
                   <LikertField
                     id="crr"
                     label="Hvor strengt må dere følge regler og dokumentasjon?"
@@ -443,7 +669,7 @@ export function AssessmentWizard({ assessmentId }: Props) {
                 </CardDescription>
               </CardHeader>
               <CardContent className="px-0 pb-4">
-                <div className="border-border/50 border-b px-6 py-8 sm:px-8 last:border-b-0">
+                <div className="border-border/50 border-b px-6 py-5 sm:px-8 last:border-b-0">
                   <LikertField
                     id="ps"
                     label="Hvor ofte endrer dere måten dere jobber på i denne prosessen?"
@@ -455,7 +681,7 @@ export function AssessmentWizard({ assessmentId }: Props) {
                     disabled={readOnly}
                   />
                 </div>
-                <div className="border-border/50 border-b px-6 py-8 sm:px-8 last:border-b-0">
+                <div className="border-border/50 border-b px-6 py-5 sm:px-8 last:border-b-0">
                   <LikertField
                     id="as"
                     label="Kan dere stole på at IT-systemene oppfører seg likt fra dag til dag?"
@@ -479,7 +705,7 @@ export function AssessmentWizard({ assessmentId }: Props) {
                 </CardDescription>
               </CardHeader>
               <CardContent className="px-0 pb-4">
-                <div className="border-border/50 border-b px-6 py-8 sm:px-8 last:border-b-0">
+                <div className="border-border/50 border-b px-6 py-5 sm:px-8 last:border-b-0">
                   <LikertField
                     id="si"
                     label="Kommer opplysningene inn i faste felt, eller som fritekst, e-post og vedlegg?"
@@ -491,7 +717,7 @@ export function AssessmentWizard({ assessmentId }: Props) {
                     disabled={readOnly}
                   />
                 </div>
-                <div className="border-border/50 border-b px-6 py-8 sm:px-8 last:border-b-0">
+                <div className="border-border/50 border-b px-6 py-5 sm:px-8 last:border-b-0">
                   <LikertField
                     id="pv"
                     label="Er sakene stort sett like, eller nesten unike hver gang?"
@@ -503,7 +729,7 @@ export function AssessmentWizard({ assessmentId }: Props) {
                     disabled={readOnly}
                   />
                 </div>
-                <div className="border-border/50 border-b px-6 py-8 sm:px-8 last:border-b-0">
+                <div className="border-border/50 border-b px-6 py-5 sm:px-8 last:border-b-0">
                   <LikertField
                     id="dg"
                     label="Skjer det meste digitalt, eller mye på papir og manuell flytting?"
@@ -527,7 +753,7 @@ export function AssessmentWizard({ assessmentId }: Props) {
                 </CardDescription>
               </CardHeader>
               <CardContent className="px-0 pb-4">
-                <div className="border-border/50 border-b px-6 py-8 sm:px-8 last:border-b-0">
+                <div className="border-border/50 border-b px-6 py-5 sm:px-8 last:border-b-0">
                   <LikertField
                     id="processLength"
                     label="Hvor mange steg og håndgrep er det fra start til ferdig?"
@@ -539,7 +765,7 @@ export function AssessmentWizard({ assessmentId }: Props) {
                     disabled={readOnly}
                   />
                 </div>
-                <div className="border-border/50 border-b px-6 py-8 sm:px-8 last:border-b-0">
+                <div className="border-border/50 border-b px-6 py-5 sm:px-8 last:border-b-0">
                   <LikertField
                     id="applicationCount"
                     label="Hvor mange ulike systemer må man inn i underveis?"
@@ -551,7 +777,7 @@ export function AssessmentWizard({ assessmentId }: Props) {
                     disabled={readOnly}
                   />
                 </div>
-                <div className="space-y-10 px-6 py-8 sm:px-8">
+                <div className="space-y-6 px-6 py-5 sm:px-8">
                   <div className="space-y-3">
                     <div className="flex items-start gap-3">
                       <Checkbox
@@ -619,10 +845,17 @@ export function AssessmentWizard({ assessmentId }: Props) {
 
             <Slide>
               <CardHeader className="space-y-3 px-4 pb-2 pt-6 sm:px-8">
-                <CardTitle>Tall for ett år — grunnlag for beregning</CardTitle>
+                <div className="flex flex-wrap items-center gap-2">
+                  <CardTitle>Tall for ett år — grunnlag for beregning</CardTitle>
+                  <Badge className="bg-amber-600 text-[10px] text-white hover:bg-amber-600/90 dark:bg-amber-700">
+                    Merkantilt
+                  </Badge>
+                </div>
                 <CardDescription className="text-muted-foreground max-w-prose text-sm leading-relaxed">
-                  Konkrete tall for tidsbruk og kost — brukes i beregningen.
-                  Anslag er nok; dere kan justere senere.
+                  Konkrete tall for tidsbruk og kost — brukes i beregningen av
+                  besparelse og porteføljeprioritet. Uten disse blir ikke
+                  kroner/timer i modellen meningsfulle. Anslag er nok; dere kan
+                  justere senere.
                 </CardDescription>
               </CardHeader>
               <CardContent className="grid gap-7 sm:grid-cols-2 sm:px-8">
@@ -707,6 +940,13 @@ export function AssessmentWizard({ assessmentId }: Props) {
                   assessmentId={assessmentId}
                   workspaceId={assessment.workspaceId}
                   canEdit={canEdit}
+                  onDraftRestored={(p, meta) => {
+                    setPayload(normalizeDraftPayload(p));
+                    if (meta?.revision !== undefined) {
+                      draftRevisionRef.current = meta.revision;
+                      setDraftRevision(meta.revision);
+                    }
+                  }}
                 />
               </CardContent>
             </Slide>
@@ -716,11 +956,40 @@ export function AssessmentWizard({ assessmentId }: Props) {
                 <CardTitle>Oppsummering</CardTitle>
                 <CardDescription className="leading-relaxed">
                   Dette er siste steg — det finnes ikke flere sider etter denne.
-                  Alt er lagret underveis. Bruk «Forrige» for å endre svar, eller
-                  «Ferdig» nederst for å gå tilbake til vurderingsoversikten.
+                  Skjemaet lagres fortløpende som utkast. Bruk «Forrige» for å
+                  endre svar, eller «Ferdig» nederst for å gå tilbake til
+                  vurderingsoversikten.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
+                {canEdit ? (
+                  <Alert className="border-primary/25 bg-primary/[0.04]">
+                    <AlertTitle>Utkast er lagret — milepæler er noe annet</AlertTitle>
+                    <AlertDescription className="space-y-3 text-foreground/90">
+                      <p className="leading-relaxed">
+                        Alt du har fylt inn, lagres automatisk som{" "}
+                        <strong className="text-foreground">utkast</strong>.
+                        Navngitte milepæler i loggen (nå:{" "}
+                        <strong className="text-foreground tabular-nums">
+                          {milestoneCount}
+                        </strong>
+                        ) opprettes bare når du trykker{" "}
+                        <strong className="text-foreground">«Lagre versjon»</strong>{" "}
+                        under Samarbeid — valgfritt for sporbarhet, anbefales før
+                        revisjon eller viktige beslutninger.
+                      </p>
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="sm"
+                        className="gap-1.5"
+                        onClick={openTeamAndVersions}
+                      >
+                        Gå til milepæler og «Lagre versjon»
+                      </Button>
+                    </AlertDescription>
+                  </Alert>
+                ) : null}
                 {computed ? (
                   <>
                     <ProcessSummaryBlocks payload={payload} />
@@ -840,6 +1109,120 @@ export function AssessmentWizard({ assessmentId }: Props) {
         </div>
       </div>
 
+      <Dialog
+        open={draftConflict !== null}
+        onOpenChange={(open) => {
+          if (!open) setDraftConflict(null);
+        }}
+      >
+        <DialogContent size="md" titleId="draft-conflict-title">
+          <DialogHeader>
+            <p
+              id="draft-conflict-title"
+              className="font-heading text-lg font-semibold"
+            >
+              {draftConflictIsSelf
+                ? "Utkastet rakk å oppdateres på serveren"
+                : "Utkastet er endret av noen andre"}
+            </p>
+          </DialogHeader>
+          <DialogBody>
+            <p className="text-muted-foreground text-sm leading-relaxed">
+              {draftConflictIsSelf ? (
+                <>
+                  Et tidligere lagringsforsøk fra deg (f.eks. auto-lagring i
+                  annen fane eller to lagringer rett etter hverandre) fullførte
+                  før dette forsøket, så revisjonen på serveren var allerede
+                  nyere. Dette er ikke en annen person med mindre du deler
+                  konto.
+                </>
+              ) : (
+                <>
+                  {draftConflict?.updatedByName
+                    ? `${draftConflict.updatedByName} har lagret en nyere versjon.`
+                    : "Det finnes en nyere lagret versjon av utkastet."}{" "}
+                  Du kan hente den fra serveren, eller overskrive med det du har
+                  åpnet her (siste skriving som lagrer vinner).
+                </>
+              )}
+            </p>
+            {draftConflict ? (
+              <p className="text-muted-foreground mt-2 text-xs">
+                Sist oppdatert på server:{" "}
+                {new Date(draftConflict.updatedAt).toLocaleString("nb-NO", {
+                  dateStyle: "medium",
+                  timeStyle: "short",
+                })}
+              </p>
+            ) : null}
+          </DialogBody>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setDraftConflict(null)}
+            >
+              Lukk
+            </Button>
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={resolveConflictLoadServer}
+            >
+              Last inn fra server
+            </Button>
+            <Button
+              type="button"
+              onClick={() => void resolveConflictOverwrite()}
+            >
+              Overskriv med mine endringer
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={leaveWizardOpen}
+        onOpenChange={(open) => {
+          if (!open) setLeaveWizardOpen(false);
+        }}
+      >
+        <DialogContent size="md" titleId="leave-wizard-title">
+          <DialogHeader>
+            <p
+              id="leave-wizard-title"
+              className="font-heading text-lg font-semibold"
+            >
+              Utkastet er allerede lagret
+            </p>
+          </DialogHeader>
+          <DialogBody>
+            <p className="text-muted-foreground text-sm leading-relaxed">
+              Du har ikke opprettet navngitte milepæler ennå (0 i loggen). Det er
+              helt normalt: skjemaet lagres fortløpende som{" "}
+              <strong className="text-foreground">utkast</strong>. Milepæler er
+              valgfrie «frys» av hele vurderingen — bruk dem når du trenger spor
+              i revisjon eller dokumentasjon.
+            </p>
+          </DialogBody>
+          <DialogFooter className="flex-wrap sm:justify-between">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setLeaveWizardOpen(false);
+                openTeamAndVersions();
+              }}
+            >
+              Gå til milepæler først
+            </Button>
+            <Button type="button" onClick={() => void goToVurderingerList()}>
+              Gå til vurderingsoversikt
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <div className="fixed bottom-0 left-0 right-0 z-30 border-t bg-background/95 p-3 backdrop-blur supports-[backdrop-filter]:bg-background/80">
         <div className="mx-auto grid max-w-6xl grid-cols-[1fr_minmax(0,auto)_1fr] items-center gap-3 px-4">
           <div className="flex justify-start">
@@ -857,26 +1240,32 @@ export function AssessmentWizard({ assessmentId }: Props) {
           </div>
           <div className="flex min-w-0 flex-col items-center justify-center gap-0.5 text-center">
             <span className="text-muted-foreground text-xs tabular-nums">
-              Steg {slide + 1} av {SLIDE_LABELS.length}
+              Steg {slide + 1} av {ASSESSMENT_WIZARD_STEP_LABELS.length}
             </span>
-            {slide >= SLIDE_LABELS.length - 1 ? (
+            {slide >= ASSESSMENT_WIZARD_STEP_LABELS.length - 1 ? (
               <span className="text-muted-foreground text-[11px] font-medium">
                 Siste steg
               </span>
             ) : null}
           </div>
           <div className="flex justify-end">
-            {slide >= SLIDE_LABELS.length - 1 ? (
-              <Link
-                href={`/w/${assessment.workspaceId}/vurderinger`}
-                className={cn(
-                  buttonVariants({ variant: "default", size: "sm" }),
-                  "gap-1",
-                )}
+            {slide >= ASSESSMENT_WIZARD_STEP_LABELS.length - 1 ? (
+              <Button
+                type="button"
+                variant="default"
+                size="sm"
+                className="gap-1"
+                onClick={() => {
+                  if (canEdit && milestoneCount === 0) {
+                    setLeaveWizardOpen(true);
+                  } else {
+                    void goToVurderingerList();
+                  }
+                }}
               >
                 Ferdig
                 <ChevronRight className="size-4" aria-hidden />
-              </Link>
+              </Button>
             ) : (
               <Button
                 type="button"

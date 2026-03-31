@@ -31,14 +31,18 @@ function formatTs(ms: number) {
 
 export function RosJournalPanel({
   analysisId,
+  expectedRevision,
   rowLabels,
   colLabels,
   afterRowLabels,
   afterColLabels,
   afterSeparate,
   onJumpToCell,
+  onJournalConflict,
 }: {
   analysisId: Id<"rosAnalyses">;
+  /** Synk med `getAnalysis.revision` — samtidig redigering */
+  expectedRevision: number;
   rowLabels: string[];
   colLabels: string[];
   /** Når «etter tiltak» har eget rutenett — må matche dimensjonen til etter-matrisen */
@@ -48,6 +52,8 @@ export function RosJournalPanel({
   afterSeparate?: boolean;
   /** matrixPhase styrer hvilken fane som åpnes ved «Hopp til celle» */
   onJumpToCell: (row: number, col: number, matrixPhase?: "before" | "after") => void;
+  /** Når revisjon ikke matcher (noen andre har lagret) */
+  onJournalConflict?: () => void;
 }) {
   const entries = useQuery(api.ros.listJournalEntries, { analysisId });
   const append = useMutation(api.ros.appendJournalEntry);
@@ -90,14 +96,19 @@ export function RosJournalPanel({
         r = ri - 1;
         c = ci - 1;
       }
-      await append({
+      const result = await append({
         analysisId,
+        expectedRevision,
         body: t,
         matrixPhase:
           linkPhase === "" ? undefined : linkPhase,
         linkedRow: r,
         linkedCol: c,
       });
+      if (!result.ok) {
+        onJournalConflict?.();
+        return;
+      }
       setBody("");
       setLinkRow("");
       setLinkCol("");
@@ -108,6 +119,8 @@ export function RosJournalPanel({
   }, [
     analysisId,
     append,
+    expectedRevision,
+    onJournalConflict,
     body,
     linkRow,
     linkCol,

@@ -138,6 +138,21 @@ export default defineSchema({
     defaultWorkspaceId: v.optional(v.id("workspaces")),
   }).index("by_user", ["userId"]),
 
+  /**
+   * Leveranse-tavle per bruker og arbeidsområde (visning, sprintfilter, tetthet).
+   * Skiller seg fra global workspace-data — hver bruker velger egen måte å jobbe på.
+   */
+  userWorkspaceLeveransePrefs: defineTable({
+    userId: v.id("users"),
+    workspaceId: v.id("workspaces"),
+    viewMode: v.union(v.literal("kanban"), v.literal("list")),
+    sprintFilter: v.union(v.literal("all"), v.id("sprints")),
+    density: v.optional(
+      v.union(v.literal("comfortable"), v.literal("compact")),
+    ),
+    updatedAt: v.number(),
+  }).index("by_user_workspace", ["userId", "workspaceId"]),
+
   /** Ventende e-postinvitasjoner til workspace */
   workspaceInvites: defineTable({
     workspaceId: v.id("workspaces"),
@@ -223,6 +238,10 @@ export default defineSchema({
     code: v.string(),
     notes: v.optional(v.string()),
     orgUnitId: v.optional(v.id("orgUnits")),
+    /** Valgfrie felt som kan flette inn i PVV når prosess velges i skjemaet */
+    linkHintBusinessOwner: v.optional(v.string()),
+    linkHintSystems: v.optional(v.string()),
+    linkHintComplianceNotes: v.optional(v.string()),
     createdByUserId: v.id("users"),
     createdAt: v.number(),
     updatedAt: v.number(),
@@ -290,6 +309,8 @@ export default defineSchema({
     payload: assessmentPayloadValidator,
     updatedAt: v.number(),
     updatedByUserId: v.id("users"),
+    /** Økes ved hver vellykket lagring — brukes til samtidig redigering uten stille overskriving */
+    revision: v.optional(v.number()),
   }).index("by_assessment", ["assessmentId"]),
 
   /** Versjonshistorikk */
@@ -348,6 +369,8 @@ export default defineSchema({
     assessmentId: v.id("assessments"),
     authorUserId: v.id("users"),
     body: v.string(),
+    /** Valgfritt: knytt kommentar til et skjemafelt (nøkkel i assessment payload) */
+    fieldKey: v.optional(v.string()),
     createdAt: v.number(),
   }).index("by_assessment", ["assessmentId"]),
 
@@ -457,6 +480,8 @@ export default defineSchema({
     createdByUserId: v.id("users"),
     createdAt: v.number(),
     updatedAt: v.number(),
+    /** Samtidig redigering — som PVV-utkast */
+    revision: v.optional(v.number()),
   })
     .index("by_workspace", ["workspaceId"])
     .index("by_workspace_updated", ["workspaceId", "updatedAt"])

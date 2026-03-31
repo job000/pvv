@@ -1009,6 +1009,7 @@ export const createAnalysis = mutation({
       createdByUserId: userId,
       createdAt: now,
       updatedAt: now,
+      revision: 1,
     });
     for (const aid of idSet) {
       const existing = await ctx.db
@@ -1042,6 +1043,8 @@ const rosCellItemsMatrixV = v.array(v.array(v.array(rosCellItemV)));
 export const updateAnalysis = mutation({
   args: {
     analysisId: v.id("rosAnalyses"),
+    /** Må matche `revision` på analysen (0 hvis eldre dokument uten felt) */
+    expectedRevision: v.number(),
     matrixValues: v.optional(v.array(v.array(v.number()))),
     cellNotes: v.optional(v.array(v.array(v.string()))),
     cellItems: v.optional(rosCellItemsMatrixV),
@@ -1259,14 +1262,37 @@ export const updateAnalysis = mutation({
       patch.notes =
         args.notes === null ? undefined : args.notes.trim() || undefined;
     }
+    const fresh = await ctx.db.get(args.analysisId);
+    if (!fresh) {
+      throw new Error("ROS-analysen finnes ikke.");
+    }
+    if (
+      !Number.isInteger(args.expectedRevision) ||
+      args.expectedRevision < 0
+    ) {
+      throw new Error("Ugyldig revisjon.");
+    }
+    const serverRev = fresh.revision ?? 0;
+    if (args.expectedRevision !== serverRev) {
+      return {
+        ok: false as const,
+        conflict: {
+          serverRevision: serverRev,
+          updatedAt: fresh.updatedAt,
+        },
+      };
+    }
+    const newRev = serverRev + 1;
+    patch.revision = newRev;
     await ctx.db.patch(args.analysisId, patch);
-    return null;
+    return { ok: true as const, revision: newRev };
   },
 });
 
 export const appendJournalEntry = mutation({
   args: {
     analysisId: v.id("rosAnalyses"),
+    expectedRevision: v.number(),
     body: v.string(),
     matrixPhase: v.optional(
       v.union(v.literal("before"), v.literal("after")),
@@ -1305,6 +1331,28 @@ export const appendJournalEntry = mutation({
         }
       }
     }
+    if (
+      !Number.isInteger(args.expectedRevision) ||
+      args.expectedRevision < 0
+    ) {
+      throw new Error("Ugyldig revisjon.");
+    }
+    const fresh = await ctx.db.get(args.analysisId);
+    if (!fresh) {
+      throw new Error("ROS-analysen finnes ikke.");
+    }
+    const serverRev = fresh.revision ?? 0;
+    if (args.expectedRevision !== serverRev) {
+      return {
+        ok: false as const,
+        conflict: {
+          serverRevision: serverRev,
+          updatedAt: fresh.updatedAt,
+        },
+      };
+    }
+    const now = Date.now();
+    const newRev = serverRev + 1;
     await ctx.db.insert("rosAnalysisJournalEntries", {
       workspaceId: row.workspaceId,
       rosAnalysisId: args.analysisId,
@@ -1313,10 +1361,13 @@ export const appendJournalEntry = mutation({
       linkedRow: args.linkedRow,
       linkedCol: args.linkedCol,
       createdByUserId: userId,
-      createdAt: Date.now(),
+      createdAt: now,
     });
-    await ctx.db.patch(args.analysisId, { updatedAt: Date.now() });
-    return null;
+    await ctx.db.patch(args.analysisId, {
+      updatedAt: now,
+      revision: newRev,
+    });
+    return { ok: true as const, revision: newRev };
   },
 });
 
@@ -1696,6 +1747,7 @@ export const restoreVersion = mutation({
       ver.cellNotesAfter,
       ver.cellItemsAfter as RosCellItemMatrix | undefined,
     );
+    const prevRev = current?.revision ?? 0;
     await ctx.db.patch(args.analysisId, {
       rowAxisTitle: ver.rowAxisTitle,
       colAxisTitle: ver.colAxisTitle,
@@ -1721,6 +1773,7 @@ export const restoreVersion = mutation({
         : undefined,
       notes: ver.notes,
       updatedAt: now,
+      revision: prevRev + 1,
     });
     return null;
   },

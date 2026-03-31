@@ -1,6 +1,7 @@
 "use client";
 
 import { UserAvatar } from "@/components/user-avatar";
+import { AssessmentVersionsBlock } from "@/components/assessment-wizard/assessment-versions-block";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -18,6 +19,11 @@ import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
+import type { AssessmentPayload } from "@/lib/assessment-types";
+import {
+  ASSESSMENT_PAYLOAD_FIELD_LABELS_NB,
+  labelAssessmentPayloadField,
+} from "@/lib/assessment-payload-field-labels";
 import { formatUserFacingError } from "@/lib/user-facing-error";
 import { cn } from "@/lib/utils";
 import { useMutation, useQuery } from "convex/react";
@@ -29,7 +35,7 @@ import {
   Share2,
   Users,
 } from "lucide-react";
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 
 const COLLAB_ROLE_NB: Record<string, string> = {
   owner: "Eier",
@@ -50,12 +56,18 @@ type Props = {
   assessmentId: Id<"assessments">;
   workspaceId: Id<"workspaces">;
   canEdit: boolean;
+  /** Kalles etter gjenoppretting fra versjon slik at veiviseren ikke stoler på gammel server-subscription. */
+  onDraftRestored?: (
+    payload: AssessmentPayload,
+    meta?: { revision: number },
+  ) => void;
 };
 
 export function AssessmentCollaborationPanel({
   assessmentId,
   workspaceId,
   canEdit,
+  onDraftRestored,
 }: Props) {
   const access = useQuery(api.assessments.getMyAccess, { assessmentId });
   const versions = useQuery(api.assessments.listVersions, { assessmentId });
@@ -74,10 +86,6 @@ export function AssessmentCollaborationPanel({
 
   const invite = useMutation(api.assessments.inviteCollaborator);
   const setShare = useMutation(api.assessments.setShareWithWorkspace);
-  const createVersion = useMutation(api.assessments.createVersion);
-  const restoreDraftFromVersion = useMutation(
-    api.assessments.restoreDraftFromVersion,
-  );
   const createAssessmentTask = useMutation(api.assessmentTasks.create);
   const setAssessmentTaskStatus = useMutation(api.assessmentTasks.setStatus);
   const addNote = useMutation(api.assessmentNotes.add);
@@ -86,26 +94,36 @@ export function AssessmentCollaborationPanel({
   const [inviteRole, setInviteRole] = useState<
     "editor" | "reviewer" | "viewer"
   >("reviewer");
-  const [versionNote, setVersionNote] = useState("");
   const [taskTitle, setTaskTitle] = useState("");
   const [taskDescription, setTaskDescription] = useState("");
   const [taskAssignee, setTaskAssignee] = useState<Id<"users"> | "">("");
   const [taskPriority, setTaskPriority] = useState(3);
   const [taskDue, setTaskDue] = useState(""); // yyyy-mm-dd for input
   const [noteBody, setNoteBody] = useState("");
+  const [noteFieldKey, setNoteFieldKey] = useState<string>("");
   const [noteError, setNoteError] = useState<string | null>(null);
+
+  const noteFieldOptions = useMemo(() => {
+    const entries = Object.entries(ASSESSMENT_PAYLOAD_FIELD_LABELS_NB);
+    return entries.sort((a, b) => a[1].localeCompare(b[1], "nb-NO"));
+  }, []);
 
   const submitNote = useCallback(async () => {
     setNoteError(null);
     const body = noteBody.trim();
     if (!body) return;
     try {
-      await addNote({ assessmentId, body });
+      await addNote({
+        assessmentId,
+        body,
+        fieldKey: noteFieldKey.trim() || undefined,
+      });
       setNoteBody("");
+      setNoteFieldKey("");
     } catch (e) {
       setNoteError(formatUserFacingError(e));
     }
-  }, [addNote, assessmentId, noteBody]);
+  }, [addNote, assessmentId, noteBody, noteFieldKey]);
 
   const taskDueMs = taskDue
     ? new Date(`${taskDue}T12:00:00`).getTime()
@@ -162,6 +180,13 @@ export function AssessmentCollaborationPanel({
           )}
         </CardContent>
       </Card>
+
+      <AssessmentVersionsBlock
+        assessmentId={assessmentId}
+        versions={versions}
+        canEdit={canEdit}
+        onDraftRestored={onDraftRestored}
+      />
 
       {/* Invitasjon + deling */}
       <div className="rounded-2xl border border-border/60 bg-card/80 p-4 shadow-xs">
@@ -474,7 +499,8 @@ export function AssessmentCollaborationPanel({
             </h3>
             <p className="text-muted-foreground text-sm">
               Korte meldinger til teamet (ikke versjonert utkast — bruk
-              versjonspunkter for milepæler).
+              versjonspunkter for milepæler). Du kan knytte et notat til et
+              bestemt felt i skjemaet.
             </p>
           </div>
         </div>
@@ -487,6 +513,27 @@ export function AssessmentCollaborationPanel({
         ) : null}
 
         <div className="space-y-2">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+            <div className="min-w-0 flex-1 space-y-1.5">
+              <Label htmlFor="note-field" className="text-xs">
+                Gjelder (valgfritt)
+              </Label>
+              <select
+                id="note-field"
+                className="border-input bg-background flex h-9 w-full rounded-lg border px-2 text-sm"
+                value={noteFieldKey}
+                onChange={(e) => setNoteFieldKey(e.target.value)}
+                disabled={!canEdit}
+              >
+                <option value="">Hele vurderingen / generelt</option>
+                {noteFieldOptions.map(([key, label]) => (
+                  <option key={key} value={key}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
           <Label htmlFor="note-composer" className="sr-only">
             Nytt notat
           </Label>
@@ -528,6 +575,11 @@ export function AssessmentCollaborationPanel({
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-baseline gap-2">
                       <span className="font-medium">{n.authorName}</span>
+                      {n.fieldKey ? (
+                        <Badge variant="outline" className="text-[10px] font-normal">
+                          {labelAssessmentPayloadField(n.fieldKey)}
+                        </Badge>
+                      ) : null}
                       <time
                         className="text-muted-foreground text-xs"
                         dateTime={new Date(n.createdAt).toISOString()}
@@ -547,92 +599,6 @@ export function AssessmentCollaborationPanel({
             ))
           )}
         </ul>
-      </div>
-
-      <Separator />
-
-      {/* Versjoner */}
-      <div className="space-y-3">
-        <div>
-          <h3 className="font-heading text-base font-semibold">
-            Versjonspunkter
-          </h3>
-          <p className="text-muted-foreground text-sm">
-            Lag et «snapshot» du kan gå tilbake til. Historikken slettes ikke.
-          </p>
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="version-note">Notat til versjon (valgfritt)</Label>
-          <Input
-            id="version-note"
-            value={versionNote}
-            onChange={(e) => setVersionNote(e.target.value)}
-            placeholder="F.eks. Etter workshop uke 12"
-            disabled={!canEdit}
-          />
-          <Button
-            variant="secondary"
-            disabled={!canEdit}
-            onClick={() =>
-              void createVersion({
-                assessmentId,
-                note: versionNote || undefined,
-              }).then(() => setVersionNote(""))
-            }
-          >
-            Lagre versjon nå
-          </Button>
-        </div>
-
-        <div id="versjoner" className="scroll-mt-28 space-y-2">
-          <p className="font-medium text-sm">Historikk</p>
-          <ul className="max-h-60 space-y-2 overflow-y-auto text-sm">
-            {(versions ?? []).length === 0 ? (
-              <li className="text-muted-foreground">Ingen versjoner ennå.</li>
-            ) : (
-              (versions ?? []).map((ver) => (
-                <li
-                  key={ver._id}
-                  className="bg-muted/15 flex flex-col gap-2 rounded-xl border px-3 py-3 sm:flex-row sm:items-center sm:justify-between"
-                >
-                  <div className="min-w-0">
-                    <span className="font-semibold">v{ver.version}</span>
-                    <span className="text-muted-foreground ml-2 text-xs">
-                      {new Date(ver.createdAt).toLocaleString("nb-NO")}
-                    </span>
-                    {ver.note ? (
-                      <p className="text-muted-foreground mt-1 text-xs leading-relaxed">
-                        {ver.note}
-                      </p>
-                    ) : null}
-                  </div>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    className="shrink-0"
-                    disabled={!canEdit}
-                    onClick={() => {
-                      if (
-                        typeof window !== "undefined" &&
-                        window.confirm(
-                          `Gjenopprette utkast fra v${ver.version}? Nåværende utkast i skjemaet erstattes.`,
-                        )
-                      ) {
-                        void restoreDraftFromVersion({
-                          assessmentId,
-                          version: ver.version,
-                        });
-                      }
-                    }}
-                  >
-                    Gjenopprett utkast
-                  </Button>
-                </li>
-              ))
-            )}
-          </ul>
-        </div>
       </div>
     </div>
   );

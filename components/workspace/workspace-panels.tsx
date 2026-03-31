@@ -34,7 +34,7 @@ import {
 } from "@/lib/assessment-ui-helpers";
 import { cn } from "@/lib/utils";
 import {
-  ArrowUpRight,
+  ChevronRight,
   LayoutGrid,
   Search,
   Sparkles,
@@ -401,6 +401,9 @@ export function WorkspaceCandidatesPanel({
   const [cName, setCName] = useState("");
   const [cCode, setCCode] = useState("");
   const [cNotes, setCNotes] = useState("");
+  const [cOwner, setCOwner] = useState("");
+  const [cSystems, setCSystems] = useState("");
+  const [cCompliance, setCCompliance] = useState("");
 
   const isAdmin =
     membership?.role === "owner" || membership?.role === "admin";
@@ -444,10 +447,19 @@ export function WorkspaceCandidatesPanel({
         name,
         code,
         notes: cNotes.trim() === "" ? undefined : cNotes.trim(),
+        linkHintBusinessOwner:
+          cOwner.trim() === "" ? undefined : cOwner.trim(),
+        linkHintSystems:
+          cSystems.trim() === "" ? undefined : cSystems.trim(),
+        linkHintComplianceNotes:
+          cCompliance.trim() === "" ? undefined : cCompliance.trim(),
       });
       setCName("");
       setCCode("");
       setCNotes("");
+      setCOwner("");
+      setCSystems("");
+      setCCompliance("");
     } catch (e) {
       alert(e instanceof Error ? e.message : "Kunne ikke opprette kandidat.");
     }
@@ -476,17 +488,24 @@ export function WorkspaceCandidatesPanel({
             <CardDescription className="max-w-2xl text-base leading-relaxed">
               {hubMode ? (
                 <>
-                  Her registrerer dere <strong>forretningsprosesser</strong> som
-                  skal vurderes — typisk på tvers av HF, avdeling og seksjon. Hver
-                  prosess får et <strong>lesbart navn</strong> og en{" "}
-                  <strong>prosess-ID</strong> (kort kode) som er den faste
-                  tekniske nøkkelen i PVV og ROS. Organisasjonsfeltet er valgfritt
-                  og sier hvor dere svarer først — ikke hvor prosessen stopper.
+                  Alle medlemmer i arbeidsområdet kan registrere{" "}
+                  <strong>forretningsprosesser</strong> her (felles
+                  prosessregister). Hver prosess får en{" "}
+                  <strong>prosess-ID</strong> som er den faste nøkkelen i PVV og
+                  ROS. <strong>Én prosess kan</strong> ha{" "}
+                  <strong>ingen eller flere</strong> PVV-vurderinger;{" "}
+                  <strong>én vurdering</strong> peker på én prosess-ID via
+                  skjemaet. <strong>ROS</strong> knyttes til kandidater og
+                  kan samtidig kobles til <strong>flere</strong> vurderinger
+                  (mange-til-mange). Valgfrie felt under fletter inn i PVV når
+                  noen velger prosessen i vurderingen.
                 </>
               ) : (
                 <>
                   Registrer prosesser med navn og prosess-ID. Du kan knytte til
                   organisasjonskart (HF/avdeling/seksjon). Sletting krever admin.
+                  En prosess kan brukes i flere PVV-vurderinger; ROS kan kobles
+                  til flere vurderinger og prosesser.
                 </>
               )}
             </CardDescription>
@@ -549,6 +568,55 @@ export function WorkspaceCandidatesPanel({
           <p className="text-muted-foreground text-[11px] leading-snug">
             {prosessRegisterCopy.notes.hint}
           </p>
+        </div>
+        <div className="rounded-xl border border-border/60 bg-muted/20 p-4">
+          <p className="text-foreground mb-3 text-sm font-medium">
+            Knyttes til PVV når prosessen velges i skjemaet
+          </p>
+          <p className="text-muted-foreground mb-4 text-xs leading-relaxed">
+            Tomme felt hopper over. Ved første valg av prosessen i PVV fylles
+            tilsvarende felter i vurderingen hvis de er tomme (roller, systemer,
+            sikkerhet/personvern).
+          </p>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="space-y-1.5 sm:col-span-2">
+              <Label htmlFor="cand-owner" className="text-xs">
+                Ansvarlig / eier (→ PVV «Roller og ansvar»)
+              </Label>
+              <Input
+                id="cand-owner"
+                value={cOwner}
+                onChange={(e) => setCOwner(e.target.value)}
+                placeholder="F.eks. avdelingsleder, kontaktperson"
+                className="h-10"
+              />
+            </div>
+            <div className="space-y-1.5 sm:col-span-2">
+              <Label htmlFor="cand-systems" className="text-xs">
+                Systemer og data (→ PVV «Systemer og data»)
+              </Label>
+              <Input
+                id="cand-systems"
+                value={cSystems}
+                onChange={(e) => setCSystems(e.target.value)}
+                placeholder="F.eks. EPJ, faktura, integrasjoner"
+                className="h-10"
+              />
+            </div>
+            <div className="space-y-1.5 sm:col-span-2">
+              <Label htmlFor="cand-comp" className="text-xs">
+                Sikkerhet og personvern (→ PVV «Sikkerhet og informasjon»)
+              </Label>
+              <Textarea
+                id="cand-comp"
+                value={cCompliance}
+                onChange={(e) => setCCompliance(e.target.value)}
+                rows={2}
+                placeholder="Kort om sensitivitet, tilgang, dokumentasjon …"
+                className="resize-y"
+              />
+            </div>
+          </div>
         </div>
         <Button
           type="button"
@@ -663,113 +731,107 @@ export function WorkspaceAssessmentsPanel({
   }
 
   return (
-    <div className="space-y-10">
+    <div className="space-y-4">
       {hubMode ? (
-        <div className="flex flex-col gap-3 rounded-2xl border border-dashed border-primary/25 bg-primary/[0.04] px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-          <p className="text-muted-foreground text-sm leading-relaxed">
-            <span className="text-foreground font-medium">
-              Mangler du en prosess å koble til?
-            </span>{" "}
-            Registrer den under fanen{" "}
+        <div className="rounded-lg border border-border/60 bg-muted/30 px-3 py-2">
+          <p className="text-muted-foreground text-sm leading-snug">
+            <span className="text-foreground font-medium">Prosess i register?</span>{" "}
+            Opprett den under{" "}
             <Link
               href={`/w/${workspaceId}/vurderinger?fane=prosesser`}
               className="text-primary font-medium underline-offset-4 hover:underline"
             >
-              Prosesser
-            </Link>{" "}
-            først — deretter velger du koden i veiviseren.
+              fanen Prosesser
+            </Link>
+            , så kan du velge den i steg 1 i veiviseren.
           </p>
         </div>
       ) : null}
-      <Card className="relative overflow-hidden border-border/60 shadow-md">
-        <div
-          className="pointer-events-none absolute inset-0 bg-[radial-gradient(900px_circle_at_0%_-20%,hsl(var(--primary)/0.12),transparent_55%),radial-gradient(700px_circle_at_100%_0%,hsl(var(--primary)/0.06),transparent_50%)]"
-          aria-hidden
-        />
-        <CardHeader className="relative pb-2">
-          <div className="flex flex-wrap items-start gap-3">
-            <div className="bg-primary/12 text-primary flex size-11 items-center justify-center rounded-2xl">
-              <Sparkles className="size-5" aria-hidden />
+      <Card className="border-border/60 overflow-hidden shadow-sm">
+        <CardHeader className="pb-3 pt-4 sm:flex sm:flex-row sm:items-center sm:justify-between sm:gap-4 sm:pb-4">
+          <div className="flex min-w-0 items-start gap-3">
+            <div className="bg-primary/10 text-primary flex size-10 shrink-0 items-center justify-center rounded-xl">
+              <Sparkles className="size-[1.15rem]" aria-hidden />
             </div>
-            <div className="min-w-0 flex-1 space-y-1">
-              <CardTitle className="text-xl tracking-tight">
-                Ny RPA-vurdering
+            <div className="min-w-0 space-y-0.5">
+              <CardTitle className="text-lg tracking-tight">
+                Ny vurdering
               </CardTitle>
-              <CardDescription className="max-w-xl text-base leading-relaxed">
-                Gi saken et navn og gå rett inn i veiviseren. Alt lagres underveis
-                — du trenger ikke fullføre alt på én gang.
+              <CardDescription className="text-sm leading-snug">
+                Navn → veiviser. Alt lagres underveis.
               </CardDescription>
             </div>
           </div>
         </CardHeader>
-        <CardFooter className="relative flex flex-col gap-4 pt-0 sm:flex-row sm:items-end">
-          <div className="min-w-0 flex-1 space-y-2">
+        <CardFooter className="flex flex-col gap-3 border-t border-border/50 bg-muted/20 pt-4 sm:flex-row sm:items-center">
+          <div className="min-w-0 flex-1 space-y-1.5">
             <Label
-              className="text-muted-foreground text-sm font-medium"
+              className="text-muted-foreground text-xs font-medium"
               htmlFor="new-assessment-title"
             >
-              Navn på prosess eller sak
+              Navn på sak eller prosess
             </Label>
             <Input
               id="new-assessment-title"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               placeholder="F.eks. Fakturamottak fra leverandører"
-              className="h-11 bg-background/80"
+              className="h-10 bg-background"
+              autoComplete="off"
             />
           </div>
           <Button
-            size="lg"
-            className="h-11 shrink-0 gap-2 px-6"
+            size="default"
+            className="h-10 w-full shrink-0 gap-1.5 px-5 sm:w-auto"
             onClick={() => void handleCreate()}
             disabled={busy}
           >
-            {busy ? "Oppretter …" : "Start vurdering"}
-            <ArrowUpRight className="size-4 opacity-80" aria-hidden />
+            {busy ? "Oppretter …" : "Start"}
+            <ChevronRight className="size-4 opacity-90" aria-hidden />
           </Button>
         </CardFooter>
       </Card>
 
-      <section className="space-y-5">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-          <div className="space-y-1">
-            <h2 className="font-heading text-xl font-semibold tracking-tight">
-              Alle vurderinger i området
+      <section className="space-y-3">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 className="font-heading text-lg font-semibold tracking-tight">
+              Dine vurderinger
             </h2>
-            <p className="text-muted-foreground max-w-2xl text-sm leading-relaxed">
+            <p className="text-muted-foreground mt-0.5 text-sm leading-snug">
               {assessments.length === 0
-                ? "Når du oppretter vurderinger, vises de her med status, modellerte tall og siste endring."
-                : `${assessments.length} vurdering${assessments.length === 1 ? "" : "er"} · søk og filtrer for å finne riktig sak raskt.`}
+                ? "Opprett over — listen fylles automatisk."
+                : `${assessments.length} ${assessments.length === 1 ? "sak" : "saker"} · søk eller filtrer.`}
             </p>
           </div>
           <Link
             href={`/w/${workspaceId}/leveranse`}
-            className="text-muted-foreground hover:text-foreground inline-flex shrink-0 items-center gap-2 text-sm font-medium transition-colors"
+            className="text-muted-foreground hover:text-foreground inline-flex shrink-0 items-center gap-1.5 text-sm font-medium transition-colors"
           >
             <LayoutGrid className="size-4" aria-hidden />
-            Leveranse-tavle
+            Leveranse
           </Link>
         </div>
 
         {assessments.length > 0 ? (
-          <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
-            <div className="relative min-w-[min(100%,20rem)] flex-1">
+          <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+            <div className="relative min-w-0 flex-1 sm:min-w-[min(100%,18rem)]">
               <Search className="text-muted-foreground pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2" />
               <Input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Søk i tittel …"
-                className="h-10 bg-background/80 pl-9"
+                className="h-9 bg-background pl-9"
                 aria-label="Søk i vurderinger"
               />
             </div>
-            <div className="flex min-w-[12rem] items-center gap-2">
+            <div className="flex w-full min-w-0 items-center gap-2 sm:w-auto sm:min-w-[11rem]">
               <Label htmlFor="assessment-status-filter" className="sr-only">
                 Filtrer på status
               </Label>
               <select
                 id="assessment-status-filter"
-                className="border-input bg-background h-10 w-full min-w-[12rem] rounded-lg border px-3 text-sm shadow-xs sm:w-auto"
+                className="border-input bg-background h-9 w-full rounded-lg border px-2.5 text-sm shadow-xs"
                 value={statusFilter}
                 onChange={(e) =>
                   setStatusFilter(e.target.value as PipelineStatus | "all")
@@ -787,18 +849,17 @@ export function WorkspaceAssessmentsPanel({
         ) : null}
 
         {assessments.length === 0 ? (
-          <div className="rounded-2xl border border-dashed bg-muted/15 px-6 py-14 text-center">
+          <div className="rounded-xl border border-dashed bg-muted/20 px-4 py-8 text-center sm:py-10">
             <p className="text-muted-foreground mx-auto max-w-md text-sm leading-relaxed">
-              Ingen vurderinger ennå. Opprett én over — du kommer rett inn i
-              veiviseren med lagring underveis.
+              Ingen vurderinger ennå. Bruk skjemaet over for å starte.
             </p>
           </div>
         ) : filteredAssessments.length === 0 ? (
-          <p className="text-muted-foreground rounded-2xl border border-dashed px-6 py-10 text-center text-sm">
-            Ingen treff. Prøv et annet søkeord eller fjern filter.
+          <p className="text-muted-foreground rounded-xl border border-dashed px-4 py-8 text-center text-sm">
+            Ingen treff — prøv annet søk eller fjern filter.
           </p>
         ) : (
-          <ul className="grid gap-4 sm:grid-cols-2 xl:grid-cols-2">
+          <ul className="grid gap-3 sm:grid-cols-2">
             {filteredAssessments.map((a) => {
               const pipeline = normalizePipelineStatus(a.pipelineStatus);
               const prio = effectiveAssessmentPriority(a);
@@ -809,32 +870,32 @@ export function WorkspaceAssessmentsPanel({
                   <Link
                     href={`/w/${workspaceId}/a/${a._id}`}
                     className={cn(
-                      "group bg-card hover:border-primary/30 block overflow-hidden rounded-2xl border border-l-4 bg-gradient-to-br from-card to-muted/15 p-4 shadow-sm transition-all hover:shadow-lg",
+                      "group bg-card hover:border-primary/35 block overflow-hidden rounded-xl border border-l-[3px] bg-gradient-to-br from-card to-muted/10 p-3.5 shadow-sm transition-all hover:shadow-md",
                       priorityBorderAccentClass(prio),
                     )}
                   >
-                    <div className="flex items-start justify-between gap-3">
-                      <span className="font-heading group-hover:text-primary line-clamp-2 text-base font-semibold leading-snug transition-colors">
+                    <div className="flex items-start justify-between gap-2">
+                      <span className="font-heading group-hover:text-primary line-clamp-2 min-w-0 text-[0.9375rem] font-semibold leading-snug transition-colors">
                         {a.title}
                       </span>
                       <Badge
                         variant="secondary"
-                        className="shrink-0 text-[11px] font-medium"
+                        className="shrink-0 max-w-[9rem] truncate text-[10px] font-medium"
                       >
                         {PIPELINE_STATUS_LABELS[pipeline]}
                       </Badge>
                     </div>
-                    <p className="text-muted-foreground mt-2 line-clamp-2 text-sm leading-snug">
+                    <p className="text-muted-foreground mt-1.5 line-clamp-2 text-xs leading-snug">
                       {compliancePlainLine(a)}
                     </p>
-                    <div className="mt-4 flex flex-wrap items-end justify-between gap-3 border-t border-border/50 pt-3">
-                      <div className="space-y-1">
-                        <p className="text-muted-foreground text-[11px] font-medium uppercase tracking-wide">
-                          Porteføljeprioritet
+                    <div className="mt-3 flex flex-wrap items-end justify-between gap-2 border-t border-border/40 pt-2.5">
+                      <div className="min-w-0 space-y-0.5">
+                        <p className="text-muted-foreground text-[10px] font-medium uppercase tracking-wide">
+                          Prioritet
                         </p>
-                        <p className="font-heading text-2xl font-bold tabular-nums tracking-tight">
+                        <p className="font-heading text-xl font-bold tabular-nums tracking-tight">
                           {prio.toFixed(1)}
-                          <span className="text-muted-foreground ml-1 text-sm font-normal">
+                          <span className="text-muted-foreground ml-1 text-xs font-normal">
                             / 100
                           </span>
                         </p>
@@ -842,25 +903,25 @@ export function WorkspaceAssessmentsPanel({
                         ap !== null &&
                         crit !== undefined &&
                         crit !== null ? (
-                          <p className="text-muted-foreground text-xs tabular-nums">
-                            AP {ap.toFixed(0)} % · Viktighet {crit.toFixed(0)} %
+                          <p className="text-muted-foreground text-[11px] tabular-nums">
+                            AP {ap.toFixed(0)} % · Vikt. {crit.toFixed(0)} %
                           </p>
                         ) : (
-                          <p className="text-muted-foreground text-xs">
-                            Åpne for å oppdatere modellerte tall
+                          <p className="text-muted-foreground text-[11px]">
+                            Åpne for tall
                           </p>
                         )}
                       </div>
-                      <div className="text-muted-foreground text-right text-xs leading-snug">
+                      <div className="text-muted-foreground shrink-0 text-right text-[11px] leading-snug">
                         <span
                           className="block"
                           title={new Date(a.updatedAt).toLocaleString("nb-NO")}
                         >
                           {formatRelativeUpdatedAt(a.updatedAt)}
                         </span>
-                        <span className="mt-1 inline-flex items-center gap-0.5 font-medium text-foreground/80 group-hover:text-primary">
+                        <span className="mt-0.5 inline-flex items-center gap-0.5 font-medium text-foreground group-hover:text-primary">
                           Åpne
-                          <ArrowUpRight className="size-3.5" aria-hidden />
+                          <ChevronRight className="size-3.5 opacity-80" aria-hidden />
                         </span>
                       </div>
                     </div>

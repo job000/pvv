@@ -22,12 +22,21 @@ export const listByWorkspace = query({
   },
 });
 
+function trimOpt(s: string | undefined): string | undefined {
+  if (s === undefined) return undefined;
+  const t = s.trim();
+  return t || undefined;
+}
+
 export const create = mutation({
   args: {
     workspaceId: v.id("workspaces"),
     name: v.string(),
     code: v.string(),
     notes: v.optional(v.string()),
+    linkHintBusinessOwner: v.optional(v.string()),
+    linkHintSystems: v.optional(v.string()),
+    linkHintComplianceNotes: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const userId = await requireUserId(ctx);
@@ -52,6 +61,9 @@ export const create = mutation({
       name,
       code,
       notes: args.notes?.trim() || undefined,
+      linkHintBusinessOwner: trimOpt(args.linkHintBusinessOwner),
+      linkHintSystems: trimOpt(args.linkHintSystems),
+      linkHintComplianceNotes: trimOpt(args.linkHintComplianceNotes),
       createdByUserId: userId,
       createdAt: now,
       updatedAt: now,
@@ -66,6 +78,9 @@ export const update = mutation({
     code: v.optional(v.string()),
     notes: v.optional(v.union(v.string(), v.null())),
     orgUnitId: v.optional(v.union(v.id("orgUnits"), v.null())),
+    linkHintBusinessOwner: v.optional(v.union(v.string(), v.null())),
+    linkHintSystems: v.optional(v.union(v.string(), v.null())),
+    linkHintComplianceNotes: v.optional(v.union(v.string(), v.null())),
   },
   handler: async (ctx, args) => {
     const userId = await requireUserId(ctx);
@@ -85,6 +100,9 @@ export const update = mutation({
       code?: string;
       notes?: string;
       orgUnitId?: Id<"orgUnits">;
+      linkHintBusinessOwner?: string;
+      linkHintSystems?: string;
+      linkHintComplianceNotes?: string;
       updatedAt: number;
     } = { updatedAt: Date.now() };
     if (args.name !== undefined) {
@@ -114,6 +132,22 @@ export const update = mutation({
     }
     if (args.orgUnitId !== undefined) {
       patch.orgUnitId = args.orgUnitId === null ? undefined : args.orgUnitId;
+    }
+    if (args.linkHintBusinessOwner !== undefined) {
+      patch.linkHintBusinessOwner =
+        args.linkHintBusinessOwner === null
+          ? undefined
+          : trimOpt(args.linkHintBusinessOwner);
+    }
+    if (args.linkHintSystems !== undefined) {
+      patch.linkHintSystems =
+        args.linkHintSystems === null ? undefined : trimOpt(args.linkHintSystems);
+    }
+    if (args.linkHintComplianceNotes !== undefined) {
+      patch.linkHintComplianceNotes =
+        args.linkHintComplianceNotes === null
+          ? undefined
+          : trimOpt(args.linkHintComplianceNotes);
     }
     await ctx.db.patch(args.candidateId, patch);
     return null;

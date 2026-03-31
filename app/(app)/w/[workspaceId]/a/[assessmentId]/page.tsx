@@ -11,12 +11,12 @@ export default function AssessmentPage() {
   const assessmentId = params.assessmentId as Id<"assessments">;
 
   return (
-    <div className="space-y-4">
+    <div className="mx-auto max-w-5xl space-y-4 px-0">
       <Link
         href={`/w/${workspaceId}/vurderinger`}
-        className="text-muted-foreground text-sm hover:text-foreground"
+        className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5 text-sm font-medium transition-colors"
       >
-        ← Tilbake til vurderinger
+        ← Til vurderinger
       </Link>
       <AssessmentWizard assessmentId={assessmentId} />
     </div>

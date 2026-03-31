@@ -182,8 +182,31 @@ export const create = mutation({
       payload,
       updatedAt: now,
       updatedByUserId: userId,
+      revision: 1,
     });
     return aid;
+  },
+});
+
+export const updateAssessmentTitle = mutation({
+  args: {
+    assessmentId: v.id("assessments"),
+    title: v.string(),
+  },
+  handler: async (ctx, args) => {
+    await requireAssessmentEdit(ctx, args.assessmentId);
+    const t = args.title.trim();
+    if (!t) {
+      throw new Error("Tittel kan ikke være tom.");
+    }
+    if (t.length > 240) {
+      throw new Error("Tittel er for lang (maks 240 tegn).");
+    }
+    await ctx.db.patch(args.assessmentId, {
+      title: t,
+      updatedAt: Date.now(),
+    });
+    return null;
   },
 });
 
@@ -208,6 +231,8 @@ export const getDraft = query({
 export const saveDraft = mutation({
   args: {
     assessmentId: v.id("assessments"),
+    /** Må matche `draft.revision` på serveren (0 hvis eldre utkast uten revisjon) */
+    expectedRevision: v.number(),
     payload: assessmentPayloadValidator,
   },
   handler: async (ctx, args) => {
@@ -215,6 +240,12 @@ export const saveDraft = mutation({
       ctx,
       args.assessmentId,
     );
+    if (
+      !Number.isInteger(args.expectedRevision) ||
+      args.expectedRevision < 0
+    ) {
+      throw new Error("Ugyldig revisjon.");
+    }
     const now = Date.now();
     const payload = sanitizeAssessmentProcessTextFields(
       args.payload as unknown as Record<string, unknown>,
@@ -225,23 +256,47 @@ export const saveDraft = mutation({
         q.eq("assessmentId", args.assessmentId),
       )
       .unique();
-    if (existing) {
-      await ctx.db.patch(existing._id, {
-        payload,
-        updatedAt: now,
-        updatedByUserId: userId,
-      });
-    } else {
+    if (!existing) {
+      if (args.expectedRevision !== 0) {
+        throw new Error(
+          "Utkastet er ikke synket. Last siden på nytt og prøv igjen.",
+        );
+      }
       await ctx.db.insert("assessmentDrafts", {
         assessmentId: args.assessmentId,
         payload,
         updatedAt: now,
         updatedByUserId: userId,
+        revision: 1,
       });
+      await ctx.db.patch(assessment._id, { updatedAt: now });
+      await refreshCachedPriority(ctx, args.assessmentId);
+      return { ok: true as const, revision: 1 };
     }
+    const serverRev = existing.revision ?? 0;
+    if (args.expectedRevision !== serverRev) {
+      const u = await ctx.db.get(existing.updatedByUserId);
+      return {
+        ok: false as const,
+        conflict: {
+          serverRevision: serverRev,
+          serverPayload: existing.payload as AssessmentPayload,
+          updatedAt: existing.updatedAt,
+          updatedByUserId: existing.updatedByUserId,
+          updatedByName: u?.name ?? u?.email ?? null,
+        },
+      };
+    }
+    const newRev = serverRev + 1;
+    await ctx.db.patch(existing._id, {
+      payload,
+      updatedAt: now,
+      updatedByUserId: userId,
+      revision: newRev,
+    });
     await ctx.db.patch(assessment._id, { updatedAt: now });
     await refreshCachedPriority(ctx, args.assessmentId);
-    return null;
+    return { ok: true as const, revision: newRev };
   },
 });
 
@@ -325,23 +380,30 @@ export const restoreDraftFromVersion = mutation({
         q.eq("assessmentId", args.assessmentId),
       )
       .unique();
+    const restoredPayload = sanitizeAssessmentProcessTextFields(
+      ver.payload as unknown as Record<string, unknown>,
+    ) as AssessmentPayload;
+    const prevRev = existing ? (existing.revision ?? 0) : 0;
+    const newRevision = prevRev + 1;
     if (existing) {
       await ctx.db.patch(existing._id, {
-        payload: ver.payload,
+        payload: restoredPayload,
         updatedAt: now,
         updatedByUserId: userId,
+        revision: newRevision,
       });
     } else {
       await ctx.db.insert("assessmentDrafts", {
         assessmentId: args.assessmentId,
-        payload: ver.payload,
+        payload: restoredPayload,
         updatedAt: now,
         updatedByUserId: userId,
+        revision: newRevision,
       });
     }
     await ctx.db.patch(assessment._id, { updatedAt: now });
     await refreshCachedPriority(ctx, args.assessmentId);
-    return null;
+    return { payload: restoredPayload, revision: newRevision };
   },
 });
 
@@ -349,6 +411,8 @@ export const listPipelineBoard = query({
   args: {
     workspaceId: v.id("workspaces"),
     sprintFilter: v.optional(v.union(v.id("sprints"), v.literal("all"))),
+    /** Filtrer på tittel (delstreng, ikke versjonssensitiv) — for store porteføljer */
+    titleSearch: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const userId = await getAuthUserId(ctx);
@@ -364,6 +428,7 @@ export const listPipelineBoard = query({
       .order("desc")
       .collect();
     const sprintFilter = args.sprintFilter ?? "all";
+    const searchQ = args.titleSearch?.trim().toLowerCase() ?? "";
     const out: Array<{
       assessment: (typeof rows)[0];
       priorityScore: number;
@@ -374,12 +439,16 @@ export const listPipelineBoard = query({
       sprintName: string | null;
       versionCount: number;
       latestVersionNumber: number;
+      ownerName: string | null;
     }> = [];
     for (const a of rows) {
       if (!(await canReadAssessment(ctx, a, userId))) {
         continue;
       }
       if (sprintFilter !== "all" && a.sprintId !== sprintFilter) {
+        continue;
+      }
+      if (searchQ && !a.title.toLowerCase().includes(searchQ)) {
         continue;
       }
       const draft = await ctx.db
@@ -410,6 +479,8 @@ export const listPipelineBoard = query({
         versionCount === 0
           ? 0
           : Math.max(...versionRows.map((x) => x.version));
+      const owner = await ctx.db.get(a.createdByUserId);
+      const ownerName = owner?.name ?? owner?.email ?? null;
       out.push({
         assessment: a,
         priorityScore: base,
@@ -420,6 +491,7 @@ export const listPipelineBoard = query({
         sprintName,
         versionCount,
         latestVersionNumber,
+        ownerName,
       });
     }
     out.sort((x, y) => {
@@ -431,6 +503,80 @@ export const listPipelineBoard = query({
       return ry - rx;
     });
     return out;
+  },
+});
+
+/** Forhåndsvisning fra leveranse-tavle (utvidet tekst + score uten å laste hele veiviseren). */
+export const getPipelinePreview = query({
+  args: { assessmentId: v.id("assessments") },
+  handler: async (ctx, args) => {
+    const { assessment } = await requireAssessmentRead(ctx, args.assessmentId);
+    const owner = await ctx.db.get(assessment.createdByUserId);
+    const ownerName = owner?.name ?? owner?.email ?? null;
+    let sprintName: string | null = null;
+    if (assessment.sprintId) {
+      const sp = await ctx.db.get(assessment.sprintId);
+      sprintName = sp?.name ?? null;
+    }
+    const draft = await ctx.db
+      .query("assessmentDrafts")
+      .withIndex("by_assessment", (q) => q.eq("assessmentId", args.assessmentId))
+      .unique();
+
+    let processName: string | null = null;
+    let processDescriptionPreview: string | null = null;
+    let priorityScore: number;
+    let apPercent: number;
+    let criticality: number;
+    let easeLabel: string;
+    let feasible: boolean;
+
+    if (draft) {
+      const payload = draft.payload as Record<string, unknown>;
+      const pn = payload.processName;
+      if (typeof pn === "string" && pn.trim()) {
+        processName = pn.trim();
+      }
+      const desc =
+        typeof payload.processDescription === "string"
+          ? payload.processDescription
+          : "";
+      const t = desc.trim();
+      if (t.length > 0) {
+        processDescriptionPreview = t.length > 420 ? `${t.slice(0, 420)}…` : t;
+      }
+      const snapshot = payloadToSnapshot(payload);
+      const c = computeAllResults(snapshot);
+      priorityScore = c.priorityScore;
+      apPercent = c.ap;
+      criticality = c.criticality;
+      easeLabel = c.easeLabel;
+      feasible = c.feasible;
+    } else {
+      const snapshot = payloadToSnapshot(
+        defaultPayload() as unknown as Record<string, unknown>,
+      );
+      const c = computeAllResults(snapshot);
+      priorityScore = assessment.cachedPriorityScore ?? c.priorityScore;
+      apPercent = assessment.cachedAp ?? c.ap;
+      criticality = assessment.cachedCriticality ?? c.criticality;
+      easeLabel = c.easeLabel;
+      feasible = c.feasible;
+    }
+
+    return {
+      assessment,
+      ownerName,
+      sprintName,
+      processName,
+      processDescriptionPreview,
+      hasDraft: draft !== null,
+      priorityScore,
+      apPercent,
+      criticality,
+      easeLabel,
+      feasible,
+    };
   },
 });
 
@@ -650,13 +796,152 @@ export const listVersions = query({
   args: { assessmentId: v.id("assessments") },
   handler: async (ctx, args) => {
     await requireAssessmentRead(ctx, args.assessmentId);
-    return await ctx.db
+    const rows = await ctx.db
       .query("assessmentVersions")
       .withIndex("by_assessment", (q) =>
         q.eq("assessmentId", args.assessmentId),
       )
       .order("desc")
       .collect();
+    const enriched = [];
+    for (const r of rows) {
+      const u = await ctx.db.get(r.createdByUserId);
+      enriched.push({
+        ...r,
+        creatorName: u?.name ?? u?.email ?? null,
+      });
+    }
+    return enriched;
+  },
+});
+
+/** En lagret milepæl-versjon (for forhåndsvisning uten hele payload i klient). */
+export const getAssessmentVersion = query({
+  args: {
+    assessmentId: v.id("assessments"),
+    version: v.number(),
+  },
+  handler: async (ctx, args) => {
+    await requireAssessmentRead(ctx, args.assessmentId);
+    const row = await ctx.db
+      .query("assessmentVersions")
+      .withIndex("by_assessment_version", (q) =>
+        q.eq("assessmentId", args.assessmentId).eq("version", args.version),
+      )
+      .unique();
+    if (!row) {
+      return null;
+    }
+    const u = await ctx.db.get(row.createdByUserId);
+    const payload = row.payload as Record<string, unknown>;
+    const pn = payload.processName;
+    const cid = payload.candidateId;
+    return {
+      version: row.version,
+      note: row.note ?? null,
+      createdAt: row.createdAt,
+      creatorName: u?.name ?? u?.email ?? null,
+      computed: row.computed,
+      processName: typeof pn === "string" ? pn : "",
+      candidateId: typeof cid === "string" ? cid : "",
+    };
+  },
+});
+
+/** Sammenlign to lagrede versjoner (beregning + hvilke skjemafelt som avviker). */
+export const compareAssessmentVersions = query({
+  args: {
+    assessmentId: v.id("assessments"),
+    versionA: v.number(),
+    versionB: v.number(),
+  },
+  handler: async (ctx, args) => {
+    await requireAssessmentRead(ctx, args.assessmentId);
+    const a = await ctx.db
+      .query("assessmentVersions")
+      .withIndex("by_assessment_version", (q) =>
+        q.eq("assessmentId", args.assessmentId).eq("version", args.versionA),
+      )
+      .unique();
+    const b = await ctx.db
+      .query("assessmentVersions")
+      .withIndex("by_assessment_version", (q) =>
+        q.eq("assessmentId", args.assessmentId).eq("version", args.versionB),
+      )
+      .unique();
+    if (!a || !b) {
+      return null;
+    }
+    const pa = a.payload as Record<string, unknown>;
+    const pb = b.payload as Record<string, unknown>;
+    const keys = new Set([...Object.keys(pa), ...Object.keys(pb)]);
+    const changedFields: Array<{
+      key: string;
+      before: string;
+      after: string;
+    }> = [];
+    const fmt = (v: unknown): string => {
+      if (v === undefined || v === null) return "—";
+      if (typeof v === "boolean") return v ? "Ja" : "Nei";
+      if (typeof v === "number") return String(v);
+      if (typeof v === "string") {
+        const t = v.trim();
+        return t.length > 280 ? `${t.slice(0, 280)}…` : t;
+      }
+      try {
+        const s = JSON.stringify(v);
+        return s.length > 200 ? `${s.slice(0, 200)}…` : s;
+      } catch {
+        return "…";
+      }
+    };
+    for (const k of keys) {
+      const sa = JSON.stringify(pa[k]);
+      const sb = JSON.stringify(pb[k]);
+      if (sa === sb) continue;
+      changedFields.push({
+        key: k,
+        before: fmt(pa[k]),
+        after: fmt(pb[k]),
+      });
+    }
+    changedFields.sort((x, y) => x.key.localeCompare(y.key, "nb"));
+    return {
+      versionA: {
+        version: a.version,
+        createdAt: a.createdAt,
+        note: a.note ?? null,
+        computed: a.computed,
+      },
+      versionB: {
+        version: b.version,
+        createdAt: b.createdAt,
+        note: b.note ?? null,
+        computed: b.computed,
+      },
+      changedFields,
+    };
+  },
+});
+
+export const deleteAssessmentVersion = mutation({
+  args: {
+    assessmentId: v.id("assessments"),
+    version: v.number(),
+  },
+  handler: async (ctx, args) => {
+    await requireAssessmentEdit(ctx, args.assessmentId);
+    const row = await ctx.db
+      .query("assessmentVersions")
+      .withIndex("by_assessment_version", (q) =>
+        q.eq("assessmentId", args.assessmentId).eq("version", args.version),
+      )
+      .unique();
+    if (!row) {
+      throw new Error("Fant ikke versjonen.");
+    }
+    await ctx.db.delete(row._id);
+    return null;
   },
 });
 
@@ -850,6 +1135,7 @@ export const getMyAccess = query({
     const collab = await getAssessmentCollaborator(ctx, args.assessmentId, userId);
     const wm = await getWorkspaceMembership(ctx, assessment.workspaceId, userId);
     return {
+      userId,
       canEdit: edit,
       collaboratorRole: collab?.role ?? null,
       workspaceRole: wm?.role ?? null,

@@ -28,12 +28,18 @@ export function WorkspaceCandidateRow({
     code?: string;
     notes?: string | null;
     orgUnitId?: Id<"orgUnits"> | null;
+    linkHintBusinessOwner?: string | null;
+    linkHintSystems?: string | null;
+    linkHintComplianceNotes?: string | null;
   }) => Promise<null>;
   onRemove: (args: { candidateId: Id<"candidates"> }) => Promise<null>;
 }) {
   const [name, setName] = useState(c.name);
   const [code, setCode] = useState(c.code);
   const [notes, setNotes] = useState(c.notes ?? "");
+  const [linkOwner, setLinkOwner] = useState(c.linkHintBusinessOwner ?? "");
+  const [linkSystems, setLinkSystems] = useState(c.linkHintSystems ?? "");
+  const [linkComp, setLinkComp] = useState(c.linkHintComplianceNotes ?? "");
   const [orgUnitId, setOrgUnitId] = useState(c.orgUnitId ?? "");
 
   function handleSave() {
@@ -51,6 +57,11 @@ export function WorkspaceCandidateRow({
       code: codeT,
       notes: notes.trim() === "" ? null : notes.trim(),
       orgUnitId: orgUnitId === "" ? null : (orgUnitId as Id<"orgUnits">),
+      linkHintBusinessOwner:
+        linkOwner.trim() === "" ? null : linkOwner.trim(),
+      linkHintSystems: linkSystems.trim() === "" ? null : linkSystems.trim(),
+      linkHintComplianceNotes:
+        linkComp.trim() === "" ? null : linkComp.trim(),
     });
   }
 
@@ -170,6 +181,49 @@ export function WorkspaceCandidateRow({
         <p className="text-muted-foreground text-[11px] leading-snug">
           {prosessRegisterCopy.notes.hint}
         </p>
+      </div>
+
+      <div className="mt-5 space-y-3 rounded-xl border border-border/60 bg-muted/15 p-4">
+        <p className="text-foreground text-sm font-medium">
+          Felter som flettes inn i PVV (hvis tomme der)
+        </p>
+        <div className="space-y-2">
+          <Label htmlFor={`cand-lo-${c._id}`} className="text-xs">
+            Ansvarlig / eier → «Roller og ansvar»
+          </Label>
+          <Input
+            id={`cand-lo-${c._id}`}
+            value={linkOwner}
+            onChange={(e) => setLinkOwner(e.target.value)}
+            disabled={!canEdit}
+            className="h-9"
+          />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor={`cand-ls-${c._id}`} className="text-xs">
+            Systemer og data
+          </Label>
+          <Input
+            id={`cand-ls-${c._id}`}
+            value={linkSystems}
+            onChange={(e) => setLinkSystems(e.target.value)}
+            disabled={!canEdit}
+            className="h-9"
+          />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor={`cand-lc-${c._id}`} className="text-xs">
+            Sikkerhet og personvern
+          </Label>
+          <Textarea
+            id={`cand-lc-${c._id}`}
+            value={linkComp}
+            onChange={(e) => setLinkComp(e.target.value)}
+            rows={2}
+            disabled={!canEdit}
+            className="resize-y"
+          />
+        </div>
       </div>
 
       {canEdit ? (

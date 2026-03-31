@@ -31,8 +31,11 @@ import {
   parseLabelLines,
   resizeNumberMatrix,
 } from "@/lib/ros-matrix-resize";
+import { cn } from "@/lib/utils";
 import { downloadRosAnalysisPdf } from "@/lib/ros-pdf";
 import {
+  ChevronLeft,
+  ChevronRight,
   FileDown,
   History,
   Link2,
@@ -43,7 +46,19 @@ import {
   Undo2,
 } from "lucide-react";
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+
+const ROS_EDITOR_SECTIONS = [
+  { id: "detaljer", label: "Detaljer" },
+  { id: "oppsummering", label: "Oppsummering" },
+  { id: "pvv", label: "PVV-koblinger" },
+  { id: "versjoner", label: "Versjoner" },
+  { id: "oppgaver", label: "Oppgaver" },
+  { id: "etter-akser", label: "Etter tiltak" },
+  { id: "matrise", label: "Matrise" },
+  { id: "journal", label: "Journal" },
+] as const;
 
 function RosPvvLinkFields({
   linkId,
@@ -168,6 +183,7 @@ export function RosAnalysisEditor({
   workspaceId: Id<"workspaces">;
   analysisId: Id<"rosAnalyses">;
 }) {
+  const router = useRouter();
   const data = useQuery(api.ros.getAnalysis, { analysisId });
   const workspace = useQuery(api.workspaces.get, { workspaceId });
   const journalEntries = useQuery(api.ros.listJournalEntries, { analysisId });
@@ -215,6 +231,11 @@ export function RosAnalysisEditor({
   const [versionNote, setVersionNote] = useState("");
   const [snapshotBusy, setSnapshotBusy] = useState(false);
 
+  const analysisRevisionRef = useRef<number | null>(null);
+  const rosSaveQueueRef = useRef(Promise.resolve());
+
+  const [rosSection, setRosSection] = useState(0);
+
   const [taskTitle, setTaskTitle] = useState("");
   const [taskDesc, setTaskDesc] = useState("");
   const [taskAssignee, setTaskAssignee] = useState<Id<"users"> | "">("");
@@ -230,6 +251,40 @@ export function RosAnalysisEditor({
   const [colAxisTitleAfter, setColAxisTitleAfter] = useState("");
   const [rowLabelsAfterText, setRowLabelsAfterText] = useState("");
   const [colLabelsAfterText, setColLabelsAfterText] = useState("");
+
+  useEffect(() => {
+    analysisRevisionRef.current = data?.revision ?? 0;
+  }, [data?._id, data?.revision]);
+
+  useEffect(() => {
+    rosSaveQueueRef.current = Promise.resolve();
+  }, [analysisId]);
+
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (rosSection === 6) return;
+      const t = e.target;
+      if (
+        t instanceof HTMLInputElement ||
+        t instanceof HTMLTextAreaElement ||
+        t instanceof HTMLSelectElement ||
+        (t instanceof HTMLElement && t.isContentEditable)
+      ) {
+        return;
+      }
+      if (e.key === "ArrowLeft") {
+        e.preventDefault();
+        setRosSection((s) => Math.max(0, s - 1));
+      } else if (e.key === "ArrowRight") {
+        e.preventDefault();
+        setRosSection((s) =>
+          Math.min(ROS_EDITOR_SECTIONS.length - 1, s + 1),
+        );
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [rosSection]);
 
   useEffect(() => {
     if (!data) return;
@@ -478,28 +533,44 @@ export function RosAnalysisEditor({
     );
     setSaving(true);
     try {
-      await updateAnalysis({
-        analysisId,
-        title: title.trim(),
-        notes: notes.trim() || null,
-        matrixValues: matrix,
-        cellItems: cellItemsMatrix,
-        matrixValuesAfter: matrixAfterToSave,
-        cellItemsAfter: cellItemsAfterToSave,
-        rowAxisTitleAfter: useSeparateAfterAxes
-          ? rowAxisTitleAfter.trim()
-          : undefined,
-        colAxisTitleAfter: useSeparateAfterAxes
-          ? colAxisTitleAfter.trim()
-          : undefined,
-        rowLabelsAfter: useSeparateAfterAxes
-          ? parseLabelLines(rowLabelsAfterText)
-          : [],
-        colLabelsAfter: useSeparateAfterAxes
-          ? parseLabelLines(colLabelsAfterText)
-          : [],
-      });
-      setDirty(false);
+      const runSave = async () => {
+        if (!data) return;
+        const rev = analysisRevisionRef.current ?? data.revision ?? 0;
+        const result = await updateAnalysis({
+          analysisId,
+          expectedRevision: rev,
+          title: title.trim(),
+          notes: notes.trim() || null,
+          matrixValues: matrix,
+          cellItems: cellItemsMatrix,
+          matrixValuesAfter: matrixAfterToSave,
+          cellItemsAfter: cellItemsAfterToSave,
+          rowAxisTitleAfter: useSeparateAfterAxes
+            ? rowAxisTitleAfter.trim()
+            : undefined,
+          colAxisTitleAfter: useSeparateAfterAxes
+            ? colAxisTitleAfter.trim()
+            : undefined,
+          rowLabelsAfter: useSeparateAfterAxes
+            ? parseLabelLines(rowLabelsAfterText)
+            : [],
+          colLabelsAfter: useSeparateAfterAxes
+            ? parseLabelLines(colLabelsAfterText)
+            : [],
+        });
+        if (result.ok) {
+          analysisRevisionRef.current = result.revision;
+          setDirty(false);
+        } else {
+          window.alert(
+            "ROS-analysen er allerede oppdatert på serveren (annen bruker, annen fane eller journal). Last siden på nytt og prøv igjen.",
+          );
+        }
+      };
+      rosSaveQueueRef.current = rosSaveQueueRef.current
+        .catch(() => undefined)
+        .then(runSave);
+      await rosSaveQueueRef.current;
     } finally {
       setSaving(false);
     }
@@ -653,7 +724,7 @@ export function RosAnalysisEditor({
   }
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-4 pb-24">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <Link
@@ -730,6 +801,64 @@ export function RosAnalysisEditor({
         </div>
       </div>
 
+      <p className="sr-only">
+        Piltastene venstre og høyre bytter steg når fokus ikke er i et felt. På
+        matrise-steget er de reservert til matrisen. Bruk Forrige og Neste nederst
+        som i vurderingsveiviseren.
+      </p>
+
+      <div className="flex flex-col gap-3 rounded-2xl border border-border/60 bg-gradient-to-r from-muted/40 via-card to-muted/30 p-3 shadow-sm sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+        <nav
+          className="flex flex-1 flex-wrap items-center justify-center gap-2 sm:justify-start"
+          aria-label="Hovedsteg i ROS-analysen"
+        >
+          {ROS_EDITOR_SECTIONS.map((sec, i) => (
+            <button
+              key={sec.id}
+              type="button"
+              aria-label={`Gå til ${sec.label}`}
+              aria-current={rosSection === i ? "step" : undefined}
+              onClick={() => setRosSection(i)}
+              className={cn(
+                "size-2.5 rounded-full transition-all",
+                rosSection === i
+                  ? "bg-primary ring-primary ring-offset-background scale-125 ring-2 ring-offset-2"
+                  : i < rosSection
+                    ? "bg-primary/45 hover:bg-primary/60"
+                    : "bg-muted-foreground/25 hover:bg-muted-foreground/40",
+              )}
+            />
+          ))}
+        </nav>
+        <div className="flex min-w-0 flex-col items-stretch gap-2 sm:flex-row sm:items-center sm:gap-2">
+          <p className="text-foreground text-center text-sm font-medium sm:min-w-0 sm:flex-1 sm:text-left">
+            <span className="text-muted-foreground font-normal">
+              Steg {rosSection + 1} av {ROS_EDITOR_SECTIONS.length} ·{" "}
+            </span>
+            <span className="break-words">
+              {ROS_EDITOR_SECTIONS[rosSection].label}
+            </span>
+          </p>
+          <label htmlFor="ros-section-jump" className="sr-only">
+            Hopp til steg
+          </label>
+          <select
+            id="ros-section-jump"
+            className="border-input bg-background h-9 w-full min-w-0 shrink-0 rounded-lg border px-2 text-sm shadow-xs sm:w-[min(100%,14rem)]"
+            value={rosSection}
+            onChange={(e) => setRosSection(Number(e.target.value))}
+          >
+            {ROS_EDITOR_SECTIONS.map((sec, i) => (
+              <option key={sec.id} value={i}>
+                {i + 1}. {sec.label}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      {rosSection === 0 && (
+        <>
       <RosMethodologyGuide
         variant="compact"
         workspaceId={workspaceId}
@@ -740,7 +869,9 @@ export function RosAnalysisEditor({
           <CardTitle className="text-base">Detaljer</CardTitle>
           <CardDescription>
             Tittel og notat (metode, forutsetninger). PVV kobles under eget
-            avsnitt.
+            avsnitt. Lagring og journal bruker{" "}
+            <strong className="text-foreground">revisjon</strong> (som PVV) slik
+            at samtidige endringer ikke overskriver hverandre uten varsel.
           </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-4 sm:grid-cols-2">
@@ -772,7 +903,10 @@ export function RosAnalysisEditor({
           </div>
         </CardContent>
       </Card>
+        </>
+      )}
 
+      {rosSection === 1 && (
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Oppsummering før / etter tiltak</CardTitle>
@@ -804,7 +938,9 @@ export function RosAnalysisEditor({
           ) : null}
         </CardContent>
       </Card>
+      )}
 
+      {rosSection === 2 && (
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-base">
@@ -930,7 +1066,9 @@ export function RosAnalysisEditor({
           </div>
         </CardContent>
       </Card>
+      )}
 
+      {rosSection === 3 && (
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-base">
@@ -1001,7 +1139,9 @@ export function RosAnalysisEditor({
           )}
         </CardContent>
       </Card>
+      )}
 
+      {rosSection === 4 && (
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-base">
@@ -1183,7 +1323,9 @@ export function RosAnalysisEditor({
           )}
         </CardContent>
       </Card>
+      )}
 
+      {rosSection === 5 && (
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Etter tiltak — egne akser (valgfritt)</CardTitle>
@@ -1291,7 +1433,9 @@ export function RosAnalysisEditor({
           ) : null}
         </CardContent>
       </Card>
+      )}
 
+      {rosSection === 6 && (
       <Card className="overflow-hidden border-primary/15">
         <CardHeader className="border-b border-border/50 bg-muted/20">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -1438,16 +1582,82 @@ export function RosAnalysisEditor({
           ) : null}
         </CardContent>
       </Card>
+      )}
 
+      {rosSection === 7 && (
       <RosJournalPanel
         analysisId={analysisId}
+        expectedRevision={data.revision ?? 0}
         rowLabels={data.rowLabels}
         colLabels={data.colLabels}
         afterRowLabels={effectiveAfterRowLabels}
         afterColLabels={effectiveAfterColLabels}
         afterSeparate={useSeparateAfterAxes}
         onJumpToCell={handleJumpToCell}
+        onJournalConflict={() =>
+          window.alert(
+            "Journalen kunne ikke lagres: analysen har nyere revisjon på serveren. Oppdater siden og prøv igjen.",
+          )
+        }
       />
+      )}
+
+      <div className="fixed bottom-0 left-0 right-0 z-30 border-t bg-background/95 p-3 backdrop-blur supports-[backdrop-filter]:bg-background/80">
+        <div className="mx-auto grid max-w-6xl grid-cols-[1fr_minmax(0,auto)_1fr] items-center gap-3 px-4">
+          <div className="flex justify-start">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="gap-1"
+              onClick={() => setRosSection((s) => Math.max(0, s - 1))}
+              disabled={rosSection <= 0}
+            >
+              <ChevronLeft className="size-4" />
+              Forrige
+            </Button>
+          </div>
+          <div className="flex min-w-0 flex-col items-center justify-center gap-0.5 text-center">
+            <span className="text-muted-foreground text-xs tabular-nums">
+              Steg {rosSection + 1} av {ROS_EDITOR_SECTIONS.length}
+            </span>
+            {rosSection >= ROS_EDITOR_SECTIONS.length - 1 ? (
+              <span className="text-muted-foreground text-[11px] font-medium">
+                Siste steg
+              </span>
+            ) : null}
+          </div>
+          <div className="flex justify-end">
+            {rosSection >= ROS_EDITOR_SECTIONS.length - 1 ? (
+              <Button
+                type="button"
+                variant="default"
+                size="sm"
+                className="gap-1"
+                onClick={() => router.push(`/w/${workspaceId}/ros`)}
+              >
+                Ferdig
+                <ChevronRight className="size-4" aria-hidden />
+              </Button>
+            ) : (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="gap-1"
+                onClick={() =>
+                  setRosSection((s) =>
+                    Math.min(ROS_EDITOR_SECTIONS.length - 1, s + 1),
+                  )
+                }
+              >
+                Neste
+                <ChevronRight className="size-4" />
+              </Button>
+            )}
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

@@ -1,6 +1,11 @@
 "use client";
 
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -15,7 +20,6 @@ import {
   Building2,
   Coins,
   HeartPulse,
-  Info,
   LifeBuoy,
   Shield,
   Siren,
@@ -30,6 +34,7 @@ const BLOCKS: Array<{
     | "hfCriticalManualGapNotes"
     | "hfOperationsSupportNotes"
   >;
+  value: string;
   title: string;
   lead: string;
   hint: string;
@@ -38,17 +43,19 @@ const BLOCKS: Array<{
 }> = [
   {
     key: "hfSecurityInformationNotes",
+    value: "security",
     title: "Sikkerhet og tilstrekkelig informasjon",
     lead:
       "Hvordan ivaretar dere krav til tilgang, logging, personvern og dokumentasjon?",
     hint:
       "Tenk på hvem som skal se hva, sporbarhet, avvik og avtaler — i ord alle forstår.",
     placeholder:
-      "F.eks. «Kun autorisert helsepersonell. Innlogging mot felles katalog. Hendelser logges i … Ingen sensitiv e-post ut av institusjonen …»",
+      "F.eks. «Kun autorisert helsepersonell. Innlogging mot felles katalog. Hendelser logges i …»",
     icon: Shield,
   },
   {
     key: "hfOrganizationalBreadthNotes",
+    value: "breadth",
     title: "Bredde og samordning",
     lead:
       "Hvor strekker prosessen seg — helseforetak, avdelinger, eksterne, flere lokasjoner?",
@@ -60,35 +67,38 @@ const BLOCKS: Array<{
   },
   {
     key: "hfEconomicRationaleNotes",
+    value: "economy",
     title: "Besparelse og økonomisk gevinst",
     lead:
       "Hvorfor lønner det seg — tid, kvalitet, risiko, pasientsikkerhet eller økonomi?",
     hint:
       "Koble gjerne til tall fra steget «Tall og kost», men forklar også i ord hva som er viktigst for beslutning.",
     placeholder:
-      "F.eks. «Mindre manuell omskriving gir færre feil og frigjør årsverk til annet arbeid. Kritisk ved saksbunker …»",
+      "F.eks. «Mindre manuell omskriving gir færre feil og frigjør årsverk …»",
     icon: Coins,
   },
   {
     key: "hfCriticalManualGapNotes",
+    value: "gap",
     title: "Kritisk: det som ikke gjøres i dag",
     lead:
       "Hva faller mellom stoler i dag — slik at automatisering blir nødvendig, ikke bare «nice to have»?",
     hint:
-      "Beskriv gapet konkret: hvem rammes, hva skjer ved forsinkelse, og hvorfor må robot eller regler ta over.",
+      "Beskriv gapet konkret: hvem rammes, hva skjer ved forsinkelse, og hvorfor må dette løses.",
     placeholder:
-      "F.eks. «Manuell overføring mellom system X og Y skjer ikke i helgene — pasientlister oppdateres sent …»",
+      "F.eks. «Manuell overføring mellom system X og Y skjer ikke i helgene …»",
     icon: Siren,
   },
   {
     key: "hfOperationsSupportNotes",
-    title: "Utvikling og drift — hva kreves?",
+    value: "ops-notes",
+    title: "Utvikling og drift — detaljer",
     lead:
-      "Forventning til vedlikehold, henvendelseslinje, avtaler (SLA), beredskap og samarbeid med IKT.",
+      "Konkrete avklaringer om vedlikehold, henvendelseslinje, SLA-vinduer og hvem som kontaktes når.",
     hint:
-      "Velg tjenestenivå over — bruk feltet her til konkrete avklaringer (hvem kontaktes når, responstid, vinduer).",
+      "Tillegg til tjenestenivå-valget over — fritekst til møtereferat og avtaler.",
     placeholder:
-      "F.eks. «Feil i produksjon: henvendelse til IKT 1. linje innen arbeidstid. Endringer koordineres med …»",
+      "F.eks. «Feil i produksjon: henvendelse til IKT 1. linje innen arbeidstid …»",
     icon: LifeBuoy,
   },
 ];
@@ -108,167 +118,166 @@ export function HfRequirementsSection({
   const level = payload.hfOperationsSupportLevel ?? "unsure";
 
   return (
-    <div className="space-y-5">
-      <Alert className="border-emerald-500/25 bg-emerald-500/[0.06]">
-        <HeartPulse className="size-4 text-emerald-700 dark:text-emerald-400" />
-        <AlertTitle className="text-foreground">
-          Krav og forventninger i helseforetak og tilsvarende virksomhet
-        </AlertTitle>
-        <AlertDescription className="space-y-2 text-pretty text-sm leading-relaxed">
-          <p>
-            Her dokumenterer dere det styrende dokumentasjon og god praksis
-            forventer: <strong>sikkerhet</strong>, <strong>tydelig nok
-            informasjon</strong>, <strong>organisasjonsbredde</strong>,{" "}
-            <strong>økonomisk begrunnelse</strong>, og hva som er{" "}
-            <strong>så kritisk at det ikke kan fortsette manuelt</strong>. Alt
-            er <strong>tekst i vanlig språk</strong> — til arkiv, ROS/PDD og
-            videre samtale med IKT og drift.
-          </p>
-          <p className="text-muted-foreground text-xs">
-            Fyll ut det dere kan nå; uferdig er bedre enn ingenting. Felt påvirker
-            ikke den automatiske poengsummen (Likert og KPI).
-          </p>
-        </AlertDescription>
-      </Alert>
-
-      <div className="relative overflow-hidden rounded-2xl border border-emerald-500/20 bg-gradient-to-br from-emerald-500/[0.06] via-card to-muted/30 p-5 shadow-sm">
-        <div
-          className="pointer-events-none absolute -right-12 -top-12 size-40 rounded-full bg-emerald-500/10 blur-3xl"
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-start gap-2">
+        <HeartPulse
+          className="text-emerald-700 dark:text-emerald-400 mt-0.5 size-4 shrink-0"
           aria-hidden
         />
-        <div className="relative space-y-3">
-          <p className="text-emerald-800 dark:text-emerald-300 font-medium text-xs uppercase tracking-wide">
-            Drift og videre utvikling
+        <div className="min-w-0 space-y-1">
+          <p className="text-foreground text-sm font-medium leading-snug">
+            Krav og kontekst (helseforetak / tilsvarende)
           </p>
-          <h3 className="font-heading text-lg font-semibold tracking-tight">
-            Tjenestenivå (1., 2. og 3. linje)
-          </h3>
-          <p className="text-muted-foreground max-w-2xl text-sm leading-relaxed">
-            Velg det som best beskriver hvor henvendelser og feilretting forventes
-            løst. Dette er et enkelt kart — ikke en formell SLA-erklæring.
+          <p className="text-muted-foreground text-xs leading-relaxed">
+            Tekst til arkiv og ROS/PDD —{" "}
+            <strong className="text-foreground">påvirker ikke</strong>{" "}
+            automatisk poengsum. Åpne bare det dere trenger å fylle ut.
           </p>
-          <div className="space-y-2">
-            <Label htmlFor="hf-ops-level" className="text-sm font-medium">
-              Forventet nivå
-            </Label>
-            <select
-              id="hf-ops-level"
-              className="border-input bg-background flex h-10 w-full max-w-xl rounded-lg border px-3 text-sm shadow-xs"
-              value={level}
-              disabled={!canEdit}
-              onChange={(e) =>
-                update(
-                  "hfOperationsSupportLevel",
-                  e.target.value as AssessmentPayload["hfOperationsSupportLevel"],
-                )
-              }
-            >
-              {(Object.keys(OPERATIONS_SUPPORT_LEVEL_LABELS) as Array<
-                keyof typeof OPERATIONS_SUPPORT_LEVEL_LABELS
-              >).map((k) => (
-                <option key={k} value={k}>
-                  {OPERATIONS_SUPPORT_LEVEL_LABELS[k]}
-                </option>
-              ))}
-            </select>
-          </div>
-          <Alert className="mt-2 border-border/60 bg-muted/30">
-            <Info className="size-4" />
-            <AlertTitle className="text-foreground text-sm">
-              Kort forklart
-            </AlertTitle>
-            <AlertDescription className="text-muted-foreground space-y-1.5 text-xs leading-relaxed">
-              <p>
-                <strong>1. linje</strong> er ofte første kontakt for brukere og
-                enkle feil. <strong>2. linje</strong> tar mer komplekse saker internt.
-                <strong> 3. linje</strong> er typisk leverandør eller dyp teknisk
-                ekspertise.
-              </p>
-              <p>
-                Mange løsninger trenger <strong>blandet</strong> nivå — f.eks. 1.
-                linje for brukere og 3. linje for leverandør ved kodefeil.
-              </p>
-            </AlertDescription>
-          </Alert>
         </div>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2">
+      <Accordion
+        multiple
+        defaultValue={["ops"]}
+        className="border-border/70 rounded-xl border bg-card/40"
+      >
+        <AccordionItem value="ops" className="border-border/60 not-last:border-b px-3">
+          <AccordionTrigger className="text-foreground py-3 text-sm font-semibold hover:no-underline">
+            <span className="flex items-center gap-2">
+              <LifeBuoy className="text-emerald-700 dark:text-emerald-400 size-4 shrink-0" />
+              Drift og tjenestenivå (1. / 2. / 3. linje)
+            </span>
+          </AccordionTrigger>
+          <AccordionContent className="pb-4">
+            <div className="space-y-3">
+              <p className="text-muted-foreground text-xs leading-relaxed">
+                Velg det som best beskriver hvor henvendelser og feilretting
+                forventes løst — enkel kartlegging, ikke formell SLA.
+              </p>
+              <div className="space-y-2">
+                <Label htmlFor="hf-ops-level" className="text-sm font-medium">
+                  Forventet nivå
+                </Label>
+                <select
+                  id="hf-ops-level"
+                  className="border-input bg-background flex h-10 w-full max-w-xl rounded-lg border px-3 text-sm shadow-xs"
+                  value={level}
+                  disabled={!canEdit}
+                  onChange={(e) =>
+                    update(
+                      "hfOperationsSupportLevel",
+                      e.target
+                        .value as AssessmentPayload["hfOperationsSupportLevel"],
+                    )
+                  }
+                >
+                  {(
+                    Object.keys(
+                      OPERATIONS_SUPPORT_LEVEL_LABELS,
+                    ) as Array<keyof typeof OPERATIONS_SUPPORT_LEVEL_LABELS>
+                  ).map((k) => (
+                    <option key={k} value={k}>
+                      {OPERATIONS_SUPPORT_LEVEL_LABELS[k]}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <p className="text-muted-foreground text-[11px] leading-relaxed">
+                <strong className="text-foreground">1. linje</strong> er ofte
+                første kontakt. <strong className="text-foreground">
+                  2. linje
+                </strong>{" "}
+                tar mer komplekse saker.{" "}
+                <strong className="text-foreground">3. linje</strong> er
+                typisk leverandør eller dyp teknisk ekspertise. Mange løsninger
+                er <strong>blandet</strong>.
+              </p>
+            </div>
+          </AccordionContent>
+        </AccordionItem>
+
         {BLOCKS.map(
-          ({ key, title, lead, hint, placeholder, icon: Icon }) => {
+          ({ key, value, title, lead, hint, placeholder, icon: Icon }) => {
             const raw = (payload[key] as string | undefined) ?? "";
             const len = raw.length;
             const atMax = len >= PROCESS_TEXT_FIELD_MAX;
             const hintId = `hf-hint-${key}`;
             const countId = `hf-count-${key}`;
+            const filled = len > 0;
 
             return (
-              <div
+              <AccordionItem
                 key={key}
-                className={cn(
-                  "rounded-xl border border-border/70 bg-card/90 p-4 shadow-sm transition-[box-shadow] hover:shadow-md",
-                  key === "hfSecurityInformationNotes" && "md:col-span-2",
-                  key === "hfCriticalManualGapNotes" && "md:col-span-2",
-                )}
+                value={value}
+                className="border-border/60 not-last:border-b px-3"
               >
-                <div className="mb-3 flex flex-wrap items-start gap-2">
-                  <span className="bg-emerald-500/12 text-emerald-800 dark:text-emerald-300 flex size-9 shrink-0 items-center justify-center rounded-lg">
-                    <Icon className="size-4" aria-hidden />
-                  </span>
-                  <div className="min-w-0 flex-1 space-y-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <h3 className="font-heading text-sm font-semibold leading-snug">
+                <AccordionTrigger className="hover:no-underline py-3">
+                  <span className="flex min-w-0 flex-1 items-start gap-2 text-left">
+                    <span className="bg-emerald-500/12 text-emerald-800 dark:text-emerald-300 flex size-8 shrink-0 items-center justify-center rounded-lg">
+                      <Icon className="size-3.5" aria-hidden />
+                    </span>
+                    <span className="min-w-0 space-y-0.5">
+                      <span className="text-foreground flex flex-wrap items-center gap-2 text-sm font-semibold">
                         {title}
-                      </h3>
-                      <Badge variant="outline" className="font-normal text-[10px]">
-                        Valgfritt tekstfelt
-                      </Badge>
-                    </div>
-                    <p className="text-foreground text-xs font-medium leading-snug">
-                      {lead}
-                    </p>
+                        {filled ? (
+                          <Badge
+                            variant="secondary"
+                            className="font-normal text-[10px]"
+                          >
+                            Har innhold
+                          </Badge>
+                        ) : null}
+                      </span>
+                      <span className="text-muted-foreground block text-xs font-normal leading-snug">
+                        {lead}
+                      </span>
+                    </span>
+                  </span>
+                </AccordionTrigger>
+                <AccordionContent className="pb-4">
+                  <div className="space-y-2 pl-0 sm:pl-10">
                     <p
                       id={hintId}
                       className="text-muted-foreground text-xs leading-relaxed"
                     >
                       {hint}
                     </p>
+                    <Textarea
+                      id={`hf-${key}`}
+                      value={raw}
+                      onChange={(e) => {
+                        const next = clampProcessText(e.target.value);
+                        update(key, next);
+                      }}
+                      disabled={!canEdit}
+                      rows={key === "hfCriticalManualGapNotes" ? 4 : 3}
+                      maxLength={PROCESS_TEXT_FIELD_MAX}
+                      aria-describedby={`${hintId} ${countId}`}
+                      className={cn(
+                        "min-h-0 resize-y border-border/80 bg-background/80 text-sm",
+                        atMax && "border-amber-500/50",
+                      )}
+                      placeholder={placeholder}
+                    />
+                    <p
+                      id={countId}
+                      className={cn(
+                        "text-right text-[11px] tabular-nums",
+                        atMax
+                          ? "font-medium text-amber-700 dark:text-amber-400"
+                          : "text-muted-foreground",
+                      )}
+                    >
+                      {len.toLocaleString("nb-NO")} /{" "}
+                      {PROCESS_TEXT_FIELD_MAX.toLocaleString("nb-NO")} tegn
+                    </p>
                   </div>
-                </div>
-                <Textarea
-                  id={`hf-${key}`}
-                  value={raw}
-                  onChange={(e) => {
-                    const next = clampProcessText(e.target.value);
-                    update(key, next);
-                  }}
-                  disabled={!canEdit}
-                  rows={key === "hfCriticalManualGapNotes" ? 5 : 4}
-                  maxLength={PROCESS_TEXT_FIELD_MAX}
-                  aria-describedby={`${hintId} ${countId}`}
-                  className={cn(
-                    "min-h-0 resize-y border-border/80 bg-background/80 text-sm",
-                    atMax && "border-amber-500/50",
-                  )}
-                  placeholder={placeholder}
-                />
-                <p
-                  id={countId}
-                  className={cn(
-                    "mt-1.5 text-right text-[11px] tabular-nums",
-                    atMax
-                      ? "font-medium text-amber-700 dark:text-amber-400"
-                      : "text-muted-foreground",
-                  )}
-                >
-                  {len.toLocaleString("nb-NO")} /{" "}
-                  {PROCESS_TEXT_FIELD_MAX.toLocaleString("nb-NO")} tegn
-                </p>
-              </div>
+                </AccordionContent>
+              </AccordionItem>
             );
           },
         )}
-      </div>
+      </Accordion>
     </div>
   );
 }

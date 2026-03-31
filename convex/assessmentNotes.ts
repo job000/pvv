@@ -31,6 +31,8 @@ export const add = mutation({
   args: {
     assessmentId: v.id("assessments"),
     body: v.string(),
+    /** Valgfritt skjemafelt (payload-nøkkel) kommentaren gjelder */
+    fieldKey: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const { assessment, userId } = await requireAssessmentEdit(
@@ -44,12 +46,21 @@ export const add = mutation({
     if (body.length > NOTE_MAX) {
       throw new Error(`Notatet kan ikke overstige ${NOTE_MAX} tegn.`);
     }
+    let fieldKey: string | undefined;
+    if (args.fieldKey !== undefined) {
+      const fk = args.fieldKey.trim();
+      if (fk.length > 120) {
+        throw new Error("Feltreferansen er for lang.");
+      }
+      fieldKey = fk || undefined;
+    }
     const now = Date.now();
     return await ctx.db.insert("assessmentNotes", {
       workspaceId: assessment.workspaceId,
       assessmentId: args.assessmentId,
       authorUserId: userId,
       body,
+      fieldKey,
       createdAt: now,
     });
   },

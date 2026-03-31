@@ -1,0 +1,42 @@
+/** Norske visningsnavn for utkastfelter (versjonssammenligning, logger). */
+export const ASSESSMENT_PAYLOAD_FIELD_LABELS_NB: Record<string, string> = {
+  processName: "Prosessnavn",
+  candidateId: "Referanse / ID",
+  processDescription: "Beskrivelse / omfang",
+  processGoal: "Mål og verdi",
+  processActors: "Roller og ansvar",
+  processSystems: "Systemer og data",
+  processFlowSummary: "Flyt og hovedtrinn",
+  processVolumeNotes: "Volum og mønster",
+  processConstraints: "Begrensninger og risiko",
+  processFollowUp: "Oppfølging",
+  processScope: "Prosessomfang",
+  processStability: "Prosessstabilitet",
+  applicationStability: "Systemstabilitet",
+  structuredInput: "Struktur på inndata",
+  processVariability: "Saksvariasjon",
+  digitization: "Digitaliseringsgrad",
+  processLength: "Flytlengde",
+  applicationCount: "Antall systemer",
+  ocrRequired: "OCR nødvendig",
+  thinClientPercent: "Tynnklient %",
+  baselineHours: "Manuelle timer/år",
+  reworkHours: "Re-arbeid timer/år",
+  auditHours: "Revisjon/kontroll timer/år",
+  avgCostPerYear: "Kostnad per årsverk",
+  workingDays: "Arbeidsdager/år",
+  workingHoursPerDay: "Timer per dag",
+  employees: "Antall involverte",
+  criticalityBusinessImpact: "Konsekvens ved stopp",
+  criticalityRegulatoryRisk: "Regelkrav",
+  hfOperationsSupportLevel: "Driftsstøttenivå",
+  hfSecurityInformationNotes: "Sikkerhet og informasjon",
+  hfOrganizationalBreadthNotes: "Organisasjonsbredde",
+  hfEconomicRationaleNotes: "Økonomisk begrunnelse",
+  hfCriticalManualGapNotes: "Manuelle gap / risiko",
+  hfOperationsSupportNotes: "Krav til drift",
+};
+
+export function labelAssessmentPayloadField(key: string): string {
+  return ASSESSMENT_PAYLOAD_FIELD_LABELS_NB[key] ?? key;
+}

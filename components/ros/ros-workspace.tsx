@@ -81,40 +81,45 @@ function RosFlowStrip({ tab }: { tab: Tab }) {
       <p className="text-muted-foreground mb-3 text-xs font-medium tracking-wide uppercase">
         Arbeidsflyt
       </p>
-      <ol className="flex flex-col gap-4 sm:flex-row sm:items-start sm:gap-0">
+      <ol className="flex list-none flex-row flex-nowrap items-start gap-0 overflow-x-auto pb-1 pl-0 [scrollbar-width:thin]">
         {steps.map((s, i) => {
           const active = tab === s.id;
           const done = activeIdx > i;
           return (
-            <li key={s.id} className="flex min-w-0 flex-1 items-start gap-3">
-              <span
-                className={cn(
-                  "flex size-9 shrink-0 items-center justify-center rounded-full text-sm font-bold tabular-nums",
-                  active
-                    ? "bg-primary text-primary-foreground shadow-sm"
-                    : done
-                      ? "bg-emerald-500/20 text-emerald-800 dark:text-emerald-200"
-                      : "bg-muted text-muted-foreground",
-                )}
-              >
-                {done ? "✓" : s.n}
-              </span>
-              <div className="min-w-0">
-                <p
+            <li
+              key={s.id}
+              className="flex shrink-0 flex-row items-start"
+            >
+              <div className="flex min-w-[min(260px,78vw)] max-w-[280px] flex-row items-start gap-3 pr-1 sm:min-w-[200px] sm:max-w-none">
+                <span
                   className={cn(
-                    "font-medium leading-tight",
-                    active && "text-foreground",
+                    "flex size-9 shrink-0 items-center justify-center rounded-full text-sm font-bold tabular-nums",
+                    active
+                      ? "bg-primary text-primary-foreground shadow-sm"
+                      : done
+                        ? "bg-emerald-500/20 text-emerald-800 dark:text-emerald-200"
+                        : "bg-muted text-muted-foreground",
                   )}
                 >
-                  {s.label}
-                </p>
-                <p className="text-muted-foreground mt-0.5 text-xs leading-snug">
-                  {s.hint}
-                </p>
+                  {done ? "✓" : s.n}
+                </span>
+                <div className="min-w-0">
+                  <p
+                    className={cn(
+                      "font-medium leading-tight",
+                      active && "text-foreground",
+                    )}
+                  >
+                    {s.label}
+                  </p>
+                  <p className="text-muted-foreground mt-0.5 text-xs leading-snug">
+                    {s.hint}
+                  </p>
+                </div>
               </div>
               {i < steps.length - 1 ? (
                 <div
-                  className="text-muted-foreground/40 hidden shrink-0 px-2 pt-2 sm:block"
+                  className="text-muted-foreground/45 flex shrink-0 items-center self-center px-2 pt-1"
                   aria-hidden
                 >
                   →

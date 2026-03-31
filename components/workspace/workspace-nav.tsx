@@ -152,7 +152,7 @@ function WorkspaceNavInner({
           {workspaceName ?? "…"}
         </p>
       </div>
-      <ul className="flex min-h-0 flex-1 flex-col gap-1 overflow-hidden py-1">
+      <ul className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto overflow-x-hidden py-1 [scrollbar-gutter:stable] [scrollbar-width:thin]">
         {nav.map(({ href, label, icon: Icon, exact, kind }) => {
           const active = isActive(pathname, href, exact, wid, fane, kind);
           return (
