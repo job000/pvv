@@ -16,8 +16,9 @@ export default function RosPage() {
           ROS — risiko og sårbarhet
         </h1>
         <p className="text-muted-foreground max-w-2xl text-base leading-relaxed">
-          Vurderingspunktene er <strong>hvert kryss i matrisen</strong> (rader ×
-          kolonner fra malen) — se boksen «Slik fungerer ROS» under. Bygg{" "}
+          Du fyller ikke ut risiko et annet sted og «flytter» til matrisen —{" "}
+          <strong>du klikker inn vurderingen direkte i hvert kryss</strong> (se «Slik
+          fungerer ROS» under). Bygg{" "}
           <strong>maler</strong> (akser og etiketter), opprett{" "}
           <strong>analyser</strong> med fargekodet matrise, og koble til{" "}
           <strong>PVV-vurderinger</strong> og{" "}

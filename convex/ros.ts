@@ -18,6 +18,7 @@ import {
   DEFAULT_ROS_ROW_AXIS,
   DEFAULT_ROS_ROW_LABELS,
   emptyMatrix,
+  emptyStringMatrix,
 } from "../lib/ros-defaults";
 
 const MIN_DIM = 2;
@@ -37,6 +38,38 @@ function validateLabelArrays(rows: string[], cols: string[]) {
     throw new Error(
       `Kolonner må være mellom ${MIN_DIM} og ${MAX_DIM} (ikke tomme etiketter).`,
     );
+  }
+}
+
+function normalizeCellNotes(
+  matrix: number[][],
+  existing?: string[][],
+): string[][] {
+  const rows = matrix.length;
+  const out: string[][] = [];
+  for (let i = 0; i < rows; i++) {
+    const cols = matrix[i]?.length ?? 0;
+    const row: string[] = [];
+    for (let j = 0; j < cols; j++) {
+      row.push(existing?.[i]?.[j] ?? "");
+    }
+    out.push(row);
+  }
+  return out;
+}
+
+function assertNotesShape(
+  notes: string[][],
+  rowCount: number,
+  colCount: number,
+) {
+  if (notes.length !== rowCount) {
+    throw new Error("Celle-notater matcher ikke antall rader.");
+  }
+  for (const row of notes) {
+    if (row.length !== colCount) {
+      throw new Error("Celle-notater matcher ikke antall kolonner.");
+    }
   }
 }
 
@@ -314,12 +347,40 @@ export const getAnalysis = query({
     }
     return {
       ...row,
+      cellNotes: normalizeCellNotes(row.matrixValues, row.cellNotes),
       candidateName: cand?.name ?? "—",
       candidateCode: cand?.code ?? "",
       linkedAssessments,
       legacyAssessmentId: row.assessmentId ?? null,
       legacyAssessmentTitle,
     };
+  },
+});
+
+export const listJournalEntries = query({
+  args: { analysisId: v.id("rosAnalyses") },
+  handler: async (ctx, args) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) {
+      return [];
+    }
+    await requireRosAnalysisRead(ctx, args.analysisId, userId);
+    const rows = await ctx.db
+      .query("rosAnalysisJournalEntries")
+      .withIndex("by_ros_analysis", (q) =>
+        q.eq("rosAnalysisId", args.analysisId),
+      )
+      .collect();
+    rows.sort((a, b) => b.createdAt - a.createdAt);
+    const out = [];
+    for (const r of rows) {
+      const u = await ctx.db.get(r.createdByUserId);
+      out.push({
+        ...r,
+        authorName: u?.name ?? u?.email ?? "—",
+      });
+    }
+    return out;
   },
 });
 
@@ -542,6 +603,10 @@ export const createAnalysis = mutation({
       tpl.rowLabels.length,
       tpl.colLabels.length,
     );
+    const cellNotes = emptyStringMatrix(
+      tpl.rowLabels.length,
+      tpl.colLabels.length,
+    );
     const now = Date.now();
     const analysisId = await ctx.db.insert("rosAnalyses", {
       workspaceId: args.workspaceId,
@@ -552,6 +617,7 @@ export const createAnalysis = mutation({
       rowLabels: [...tpl.rowLabels],
       colLabels: [...tpl.colLabels],
       matrixValues,
+      cellNotes,
       candidateId: args.candidateId,
       assessmentId: undefined,
       notes: args.notes?.trim() || undefined,
@@ -585,6 +651,7 @@ export const updateAnalysis = mutation({
   args: {
     analysisId: v.id("rosAnalyses"),
     matrixValues: v.optional(v.array(v.array(v.number()))),
+    cellNotes: v.optional(v.array(v.array(v.string()))),
     title: v.optional(v.string()),
     notes: v.optional(v.union(v.string(), v.null())),
   },
@@ -598,7 +665,38 @@ export const updateAnalysis = mutation({
         row.rowLabels.length,
         row.colLabels.length,
       );
+      const oldM = row.matrixValues;
+      const newM = args.matrixValues;
+      for (let i = 0; i < newM.length; i++) {
+        for (let j = 0; j < (newM[i]?.length ?? 0); j++) {
+          const o = oldM[i]?.[j] ?? 0;
+          const n = newM[i][j];
+          if (o !== n) {
+            const rl = row.rowLabels[i] ?? `Rad ${i + 1}`;
+            const cl = row.colLabels[j] ?? `Kol ${j + 1}`;
+            await ctx.db.insert("rosAnalysisJournalEntries", {
+              workspaceId: row.workspaceId,
+              rosAnalysisId: args.analysisId,
+              body: `Nivå endret · ${rl.slice(0, 120)} × ${cl.slice(0, 120)}: ${o} → ${n}`,
+              linkedRow: i,
+              linkedCol: j,
+              createdByUserId: userId,
+              createdAt: Date.now(),
+            });
+          }
+        }
+      }
       patch.matrixValues = args.matrixValues;
+    }
+    if (args.cellNotes !== undefined) {
+      const mv = (args.matrixValues ?? row.matrixValues) as number[][];
+      assertNotesShape(
+        args.cellNotes,
+        row.rowLabels.length,
+        row.colLabels.length,
+      );
+      assertMatrixShape(mv, row.rowLabels.length, row.colLabels.length);
+      patch.cellNotes = args.cellNotes.map((r) => [...r]);
     }
     if (args.title !== undefined) {
       const t = args.title.trim();
@@ -610,6 +708,65 @@ export const updateAnalysis = mutation({
         args.notes === null ? undefined : args.notes.trim() || undefined;
     }
     await ctx.db.patch(args.analysisId, patch);
+    return null;
+  },
+});
+
+export const appendJournalEntry = mutation({
+  args: {
+    analysisId: v.id("rosAnalyses"),
+    body: v.string(),
+    linkedRow: v.optional(v.number()),
+    linkedCol: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const userId = await requireUserId(ctx);
+    const row = await requireRosAnalysisEdit(ctx, args.analysisId, userId);
+    const text = args.body.trim();
+    if (!text) {
+      throw new Error("Tekst kan ikke være tom.");
+    }
+    const hasR = args.linkedRow !== undefined;
+    const hasC = args.linkedCol !== undefined;
+    if (hasR !== hasC) {
+      throw new Error("Oppgi både rad og kolonne for cellekobling, eller ingen.");
+    }
+    if (hasR && hasC) {
+      const i = args.linkedRow!;
+      const j = args.linkedCol!;
+      if (
+        i < 0 ||
+        j < 0 ||
+        i >= row.rowLabels.length ||
+        j >= row.colLabels.length
+      ) {
+        throw new Error("Ugyldig cellekobling.");
+      }
+    }
+    await ctx.db.insert("rosAnalysisJournalEntries", {
+      workspaceId: row.workspaceId,
+      rosAnalysisId: args.analysisId,
+      body: text,
+      linkedRow: args.linkedRow,
+      linkedCol: args.linkedCol,
+      createdByUserId: userId,
+      createdAt: Date.now(),
+    });
+    await ctx.db.patch(args.analysisId, { updatedAt: Date.now() });
+    return null;
+  },
+});
+
+export const removeJournalEntry = mutation({
+  args: { entryId: v.id("rosAnalysisJournalEntries") },
+  handler: async (ctx, args) => {
+    const userId = await requireUserId(ctx);
+    const e = await ctx.db.get(args.entryId);
+    if (!e) {
+      throw new Error("Logginnlegg finnes ikke.");
+    }
+    await requireRosAnalysisEdit(ctx, e.rosAnalysisId, userId);
+    await ctx.db.delete(args.entryId);
     return null;
   },
 });
@@ -645,6 +802,15 @@ export const removeAnalysis = mutation({
       .collect();
     for (const t of tasks) {
       await ctx.db.delete(t._id);
+    }
+    const journalRows = await ctx.db
+      .query("rosAnalysisJournalEntries")
+      .withIndex("by_ros_analysis", (q) =>
+        q.eq("rosAnalysisId", args.analysisId),
+      )
+      .collect();
+    for (const j of journalRows) {
+      await ctx.db.delete(j._id);
     }
     await ctx.db.delete(row._id);
     return null;
@@ -790,6 +956,10 @@ export const createVersion = mutation({
       rowLabels: [...analysis.rowLabels],
       colLabels: [...analysis.colLabels],
       matrixValues: analysis.matrixValues.map((r) => [...r]),
+      cellNotes: normalizeCellNotes(
+        analysis.matrixValues,
+        analysis.cellNotes,
+      ).map((r) => [...r]),
       notes: analysis.notes,
       createdByUserId: userId,
       createdAt: now,
@@ -821,6 +991,9 @@ export const restoreVersion = mutation({
       rowLabels: [...ver.rowLabels],
       colLabels: [...ver.colLabels],
       matrixValues: ver.matrixValues.map((r) => [...r]),
+      cellNotes: normalizeCellNotes(ver.matrixValues, ver.cellNotes).map((r) => [
+        ...r,
+      ]),
       notes: ver.notes,
       updatedAt: now,
     });

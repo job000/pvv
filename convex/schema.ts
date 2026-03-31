@@ -381,6 +381,8 @@ export default defineSchema({
     colLabels: v.array(v.string()),
     /** 0 = ikke vurdert, 1–5 = risikonivå */
     matrixValues: v.array(v.array(v.number())),
+    /** Fritekst per celle (samme dimensjon som matrixValues) — begrunnelse, referanser */
+    cellNotes: v.optional(v.array(v.array(v.string()))),
     candidateId: v.id("candidates"),
     assessmentId: v.optional(v.id("assessments")),
     notes: v.optional(v.string()),
@@ -392,6 +394,22 @@ export default defineSchema({
     .index("by_workspace_updated", ["workspaceId", "updatedAt"])
     .index("by_candidate", ["candidateId"])
     .index("by_assessment", ["assessmentId"]),
+
+  /**
+   * Tidslinje / logg for ROS-analyse: manuelle innlegg eller auto ved nivåendring.
+   * linkedRow/linkedCol peker på matrise (0-basert), valgfritt.
+   */
+  rosAnalysisJournalEntries: defineTable({
+    workspaceId: v.id("workspaces"),
+    rosAnalysisId: v.id("rosAnalyses"),
+    body: v.string(),
+    linkedRow: v.optional(v.number()),
+    linkedCol: v.optional(v.number()),
+    createdByUserId: v.id("users"),
+    createdAt: v.number(),
+  })
+    .index("by_ros_analysis", ["rosAnalysisId"])
+    .index("by_workspace", ["workspaceId"]),
 
   /** Mange-til-mange: ROS-analyse ↔ PVV-vurdering */
   rosAnalysisAssessments: defineTable({
@@ -417,6 +435,7 @@ export default defineSchema({
     rowLabels: v.array(v.string()),
     colLabels: v.array(v.string()),
     matrixValues: v.array(v.array(v.number())),
+    cellNotes: v.optional(v.array(v.array(v.string()))),
     notes: v.optional(v.string()),
     createdByUserId: v.id("users"),
     createdAt: v.number(),

@@ -1,5 +1,6 @@
 "use client";
 
+import { RosJournalPanel } from "@/components/ros/ros-journal-panel";
 import { RosMatrix } from "@/components/ros/ros-matrix";
 import { RosMethodologyGuide } from "@/components/ros/ros-methodology-guide";
 import { Badge } from "@/components/ui/badge";
@@ -73,6 +74,12 @@ export function RosAnalysisEditor({
   const [title, setTitle] = useState("");
   const [notes, setNotes] = useState("");
   const [matrix, setMatrix] = useState<number[][]>([]);
+  const [cellNotes, setCellNotes] = useState<string[][]>([]);
+  const [jumpRequest, setJumpRequest] = useState<{
+    row: number;
+    col: number;
+    nonce: number;
+  } | null>(null);
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
 
@@ -95,6 +102,7 @@ export function RosAnalysisEditor({
     setTitle(data.title);
     setNotes(data.notes ?? "");
     setMatrix(data.matrixValues.map((r) => [...r]));
+    setCellNotes(data.cellNotes.map((r) => [...r]));
     setDirty(false);
   // Synk kun ved server-oppdatering (id/tidsstempel), ikke ved hver query-referanse
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -123,6 +131,23 @@ export function RosAnalysisEditor({
     [],
   );
 
+  const onCellNoteChange = useCallback(
+    (row: number, col: number, text: string) => {
+      setCellNotes((prev) => {
+        const copy = prev.map((r) => [...r]);
+        if (!copy[row]) return prev;
+        copy[row][col] = text;
+        return copy;
+      });
+      setDirty(true);
+    },
+    [],
+  );
+
+  const handleJumpToCell = useCallback((row: number, col: number) => {
+    setJumpRequest({ row, col, nonce: Date.now() });
+  }, []);
+
   const matrixStats = useMemo(() => {
     let max = 0;
     let highOrCritical = 0;
@@ -144,6 +169,7 @@ export function RosAnalysisEditor({
         title: title.trim(),
         notes: notes.trim() || null,
         matrixValues: matrix,
+        cellNotes,
       });
       setDirty(false);
     } finally {
@@ -717,8 +743,10 @@ export function RosAnalysisEditor({
             <div>
               <CardTitle className="text-base">Risikomatrise</CardTitle>
               <CardDescription>
-                {data.rowAxisTitle} (rader) × {data.colAxisTitle} (kolonner).
-                Klikk en celle for å velge nivå 0–5 (0 = ikke vurdert).
+                {data.rowAxisTitle} (rader) × {data.colAxisTitle} (kolonner). Klikk en
+                celle for nivå 0–5 og valgfritt tekstnotat i samme popup. Ikon på cellen
+                viser om det finnes notat. Lagre øverst for å skrive til server og
+                loggføre nivåendringer.
               </CardDescription>
             </div>
             {matrix.length > 0 ? (
@@ -754,11 +782,22 @@ export function RosAnalysisEditor({
               rowLabels={data.rowLabels}
               colLabels={data.colLabels}
               matrixValues={matrix}
+              cellNotes={cellNotes}
+              onCellNoteChange={onCellNoteChange}
               onCellChange={onCellChange}
+              jumpRequest={jumpRequest}
+              onJumpHandled={() => setJumpRequest(null)}
             />
           ) : null}
         </CardContent>
       </Card>
+
+      <RosJournalPanel
+        analysisId={analysisId}
+        rowLabels={data.rowLabels}
+        colLabels={data.colLabels}
+        onJumpToCell={handleJumpToCell}
+      />
     </div>
   );
 }

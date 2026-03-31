@@ -8,11 +8,13 @@ import {
   DialogHeader,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { legendItems, cnCell } from "@/lib/ros-risk-colors";
 import { RISK_LEVEL_HINTS } from "@/lib/ros-defaults";
 import { cn } from "@/lib/utils";
-import { Grid3x3, MousePointerClick, Palette } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { FileText, Grid3x3, MousePointerClick, Palette } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 type Props = {
   rowAxisTitle: string;
@@ -20,8 +22,14 @@ type Props = {
   rowLabels: string[];
   colLabels: string[];
   matrixValues: number[][];
+  /** Fritekst per celle — lagres med analysens «Lagre endringer». */
+  cellNotes?: string[][];
+  onCellNoteChange?: (row: number, col: number, text: string) => void;
   onCellChange?: (row: number, col: number, next: number) => void;
   readOnly?: boolean;
+  /** Ekstern «hopp til celle» (f.eks. fra logg) — øk nonce for nytt hopp til samme celle. */
+  jumpRequest?: { row: number; col: number; nonce: number } | null;
+  onJumpHandled?: () => void;
 };
 
 type PickerTarget = { row: number; col: number };
@@ -32,14 +40,58 @@ export function RosMatrix({
   rowLabels,
   colLabels,
   matrixValues,
+  cellNotes,
+  onCellNoteChange,
   onCellChange,
   readOnly = false,
+  jumpRequest,
+  onJumpHandled,
 }: Props) {
   const interactive = Boolean(onCellChange) && !readOnly;
   const [picker, setPicker] = useState<PickerTarget | null>(null);
+  const lastJumpNonce = useRef<number | null>(null);
   const riskLegend = useMemo(() => legendItems(), []);
 
-  const closePicker = useCallback(() => setPicker(null), []);
+  const notesGrid = useMemo(() => {
+    if (!cellNotes) {
+      return matrixValues.map((row) => row.map(() => ""));
+    }
+    return cellNotes;
+  }, [cellNotes, matrixValues]);
+
+  const pickerCellNote =
+    picker === null ? "" : (notesGrid[picker.row]?.[picker.col] ?? "");
+
+  useEffect(() => {
+    if (!jumpRequest) {
+      lastJumpNonce.current = null;
+      return;
+    }
+    if (!interactive) return;
+    if (lastJumpNonce.current === jumpRequest.nonce) return;
+    const { row, col } = jumpRequest;
+    if (
+      row < 0 ||
+      col < 0 ||
+      row >= rowLabels.length ||
+      col >= colLabels.length
+    ) {
+      onJumpHandled?.();
+      return;
+    }
+    lastJumpNonce.current = jumpRequest.nonce;
+    const el = document.getElementById(`ros-mx-cell-${row}-${col}`);
+    el?.scrollIntoView({ block: "center", behavior: "smooth" });
+    const t = window.setTimeout(() => {
+      setPicker({ row, col });
+      onJumpHandled?.();
+    }, 0);
+    return () => window.clearTimeout(t);
+  }, [jumpRequest, interactive, rowLabels.length, colLabels.length, onJumpHandled]);
+
+  const closePicker = useCallback(() => {
+    setPicker(null);
+  }, []);
 
   useEffect(() => {
     if (!picker) return;
@@ -53,7 +105,6 @@ export function RosMatrix({
   function selectLevel(level: number) {
     if (!picker || !onCellChange) return;
     onCellChange(picker.row, picker.col, level);
-    setPicker(null);
   }
 
   const pickerRowLabel =
@@ -70,11 +121,11 @@ export function RosMatrix({
             Slik bruker du matrisen
           </p>
           <p className="text-foreground text-sm leading-relaxed">
-            <strong>Klikk på en celle</strong>. Da åpnes en{" "}
+            <strong>Vurderingen legges inn her</strong> — ikke i en egen liste først.{" "}
+            <strong>Klikk en celle</strong> (rad × kolonne); popup med farger for nivå{" "}
             <span className="text-muted-foreground">
-              popup med fargekodet nivåvelger (0 = ikke vurdert, 1–5 = lav →
-              kritisk). Velg nivå én gang — raskere enn å «spole» gjennom
-              verdier med mange klikk.
+              0–5. Ofte er én risiko = ett kryss der sannsynlighet og konsekvens møtes;
+              celler dere ikke bruker, kan stå på 0 (ikke vurdert).
             </span>
           </p>
         </div>
@@ -127,11 +178,15 @@ export function RosMatrix({
                 </th>
                 {colLabels.map((_, j) => {
                   const v = matrixValues[i]?.[j] ?? 0;
+                  const hasNote = Boolean(
+                    (notesGrid[i]?.[j] ?? "").trim(),
+                  );
                   const isPicked =
                     picker?.row === i && picker?.col === j && interactive;
                   return (
                     <td key={j} className="p-1.5 align-middle">
                       <button
+                        id={`ros-mx-cell-${i}-${j}`}
                         type="button"
                         disabled={!interactive}
                         aria-pressed={isPicked}
@@ -142,7 +197,7 @@ export function RosMatrix({
                         }}
                         className={cn(
                           cnCell(v, interactive),
-                          "flex min-h-[3.5rem] w-full flex-col items-center justify-center gap-0.5 rounded-xl shadow-sm transition-[transform,box-shadow] duration-150",
+                          "relative flex min-h-[3.5rem] w-full flex-col items-center justify-center gap-0.5 rounded-xl shadow-sm transition-[transform,box-shadow] duration-150",
                           interactive &&
                             "hover:scale-[1.02] hover:shadow-md active:scale-[0.98]",
                           !interactive && "cursor-default",
@@ -150,6 +205,12 @@ export function RosMatrix({
                             "ring-primary ring-offset-background ring-2 ring-offset-2",
                         )}
                       >
+                        {hasNote ? (
+                          <FileText
+                            className="text-primary absolute top-1 right-1 size-3.5 opacity-90"
+                            aria-hidden
+                          />
+                        ) : null}
                         <span className="text-lg font-bold tabular-nums leading-none tracking-tight">
                           {v}
                         </span>
@@ -204,6 +265,29 @@ export function RosMatrix({
             </p>
           </DialogHeader>
           <DialogBody>
+            {onCellNoteChange && picker ? (
+              <div className="mb-4 space-y-2">
+                <Label htmlFor="ros-cell-note" className="text-foreground">
+                  Celle-notat (tekst)
+                </Label>
+                <Textarea
+                  id="ros-cell-note"
+                  value={pickerCellNote}
+                  onChange={(e) => {
+                    if (!picker || !onCellNoteChange) return;
+                    onCellNoteChange(picker.row, picker.col, e.target.value);
+                  }}
+                  rows={3}
+                  placeholder="Begrunnelse, referanse, hva som er vurdert …"
+                  className="min-h-[4.5rem] resize-y text-sm"
+                />
+                <p className="text-muted-foreground text-[11px] leading-relaxed">
+                  Lagres sammen med resten av analysen når du trykker «Lagre
+                  endringer» øverst på siden. Nivåendringer loggføres automatisk i
+                  risikologgen under.
+                </p>
+              </div>
+            ) : null}
             <div className="flex flex-wrap gap-2 sm:gap-2.5">
               {([0, 1, 2, 3, 4, 5] as const).map((level) => {
                 const current =
@@ -234,8 +318,9 @@ export function RosMatrix({
               })}
             </div>
             <p className="text-muted-foreground mt-4 text-[11px] leading-relaxed">
-              Cellefargen i matrisen oppdateres med en gang. Bruk «Lagre
-              endringer» øverst på siden for å lagre hele analysen til server.
+              Cellefargen oppdateres med en gang lokalt. «Lagre endringer» sender
+              matrise, notater og celle-notat til server og skriver nivåendringer
+              til loggen.
             </p>
           </DialogBody>
           <DialogFooter>

@@ -9,6 +9,7 @@ import {
   GitBranch,
   Grid3x3,
   Link2,
+  ListOrdered,
 } from "lucide-react";
 
 type Variant = "page" | "compact";
@@ -56,38 +57,78 @@ export function RosMethodologyGuide({
   const blocks = (
     <>
       <DetailsBlock
+        id="ros-metode-rekkefoelge"
+        title="Skal jeg vurdere hver linje (sannsynlighet, konsekvens) først — og så legge inn i matrisen?"
+        icon={ListOrdered}
+        defaultOpen
+      >
+        <p>
+          <strong className="text-foreground">Nei, ikke som to separate steg i
+          appen.</strong> Her er <strong className="text-foreground">matrisen
+          stedet dere legger inn vurderingen</strong>. Dere trenger ikke fylle ut en
+          liste «ved siden av» og så overføre tall manuelt — dere klikker en{" "}
+          <strong className="text-foreground">celle</strong> (rad × kolonne) og velger
+          nivå <strong className="text-foreground">0–5</strong> i popupen.
+        </p>
+        <p>
+          <strong className="text-foreground">Mentalt</strong> kan dere godt tenke:
+          «hva er sannsynlighet og konsekvens for denne risikoen?» — det er vanlig
+          arbeidsmåte. Når dere er enige, skal det som oftest lande som{" "}
+          <strong className="text-foreground">ett punkt i matrisen</strong>: der
+          sannsynlighetsnivå og konsekvensnivå møtes (det krysset dere markerer). Da
+          beskriver cellen <strong className="text-foreground">den samlede
+          risikoen</strong> for det scenarioet, ikke to uavhengige felt du fyller
+          først og «baker inn» senere.
+        </p>
+        <p>
+          <strong className="text-foreground">Celle 0</strong> betyr «ikke vurdert
+          ennå». Celler dere ikke trenger, kan stå på 0. Mange team har{" "}
+          <strong className="text-foreground">én aktiv risiko = ett eller få
+          kryss</strong> i matrisen; dere kan bruke notatfeltet over matrisen for å
+          forklare hvordan dere har tolket aksene.
+        </p>
+      </DetailsBlock>
+
+      <DetailsBlock
         id="ros-metode-sporsmal"
         title="Hva er «spørsmålene» — hva vurderer dere egentlig?"
         icon={Grid3x3}
-        defaultOpen={variant === "page"}
+        defaultOpen={false}
       >
         <p>
-          I denne løsningen er det <strong className="text-foreground">ikke</strong> en
-          egen nummerert spørsmålsliste. Risiko og sårbarhet vurderes i en{" "}
+          Det finnes <strong className="text-foreground">ikke</strong> en egen
+          nummerert spørsmålsliste. Risiko og sårbarhet vurderes i en{" "}
           <strong className="text-foreground">matrise</strong> der{" "}
-          <strong className="text-foreground">radene og kolonnene</strong> (definert i
-          malen) er dimensjonene dere scorer.
+          <strong className="text-foreground">radene og kolonnene</strong> (fra malen)
+          definerer hva hvert kryss betyr.
         </p>
         <ul className="list-inside list-disc space-y-1.5 pl-1">
           <li>
-            <strong className="text-foreground">Vanlig bruk:</strong> radene =
-            sannsynlighet (eller trussel), kolonnene = konsekvens.{" "}
-            <strong className="text-foreground">Hvert kryss (celle)</strong> er ett
-            vurderingspunkt: «Hvilket risikonivå (0–5) gir denne kombinasjonen?»
+            <strong className="text-foreground">Klassisk 5×5:</strong> rader =
+            sannsynlighet, kolonner = konsekvens. For <strong className="text-foreground">én
+            risiko</strong> peker dere vanligvis på <strong className="text-foreground">én
+            celle</strong> der vurderingen «landar» (eller dere beskriver i notat).
           </li>
           <li>
-            <strong className="text-foreground">Alternativ:</strong> dere kan skrive
-            radetiketter som konkrete{" "}
-            <strong className="text-foreground">risikoscenarioer</strong> eller temaer
-            (f.eks. «Datainnbrudd», «Feil i automatisering») og beholde kolonner som
-            konsekvensnivå — da blir hver rad et tema dere vurderer celle for celle
-            langs konsekvensaksen.
+            <strong className="text-foreground">Flere temaer:</strong> dere kan la
+            radene være ulike <strong className="text-foreground">risikolinjer /
+            scenarioer</strong> (f.eks. «Datainnbrudd», «Feil i automatisering») og
+            kolonnene være konsekvens — da fyller dere <strong className="text-foreground">én
+            rad om gangen</strong> ved å sette nivå i hvert relevante kryss på den
+            raden.
           </li>
         </ul>
         <p>
-          Nivå <strong className="text-foreground">0</strong> = ikke vurdert ennå;{" "}
-          <strong className="text-foreground">1–5</strong> = fra lav til kritisk, med
-          farge i matrisen og i popup når dere klikker en celle.
+          Nivå <strong className="text-foreground">0</strong> = ikke vurdert;{" "}
+          <strong className="text-foreground">1–5</strong> = lav → kritisk, med farge i
+          matrisen og i popup.
+        </p>
+        <p>
+          I popupen kan du skrive <strong className="text-foreground">tekst per
+          celle</strong> (begrunnelse, referanse). Det lagres med «Lagre endringer».
+          <strong className="text-foreground"> Risikologgen</strong> under matrisen
+          loggfører automatisk hver lagret nivåendring og kan suppleres med manuelle
+          innlegg med valgfri «hopp til celle».
         </p>
       </DetailsBlock>
 

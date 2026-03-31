@@ -31,3 +31,10 @@ export const RISK_LEVEL_HINTS: Record<number, string> = {
 export function emptyMatrix(rows: number, cols: number): number[][] {
   return Array.from({ length: rows }, () => Array.from({ length: cols }, () => 0));
 }
+
+/** Tomme notatfelt parallelt med matrise (samme dimensjon). */
+export function emptyStringMatrix(rows: number, cols: number): string[][] {
+  return Array.from({ length: rows }, () =>
+    Array.from({ length: cols }, () => ""),
+  );
+}
