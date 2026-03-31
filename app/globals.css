@@ -132,3 +132,24 @@
     padding-bottom: max(6.5rem, env(safe-area-inset-bottom));
   }
 }
+
+/* Innlogging / registrering — Tailark-inspirert mesh (dynamisk bakgrunn) */
+@keyframes tailark-auth-mesh {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  50% {
+    transform: translate3d(4%, -3%, 0) scale(1.06);
+  }
+}
+
+@keyframes tailark-auth-mesh-2 {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) scale(1.05);
+  }
+  50% {
+    transform: translate3d(-5%, 4%, 0) scale(1);
+  }
+}

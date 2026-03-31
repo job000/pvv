@@ -5,12 +5,12 @@ import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { TailarkAuthBackground } from "@/components/auth/tailark-auth-background";
 import { formatUserFacingError } from "@/lib/user-facing-error";
 import { useAuthActions } from "@convex-dev/auth/react";
 import { cn } from "@/lib/utils";
@@ -66,15 +66,12 @@ export function AuthForm({
   return (
     <div
       className={cn(
-        "bg-background flex min-h-dvh flex-col lg:grid lg:min-h-dvh lg:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)]",
+        "relative flex min-h-dvh flex-col lg:grid lg:min-h-dvh lg:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)]",
         className,
       )}
     >
-      <aside className="relative flex flex-col justify-between overflow-hidden border-b border-border/60 px-8 py-10 lg:min-h-dvh lg:border-b-0 lg:border-r lg:px-12 lg:py-14">
-        <div
-          className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_120%_80%_at_0%_-20%,hsl(var(--primary)/0.18),transparent_55%),radial-gradient(ellipse_90%_60%_at_100%_100%,hsl(var(--primary)/0.12),transparent_50%)]"
-          aria-hidden
-        />
+      <TailarkAuthBackground variant={isSignUp ? "signUp" : "signIn"} />
+      <aside className="relative flex flex-col justify-between overflow-hidden border-b border-border/40 bg-muted/10 px-8 py-10 backdrop-blur-[2px] lg:min-h-dvh lg:border-b-0 lg:border-r lg:px-12 lg:py-14 dark:bg-muted/5">
         <div className="relative space-y-6">
           <div className="flex items-center gap-3">
             <div className="bg-primary/15 text-primary flex size-11 items-center justify-center rounded-2xl shadow-sm ring-1 ring-primary/20">
@@ -89,36 +86,15 @@ export function AuthForm({
               </p>
             </div>
           </div>
-          <div className="max-w-md space-y-3">
+          <div className="max-w-md space-y-2">
             <h2 className="font-heading text-2xl font-semibold tracking-tight md:text-3xl">
-              {isSignUp
-                ? "Opprett konto og kom i gang"
-                : "Velkommen tilbake"}
+              {isSignUp ? "Ny konto" : "Logg inn"}
             </h2>
-            <p className="text-muted-foreground leading-relaxed">
-              Samarbeid om PVV-vurderinger, prosessregister og ROS i felles
-              arbeidsområder — med roller, sporbarhet og versjoner.
+            <p className="text-muted-foreground text-sm leading-snug">
+              PVV — vurderinger og prosesser i arbeidsområder.
             </p>
           </div>
-          <ul className="text-muted-foreground max-w-sm space-y-2.5 text-sm leading-relaxed">
-            <li className="flex gap-2">
-              <span className="text-primary mt-0.5 font-bold">✓</span>
-              Trygg innlogging med kryptert passord
-            </li>
-            <li className="flex gap-2">
-              <span className="text-primary mt-0.5 font-bold">✓</span>
-              Invitasjoner og tilganger per arbeidsområde
-            </li>
-            <li className="flex gap-2">
-              <span className="text-primary mt-0.5 font-bold">✓</span>
-              Fungerer på mobil og som PWA
-            </li>
-          </ul>
         </div>
-        <p className="text-muted-foreground relative mt-10 hidden text-xs leading-relaxed lg:block">
-          Ved å fortsette godtar du at vi behandler data i tråd med formålet
-          for tjenesten. Kontakt administratoren i din organisasjon ved spørsmål.
-        </p>
       </aside>
 
       <main className="flex flex-1 flex-col justify-center px-4 py-10 sm:px-8 lg:px-12 lg:py-14">
@@ -130,16 +106,11 @@ export function AuthForm({
             </div>
           </div>
 
-          <Card className="border-border/80 shadow-lg shadow-black/5">
-            <CardHeader className="space-y-1 pb-2">
+          <Card className="border-border/80 bg-card/90 shadow-lg shadow-black/5 backdrop-blur-sm dark:bg-card/85">
+            <CardHeader className="pb-2">
               <CardTitle className="font-heading text-xl tracking-tight">
                 {isSignUp ? "Registrer deg" : "Logg inn"}
               </CardTitle>
-              <CardDescription>
-                {isSignUp
-                  ? "Opprett en konto med e-post og passord."
-                  : "Skriv inn e-postadressen og passordet ditt."}
-              </CardDescription>
             </CardHeader>
 
             <nav
