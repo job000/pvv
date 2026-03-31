@@ -1,4 +1,5 @@
 import { v } from "convex/values";
+import { internal } from "./_generated/api";
 import {
   mutation,
   query,
@@ -911,7 +912,10 @@ export const updateAssessmentCompliance = mutation({
     rosPvvReviewRoutineNotes: v.optional(v.union(v.string(), v.null())),
   },
   handler: async (ctx, args) => {
-    await requireAssessmentEdit(ctx, args.assessmentId);
+    const { assessment: priorAssessment } = await requireAssessmentEdit(
+      ctx,
+      args.assessmentId,
+    );
     const now = Date.now();
     const patch: {
       updatedAt: number;
@@ -973,6 +977,17 @@ export const updateAssessmentCompliance = mutation({
       );
     }
     await ctx.db.patch(args.assessmentId, patch);
+    const prevRos = priorAssessment.rosStatus ?? "not_started";
+    if (
+      args.rosStatus === "completed" &&
+      prevRos !== "completed"
+    ) {
+      await ctx.scheduler.runAfter(
+        0,
+        internal.githubCandidateProject.postRosCompletedGithubComment,
+        { assessmentId: args.assessmentId },
+      );
+    }
   },
 });
 

@@ -46,12 +46,92 @@ export function emptyCellItemsMatrix(
   return out;
 }
 
+/** Én linje per punkt — inkl. flagg (tiltak/følg) selv om beskrivelse er tom. */
+function cellItemToNoteLine(it: RosCellItem): string {
+  const t = it.text.trim();
+  const tags: string[] = [];
+  if (it.flags?.includes(ROS_CELL_FLAG_REQUIRES_ACTION)) {
+    tags.push("Må håndteres (tiltak)");
+  }
+  if (it.flags?.includes(ROS_CELL_FLAG_WATCH)) {
+    tags.push("Følg med");
+  }
+  if (tags.length > 0 && t) {
+    return `${tags.join(" · ")}: ${t}`;
+  }
+  if (tags.length > 0) {
+    return tags.join(" · ");
+  }
+  return t;
+}
+
 /** Slår sammen flere punkter til én streng for PDF / eldre felt. */
 export function flattenCellItemsToNote(cell: RosCellItem[]): string {
   return cell
-    .map((it) => it.text.trim())
-    .filter(Boolean)
+    .map(cellItemToNoteLine)
+    .filter((s) => s.length > 0)
     .join("\n\n");
+}
+
+/** Rad til egen PDF-seksjon «Identifiserte risikoer» (full tekst, ikke bare matrise-celle). */
+export type RosIdentifiedRiskPdfRow = {
+  text: string;
+  beforeRowLabel: string;
+  beforeColLabel: string;
+  afterRowLabel: string;
+  afterColLabel: string;
+  beforeLevel: number;
+  afterLevel: number;
+  hasTiltak: boolean;
+  hasFølg: boolean;
+};
+
+export function collectIdentifiedRisksForPdf(args: {
+  cellItemsMatrix: RosCellItemMatrix;
+  rowLabels: string[];
+  colLabels: string[];
+  matrixValues: number[][];
+  afterRowLabels: string[];
+  afterColLabels: string[];
+  matrixValuesAfter: number[][];
+}): RosIdentifiedRiskPdfRow[] {
+  const out: RosIdentifiedRiskPdfRow[] = [];
+  for (let r = 0; r < args.cellItemsMatrix.length; r++) {
+    const row = args.cellItemsMatrix[r];
+    if (!row) continue;
+    for (let c = 0; c < row.length; c++) {
+      const cell = row[c];
+      if (!cell) continue;
+      for (const item of cell) {
+        const t = item.text.trim();
+        const hasFlags = (item.flags?.length ?? 0) > 0;
+        if (!t && !hasFlags) continue;
+        const ar = item.afterRow ?? r;
+        const ac = item.afterCol ?? c;
+        const beforeLevel = args.matrixValues[r]?.[c] ?? 0;
+        const afterLevel = args.matrixValuesAfter[ar]?.[ac] ?? 0;
+        out.push({
+          text: t,
+          beforeRowLabel: args.rowLabels[r] ?? `Rad ${r + 1}`,
+          beforeColLabel: args.colLabels[c] ?? `Kolonne ${c + 1}`,
+          afterRowLabel: args.afterRowLabels[ar] ?? `Rad ${ar + 1}`,
+          afterColLabel: args.afterColLabels[ac] ?? `Kolonne ${ac + 1}`,
+          beforeLevel,
+          afterLevel,
+          hasTiltak: Boolean(
+            item.flags?.includes(ROS_CELL_FLAG_REQUIRES_ACTION),
+          ),
+          hasFølg: Boolean(item.flags?.includes(ROS_CELL_FLAG_WATCH)),
+        });
+      }
+    }
+  }
+  return out.sort((a, b) => {
+    if (b.beforeLevel !== a.beforeLevel) return b.beforeLevel - a.beforeLevel;
+    const at = a.text || "\uffff";
+    const bt = b.text || "\uffff";
+    return at.localeCompare(bt, "nb");
+  });
 }
 
 export function flattenCellItemsMatrixToLegacyNotes(

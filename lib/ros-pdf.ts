@@ -1,5 +1,6 @@
 import { jsPDF } from "jspdf";
 
+import type { RosIdentifiedRiskPdfRow } from "@/lib/ros-cell-items";
 import { ROS_COMPLIANCE_PDF_DISCLAIMER_NB } from "@/lib/ros-compliance";
 import { ROS_COMPLIANCE_SCOPE_TAGS } from "@/lib/ros-requirement-catalog";
 import { legendItems, pdfRiskLevelStyle } from "@/lib/ros-risk-colors";
@@ -46,6 +47,8 @@ export type RosPdfInput = {
   requirementRefLines?: string[];
   /** Åpne oppfølgingsoppgaver (én linje per oppgave) */
   openTaskLines?: string[];
+  /** Alle risiko-punkter fra matrisen med full tekst og tiltak/følg (egen seksjon i PDF) */
+  identifiedRisks?: RosIdentifiedRiskPdfRow[];
   linkedPvvTitles: string[];
   journalEntries: RosPdfJournalLine[];
   generatedAt: Date;
@@ -199,6 +202,37 @@ export function downloadRosAnalysisPdf(data: RosPdfInput): void {
     addHeading("Åpne oppfølgingsoppgaver", 12);
     for (const line of data.openTaskLines) {
       addPara(`• ${line}`, 9);
+    }
+  }
+
+  if (data.identifiedRisks && data.identifiedRisks.length > 0) {
+    y += 4;
+    addHeading("Identifiserte risikoer og tiltak", 12);
+    addPara(
+      "Alle punkter fra risikolisten med beskrivelse, plassering i matrisen før/etter tiltak, og markeringer (tiltak / følg med). Matrisesidene viser kompakt sammendrag; her er full tekst.",
+      8,
+    );
+    for (const r of data.identifiedRisks) {
+      const parts: string[] = [];
+      if (r.text.trim()) {
+        parts.push(r.text.trim());
+      } else {
+        parts.push("(Ingen fritekst — se markeringer nedenfor.)");
+      }
+      parts.push(
+        `Før tiltak: ${r.beforeRowLabel} × ${r.beforeColLabel} — nivå ${r.beforeLevel} (${levelLabel(r.beforeLevel)})`,
+      );
+      parts.push(
+        `Etter tiltak: ${r.afterRowLabel} × ${r.afterColLabel} — nivå ${r.afterLevel} (${levelLabel(r.afterLevel)})`,
+      );
+      const marks: string[] = [];
+      if (r.hasTiltak) marks.push("Må håndteres (tiltak)");
+      if (r.hasFølg) marks.push("Følg med");
+      if (marks.length > 0) {
+        parts.push(`Markeringer: ${marks.join(" · ")}`);
+      }
+      addPara(parts.join("\n"), 9);
+      y += 2;
     }
   }
 

@@ -11,6 +11,11 @@ import {
   requireUserId,
   requireWorkspaceMember,
 } from "./lib/access";
+import {
+  extractPvvSyncedFieldsFromGithubIssueBody,
+  hasPvvSyncMarkersInBody,
+} from "./lib/githubCandidateSync";
+import { normalizeGithubRepoFullName } from "./lib/github";
 
 export const getCandidateForGithub = internalQuery({
   args: { candidateId: v.id("candidates") },
@@ -119,10 +124,24 @@ export const getCandidateGithubSyncContext = internalQuery({
       scopeAndCriteria: r.scopeAndCriteria,
       updatedAt: r.updatedAt,
     }));
+    const creator = await ctx.db.get(candidate.createdByUserId);
+    let createdByLabel: string | null = null;
+    if (creator) {
+      const name = creator.name?.trim();
+      const email = creator.email?.trim();
+      if (name && email) {
+        createdByLabel = `${name} (${email})`;
+      } else if (name) {
+        createdByLabel = name;
+      } else if (email) {
+        createdByLabel = email;
+      }
+    }
     return {
       candidate,
       workspaceName: workspace.name,
       workspaceId: candidate.workspaceId,
+      createdByLabel,
       orgUnitName,
       linkedAssessments,
       rosAnalyses: rosOut,
@@ -142,6 +161,9 @@ export const setGithubProjectItem = internalMutation({
       await ctx.db.patch(args.candidateId, {
         githubProjectItemNodeId: undefined,
         githubProjectStatusOptionId: undefined,
+        githubRepoFullName: undefined,
+        githubIssueNumber: undefined,
+        githubIssueNodeId: undefined,
         updatedAt: now,
       });
       return;
@@ -156,6 +178,198 @@ export const setGithubProjectItem = internalMutation({
           }
         : {}),
     });
+  },
+});
+
+export const setGithubIssueLinkFromGithub = internalMutation({
+  args: {
+    candidateId: v.id("candidates"),
+    githubRepoFullName: v.string(),
+    githubIssueNumber: v.number(),
+    githubIssueNodeId: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    let repo: string;
+    try {
+      repo = normalizeGithubRepoFullName(args.githubRepoFullName);
+    } catch {
+      return;
+    }
+    await ctx.db.patch(args.candidateId, {
+      githubRepoFullName: repo,
+      githubIssueNumber: args.githubIssueNumber,
+      githubIssueNodeId: args.githubIssueNodeId?.trim() || undefined,
+      updatedAt: Date.now(),
+    });
+  },
+});
+
+export const clearGithubIssueLink = internalMutation({
+  args: { candidateId: v.id("candidates") },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.candidateId, {
+      githubRepoFullName: undefined,
+      githubIssueNumber: undefined,
+      githubIssueNodeId: undefined,
+      updatedAt: Date.now(),
+    });
+  },
+});
+
+/** Kontekst for valgfri GitHub-kommentar når ROS settes til fullført på en vurdering. */
+export const getGithubRosCompletedCommentContext = internalQuery({
+  args: { assessmentId: v.id("assessments") },
+  handler: async (ctx, args) => {
+    const assessment = await ctx.db.get(args.assessmentId);
+    if (!assessment) {
+      return null;
+    }
+    const draft = await ctx.db
+      .query("assessmentDrafts")
+      .withIndex("by_assessment", (q) => q.eq("assessmentId", assessment._id))
+      .first();
+    const raw = draft?.payload as { candidateId?: string } | undefined;
+    const code = raw?.candidateId?.trim() ?? "";
+    if (!code) {
+      return null;
+    }
+    const candidate = await ctx.db
+      .query("candidates")
+      .withIndex("by_workspace_code", (q) =>
+        q.eq("workspaceId", assessment.workspaceId).eq("code", code),
+      )
+      .unique();
+    if (!candidate) {
+      return null;
+    }
+    if (
+      candidate.githubRepoFullName === undefined ||
+      candidate.githubIssueNumber === undefined
+    ) {
+      return null;
+    }
+    return {
+      workspaceId: assessment.workspaceId,
+      assessmentTitle: assessment.title,
+      processCode: candidate.code,
+      processName: candidate.name,
+      githubRepoFullName: candidate.githubRepoFullName,
+      githubIssueNumber: candidate.githubIssueNumber,
+    };
+  },
+});
+
+/** Webhook: oppdater synkbare felt fra issue-body når markører finnes. */
+export const applyGithubIssueBodyToCandidate = internalMutation({
+  args: {
+    repoFullName: v.string(),
+    issueNumber: v.number(),
+    body: v.string(),
+  },
+  handler: async (ctx, args) => {
+    let repo: string;
+    try {
+      repo = normalizeGithubRepoFullName(args.repoFullName);
+    } catch {
+      return { updated: false as const };
+    }
+    if (!hasPvvSyncMarkersInBody(args.body)) {
+      return { updated: false as const };
+    }
+    const candidate = await ctx.db
+      .query("candidates")
+      .withIndex("by_github_issue", (q) =>
+        q.eq("githubRepoFullName", repo).eq("githubIssueNumber", args.issueNumber),
+      )
+      .first();
+    if (!candidate) {
+      return { updated: false as const };
+    }
+    const fields = extractPvvSyncedFieldsFromGithubIssueBody(args.body);
+    const patch: {
+      notes?: string;
+      linkHintBusinessOwner?: string;
+      linkHintSystems?: string;
+      linkHintComplianceNotes?: string;
+      updatedAt: number;
+    } = { updatedAt: Date.now() };
+    if (fields.notes !== undefined) {
+      patch.notes = fields.notes.trim() || undefined;
+    }
+    if (fields.linkHintBusinessOwner !== undefined) {
+      patch.linkHintBusinessOwner =
+        fields.linkHintBusinessOwner.trim() || undefined;
+    }
+    if (fields.linkHintSystems !== undefined) {
+      patch.linkHintSystems = fields.linkHintSystems.trim() || undefined;
+    }
+    if (fields.linkHintComplianceNotes !== undefined) {
+      patch.linkHintComplianceNotes =
+        fields.linkHintComplianceNotes.trim() || undefined;
+    }
+    await ctx.db.patch(candidate._id, patch);
+    return { updated: true as const, candidateId: candidate._id };
+  },
+});
+
+/**
+ * Manuell «hent fra GitHub»: parser PVV-markører i utkast/issue-body og oppdaterer prosessen.
+ * (Webhook bruker `applyGithubIssueBodyToCandidate` når issue oppdateres.)
+ */
+export const applyPvvSyncedMarkersFromBody = internalMutation({
+  args: {
+    candidateId: v.id("candidates"),
+    body: v.string(),
+  },
+  handler: async (ctx, args) => {
+    if (!hasPvvSyncMarkersInBody(args.body)) {
+      return {
+        applied: false as const,
+        reason: "no_markers" as const,
+      };
+    }
+    const fields = extractPvvSyncedFieldsFromGithubIssueBody(args.body);
+    const candidate = await ctx.db.get(args.candidateId);
+    if (!candidate) {
+      throw new Error("Prosess finnes ikke.");
+    }
+    const patch: {
+      notes?: string;
+      linkHintBusinessOwner?: string;
+      linkHintSystems?: string;
+      linkHintComplianceNotes?: string;
+      updatedAt: number;
+    } = { updatedAt: Date.now() };
+    let any = false;
+    if (fields.notes !== undefined) {
+      patch.notes = fields.notes.trim() || undefined;
+      any = true;
+    }
+    if (fields.linkHintBusinessOwner !== undefined) {
+      patch.linkHintBusinessOwner =
+        fields.linkHintBusinessOwner.trim() || undefined;
+      any = true;
+    }
+    if (fields.linkHintSystems !== undefined) {
+      patch.linkHintSystems = fields.linkHintSystems.trim() || undefined;
+      any = true;
+    }
+    if (fields.linkHintComplianceNotes !== undefined) {
+      patch.linkHintComplianceNotes =
+        fields.linkHintComplianceNotes.trim() || undefined;
+      any = true;
+    }
+    if (!any) {
+      return {
+        applied: false as const,
+        reason: "no_extracted_fields" as const,
+      };
+    }
+    await ctx.db.patch(args.candidateId, patch);
+    return {
+      applied: true as const,
+      updatedKeys: Object.keys(patch).filter((k) => k !== "updatedAt"),
+    };
   },
 });
 
@@ -216,6 +430,169 @@ export const create = mutation({
       linkHintBusinessOwner: trimOpt(args.linkHintBusinessOwner),
       linkHintSystems: trimOpt(args.linkHintSystems),
       linkHintComplianceNotes: trimOpt(args.linkHintComplianceNotes),
+      createdByUserId: userId,
+      createdAt: now,
+      updatedAt: now,
+    });
+  },
+});
+
+/**
+ * Oppretter prosess fra eksisterende GitHub-prosjektkort (kolonnehenting) og kobler PVV til samme kort.
+ * Brukes når kortet allerede ligger i prosjektet med riktig status.
+ */
+export const createFromGithubProjectItem = mutation({
+  args: {
+    workspaceId: v.id("workspaces"),
+    projectItemNodeId: v.string(),
+    name: v.string(),
+    code: v.string(),
+    statusOptionId: v.string(),
+    contentKind: v.union(
+      v.literal("draft_issue"),
+      v.literal("issue"),
+      v.literal("pull_request"),
+    ),
+    githubRepoFullName: v.optional(v.string()),
+    githubIssueNumber: v.optional(v.number()),
+    githubIssueNodeId: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const userId = await requireUserId(ctx);
+    await requireWorkspaceMember(ctx, args.workspaceId, userId, "member");
+    const name = args.name.trim();
+    const code = args.code
+      .trim()
+      .toUpperCase()
+      .replace(/\s+/g, "-")
+      .replace(/[^A-Z0-9_-]/g, "");
+    if (!name || !code) {
+      throw new Error("Navn og prosess-ID kan ikke være tomme.");
+    }
+    const clash = await ctx.db
+      .query("candidates")
+      .withIndex("by_workspace_code", (q) =>
+        q.eq("workspaceId", args.workspaceId).eq("code", code),
+      )
+      .unique();
+    if (clash) {
+      throw new Error("Prosess-ID er allerede i bruk i dette arbeidsområdet.");
+    }
+    const pid = args.projectItemNodeId.trim();
+    const existing = await ctx.db
+      .query("candidates")
+      .withIndex("by_workspace", (q) =>
+        q.eq("workspaceId", args.workspaceId),
+      )
+      .collect();
+    for (const c of existing) {
+      if (c.githubProjectItemNodeId?.trim() === pid) {
+        throw new Error(
+          "Dette prosjektkortet er allerede koblet til en prosess i PVV.",
+        );
+      }
+    }
+    if (
+      (args.contentKind === "issue" || args.contentKind === "pull_request") &&
+      (!args.githubRepoFullName?.trim() || args.githubIssueNumber == null)
+    ) {
+      throw new Error("Mangler repo eller nummer for GitHub-issue/PR.");
+    }
+    let repo: string | undefined;
+    if (args.githubRepoFullName?.trim()) {
+      try {
+        repo = normalizeGithubRepoFullName(args.githubRepoFullName);
+      } catch {
+        throw new Error("Ugyldig repo-navn.");
+      }
+    }
+    const now = Date.now();
+    const id = await ctx.db.insert("candidates", {
+      workspaceId: args.workspaceId,
+      name,
+      code,
+      githubProjectItemNodeId: pid,
+      githubProjectStatusOptionId: args.statusOptionId.trim(),
+      ...(args.contentKind === "issue" || args.contentKind === "pull_request"
+        ? {
+            githubRepoFullName: repo,
+            githubIssueNumber: Math.floor(args.githubIssueNumber!),
+            githubIssueNodeId: args.githubIssueNodeId?.trim() || undefined,
+          }
+        : {}),
+      createdByUserId: userId,
+      createdAt: now,
+      updatedAt: now,
+    });
+    return id;
+  },
+});
+
+/**
+ * Oppretter prosess fra GitHub-issue uten prosjektkort (kun repo + issue, krever PAT).
+ */
+export const createCandidateFromGithubIssue = mutation({
+  args: {
+    workspaceId: v.id("workspaces"),
+    name: v.string(),
+    code: v.string(),
+    githubRepoFullName: v.string(),
+    githubIssueNumber: v.number(),
+    githubIssueNodeId: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const userId = await requireUserId(ctx);
+    await requireWorkspaceMember(ctx, args.workspaceId, userId, "member");
+    const name = args.name.trim();
+    const code = args.code
+      .trim()
+      .toUpperCase()
+      .replace(/\s+/g, "-")
+      .replace(/[^A-Z0-9_-]/g, "");
+    if (!name || !code) {
+      throw new Error("Navn og prosess-ID kan ikke være tomme.");
+    }
+    let repo: string;
+    try {
+      repo = normalizeGithubRepoFullName(args.githubRepoFullName);
+    } catch {
+      throw new Error("Ugyldig repo-navn.");
+    }
+    const issueNum = Math.floor(args.githubIssueNumber);
+    if (!Number.isFinite(issueNum) || issueNum < 1) {
+      throw new Error("Ugyldig issue-nummer.");
+    }
+
+    const clashCode = await ctx.db
+      .query("candidates")
+      .withIndex("by_workspace_code", (q) =>
+        q.eq("workspaceId", args.workspaceId).eq("code", code),
+      )
+      .unique();
+    if (clashCode) {
+      throw new Error("Prosess-ID er allerede i bruk i dette arbeidsområdet.");
+    }
+
+    const sameIssue = await ctx.db
+      .query("candidates")
+      .withIndex("by_github_issue", (q) =>
+        q.eq("githubRepoFullName", repo).eq("githubIssueNumber", issueNum),
+      )
+      .collect();
+    if (sameIssue.some((c) => c.workspaceId === args.workspaceId)) {
+      throw new Error(
+        "Denne GitHub-saken er allerede koblet til en prosess i dette arbeidsområdet.",
+      );
+    }
+
+    const now = Date.now();
+    return await ctx.db.insert("candidates", {
+      workspaceId: args.workspaceId,
+      name,
+      code,
+      githubRepoFullName: repo,
+      githubIssueNumber: issueNum,
+      githubIssueNodeId: args.githubIssueNodeId?.trim() || undefined,
       createdByUserId: userId,
       createdAt: now,
       updatedAt: now,
@@ -314,7 +691,7 @@ export const remove = mutation({
     if (!row) {
       throw new Error("Kandidat finnes ikke.");
     }
-    await requireWorkspaceMember(ctx, row.workspaceId, userId, "admin");
+    await requireWorkspaceMember(ctx, row.workspaceId, userId, "member");
     await ctx.db.delete(args.candidateId);
     return null;
   },

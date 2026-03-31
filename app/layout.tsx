@@ -1,3 +1,4 @@
+import { AppToaster } from "@/components/providers/app-toaster";
 import { ConvexClientProvider } from "@/components/providers/convex-provider";
 import { ThemeProvider } from "@/components/providers/theme-provider";
 import { PwaClient } from "@/components/pwa-client";
@@ -71,6 +72,7 @@ export default async function RootLayout({
           <ConvexClientProvider>
             <ThemeProvider>
               {children}
+              <AppToaster />
               <PwaClient />
             </ThemeProvider>
           </ConvexClientProvider>

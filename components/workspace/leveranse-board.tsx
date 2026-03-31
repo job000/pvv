@@ -11,13 +11,15 @@ import { cn } from "@/lib/utils";
 import {
   PIPELINE_KANBAN_ORDER,
   PIPELINE_STATUS_LABELS,
+  PIPELINE_STATUSES,
   type PipelineStatus,
 } from "@/lib/assessment-pipeline";
+import { githubKanbanDisplayFromStatusOptions } from "@/lib/github-leveranse-kanban-order";
 import {
   COMPLIANCE_STATUS_LABELS,
   type ComplianceStatusKey,
 } from "@/lib/helsesector-labels";
-import { useMutation, useQuery } from "convex/react";
+import { useAction, useMutation, useQuery } from "convex/react";
 import {
   CalendarRange,
   ChevronDown,
@@ -26,6 +28,7 @@ import {
   LayoutGrid,
   List,
   Plus,
+  RefreshCw,
   Search,
   Shield,
   UserCircle,
@@ -71,6 +74,8 @@ function PipelineCard({
   onSprintChange,
   onOpenPreview,
   compact,
+  pipelineStatusOrder = PIPELINE_KANBAN_ORDER,
+  getPipelineStatusLabel = (s: PipelineStatus) => PIPELINE_STATUS_LABELS[s],
 }: {
   row: BoardRow;
   workspaceId: Id<"workspaces">;
@@ -82,6 +87,9 @@ function PipelineCard({
   ) => void;
   onOpenPreview: (row: BoardRow) => void;
   compact?: boolean;
+  /** Rekkefølge i status-nedtrekk (typisk fra GitHub-tavle) */
+  pipelineStatusOrder?: PipelineStatus[];
+  getPipelineStatusLabel?: (status: PipelineStatus) => string;
 }) {
   const a = row.assessment;
   const hrefBase = `/w/${workspaceId}/a/${a._id}`;
@@ -190,9 +198,9 @@ function PipelineCard({
               onStatusChange(a._id, e.target.value as PipelineStatus)
             }
           >
-            {PIPELINE_KANBAN_ORDER.map((s) => (
+            {pipelineStatusOrder.map((s) => (
               <option key={s} value={s}>
-                {PIPELINE_STATUS_LABELS[s]}
+                {getPipelineStatusLabel(s)}
               </option>
             ))}
           </select>
@@ -468,7 +476,14 @@ export function LeveranseBoard({
   workspaceId: Id<"workspaces">;
 }) {
   const prefs = useQuery(api.leveransePrefs.getForWorkspace, { workspaceId });
+  const workspaceDoc = useQuery(api.workspaces.get, { workspaceId });
   const savePrefs = useMutation(api.leveransePrefs.upsert);
+  const syncSprintsFromGithub = useAction(
+    api.githubLeveranseSync.syncSprintsFromGithubProject,
+  );
+  const listGithubProjectStatusOptions = useAction(
+    api.githubCandidateProject.listGithubProjectStatusOptions,
+  );
 
   const [sprintFilter, setSprintFilter] = useState<"all" | Id<"sprints">>(
     "all",
@@ -482,6 +497,14 @@ export function LeveranseBoard({
   const [rosFilter, setRosFilter] = useState<RosFilter>("all");
   const prefsHydrated = useRef(false);
   const [previewRow, setPreviewRow] = useState<BoardRow | null>(null);
+  const [githubSprintSyncBusy, setGithubSprintSyncBusy] = useState(false);
+  const [githubSprintSyncMessage, setGithubSprintSyncMessage] = useState<
+    string | null
+  >(null);
+  const [githubBoardBusy, setGithubBoardBusy] = useState(false);
+  const [githubBoardMessage, setGithubBoardMessage] = useState<string | null>(
+    null,
+  );
 
   const sprintDetailsRef = useRef<HTMLDetailsElement>(null);
 
@@ -549,9 +572,17 @@ export function LeveranseBoard({
     });
   }, [rows, rosFilter]);
 
+  const kanbanDisplay = useMemo(
+    () =>
+      githubKanbanDisplayFromStatusOptions(
+        workspaceDoc?.githubProjectStatusFieldCache?.options,
+      ),
+    [workspaceDoc?.githubProjectStatusFieldCache?.options],
+  );
+
   const byStatus = useMemo(() => {
     const m = new Map<PipelineStatus, BoardRow[]>();
-    for (const s of PIPELINE_KANBAN_ORDER) {
+    for (const s of PIPELINE_STATUSES) {
       m.set(s, []);
     }
     if (!filteredRows) {
@@ -562,7 +593,7 @@ export function LeveranseBoard({
       list.push(row);
       m.set(row.pipelineStatus, list);
     }
-    for (const s of PIPELINE_KANBAN_ORDER) {
+    for (const s of PIPELINE_STATUSES) {
       const list = m.get(s)!;
       list.sort((a, b) => {
         if (b.effectivePriority !== a.effectivePriority) {
@@ -603,6 +634,49 @@ export function LeveranseBoard({
     sprintDetailsRef.current?.removeAttribute("open");
   }
 
+  async function handleSyncSprintsFromGithub(forceRefresh: boolean) {
+    setGithubSprintSyncMessage(null);
+    setGithubSprintSyncBusy(true);
+    try {
+      const r = await syncSprintsFromGithub({
+        workspaceId,
+        forceRefresh,
+      });
+      setGithubSprintSyncMessage(
+        `Synket «${r.fieldName}»: ${r.created} nye, ${r.updated} oppdatert (${r.total} iterasjoner).`,
+      );
+    } catch (e) {
+      setGithubSprintSyncMessage(
+        e instanceof Error ? e.message : "Kunne ikke synke sprinter.",
+      );
+    } finally {
+      setGithubSprintSyncBusy(false);
+    }
+  }
+
+  async function handleSyncBoardFromGithub(forceRefresh: boolean) {
+    setGithubBoardMessage(null);
+    setGithubBoardBusy(true);
+    try {
+      const r = await listGithubProjectStatusOptions({
+        workspaceId,
+        forceRefresh,
+      });
+      setGithubBoardMessage(
+        `Tavle «${r.fieldName}»: ${r.options.length} kolonner hentet fra GitHub (rekkefølge og overskrifter speiles når navn matcher PVV-statuser).`,
+      );
+    } catch (e) {
+      setGithubBoardMessage(
+        e instanceof Error ? e.message : "Kunne ikke hente tavle fra GitHub.",
+      );
+    } finally {
+      setGithubBoardBusy(false);
+    }
+  }
+
+  const hasGithubProject =
+    (workspaceDoc?.githubProjectNodeId ?? "").trim().length > 0;
+
   return (
     <div className="space-y-6">
       <p className="text-muted-foreground text-xs leading-relaxed">
@@ -613,6 +687,127 @@ export function LeveranseBoard({
           Klikk på et kort (utenom lenker og felt) for forhåndsvisning.
         </span>
       </p>
+
+      {workspaceDoc !== undefined && hasGithubProject ? (
+        <div className="space-y-3">
+          <div className="bg-muted/20 flex flex-col gap-3 rounded-2xl border border-border/60 p-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex min-w-0 flex-1 items-start gap-3">
+              <GitBranch
+                className="text-muted-foreground mt-0.5 size-4 shrink-0"
+                aria-hidden
+              />
+              <div className="min-w-0 space-y-1">
+                <p className="text-foreground text-sm font-medium">
+                  Sprinter fra GitHub Projects
+                </p>
+                <p className="text-muted-foreground text-xs leading-relaxed">
+                  Hent eller oppdater sprintnavn og datoer fra prosjektets
+                  iterasjonsfelt (samme som under Innstillinger → GitHub).
+                </p>
+              </div>
+            </div>
+            <div className="flex shrink-0 flex-wrap items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-9 gap-2"
+                disabled={githubSprintSyncBusy}
+                onClick={() => void handleSyncSprintsFromGithub(false)}
+              >
+                {githubSprintSyncBusy ? (
+                  <RefreshCw className="size-4 shrink-0 animate-spin" aria-hidden />
+                ) : (
+                  <RefreshCw className="size-4 shrink-0" aria-hidden />
+                )}
+                Hent sprinter
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-9"
+                disabled={githubSprintSyncBusy}
+                onClick={() => void handleSyncSprintsFromGithub(true)}
+              >
+                {`Tving oppdatering`}
+              </Button>
+            </div>
+          </div>
+
+          <div className="bg-muted/20 flex flex-col gap-3 rounded-2xl border border-border/60 p-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex min-w-0 flex-1 items-start gap-3">
+              <LayoutGrid
+                className="text-muted-foreground mt-0.5 size-4 shrink-0"
+                aria-hidden
+              />
+              <div className="min-w-0 space-y-1">
+                <p className="text-foreground text-sm font-medium">
+                  Tavlevisning fra GitHub Projects
+                </p>
+                <p className="text-muted-foreground text-xs leading-relaxed">
+                  Kolonnerekkefølge og overskrifter følger enkeltvalg-feltet for
+                  status (samme som under Innstillinger → GitHub). Navn som matcher
+                  PVV-statuser brukes som kolonnetittel; øvrige kolonner kommer etterpå.
+                </p>
+              </div>
+            </div>
+            <div className="flex shrink-0 flex-wrap items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-9 gap-2"
+                disabled={githubBoardBusy}
+                onClick={() => void handleSyncBoardFromGithub(false)}
+              >
+                {githubBoardBusy ? (
+                  <RefreshCw className="size-4 shrink-0 animate-spin" aria-hidden />
+                ) : (
+                  <RefreshCw className="size-4 shrink-0" aria-hidden />
+                )}
+                Hent tavle
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-9"
+                disabled={githubBoardBusy}
+                onClick={() => void handleSyncBoardFromGithub(true)}
+              >
+                {`Tving oppdatering`}
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+      {githubSprintSyncMessage ? (
+        <p
+          className={cn(
+            "text-sm",
+            githubSprintSyncMessage.includes("Synket")
+              ? "text-emerald-700 dark:text-emerald-300"
+              : "text-destructive",
+          )}
+          role="status"
+        >
+          {githubSprintSyncMessage}
+        </p>
+      ) : null}
+      {githubBoardMessage ? (
+        <p
+          className={cn(
+            "text-sm",
+            githubBoardMessage.startsWith("Tavle «")
+              ? "text-emerald-700 dark:text-emerald-300"
+              : "text-destructive",
+          )}
+          role="status"
+        >
+          {githubBoardMessage}
+        </p>
+      ) : null}
 
       {/* Planner-style toolbar */}
       <div className="bg-muted/30 flex flex-col gap-3 rounded-2xl border p-3">
@@ -943,9 +1138,9 @@ export function LeveranseBoard({
                         })
                       }
                     >
-                      {PIPELINE_KANBAN_ORDER.map((s) => (
+                      {kanbanDisplay.order.map((s) => (
                         <option key={s} value={s}>
-                          {PIPELINE_STATUS_LABELS[s]}
+                          {kanbanDisplay.labelForStatus(s)}
                         </option>
                       ))}
                     </select>
@@ -1025,7 +1220,7 @@ export function LeveranseBoard({
       ) : (
         <div className="relative">
           <div className="flex gap-3 overflow-x-auto pb-2 [-ms-overflow-style:none] [scrollbar-width:thin] [&::-webkit-scrollbar]:h-1.5">
-            {PIPELINE_KANBAN_ORDER.map((status) => {
+            {kanbanDisplay.order.map((status) => {
               const list = byStatus.get(status) ?? [];
               return (
                 <div
@@ -1035,7 +1230,7 @@ export function LeveranseBoard({
                   <header className="border-b border-border/80 shrink-0 px-3 py-2.5">
                     <div className="flex items-center justify-between gap-2">
                       <h3 className="truncate text-sm font-semibold">
-                        {PIPELINE_STATUS_LABELS[status]}
+                        {kanbanDisplay.labelForStatus(status)}
                       </h3>
                       <span className="bg-background text-muted-foreground rounded-full px-2 py-0.5 text-xs tabular-nums">
                         {list.length}
@@ -1055,6 +1250,8 @@ export function LeveranseBoard({
                           workspaceId={workspaceId}
                           sprints={sprints}
                           compact={compact}
+                          pipelineStatusOrder={kanbanDisplay.order}
+                          getPipelineStatusLabel={kanbanDisplay.labelForStatus}
                           onOpenPreview={(r) => setPreviewRow(r)}
                           onStatusChange={(id, status) =>
                             void setStatus({ assessmentId: id, status })

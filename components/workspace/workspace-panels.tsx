@@ -14,13 +14,21 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
+import { toast } from "@/lib/app-toast";
 import { api } from "@/convex/_generated/api";
 import type { Doc, Id } from "@/convex/_generated/dataModel";
 import { useAction, useMutation, useQuery } from "convex/react";
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
+import {
+  Dialog,
+  DialogBody,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+} from "@/components/ui/dialog";
 import {
   PIPELINE_KANBAN_ORDER,
   PIPELINE_STATUS_LABELS,
@@ -36,9 +44,11 @@ import {
 import { cn } from "@/lib/utils";
 import {
   ChevronRight,
+  ExternalLink,
   GitBranch,
   LayoutGrid,
   Loader2,
+  Plus,
   Search,
   Sparkles,
   Trash2,
@@ -49,6 +59,7 @@ import { WorkspaceDeleteDialog } from "@/components/workspace/workspace-delete-d
 import { useRouter } from "next/navigation";
 
 import { ORG_UNIT_KIND_LABELS } from "@/lib/helsesector-labels";
+import { parseSuggestedCodeAndNameFromGithubTitle } from "@/lib/github-process-title";
 import { prosessRegisterCopy } from "@/lib/prosess-register-copy";
 import {
   WORKSPACE_ROLE_DESC_NB,
@@ -56,6 +67,32 @@ import {
 } from "@/lib/role-labels-nb";
 import { WorkspaceCandidateRow } from "./workspace-candidate-row";
 import { WorkspaceGithubIntegrationCard } from "./workspace-github-integration-card";
+
+/** Rad fra `listGithubProjectItemsInStatusColumn` — brukt i prosessregister-UI. */
+type GithubColumnItemRow = {
+  projectItemId: string;
+  contentKind: "draft_issue" | "issue" | "pull_request" | "unknown";
+  title: string;
+  issueUrl?: string;
+  issueNumber?: number;
+  repoFullName?: string;
+  issueNodeId?: string;
+};
+
+function githubColumnContentKindLabel(
+  k: GithubColumnItemRow["contentKind"],
+): string {
+  switch (k) {
+    case "draft_issue":
+      return "Utkast";
+    case "issue":
+      return "Issue";
+    case "pull_request":
+      return "PR";
+    default:
+      return "Ukjent";
+  }
+}
 
 function candidateOrgUnitLabel(
   c: Doc<"candidates">,
@@ -84,7 +121,6 @@ export function WorkspaceSettingsPanel({
   const [wsNotes, setWsNotes] = useState("");
   const [wsOrgNr, setWsOrgNr] = useState("");
   const [wsHer, setWsHer] = useState("");
-  const [settingsSaved, setSettingsSaved] = useState<string | null>(null);
 
   const isAdmin =
     membership?.role === "owner" || membership?.role === "admin";
@@ -112,7 +148,6 @@ export function WorkspaceSettingsPanel({
   }
 
   async function saveWorkspaceSettings() {
-    setSettingsSaved(null);
     try {
       await updateWorkspace({
         workspaceId,
@@ -121,9 +156,9 @@ export function WorkspaceSettingsPanel({
         organizationNumber: wsOrgNr.trim() === "" ? null : wsOrgNr,
         institutionIdentifier: wsHer.trim() === "" ? null : wsHer,
       });
-      setSettingsSaved("Lagret.");
+      toast.success("Innstillinger lagret.");
     } catch (e) {
-      setSettingsSaved(
+      toast.error(
         e instanceof Error ? e.message : "Kunne ikke lagre innstillinger.",
       );
     }
@@ -191,11 +226,6 @@ export function WorkspaceSettingsPanel({
             rows={4}
           />
         </div>
-        {settingsSaved ? (
-          <p className="text-muted-foreground text-sm" role="status">
-            {settingsSaved}
-          </p>
-        ) : null}
       </CardContent>
       <CardFooter>
         <Button type="button" onClick={() => void saveWorkspaceSettings()}>
@@ -257,7 +287,6 @@ export function WorkspaceTeamPanel({
   const [inviteRole, setInviteRole] = useState<"admin" | "member" | "viewer">(
     "member",
   );
-  const [inviteMsg, setInviteMsg] = useState<string | null>(null);
 
   const isAdmin =
     membership?.role === "owner" || membership?.role === "admin";
@@ -267,7 +296,6 @@ export function WorkspaceTeamPanel({
   }
 
   async function sendInvite() {
-    setInviteMsg(null);
     try {
       const r = await inviteMember({
         workspaceId,
@@ -275,13 +303,13 @@ export function WorkspaceTeamPanel({
         role: inviteRole,
       });
       setInviteEmail("");
-      setInviteMsg(
+      toast.success(
         r.kind === "linked"
           ? "Bruker lagt til."
           : "Invitasjon registrert (aktiveres når brukeren logger inn med e-posten).",
       );
     } catch (e) {
-      setInviteMsg(e instanceof Error ? e.message : "Invitasjon feilet.");
+      toast.error(e instanceof Error ? e.message : "Invitasjon feilet.");
     }
   }
 
@@ -330,9 +358,6 @@ export function WorkspaceTeamPanel({
                 Inviter
               </Button>
             </div>
-            {inviteMsg ? (
-              <p className="text-muted-foreground text-sm">{inviteMsg}</p>
-            ) : null}
             <Separator />
             <div>
               <p className="text-foreground mb-2 text-sm font-medium">
@@ -535,6 +560,25 @@ export function WorkspaceCandidatesPanel({
   const removeCandidateFromGithubProject = useAction(
     api.githubCandidateProject.removeCandidateFromGithubProject,
   );
+  const importPvvFieldsFromGithubProjectItem = useAction(
+    api.githubCandidateProject.importPvvFieldsFromGithubProjectItem,
+  );
+  const listGithubProjectColumnItems = useAction(
+    api.githubProjectColumnItems.listGithubProjectItemsInStatusColumn,
+  );
+  const createFromGithubProjectItem = useMutation(
+    api.candidates.createFromGithubProjectItem,
+  );
+  const fetchGithubIssueForProcessImport = useAction(
+    api.githubIssueImport.fetchGithubIssueForProcessImport,
+  );
+  const createCandidateFromGithubIssue = useMutation(
+    api.candidates.createCandidateFromGithubIssue,
+  );
+
+  /** Unngår at useEffect re-kjører ved hver render hvis useAction bytter referanse. */
+  const listGithubStatusOptionsRef = useRef(listGithubProjectStatusOptions);
+  listGithubStatusOptionsRef.current = listGithubProjectStatusOptions;
 
   const [cName, setCName] = useState("");
   const [cCode, setCCode] = useState("");
@@ -558,14 +602,108 @@ export function WorkspaceCandidatesPanel({
   const [rowGithubBusyId, setRowGithubBusyId] = useState<
     Id<"candidates"> | null
   >(null);
-  const [autoGithubSaveMsg, setAutoGithubSaveMsg] = useState<string | null>(
-    null,
-  );
+  const [overviewDeleteBusyId, setOverviewDeleteBusyId] = useState<
+    Id<"candidates"> | null
+  >(null);
   const [autoRegGithub, setAutoRegGithub] = useState(false);
   const [autoRegStatusId, setAutoRegStatusId] = useState("");
+  const [newProcessOpen, setNewProcessOpen] = useState(false);
+  const [editCandidateId, setEditCandidateId] =
+    useState<Id<"candidates"> | null>(null);
 
-  const reloadGithubProjectStatus = useCallback(() => {
-    if (!workspace?.githubProjectNodeId?.trim()) {
+  const [columnPickId, setColumnPickId] = useState("");
+  const [columnItemsResult, setColumnItemsResult] = useState<{
+    fieldName: string;
+    optionName: string;
+    items: GithubColumnItemRow[];
+  } | null>(null);
+  const [columnItemsError, setColumnItemsError] = useState<string | null>(null);
+  const [columnItemsLoading, setColumnItemsLoading] = useState(false);
+  const [importGithubOpen, setImportGithubOpen] = useState(false);
+  const [importGithubRow, setImportGithubRow] =
+    useState<GithubColumnItemRow | null>(null);
+  const [importGithubName, setImportGithubName] = useState("");
+  const [importGithubCode, setImportGithubCode] = useState("");
+  const [importGithubBusy, setImportGithubBusy] = useState(false);
+
+  const [issueGithubUrlInput, setIssueGithubUrlInput] = useState("");
+  const [issueUrlFetchBusy, setIssueUrlFetchBusy] = useState(false);
+  const [issueUrlFetchError, setIssueUrlFetchError] = useState<string | null>(
+    null,
+  );
+  const [issueImportPreview, setIssueImportPreview] = useState<{
+    title: string;
+    repoFullName: string;
+    issueNumber: number;
+    issueNodeId?: string;
+  } | null>(null);
+  const [issueFromGithubDialogOpen, setIssueFromGithubDialogOpen] =
+    useState(false);
+  const [issueImportName, setIssueImportName] = useState("");
+  const [issueImportCode, setIssueImportCode] = useState("");
+  const [issueImportBusy, setIssueImportBusy] = useState(false);
+
+  const editingCandidate = useMemo(() => {
+    if (!editCandidateId || !candidates) {
+      return undefined;
+    }
+    return candidates.find((c) => c._id === editCandidateId);
+  }, [editCandidateId, candidates]);
+
+  useEffect(() => {
+    if (
+      editCandidateId &&
+      candidates &&
+      !candidates.some((c) => c._id === editCandidateId)
+    ) {
+      setEditCandidateId(null);
+    }
+  }, [editCandidateId, candidates]);
+
+  const reloadGithubProjectStatus = useCallback(
+    (forceRefresh = false) => {
+      if (!workspace?.githubProjectNodeId?.trim()) {
+        setGithubProjectStatus({
+          loading: false,
+          options: null,
+          fieldName: null,
+          error: null,
+        });
+        return;
+      }
+      setGithubProjectStatus((s) => ({ ...s, loading: true, error: null }));
+      void listGithubStatusOptionsRef.current({ workspaceId, forceRefresh })
+        .then((r) =>
+          setGithubProjectStatus({
+            loading: false,
+            options: r.options,
+            fieldName: r.fieldName,
+            error: r.githubRateLimited
+              ? "GitHub rate limit: ingen lagret statusliste ennå. Vent noen minutter og bruk «Prøv på nytt»."
+              : null,
+          }),
+        )
+        .catch((e) =>
+          setGithubProjectStatus({
+            loading: false,
+            options: null,
+            fieldName: null,
+            error:
+              e instanceof Error
+                ? e.message
+                : "Kunne ikke laste statusliste fra GitHub.",
+          }),
+        );
+    },
+    [workspace?.githubProjectNodeId, workspaceId],
+  );
+
+  /** Kun når prosjekt-node-ID endres — ikke ved hver workspace-oppdatering (unngår GitHub rate limit). */
+  useEffect(() => {
+    if (workspace === undefined) {
+      return;
+    }
+    if (workspace === null) {
       setGithubProjectStatus({
         loading: false,
         options: null,
@@ -574,37 +712,47 @@ export function WorkspaceCandidatesPanel({
       });
       return;
     }
+    if (!workspace.githubProjectNodeId?.trim()) {
+      setGithubProjectStatus({
+        loading: false,
+        options: null,
+        fieldName: null,
+        error: null,
+      });
+      return;
+    }
+    let cancelled = false;
     setGithubProjectStatus((s) => ({ ...s, loading: true, error: null }));
-    void listGithubProjectStatusOptions({ workspaceId })
-      .then((r) =>
-        setGithubProjectStatus({
-          loading: false,
-          options: r.options,
-          fieldName: r.fieldName,
-          error: null,
-        }),
-      )
-      .catch((e) =>
-        setGithubProjectStatus({
-          loading: false,
-          options: null,
-          fieldName: null,
-          error:
-            e instanceof Error
-              ? e.message
-              : "Kunne ikke laste statusliste fra GitHub.",
-        }),
-      );
-  }, [
-    workspace?.githubProjectNodeId,
-    workspaceId,
-    listGithubProjectStatusOptions,
-  ]);
-
-  useEffect(() => {
-    const t = setTimeout(() => reloadGithubProjectStatus(), 0);
-    return () => clearTimeout(t);
-  }, [reloadGithubProjectStatus]);
+    void listGithubStatusOptionsRef.current({ workspaceId })
+      .then((r) => {
+        if (!cancelled) {
+          setGithubProjectStatus({
+            loading: false,
+            options: r.options,
+            fieldName: r.fieldName,
+            error: r.githubRateLimited
+              ? "GitHub rate limit: ingen lagret statusliste ennå. Vent noen minutter og bruk «Prøv på nytt»."
+              : null,
+          });
+        }
+      })
+      .catch((e) => {
+        if (!cancelled) {
+          setGithubProjectStatus({
+            loading: false,
+            options: null,
+            fieldName: null,
+            error:
+              e instanceof Error
+                ? e.message
+                : "Kunne ikke laste statusliste fra GitHub.",
+          });
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [workspaceId, workspace?.githubProjectNodeId]);
 
   useEffect(() => {
     if (workspace === undefined || workspace === null) {
@@ -623,6 +771,20 @@ export function WorkspaceCandidatesPanel({
     return [...candidates].sort((a, b) =>
       a.code.localeCompare(b.code, "nb", { sensitivity: "base" }),
     );
+  }, [candidates]);
+
+  const projectItemIdsLinkedInPvv = useMemo(() => {
+    const s = new Set<string>();
+    if (!candidates) {
+      return s;
+    }
+    for (const c of candidates) {
+      const pid = c.githubProjectItemNodeId?.trim();
+      if (pid) {
+        s.add(pid);
+      }
+    }
+    return s;
   }, [candidates]);
 
   const isAdmin =
@@ -652,25 +814,16 @@ export function WorkspaceCandidatesPanel({
 
   const w = workspace;
 
-  if (!canEditCandidates) {
-    return (
-      <Card>
-        <CardHeader>
-          <CardTitle>Prosessregister</CardTitle>
-          <CardDescription>
-            Du har ikke tilgang til å redigere prosessregisteret i dette
-            arbeidsområdet.
-          </CardDescription>
-        </CardHeader>
-      </Card>
-    );
-  }
-
   async function addCandidate() {
+    if (!canEditCandidates) {
+      return;
+    }
     const name = cName.trim();
     const code = cCode.trim();
     if (!name || !code) {
-      window.alert("Fyll inn både navn og kode (kode kan ikke bare være mellomrom).");
+      toast.error(
+        "Fyll inn både navn og kode (kode kan ikke bare være mellomrom).",
+      );
       return;
     }
     try {
@@ -700,6 +853,7 @@ export function WorkspaceCandidatesPanel({
         Boolean(w.githubProjectNodeId?.trim()) &&
         statusForGithub.length > 0 &&
         (autoRegGithub || w.githubAutoRegisterProcessOnCreate);
+      let githubAutoRegisterFailed = false;
       if (shouldAutoRegisterInGithub) {
         try {
           await registerCandidateToGithubProject({
@@ -707,20 +861,26 @@ export function WorkspaceCandidatesPanel({
             statusOptionId: statusForGithub,
           });
         } catch (e) {
-          window.alert(
+          githubAutoRegisterFailed = true;
+          toast.warning(
             `Prosessen ble lagret. Automatisk registrering i GitHub-tavle feilet: ${
               e instanceof Error ? e.message : "ukjent feil"
             }`,
           );
         }
       }
+      setNewProcessOpen(false);
+      if (!githubAutoRegisterFailed) {
+        toast.success("Prosess opprettet.");
+      }
     } catch (e) {
-      alert(e instanceof Error ? e.message : "Kunne ikke legge til prosess.");
+      toast.error(
+        e instanceof Error ? e.message : "Kunne ikke legge til prosess.",
+      );
     }
   }
 
   async function saveAutoGithubSettings() {
-    setAutoGithubSaveMsg(null);
     try {
       await updateWorkspace({
         workspaceId,
@@ -728,9 +888,9 @@ export function WorkspaceCandidatesPanel({
         githubAutoRegisterProcessStatusOptionId:
           autoRegStatusId.trim() === "" ? null : autoRegStatusId.trim(),
       });
-      setAutoGithubSaveMsg("Lagret.");
+      toast.success("Innstilling lagret.");
     } catch (e) {
-      setAutoGithubSaveMsg(
+      toast.error(
         e instanceof Error ? e.message : "Kunne ikke lagre innstillinger.",
       );
     }
@@ -739,7 +899,7 @@ export function WorkspaceCandidatesPanel({
   async function bulkRegisterMissingInGithub() {
     const missing = candidates!.filter((c) => !c.githubProjectItemNodeId);
     if (missing.length === 0) {
-      window.alert("Alle prosesser har allerede et kort i GitHub-prosjektet.");
+      toast.message("Alle prosesser har allerede et kort i GitHub-prosjektet.");
       return;
     }
     const opt =
@@ -747,7 +907,7 @@ export function WorkspaceCandidatesPanel({
       w.githubAutoRegisterProcessStatusOptionId?.trim() ||
       githubProjectStatus.options?.[0]?.id;
     if (!opt) {
-      window.alert(
+      toast.error(
         "Velg en standardstatus (under «Automatisk GitHub-prosjekt») eller vent til statuslisten er lastet.",
       );
       return;
@@ -768,8 +928,11 @@ export function WorkspaceCandidatesPanel({
           statusOptionId: opt,
         });
       }
+      toast.success(
+        `${missing.length} prosess(er) registrert i GitHub-prosjektet.`,
+      );
     } catch (e) {
-      window.alert(
+      toast.error(
         e instanceof Error ? e.message : "Feil under masse-registrering.",
       );
     } finally {
@@ -783,7 +946,7 @@ export function WorkspaceCandidatesPanel({
       w.githubAutoRegisterProcessStatusOptionId?.trim() ||
       githubProjectStatus.options?.[0]?.id;
     if (!opt) {
-      window.alert(
+      toast.error(
         "Velg standardstatus under «Automatisk GitHub-prosjekt», eller vent til statuslisten er lastet. Du kan også utvide prosessen under og velge kolonne der.",
       );
       return;
@@ -794,12 +957,218 @@ export function WorkspaceCandidatesPanel({
         candidateId,
         statusOptionId: opt,
       });
+      toast.success("Prosess lagt til i GitHub-tavle.");
     } catch (e) {
-      window.alert(
+      toast.error(
         e instanceof Error ? e.message : "Kunne ikke legge til i GitHub-tavle.",
       );
     } finally {
       setRowGithubBusyId(null);
+    }
+  }
+
+  async function deleteCandidateFromOverview(
+    candidateId: Id<"candidates">,
+    c: Doc<"candidates">,
+  ) {
+    if (!canEditCandidates) {
+      return;
+    }
+    const msg = c.githubProjectItemNodeId
+      ? "Slette denne prosessen fra registeret? Fjern eventuelt kortet i GitHub-prosjekt manuelt. Eksisterende PVV-koblinger bør ryddes manuelt."
+      : "Slette denne prosessen fra registeret? Eksisterende PVV-koblinger bør ryddes manuelt.";
+    if (typeof window !== "undefined" && !window.confirm(msg)) {
+      return;
+    }
+    setOverviewDeleteBusyId(candidateId);
+    try {
+      await removeCandidate({ candidateId });
+      toast.success("Prosess slettet.");
+      if (editCandidateId === candidateId) {
+        setEditCandidateId(null);
+      }
+    } catch (e) {
+      toast.error(
+        e instanceof Error ? e.message : "Kunne ikke slette prosessen.",
+      );
+    } finally {
+      setOverviewDeleteBusyId(null);
+    }
+  }
+
+  async function fetchGithubColumnItems() {
+    const opt = columnPickId.trim();
+    if (!opt) {
+      toast.error("Velg en kolonne (status) først.");
+      return;
+    }
+    setColumnItemsError(null);
+    setColumnItemsLoading(true);
+    try {
+      const r = await listGithubProjectColumnItems({
+        workspaceId,
+        statusOptionId: opt,
+      });
+      setColumnItemsResult({
+        fieldName: r.fieldName,
+        optionName: r.optionName,
+        items: r.items,
+      });
+    } catch (e) {
+      setColumnItemsResult(null);
+      setColumnItemsError(
+        e instanceof Error ? e.message : "Kunne ikke hente kort fra GitHub.",
+      );
+    } finally {
+      setColumnItemsLoading(false);
+    }
+  }
+
+  function openImportFromGithubColumn(row: GithubColumnItemRow) {
+    if (row.contentKind === "unknown") {
+      toast.error(
+        "Dette kortet har ukjent innholdstype i GitHub. Kan ikke opprettes i PVV automatisk.",
+      );
+      return;
+    }
+    if (
+      (row.contentKind === "issue" || row.contentKind === "pull_request") &&
+      (!row.repoFullName?.trim() || row.issueNumber == null)
+    ) {
+      toast.error(
+        "Mangler repo eller saksnummer for dette kortet. Sjekk kortet i GitHub og prøv igjen.",
+      );
+      return;
+    }
+    const sug = parseSuggestedCodeAndNameFromGithubTitle(row.title);
+    setImportGithubName(sug.name);
+    setImportGithubCode(sug.code);
+    setImportGithubRow(row);
+    setImportGithubOpen(true);
+  }
+
+  async function confirmImportFromGithubColumn() {
+    if (!importGithubRow || !canEditCandidates) {
+      return;
+    }
+    const statusOpt = columnPickId.trim();
+    if (!statusOpt) {
+      toast.error("Velg kolonnen du hentet fra (samme som over).");
+      return;
+    }
+    const name = importGithubName.trim();
+    const code = importGithubCode.trim();
+    if (!name || !code) {
+      toast.error("Fyll inn navn og prosess-ID.");
+      return;
+    }
+    const row = importGithubRow;
+    const removedId = row.projectItemId;
+    setImportGithubBusy(true);
+    try {
+      await createFromGithubProjectItem({
+        workspaceId,
+        projectItemNodeId: row.projectItemId,
+        name,
+        code,
+        statusOptionId: statusOpt,
+        contentKind:
+          row.contentKind === "issue"
+            ? "issue"
+            : row.contentKind === "pull_request"
+              ? "pull_request"
+              : "draft_issue",
+        githubRepoFullName:
+          row.contentKind === "issue" || row.contentKind === "pull_request"
+            ? row.repoFullName
+            : undefined,
+        githubIssueNumber:
+          row.contentKind === "issue" || row.contentKind === "pull_request"
+            ? row.issueNumber
+            : undefined,
+        githubIssueNodeId:
+          row.contentKind === "issue" || row.contentKind === "pull_request"
+            ? row.issueNodeId
+            : undefined,
+      });
+      setImportGithubOpen(false);
+      setImportGithubRow(null);
+      setColumnItemsResult((prev) =>
+        prev
+          ? {
+              ...prev,
+              items: prev.items.filter((i) => i.projectItemId !== removedId),
+            }
+          : null,
+      );
+      toast.success("Prosess opprettet fra GitHub-kort.");
+    } catch (e) {
+      toast.error(
+        e instanceof Error ? e.message : "Kunne ikke opprette prosess fra kort.",
+      );
+    } finally {
+      setImportGithubBusy(false);
+    }
+  }
+
+  async function fetchGithubIssueForImport() {
+    const url = issueGithubUrlInput.trim();
+    if (!url) {
+      toast.error("Lim inn en issue-URL fra GitHub.");
+      return;
+    }
+    setIssueUrlFetchError(null);
+    setIssueUrlFetchBusy(true);
+    try {
+      const r = await fetchGithubIssueForProcessImport({
+        workspaceId,
+        issueUrl: url,
+      });
+      setIssueImportPreview(r);
+      const sug = parseSuggestedCodeAndNameFromGithubTitle(r.title);
+      setIssueImportName(sug.name);
+      setIssueImportCode(sug.code);
+      setIssueFromGithubDialogOpen(true);
+    } catch (e) {
+      setIssueImportPreview(null);
+      setIssueUrlFetchError(
+        e instanceof Error ? e.message : "Kunne ikke hente issue fra GitHub.",
+      );
+    } finally {
+      setIssueUrlFetchBusy(false);
+    }
+  }
+
+  async function confirmCreateFromGithubIssue() {
+    if (!issueImportPreview || !canEditCandidates) {
+      return;
+    }
+    const name = issueImportName.trim();
+    const code = issueImportCode.trim();
+    if (!name || !code) {
+      toast.error("Fyll inn navn og prosess-ID.");
+      return;
+    }
+    setIssueImportBusy(true);
+    try {
+      await createCandidateFromGithubIssue({
+        workspaceId,
+        name,
+        code,
+        githubRepoFullName: issueImportPreview.repoFullName,
+        githubIssueNumber: issueImportPreview.issueNumber,
+        githubIssueNodeId: issueImportPreview.issueNodeId,
+      });
+      setIssueFromGithubDialogOpen(false);
+      setIssueImportPreview(null);
+      setIssueGithubUrlInput("");
+      toast.success("Prosess opprettet fra GitHub-issue.");
+    } catch (e) {
+      toast.error(
+        e instanceof Error ? e.message : "Kunne ikke opprette prosess fra issue.",
+      );
+    } finally {
+      setIssueImportBusy(false);
     }
   }
 
@@ -827,6 +1196,12 @@ export function WorkspaceCandidatesPanel({
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="space-y-1">
             <CardTitle className="text-xl">Prosessregister</CardTitle>
+            {!canEditCandidates ? (
+              <p className="text-muted-foreground text-sm">
+                Lesertilgang — opprettelse, endring, sletting og GitHub-henting krever
+                medlem- eller admin-rolle.
+              </p>
+            ) : null}
             <CardDescription className="max-w-2xl text-base leading-relaxed">
               {hubMode ? (
                 <>
@@ -871,7 +1246,7 @@ export function WorkspaceCandidatesPanel({
                 prosjekt (node-ID)
               </strong>{" "}
               er lagret sammen med token under Innstillinger. Uten det vises bare
-              teksten under hver prosess.
+              hjelpetekst når du åpner en prosess for redigering.
             </p>
             {isAdmin ? (
               <Link
@@ -890,22 +1265,262 @@ export function WorkspaceCandidatesPanel({
             )}
           </div>
         ) : null}
+        {canEditCandidates ? (
+          <section
+            className="border-border/60 space-y-4 rounded-xl border bg-card/40 p-4"
+            aria-labelledby="github-issue-import-heading"
+          >
+            <div className="space-y-1">
+              <h2
+                id="github-issue-import-heading"
+                className="text-foreground text-base font-semibold"
+              >
+                Hent prosess fra GitHub-issue
+              </h2>
+              <p className="text-muted-foreground text-xs leading-relaxed">
+                Lim inn en <strong className="text-foreground font-medium">issue-URL</strong>{" "}
+                (<span className="font-mono text-[11px]">…/owner/repo/issues/123</span>). Krever
+                lagret GitHub-token under Innstillinger — trenger ikke at saken ligger i
+                prosjekt-tavle. Du kan koble til tavle senere fra prosessen.
+              </p>
+            </div>
+            <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
+              <div className="min-w-0 flex-1 space-y-1">
+                <Label htmlFor="gh-issue-url" className="text-xs">
+                  Issue-URL
+                </Label>
+                <Input
+                  id="gh-issue-url"
+                  type="url"
+                  value={issueGithubUrlInput}
+                  onChange={(e) => setIssueGithubUrlInput(e.target.value)}
+                  placeholder="https://github.com/org/repo/issues/42"
+                  className="h-10 font-mono text-sm"
+                  autoComplete="off"
+                />
+              </div>
+              <Button
+                type="button"
+                variant="secondary"
+                className="h-10 gap-2"
+                disabled={issueUrlFetchBusy || !issueGithubUrlInput.trim()}
+                onClick={() => void fetchGithubIssueForImport()}
+              >
+                {issueUrlFetchBusy ? (
+                  <Loader2 className="size-4 shrink-0 animate-spin" aria-hidden />
+                ) : (
+                  <ExternalLink className="size-4" aria-hidden />
+                )}
+                Hent issue
+              </Button>
+            </div>
+            {issueUrlFetchError ? (
+              <p className="text-destructive text-sm" role="alert">
+                {issueUrlFetchError}
+              </p>
+            ) : null}
+          </section>
+        ) : null}
+        {w.githubProjectNodeId?.trim() && canEditCandidates ? (
+          <section
+            className="border-border/60 space-y-4 rounded-xl border bg-card/40 p-4"
+            aria-labelledby="github-column-fetch-heading"
+          >
+            <div className="space-y-1">
+              <h2
+                id="github-column-fetch-heading"
+                className="text-foreground text-base font-semibold"
+              >
+                Hent kort fra prosjektkolonne
+              </h2>
+              <p className="text-muted-foreground text-xs leading-relaxed">
+                Velg samme <strong className="text-foreground font-medium">statuskolonne</strong>{" "}
+                som i GitHub Projects (feltet «{githubProjectStatus.fieldName ?? "Status"}»).
+                Listen viser kort i den kolonnen — opprett prosess i PVV for vurdering og ROS.
+              </p>
+            </div>
+            {githubProjectStatus.loading ? (
+              <p className="text-muted-foreground flex items-center gap-2 text-sm">
+                <Loader2 className="size-4 animate-spin" aria-hidden />
+                Laster kolonner fra GitHub …
+              </p>
+            ) : githubProjectStatus.error ? (
+              <p className="text-destructive text-sm">{githubProjectStatus.error}</p>
+            ) : (githubProjectStatus.options?.length ?? 0) === 0 ? (
+              <p className="text-muted-foreground text-sm">
+                Ingen statuskolonner funnet. Sjekk prosjekt og token under Innstillinger, eller
+                bruk «Prøv på nytt» der du redigerer en prosess.
+              </p>
+            ) : (
+              <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
+                <div className="min-w-[12rem] flex-1 space-y-1">
+                  <Label htmlFor="gh-column-pick" className="text-xs">
+                    Kolonne (status)
+                  </Label>
+                  <select
+                    id="gh-column-pick"
+                    className="border-input bg-background h-10 w-full max-w-md rounded-lg border px-3 text-sm"
+                    value={columnPickId}
+                    onChange={(e) => setColumnPickId(e.target.value)}
+                  >
+                    <option value="">— Velg kolonne —</option>
+                    {githubProjectStatus.options?.map((o) => (
+                      <option key={o.id} value={o.id}>
+                        {o.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  className="h-10 gap-2"
+                  disabled={
+                    columnItemsLoading || !columnPickId.trim()
+                  }
+                  onClick={() => void fetchGithubColumnItems()}
+                >
+                  {columnItemsLoading ? (
+                    <Loader2 className="size-4 shrink-0 animate-spin" aria-hidden />
+                  ) : (
+                    <Search className="size-4" aria-hidden />
+                  )}
+                  Hent kort
+                </Button>
+              </div>
+            )}
+            {columnItemsError ? (
+              <p className="text-destructive text-sm" role="alert">
+                {columnItemsError}
+              </p>
+            ) : null}
+            {columnItemsResult && columnItemsResult.items.length > 0 ? (
+              <div className="space-y-2">
+                <p className="text-muted-foreground text-xs">
+                  {columnItemsResult.fieldName}: <strong className="text-foreground">{columnItemsResult.optionName}</strong>{" "}
+                  · {columnItemsResult.items.length}{" "}
+                  {columnItemsResult.items.length === 1 ? "kort" : "kort"}
+                </p>
+                <div className="border-border/80 max-h-[min(24rem,50vh)] overflow-auto rounded-lg border">
+                  <table className="w-full min-w-[28rem] text-left text-sm">
+                    <thead>
+                      <tr className="bg-muted/50 border-border/60 border-b text-xs uppercase tracking-wide">
+                        <th className="text-foreground px-3 py-2 font-semibold">
+                          Tittel
+                        </th>
+                        <th className="text-foreground w-24 px-3 py-2 font-semibold">
+                          Type
+                        </th>
+                        <th className="text-foreground w-28 px-3 py-2 font-semibold">
+                          I PVV
+                        </th>
+                        <th className="text-foreground w-40 px-3 py-2 font-semibold">
+                          Handling
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {columnItemsResult.items.map((row) => {
+                        const linked = projectItemIdsLinkedInPvv.has(row.projectItemId);
+                        return (
+                          <tr
+                            key={row.projectItemId}
+                            className="border-border/40 border-b last:border-b-0"
+                          >
+                            <td className="text-foreground max-w-[18rem] px-3 py-2 align-top">
+                              <span className="line-clamp-2">{row.title}</span>
+                              {row.issueUrl ? (
+                                <a
+                                  href={row.issueUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-primary mt-1 block text-xs font-medium underline-offset-2 hover:underline"
+                                >
+                                  Åpne i GitHub
+                                </a>
+                              ) : null}
+                            </td>
+                            <td className="text-muted-foreground px-3 py-2 align-top text-xs">
+                              {githubColumnContentKindLabel(row.contentKind)}
+                            </td>
+                            <td className="px-3 py-2 align-top">
+                              {linked ? (
+                                <Badge
+                                  variant="secondary"
+                                  className="border-emerald-500/30 bg-emerald-500/10 text-emerald-900 dark:text-emerald-100"
+                                >
+                                  Ja
+                                </Badge>
+                              ) : (
+                                <span className="text-muted-foreground text-xs">Nei</span>
+                              )}
+                            </td>
+                            <td className="px-3 py-2 align-top">
+                              {linked ? (
+                                <span className="text-muted-foreground text-xs">—</span>
+                              ) : (
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-8 gap-1 text-xs"
+                                  disabled={
+                                    row.contentKind === "unknown" ||
+                                    ((row.contentKind === "issue" ||
+                                      row.contentKind === "pull_request") &&
+                                      (!row.repoFullName?.trim() ||
+                                        row.issueNumber == null))
+                                  }
+                                  onClick={() => openImportFromGithubColumn(row)}
+                                >
+                                  <Plus className="size-3.5" aria-hidden />
+                                  Opprett i PVV
+                                </Button>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            ) : columnItemsResult && columnItemsResult.items.length === 0 ? (
+              <p className="text-muted-foreground text-sm">
+                Ingen kort i denne kolonnen akkurat nå.
+              </p>
+            ) : null}
+          </section>
+        ) : null}
         {candidates.length > 0 ? (
           <section
             className="space-y-3"
             aria-labelledby="process-overview-heading"
           >
-            <div>
-              <h2
-                id="process-overview-heading"
-                className="text-foreground font-heading text-lg font-semibold tracking-tight"
-              >
-                Prosessoversikt
-              </h2>
-              <p className="text-muted-foreground mt-1 text-sm leading-relaxed">
-                Alle registrerte prosesser — klikk en rad for å hoppe ned til
-                redigering og GitHub.
-              </p>
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="min-w-0 space-y-1">
+                <h2
+                  id="process-overview-heading"
+                  className="text-foreground font-heading text-lg font-semibold tracking-tight"
+                >
+                  Prosessoversikt
+                </h2>
+                <p className="text-muted-foreground mt-1 text-sm leading-relaxed">
+                  Klikk en rad for å åpne prosessen. Du kan slette direkte med
+                  søppelikonet, eller redigere og slette i vinduet — inkludert
+                  henting fra GitHub der det er satt opp.
+                </p>
+              </div>
+              {canEditCandidates ? (
+                <Button
+                  type="button"
+                  className="h-10 shrink-0 gap-2"
+                  onClick={() => setNewProcessOpen(true)}
+                >
+                  <Plus className="size-4" aria-hidden />
+                  Ny prosess
+                </Button>
+              ) : null}
             </div>
             <div className="border-border/80 overflow-x-auto rounded-xl border bg-card shadow-sm">
               <table className="w-full min-w-[32rem] text-left text-sm">
@@ -923,6 +1538,11 @@ export function WorkspaceCandidatesPanel({
                     <th className="text-foreground px-3 py-2.5 font-semibold">
                       GitHub
                     </th>
+                    {canEditCandidates ? (
+                      <th className="text-foreground w-14 px-2 py-2.5 text-right font-semibold">
+                        <span className="sr-only">Slett</span>
+                      </th>
+                    ) : null}
                   </tr>
                 </thead>
                 <tbody>
@@ -930,14 +1550,7 @@ export function WorkspaceCandidatesPanel({
                     <tr
                       key={c._id}
                       className="border-border/40 hover:bg-muted/40 cursor-pointer border-b transition-colors"
-                      onClick={() =>
-                        document
-                          .getElementById(`cand-detail-${c._id}`)
-                          ?.scrollIntoView({
-                            behavior: "smooth",
-                            block: "start",
-                          })
-                      }
+                      onClick={() => setEditCandidateId(c._id)}
                     >
                       <td className="text-foreground px-3 py-2.5 font-mono text-xs font-semibold">
                         {c.code}
@@ -991,6 +1604,32 @@ export function WorkspaceCandidatesPanel({
                           </div>
                         )}
                       </td>
+                      {canEditCandidates ? (
+                        <td className="px-2 py-2 text-right align-middle">
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="text-muted-foreground hover:text-destructive size-9 shrink-0"
+                            disabled={overviewDeleteBusyId === c._id}
+                            aria-label={`Slett prosess ${c.code}`}
+                            title="Slett prosess"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              void deleteCandidateFromOverview(c._id, c);
+                            }}
+                          >
+                            {overviewDeleteBusyId === c._id ? (
+                              <Loader2
+                                className="size-4 animate-spin"
+                                aria-hidden
+                              />
+                            ) : (
+                              <Trash2 className="size-4" aria-hidden />
+                            )}
+                          </Button>
+                        </td>
+                      ) : null}
                     </tr>
                   ))}
                 </tbody>
@@ -1063,11 +1702,6 @@ export function WorkspaceCandidatesPanel({
                 Lagre innstilling
               </Button>
             </div>
-            {autoGithubSaveMsg ? (
-              <p className="text-muted-foreground text-sm" role="status">
-                {autoGithubSaveMsg}
-              </p>
-            ) : null}
             {candidates.some((c) => !c.githubProjectItemNodeId) ? (
               <div className="border-border/50 flex flex-col gap-2 border-t pt-3 sm:flex-row sm:items-center sm:justify-between">
                 <p className="text-muted-foreground text-xs">
@@ -1104,168 +1738,390 @@ export function WorkspaceCandidatesPanel({
 
         <Separator />
 
-        <section className="space-y-5" aria-labelledby="new-process-heading">
-          <h2
-            id="new-process-heading"
-            className="text-foreground font-heading text-lg font-semibold tracking-tight"
+        <Dialog open={newProcessOpen} onOpenChange={setNewProcessOpen}>
+          <DialogContent
+            size="xl"
+            className="max-h-[92vh] max-w-2xl"
+            titleId="new-process-title"
+            descriptionId="new-process-desc"
           >
-            Registrer ny prosess
-          </h2>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-2">
-              <Label htmlFor="cand-name">{prosessRegisterCopy.displayName.label}</Label>
-              <Input
-                id="cand-name"
-                value={cName}
-                onChange={(e) => setCName(e.target.value)}
-                placeholder="F.eks. Fakturamottak"
-                required
-                autoComplete="off"
-                className="h-11"
-              />
-              <p className="text-muted-foreground text-[11px] leading-snug">
-                {prosessRegisterCopy.displayName.hint}
+            <DialogHeader>
+              <h2
+                id="new-process-title"
+                className="text-foreground text-lg font-semibold tracking-tight"
+              >
+                Registrer ny prosess
+              </h2>
+              <p id="new-process-desc" className="text-muted-foreground text-sm">
+                Samme felt som før — i et vindu så siden forblir kort.
               </p>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="cand-code" className="flex flex-wrap items-center gap-1">
-                {prosessRegisterCopy.referenceCode.label}
-                <span className="text-destructive">*</span>
-              </Label>
-              <Input
-                id="cand-code"
-                value={cCode}
-                onChange={(e) => setCCode(e.target.value)}
-                placeholder={prosessRegisterCopy.referenceCode.placeholder}
-                required
-                autoComplete="off"
-                className="h-11 font-mono"
-              />
-              <p className="text-muted-foreground text-[11px] leading-snug">
-                {prosessRegisterCopy.referenceCode.hint}
-              </p>
-            </div>
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="cand-notes">{prosessRegisterCopy.notes.label}</Label>
-            <Textarea
-              id="cand-notes"
-              value={cNotes}
-              onChange={(e) => setCNotes(e.target.value)}
-              rows={2}
-              placeholder="Valgfritt — f.eks. systemnavn, kontaktperson …"
-              className="resize-y"
-            />
-            <p className="text-muted-foreground text-[11px] leading-snug">
-              {prosessRegisterCopy.notes.hint}
-            </p>
-          </div>
-          <div className="rounded-xl border border-border/60 bg-muted/20 p-4">
-            <p className="text-foreground mb-3 text-sm font-medium">
-              Brukes i vurderingen når prosessen velges
-            </p>
-            <p className="text-muted-foreground mb-4 text-xs leading-relaxed">
-              Tomme felt hoppes over. Ved første valg av prosessen i veiviseren
-              fylles tilsvarende felt i vurderingen hvis de er tomme (roller,
-              systemer, sikkerhet og personvern).
-            </p>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div className="space-y-1.5 sm:col-span-2">
-                <Label htmlFor="cand-owner" className="text-xs">
-                  Ansvarlig / eier (til «Roller og ansvar» i skjemaet)
-                </Label>
-                <Input
-                  id="cand-owner"
-                  value={cOwner}
-                  onChange={(e) => setCOwner(e.target.value)}
-                  placeholder="F.eks. avdelingsleder, kontaktperson"
-                  className="h-10"
-                />
+            </DialogHeader>
+            <DialogBody className="space-y-5">
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="new-cand-name">
+                    {prosessRegisterCopy.displayName.label}
+                  </Label>
+                  <Input
+                    id="new-cand-name"
+                    value={cName}
+                    onChange={(e) => setCName(e.target.value)}
+                    placeholder="F.eks. Fakturamottak"
+                    required
+                    autoComplete="off"
+                    className="h-11"
+                  />
+                  <p className="text-muted-foreground text-[11px] leading-snug">
+                    {prosessRegisterCopy.displayName.hint}
+                  </p>
+                </div>
+                <div className="space-y-2">
+                  <Label
+                    htmlFor="new-cand-code"
+                    className="flex flex-wrap items-center gap-1"
+                  >
+                    {prosessRegisterCopy.referenceCode.label}
+                    <span className="text-destructive">*</span>
+                  </Label>
+                  <Input
+                    id="new-cand-code"
+                    value={cCode}
+                    onChange={(e) => setCCode(e.target.value)}
+                    placeholder={prosessRegisterCopy.referenceCode.placeholder}
+                    required
+                    autoComplete="off"
+                    className="h-11 font-mono"
+                  />
+                  <p className="text-muted-foreground text-[11px] leading-snug">
+                    {prosessRegisterCopy.referenceCode.hint}
+                  </p>
+                </div>
               </div>
-              <div className="space-y-1.5 sm:col-span-2">
-                <Label htmlFor="cand-systems" className="text-xs">
-                  Systemer og data (til «Systemer og data»)
-                </Label>
-                <Input
-                  id="cand-systems"
-                  value={cSystems}
-                  onChange={(e) => setCSystems(e.target.value)}
-                  placeholder="F.eks. EPJ, faktura, integrasjoner"
-                  className="h-10"
-                />
-              </div>
-              <div className="space-y-1.5 sm:col-span-2">
-                <Label htmlFor="cand-comp" className="text-xs">
-                  Sikkerhet og personvern (til «Sikkerhet og informasjon»)
+              <div className="space-y-2">
+                <Label htmlFor="new-cand-notes">
+                  {prosessRegisterCopy.notes.label}
                 </Label>
                 <Textarea
-                  id="cand-comp"
-                  value={cCompliance}
-                  onChange={(e) => setCCompliance(e.target.value)}
+                  id="new-cand-notes"
+                  value={cNotes}
+                  onChange={(e) => setCNotes(e.target.value)}
                   rows={2}
-                  placeholder="Kort om sensitivitet, tilgang, dokumentasjon …"
+                  placeholder="Valgfritt — f.eks. systemnavn, kontaktperson …"
                   className="resize-y"
                 />
+                <p className="text-muted-foreground text-[11px] leading-snug">
+                  {prosessRegisterCopy.notes.hint}
+                </p>
               </div>
-            </div>
-          </div>
-          <Button
-            type="button"
-            size="lg"
-            className="h-11"
-            disabled={!cName.trim() || !cCode.trim()}
-            onClick={() => void addCandidate()}
-          >
-            Legg til prosess
-          </Button>
-        </section>
-
-        <Separator />
-
-        {candidates.length === 0 ? (
-          <div className="rounded-2xl border border-dashed border-emerald-500/25 bg-emerald-500/[0.03] px-6 py-12 text-center">
-            <div className="bg-muted/80 mx-auto mb-3 flex size-12 items-center justify-center rounded-2xl">
-              <Users className="text-muted-foreground size-6" aria-hidden />
-            </div>
-            <p className="text-foreground text-sm font-medium">
-              Ingen prosesser ennå
-            </p>
-            <p className="text-muted-foreground mx-auto mt-2 max-w-sm text-sm leading-relaxed">
-              Opprett en prosess over, eller gå til vurderinger og start en sak —
-              der velger du prosess-ID i veiviseren.
-            </p>
-            {hubMode ? (
-              <Link
-                href={`/w/${workspaceId}/vurderinger`}
-                className={cn(
-                  buttonVariants({ variant: "default", size: "sm" }),
-                  "mt-5 inline-flex",
-                )}
+              <div className="rounded-xl border border-border/60 bg-muted/20 p-4">
+                <p className="text-foreground mb-3 text-sm font-medium">
+                  Brukes i vurderingen når prosessen velges
+                </p>
+                <p className="text-muted-foreground mb-4 text-xs leading-relaxed">
+                  Tomme felt hoppes over. Ved første valg av prosessen i veiviseren
+                  fylles tilsvarende felt i vurderingen hvis de er tomme (roller,
+                  systemer, sikkerhet og personvern).
+                </p>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="space-y-1.5 sm:col-span-2">
+                    <Label htmlFor="new-cand-owner" className="text-xs">
+                      Ansvarlig / eier (til «Roller og ansvar» i skjemaet)
+                    </Label>
+                    <Input
+                      id="new-cand-owner"
+                      value={cOwner}
+                      onChange={(e) => setCOwner(e.target.value)}
+                      placeholder="F.eks. avdelingsleder, kontaktperson"
+                      className="h-10"
+                    />
+                  </div>
+                  <div className="space-y-1.5 sm:col-span-2">
+                    <Label htmlFor="new-cand-systems" className="text-xs">
+                      Systemer og data (til «Systemer og data»)
+                    </Label>
+                    <Input
+                      id="new-cand-systems"
+                      value={cSystems}
+                      onChange={(e) => setCSystems(e.target.value)}
+                      placeholder="F.eks. EPJ, faktura, integrasjoner"
+                      className="h-10"
+                    />
+                  </div>
+                  <div className="space-y-1.5 sm:col-span-2">
+                    <Label htmlFor="new-cand-comp" className="text-xs">
+                      Sikkerhet og personvern (til «Sikkerhet og informasjon»)
+                    </Label>
+                    <Textarea
+                      id="new-cand-comp"
+                      value={cCompliance}
+                      onChange={(e) => setCCompliance(e.target.value)}
+                      rows={2}
+                      placeholder="Kort om sensitivitet, tilgang, dokumentasjon …"
+                      className="resize-y"
+                    />
+                  </div>
+                </div>
+              </div>
+            </DialogBody>
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setNewProcessOpen(false)}
               >
-                Gå til vurderinger
-              </Link>
-            ) : null}
-          </div>
-        ) : (
-          <section className="space-y-3" aria-labelledby="all-processes-heading">
-            <h2
-              id="all-processes-heading"
-              className="text-foreground font-heading text-lg font-semibold tracking-tight"
-            >
-              Alle prosesser — detaljer og GitHub
-            </h2>
-            <p className="text-muted-foreground text-sm">
-              Utvid hver rad for full redigering og kobling til GitHub-prosjekt.
-            </p>
-            <ul className="space-y-3">
-              {candidates.map((c) => (
+                Avbryt
+              </Button>
+              <Button
+                type="button"
+                disabled={!cName.trim() || !cCode.trim()}
+                onClick={() => void addCandidate()}
+              >
+                Legg til prosess
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog
+          open={importGithubOpen}
+          onOpenChange={(open) => {
+            setImportGithubOpen(open);
+            if (!open) {
+              setImportGithubRow(null);
+            }
+          }}
+        >
+          <DialogContent
+            size="lg"
+            className="max-h-[92vh] max-w-lg"
+            titleId="import-gh-col-title"
+            descriptionId="import-gh-col-desc"
+          >
+            <DialogHeader>
+              <h2
+                id="import-gh-col-title"
+                className="text-foreground text-lg font-semibold tracking-tight"
+              >
+                Opprett prosess fra GitHub-kort
+              </h2>
+              <p
+                id="import-gh-col-desc"
+                className="text-muted-foreground line-clamp-3 text-sm"
+              >
+                {importGithubRow
+                  ? importGithubRow.title.length > 180
+                    ? `${importGithubRow.title.slice(0, 180)}…`
+                    : importGithubRow.title
+                  : "…"}
+              </p>
+            </DialogHeader>
+            <DialogBody className="space-y-4">
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="import-gh-name">
+                    {prosessRegisterCopy.displayName.label}
+                  </Label>
+                  <Input
+                    id="import-gh-name"
+                    value={importGithubName}
+                    onChange={(e) => setImportGithubName(e.target.value)}
+                    className="h-11"
+                    autoComplete="off"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="import-gh-code">
+                    {prosessRegisterCopy.referenceCode.label}
+                  </Label>
+                  <Input
+                    id="import-gh-code"
+                    value={importGithubCode}
+                    onChange={(e) => setImportGithubCode(e.target.value)}
+                    className="h-11 font-mono"
+                    autoComplete="off"
+                  />
+                </div>
+              </div>
+              <p className="text-muted-foreground text-xs leading-relaxed">
+                Titler som{" "}
+                <code className="text-foreground bg-muted/60 rounded px-1 py-0.5 text-[11px]">
+                  [P01] Prosessnavn
+                </code>{" "}
+                gir foreslått prosess-ID og navn. Juster før du lagrer — deretter kan du bruke
+                prosessen i vurdering og ROS.
+              </p>
+            </DialogBody>
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setImportGithubOpen(false);
+                  setImportGithubRow(null);
+                }}
+              >
+                Avbryt
+              </Button>
+              <Button
+                type="button"
+                className="gap-2"
+                disabled={
+                  importGithubBusy ||
+                  !importGithubName.trim() ||
+                  !importGithubCode.trim()
+                }
+                onClick={() => void confirmImportFromGithubColumn()}
+              >
+                {importGithubBusy ? (
+                  <Loader2 className="size-4 shrink-0 animate-spin" aria-hidden />
+                ) : null}
+                Opprett prosess
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog
+          open={issueFromGithubDialogOpen}
+          onOpenChange={(open) => {
+            setIssueFromGithubDialogOpen(open);
+            if (!open) {
+              setIssueImportPreview(null);
+            }
+          }}
+        >
+          <DialogContent
+            size="lg"
+            className="max-h-[92vh] max-w-lg"
+            titleId="import-gh-issue-title"
+            descriptionId="import-gh-issue-desc"
+          >
+            <DialogHeader>
+              <h2
+                id="import-gh-issue-title"
+                className="text-foreground text-lg font-semibold tracking-tight"
+              >
+                Opprett prosess fra GitHub-issue
+              </h2>
+              <p
+                id="import-gh-issue-desc"
+                className="text-muted-foreground text-sm"
+              >
+                {issueImportPreview ? (
+                  <>
+                    <span className="font-mono text-xs">
+                      {issueImportPreview.repoFullName}#{issueImportPreview.issueNumber}
+                    </span>
+                    {" · "}
+                    {issueImportPreview.title.length > 120
+                      ? `${issueImportPreview.title.slice(0, 120)}…`
+                      : issueImportPreview.title}
+                  </>
+                ) : (
+                  "…"
+                )}
+              </p>
+            </DialogHeader>
+            <DialogBody className="space-y-4">
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="import-gh-issue-name">
+                    {prosessRegisterCopy.displayName.label}
+                  </Label>
+                  <Input
+                    id="import-gh-issue-name"
+                    value={issueImportName}
+                    onChange={(e) => setIssueImportName(e.target.value)}
+                    className="h-11"
+                    autoComplete="off"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="import-gh-issue-code">
+                    {prosessRegisterCopy.referenceCode.label}
+                  </Label>
+                  <Input
+                    id="import-gh-issue-code"
+                    value={issueImportCode}
+                    onChange={(e) => setIssueImportCode(e.target.value)}
+                    className="h-11 font-mono"
+                    autoComplete="off"
+                  />
+                </div>
+              </div>
+              <p className="text-muted-foreground text-xs leading-relaxed">
+                Prosessen kobles til denne GitHub-saken. Du kan legge kort i
+                prosjekt-tavle senere fra prosessvinduet hvis arbeidsområdet har
+                GitHub-prosjekt.
+              </p>
+            </DialogBody>
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setIssueFromGithubDialogOpen(false);
+                  setIssueImportPreview(null);
+                }}
+              >
+                Avbryt
+              </Button>
+              <Button
+                type="button"
+                className="gap-2"
+                disabled={
+                  issueImportBusy ||
+                  !issueImportName.trim() ||
+                  !issueImportCode.trim()
+                }
+                onClick={() => void confirmCreateFromGithubIssue()}
+              >
+                {issueImportBusy ? (
+                  <Loader2 className="size-4 shrink-0 animate-spin" aria-hidden />
+                ) : null}
+                Opprett prosess
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog
+          open={editCandidateId !== null}
+          onOpenChange={(open) => {
+            if (!open) {
+              setEditCandidateId(null);
+            }
+          }}
+        >
+          <DialogContent
+            size="2xl"
+            className="max-h-[92vh] max-w-3xl"
+            titleId="edit-process-title"
+            descriptionId="edit-process-desc"
+          >
+            <DialogHeader>
+              <h2
+                id="edit-process-title"
+                className="text-foreground text-lg font-semibold tracking-tight"
+              >
+                {canEditCandidates ? "Rediger prosess" : "Vis prosess"}
+              </h2>
+              <p id="edit-process-desc" className="text-muted-foreground text-sm">
+                {editingCandidate
+                  ? `${editingCandidate.code} · ${editingCandidate.name}`
+                  : "…"}
+              </p>
+            </DialogHeader>
+            <DialogBody>
+              {editingCandidate ? (
                 <WorkspaceCandidateRow
-                  key={`${c._id}-${c.updatedAt}`}
+                  key={`${editingCandidate._id}-${editingCandidate.updatedAt}`}
+                  as="div"
                   workspaceId={workspaceId}
-                  candidate={c}
+                  candidate={editingCandidate}
                   orgUnits={orgUnits}
                   isAdmin={isAdmin}
-                  canEdit={canEditCandidates}
+                  canEdit={Boolean(canEditCandidates)}
                   onUpdate={updateCandidate}
                   onRemove={removeCandidate}
                   syncGithubDraft={(cid) =>
@@ -1280,7 +2136,7 @@ export function WorkspaceCandidatesPanel({
                     error: githubProjectStatus.error,
                     statusOptions: githubProjectStatus.options,
                     statusFieldName: githubProjectStatus.fieldName,
-                    onReload: reloadGithubProjectStatus,
+                    onReload: () => reloadGithubProjectStatus(true),
                     register: (candidateId, statusOptionId) =>
                       registerCandidateToGithubProject({
                         candidateId,
@@ -1294,11 +2150,52 @@ export function WorkspaceCandidatesPanel({
                     remove: (candidateId) =>
                       removeCandidateFromGithubProject({ candidateId }),
                   }}
+                  importFromGithub={(cid) =>
+                    importPvvFieldsFromGithubProjectItem({ candidateId: cid })
+                  }
                 />
-              ))}
-            </ul>
-          </section>
-        )}
+              ) : null}
+            </DialogBody>
+          </DialogContent>
+        </Dialog>
+
+        {candidates.length === 0 ? (
+          <div className="rounded-2xl border border-dashed border-emerald-500/25 bg-emerald-500/[0.03] px-6 py-12 text-center">
+            <div className="bg-muted/80 mx-auto mb-3 flex size-12 items-center justify-center rounded-2xl">
+              <Users className="text-muted-foreground size-6" aria-hidden />
+            </div>
+            <p className="text-foreground text-sm font-medium">
+              Ingen prosesser ennå
+            </p>
+            <p className="text-muted-foreground mx-auto mt-2 max-w-sm text-sm leading-relaxed">
+              Trykk «Ny prosess» for å åpne skjemaet, eller gå til vurderinger og
+              start en sak — der velger du prosess-ID i veiviseren.
+            </p>
+            <div className="mt-5 flex flex-wrap items-center justify-center gap-3">
+              {canEditCandidates ? (
+                <Button
+                  type="button"
+                  className="gap-2"
+                  onClick={() => setNewProcessOpen(true)}
+                >
+                  <Plus className="size-4" aria-hidden />
+                  Ny prosess
+                </Button>
+              ) : null}
+              {hubMode ? (
+                <Link
+                  href={`/w/${workspaceId}/vurderinger`}
+                  className={cn(
+                    buttonVariants({ variant: "secondary", size: "sm" }),
+                    "inline-flex",
+                  )}
+                >
+                  Gå til vurderinger
+                </Link>
+              ) : null}
+            </div>
+          </div>
+        ) : null}
       </CardContent>
     </Card>
   );
@@ -1589,12 +2486,24 @@ export function WorkspaceAssessmentsPanel({
                     onClick={(e) => {
                       e.stopPropagation();
                       if (
-                        window.confirm(
+                        !window.confirm(
                           `Slette «${a.title}»?\n\nAlle utkast, versjoner, oppgaver, kommentarer og koblinger fjernes permanent.`,
                         )
                       ) {
-                        void deleteAssessment({ assessmentId: a._id });
+                        return;
                       }
+                      void (async () => {
+                        try {
+                          await deleteAssessment({ assessmentId: a._id });
+                          toast.success("Vurdering slettet.");
+                        } catch (err) {
+                          toast.error(
+                            err instanceof Error
+                              ? err.message
+                              : "Kunne ikke slette vurderingen.",
+                          );
+                        }
+                      })();
                     }}
                   >
                     <Trash2 className="size-3.5" />

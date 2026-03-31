@@ -3,6 +3,7 @@
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { GithubSubIssuesProgress } from "@/components/github/github-sub-issues-progress";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import { formatUserFacingError } from "@/lib/user-facing-error";
@@ -38,8 +39,44 @@ export function TaskGithubControls({
   const createGithub = useAction(api.githubTasks.createGithubIssue);
   const syncFromGithub = useAction(api.githubTasks.syncFromGithub);
   const pushToGithub = useAction(api.githubTasks.pushToGithub);
+  const getSubIssuesSummary = useAction(
+    api.githubTasks.getGithubSubIssuesSummaryForTask,
+  );
 
   const linked = githubIssueUrl !== null;
+
+  const [subIssuesSummary, setSubIssuesSummary] = useState<
+    | {
+        total: number;
+        completed: number;
+        percentCompleted: number | null;
+      }
+    | null
+  >(null);
+  const [subIssuesRefreshKey, setSubIssuesRefreshKey] = useState(0);
+
+  useEffect(() => {
+    if (!linked) {
+      setSubIssuesSummary(null);
+      return;
+    }
+    let cancelled = false;
+    setSubIssuesSummary(null);
+    void getSubIssuesSummary({ taskId })
+      .then((r) => {
+        if (!cancelled && r.summary) {
+          setSubIssuesSummary(r.summary);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setSubIssuesSummary(null);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [linked, taskId, getSubIssuesSummary, subIssuesRefreshKey]);
 
   useEffect(() => {
     if (workspaceDefaultRepos.length === 0) {
@@ -104,6 +141,12 @@ export function TaskGithubControls({
             {githubIssueUrl.replace("https://", "")}
             <ExternalLink className="size-3" aria-hidden />
           </Link>
+          {subIssuesSummary && subIssuesSummary.total > 0 ? (
+            <GithubSubIssuesProgress
+              summary={subIssuesSummary}
+              className={compact ? "pt-0.5" : "pt-1"}
+            />
+          ) : null}
           <div className={`flex flex-wrap ${gap}`}>
             <Button
               type="button"
@@ -112,9 +155,10 @@ export function TaskGithubControls({
               className="h-8 text-xs"
               disabled={!canEdit || busy !== null}
               onClick={() =>
-                void run("sync", () =>
-                  syncFromGithub({ taskId }),
-                )
+                void run("sync", async () => {
+                  await syncFromGithub({ taskId });
+                  setSubIssuesRefreshKey((k) => k + 1);
+                })
               }
             >
               {busy === "sync" ? "…" : "Hent fra GitHub"}

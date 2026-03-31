@@ -22,6 +22,7 @@ import {
   DEFAULT_ROS_ROW_LABELS,
   positionRiskLevel,
 } from "@/lib/ros-defaults";
+import { toast } from "@/lib/app-toast";
 import { cellRiskClass } from "@/lib/ros-risk-colors";
 import { cn } from "@/lib/utils";
 import { useMutation, useQuery } from "convex/react";
@@ -363,7 +364,7 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
         !editingId && rowLabels.length === 0 && colLabels.length === 0;
       if (!useDefault) {
         if (rowLabels.length < 2 || colLabels.length < 2) {
-          window.alert(
+          toast.error(
             "Minst to etiketter for både rader og kolonner — eller la begge felt stå tomme for standard 5×5 ved ny mal.",
           );
           return;
@@ -384,6 +385,7 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
           colDescriptions: colDescsClean ?? null,
           defaultMatrixValues: tplMatrixValues ?? null,
         });
+        toast.success("Mal oppdatert.");
       } else {
         await createTemplate({
           workspaceId,
@@ -397,9 +399,14 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
           colDescriptions: colDescsClean,
           defaultMatrixValues: tplMatrixValues ?? undefined,
         });
+        toast.success("Mal opprettet.");
       }
       resetTemplateForm();
       setTemplateDialogOpen(false);
+    } catch (e) {
+      toast.error(
+        e instanceof Error ? e.message : "Kunne ikke lagre malen.",
+      );
     } finally {
       setBusy(false);
     }
@@ -417,6 +424,10 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
         title: anaTitle.trim(),
       });
       window.location.href = `/w/${workspaceId}/ros/a/${id}`;
+    } catch (e) {
+      toast.error(
+        e instanceof Error ? e.message : "Kunne ikke opprette analysen.",
+      );
     } finally {
       setBusy(false);
     }
@@ -592,7 +603,18 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
                             "Slette denne malen? Eksisterende analyser beholder sin kopi.",
                           )
                         ) {
-                          void removeTemplate({ templateId: t._id });
+                          void (async () => {
+                            try {
+                              await removeTemplate({ templateId: t._id });
+                              toast.success("Mal slettet.");
+                            } catch (e) {
+                              toast.error(
+                                e instanceof Error
+                                  ? e.message
+                                  : "Kunne ikke slette malen.",
+                              );
+                            }
+                          })();
                         }
                       }}
                     >
@@ -920,7 +942,18 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
                             `Slette «${a.title}»? Matrisedata, oppgaver og koblinger fjernes permanent.`,
                           )
                         ) {
-                          void removeAnalysis({ analysisId: a._id });
+                          void (async () => {
+                            try {
+                              await removeAnalysis({ analysisId: a._id });
+                              toast.success("Analyse slettet.");
+                            } catch (e) {
+                              toast.error(
+                                e instanceof Error
+                                  ? e.message
+                                  : "Kunne ikke slette analysen.",
+                              );
+                            }
+                          })();
                         }
                       }}
                     >

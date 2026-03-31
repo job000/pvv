@@ -61,8 +61,9 @@ http.route({
       return new Response("ok", { status: 200 });
     }
     let payload: {
+      action?: string;
       repository?: { full_name?: string };
-      issue?: { number?: number; state?: string };
+      issue?: { number?: number; state?: string; body?: string | null };
     };
     try {
       payload = JSON.parse(bodyText) as typeof payload;
@@ -80,14 +81,27 @@ http.route({
     ) {
       return new Response("ok", { status: 200 });
     }
-    if (state !== "open" && state !== "closed") {
-      return new Response("ok", { status: 200 });
+    if (state === "open" || state === "closed") {
+      await ctx.runMutation(internal.githubTasks.applyWebhookIssueState, {
+        repoFullName: repo,
+        issueNumber: num,
+        state,
+      });
     }
-    await ctx.runMutation(internal.githubTasks.applyWebhookIssueState, {
-      repoFullName: repo,
-      issueNumber: num,
-      state,
-    });
+    const action = payload.action;
+    if (
+      (action === "edited" || action === "opened") &&
+      typeof payload.issue?.body === "string"
+    ) {
+      await ctx.runMutation(
+        internal.candidates.applyGithubIssueBodyToCandidate,
+        {
+          repoFullName: repo,
+          issueNumber: num,
+          body: payload.issue.body,
+        },
+      );
+    }
     return new Response("ok", { status: 200 });
   }),
 });

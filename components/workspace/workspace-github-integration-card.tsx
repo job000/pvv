@@ -61,6 +61,12 @@ export function WorkspaceGithubIntegrationCard({ workspaceId, workspace }: Props
     api.githubTasks.testGithubWorkspaceConnection,
   );
   const testGithubProjectAccess = useAction(api.githubTasks.testGithubProjectAccess);
+  const listGithubProjectSingleSelectFields = useAction(
+    api.githubCandidateProject.listGithubProjectSingleSelectFields,
+  );
+  const listGithubProjectIterationFields = useAction(
+    api.githubLeveranseSync.listGithubProjectIterationFields,
+  );
   const updateWorkspace = useMutation(api.workspaces.update);
 
   const [tokenInput, setTokenInput] = useState("");
@@ -94,6 +100,23 @@ export function WorkspaceGithubIntegrationCard({ workspaceId, workspace }: Props
   const [projectAccessTestMessage, setProjectAccessTestMessage] = useState<
     string | null
   >(null);
+  const [singleSelectFieldId, setSingleSelectFieldId] = useState("");
+  const [singleSelectFields, setSingleSelectFields] = useState<
+    { id: string; name: string; optionCount: number }[]
+  >([]);
+  const [singleSelectFieldsLoading, setSingleSelectFieldsLoading] =
+    useState(false);
+  const [singleSelectFieldsError, setSingleSelectFieldsError] = useState<
+    string | null
+  >(null);
+  const [iterationFieldId, setIterationFieldId] = useState("");
+  const [iterationFields, setIterationFields] = useState<
+    { id: string; name: string; iterationCount: number }[]
+  >([]);
+  const [iterationFieldsLoading, setIterationFieldsLoading] = useState(false);
+  const [iterationFieldsError, setIterationFieldsError] = useState<
+    string | null
+  >(null);
 
   const webhookUrl = useMemo(() => getConvexGithubWebhookUrl(), []);
 
@@ -101,6 +124,8 @@ export function WorkspaceGithubIntegrationCard({ workspaceId, workspace }: Props
     setRepos(effectiveGithubDefaultRepos(workspace));
     setProjectNodeId(workspace.githubProjectNodeId ?? "");
     setSelectedProjectId("");
+    setSingleSelectFieldId(workspace.githubProjectSingleSelectFieldId ?? "");
+    setIterationFieldId(workspace.githubProjectIterationFieldId ?? "");
   }, [workspace]);
 
   useEffect(() => {
@@ -190,6 +215,38 @@ export function WorkspaceGithubIntegrationCard({ workspaceId, workspace }: Props
     setRepos((prev) => prev.filter((x) => x !== r));
   }
 
+  async function loadSingleSelectFields() {
+    setSingleSelectFieldsError(null);
+    setSingleSelectFieldsLoading(true);
+    try {
+      const r = await listGithubProjectSingleSelectFields({ workspaceId });
+      setSingleSelectFields(r.fields);
+    } catch (e) {
+      setSingleSelectFields([]);
+      setSingleSelectFieldsError(
+        e instanceof Error ? e.message : "Kunne ikke hente kolonner.",
+      );
+    } finally {
+      setSingleSelectFieldsLoading(false);
+    }
+  }
+
+  async function loadIterationFields() {
+    setIterationFieldsError(null);
+    setIterationFieldsLoading(true);
+    try {
+      const r = await listGithubProjectIterationFields({ workspaceId });
+      setIterationFields(r.fields);
+    } catch (e) {
+      setIterationFields([]);
+      setIterationFieldsError(
+        e instanceof Error ? e.message : "Kunne ikke hente iterasjonsfelt.",
+      );
+    } finally {
+      setIterationFieldsLoading(false);
+    }
+  }
+
   async function saveGithubReposAndProject() {
     setGithubSaveMessage(null);
     try {
@@ -198,6 +255,10 @@ export function WorkspaceGithubIntegrationCard({ workspaceId, workspace }: Props
         githubDefaultRepoFullNames: repos.length > 0 ? repos : null,
         githubProjectNodeId:
           projectNodeId.trim() === "" ? null : projectNodeId.trim(),
+        githubProjectSingleSelectFieldId:
+          singleSelectFieldId.trim() === "" ? null : singleSelectFieldId.trim(),
+        githubProjectIterationFieldId:
+          iterationFieldId.trim() === "" ? null : iterationFieldId.trim(),
       });
       setGithubSaveMessage("GitHub-innstillinger er lagret.");
     } catch (e) {
@@ -730,6 +791,130 @@ export function WorkspaceGithubIntegrationCard({ workspaceId, workspace }: Props
               </p>
             ) : null}
           </div>
+
+          {tokenOk && projectNodeId.trim().length > 0 ? (
+            <div className="bg-muted/20 space-y-3 rounded-xl border border-border/50 p-4">
+              <div className="space-y-1">
+                <Label className="text-foreground text-sm font-medium">
+                  Prosjektkolonne for PVV (enkeltvalg)
+                </Label>
+                <p className="text-muted-foreground text-xs leading-relaxed">
+                  PVV leser og oppdaterer <strong className="text-foreground">én</strong>{" "}
+                  kolonne (single select) i prosjektet — samme som tavlekolonner på GitHub.
+                  Velg f.eks. <strong className="text-foreground">Status</strong> eller et
+                  eget felt for «skal vurderes». Kort som legges inn manuelt i GitHub ligger
+                  i samme felt; da styrer du kolonnen her, ikke bare standardfeltet «Status».
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-9 gap-2"
+                  disabled={singleSelectFieldsLoading}
+                  onClick={() => void loadSingleSelectFields()}
+                >
+                  {singleSelectFieldsLoading ? (
+                    <Loader2 className="size-4 shrink-0 animate-spin" aria-hidden />
+                  ) : null}
+                  Hent kolonner fra prosjekt
+                </Button>
+              </div>
+              {singleSelectFieldsError ? (
+                <p className="text-destructive text-xs" role="alert">
+                  {singleSelectFieldsError}
+                </p>
+              ) : null}
+              {singleSelectFields.length > 0 ? (
+                <div className="space-y-1.5">
+                  <Label htmlFor="gh-project-single-select" className="text-xs">
+                    Kolonne brukt av PVV
+                  </Label>
+                  <select
+                    id="gh-project-single-select"
+                    className="border-input bg-background h-10 w-full max-w-lg rounded-lg border px-3 text-sm"
+                    value={singleSelectFieldId}
+                    onChange={(e) => setSingleSelectFieldId(e.target.value)}
+                  >
+                    <option value="">
+                      Automatisk — felt «Status», ellers første enkeltvalg-kolonne
+                    </option>
+                    {singleSelectFields.map((f) => (
+                      <option key={f.id} value={f.id}>
+                        {f.name} ({f.optionCount} valg)
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              ) : (
+                <p className="text-muted-foreground text-xs">
+                  Trykk «Hent kolonner» for å liste felt fra prosjektet (krever lagret
+                  node-ID over).
+                </p>
+              )}
+
+              <div className="border-border/40 mt-4 border-t pt-4">
+                <div className="space-y-1">
+                  <Label className="text-foreground text-sm font-medium">
+                    Iterasjonsfelt for leveranse (sprint)
+                  </Label>
+                  <p className="text-muted-foreground text-xs leading-relaxed">
+                    GitHub Projects kan ha flere iterasjonsfelt. Velg det som skal
+                    speiles til PVV-sprinter under Leveranse — eller la stå på
+                    automatikk (første felt, eller felt med navn «Iteration»).
+                  </p>
+                </div>
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-9 gap-2"
+                    disabled={iterationFieldsLoading}
+                    onClick={() => void loadIterationFields()}
+                  >
+                    {iterationFieldsLoading ? (
+                      <Loader2 className="size-4 shrink-0 animate-spin" aria-hidden />
+                    ) : null}
+                    Hent iterasjonsfelt
+                  </Button>
+                </div>
+                {iterationFieldsError ? (
+                  <p className="text-destructive mt-2 text-xs" role="alert">
+                    {iterationFieldsError}
+                  </p>
+                ) : null}
+                {iterationFields.length > 0 ? (
+                  <div className="mt-2 space-y-1.5">
+                    <Label htmlFor="gh-project-iteration-field" className="text-xs">
+                      Felt brukt for PVV-sprinter
+                    </Label>
+                    <select
+                      id="gh-project-iteration-field"
+                      className="border-input bg-background h-10 w-full max-w-lg rounded-lg border px-3 text-sm"
+                      value={iterationFieldId}
+                      onChange={(e) => setIterationFieldId(e.target.value)}
+                    >
+                      <option value="">
+                        Automatisk — «Iteration» eller første iterasjonsfelt
+                      </option>
+                      {iterationFields.map((f) => (
+                        <option key={f.id} value={f.id}>
+                          {f.name} ({f.iterationCount} iterasjoner)
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                ) : (
+                  <p className="text-muted-foreground mt-2 text-xs">
+                    Trykk «Hent iterasjonsfelt» hvis prosjektet har sprint/iterasjon
+                    på GitHub (samme node-ID som over).
+                  </p>
+                )}
+              </div>
+            </div>
+          ) : null}
         </section>
 
         <Accordion

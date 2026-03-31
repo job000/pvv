@@ -123,7 +123,7 @@ export function RosRiskList({
         const cell = row[c];
         if (!cell) continue;
         for (const item of cell) {
-          if (!item.text.trim() && !item.flags?.length) continue;
+          /* Alle cell-elementer er bevisst risiko-rader (inkl. nye uten tekst etter «Legg til risiko»). */
           risks.push({
             id: item.id,
             text: item.text,

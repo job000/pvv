@@ -25,6 +25,7 @@ import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import { useMutation, useQuery } from "convex/react";
 import {
+  collectIdentifiedRisksForPdf,
   flattenCellItemsMatrixToLegacyNotes,
   newRosCellItemId,
   resizeCellItemsMatrix,
@@ -45,6 +46,7 @@ import {
   type ComplianceStatusKey,
 } from "@/lib/helsesector-labels";
 import { ROS_PDD_ALIGNMENT_HINT_NB } from "@/lib/ros-compliance";
+import { toast } from "@/lib/app-toast";
 import { cn } from "@/lib/utils";
 import type { RosRequirementRef } from "@/lib/ros-requirement-catalog";
 import { downloadRosAnalysisPdf } from "@/lib/ros-pdf";
@@ -827,7 +829,7 @@ export function RosAnalysisEditor({
       const rl = parseLabelLines(rowLabelsAfterText);
       const cl = parseLabelLines(colLabelsAfterText);
       if (rl.length < 2 || cl.length < 2) {
-        window.alert(
+        toast.error(
           "Angi minst to rader og to kolonner i etter-akser før du kopierer.",
         );
         return;
@@ -936,13 +938,14 @@ export function RosAnalysisEditor({
       });
       if (result.ok) {
         analysisRevisionRef.current = result.revision;
+        toast.success("Revisjonsplan lagret.");
       } else {
-        window.alert(
+        toast.error(
           "ROS-analysen er allerede oppdatert på serveren. Last siden på nytt og prøv igjen.",
         );
       }
     } catch (e) {
-      window.alert(e instanceof Error ? e.message : "Kunne ikke lagre.");
+      toast.error(e instanceof Error ? e.message : "Kunne ikke lagre.");
     }
   }
 
@@ -955,7 +958,7 @@ export function RosAnalysisEditor({
       ? parseLabelLines(colLabelsAfterText).length
       : data.colLabels.length;
     if (useSeparateAfterAxes && (targetRows < 2 || targetCols < 2)) {
-      window.alert(
+      toast.error(
         "Etter-tiltak med egne akser krever minst to rader og to kolonner (én etikett per linje).",
       );
       return;
@@ -983,7 +986,7 @@ export function RosAnalysisEditor({
           rawNext !== "" &&
           (parsedNextMs === null || !Number.isFinite(parsedNextMs))
         ) {
-          window.alert("Ugyldig dato/tid for neste revisjon.");
+          toast.error("Ugyldig dato/tid for neste revisjon.");
           return;
         }
         const rev = analysisRevisionRef.current ?? data.revision ?? 0;
@@ -1029,8 +1032,9 @@ export function RosAnalysisEditor({
         if (result.ok) {
           analysisRevisionRef.current = result.revision;
           setDirty(false);
+          toast.success("ROS-analysen er lagret.");
         } else {
-          window.alert(
+          toast.error(
             "ROS-analysen er allerede oppdatert på serveren (annen bruker, annen fane eller journal). Last siden på nytt og prøv igjen.",
           );
         }
@@ -1039,6 +1043,8 @@ export function RosAnalysisEditor({
         .catch(() => undefined)
         .then(runSave);
       await rosSaveQueueRef.current;
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Kunne ikke lagre.");
     } finally {
       setSaving(false);
     }
@@ -1053,7 +1059,7 @@ export function RosAnalysisEditor({
       ? parseLabelLines(colLabelsAfterText).length
       : data.colLabels.length;
     if (useSeparateAfterAxes && (pdfRows < 2 || pdfCols < 2)) {
-      window.alert(
+      toast.error(
         "Angi minst to rader og to kolonner for etter-matrisen før PDF-eksport.",
       );
       return;
@@ -1089,6 +1095,22 @@ export function RosAnalysisEditor({
         return `${t.title}${due}`;
       }) ?? [];
 
+    const afterRowLabelsPdf = useSeparateAfterAxes
+      ? parseLabelLines(rowLabelsAfterText)
+      : data.rowLabels;
+    const afterColLabelsPdf = useSeparateAfterAxes
+      ? parseLabelLines(colLabelsAfterText)
+      : data.colLabels;
+    const identifiedRisks = collectIdentifiedRisksForPdf({
+      cellItemsMatrix,
+      rowLabels: data.rowLabels,
+      colLabels: data.colLabels,
+      matrixValues: matrix,
+      afterRowLabels: afterRowLabelsPdf,
+      afterColLabels: afterColLabelsPdf,
+      matrixValuesAfter: mvAfterPdf,
+    });
+
     downloadRosAnalysisPdf({
       title: title.trim() || data.title,
       workspaceName: workspace?.name ?? null,
@@ -1102,12 +1124,8 @@ export function RosAnalysisEditor({
       cellNotes: flattenCellItemsMatrixToLegacyNotes(cellItemsMatrix),
       matrixValuesAfter: mvAfterPdf,
       cellNotesAfter: flattenCellItemsMatrixToLegacyNotes(cellItemsAfterPdf),
-      afterRowLabels: useSeparateAfterAxes
-        ? parseLabelLines(rowLabelsAfterText)
-        : data.rowLabels,
-      afterColLabels: useSeparateAfterAxes
-        ? parseLabelLines(colLabelsAfterText)
-        : data.colLabels,
+      afterRowLabels: afterRowLabelsPdf,
+      afterColLabels: afterColLabelsPdf,
       afterRowAxisTitle: useSeparateAfterAxes
         ? rowAxisTitleAfter.trim()
         : data.rowAxisTitle,
@@ -1126,6 +1144,8 @@ export function RosAnalysisEditor({
       requirementRefLines:
         requirementRefLines.length > 0 ? requirementRefLines : undefined,
       openTaskLines: openTaskLines.length > 0 ? openTaskLines : undefined,
+      identifiedRisks:
+        identifiedRisks.length > 0 ? identifiedRisks : undefined,
       linkedPvvTitles: data.linkedAssessments.map((l) => l.title),
       journalEntries: (journalEntries ?? []).map((e) => ({
         body: e.body,
@@ -1144,16 +1164,18 @@ export function RosAnalysisEditor({
     try {
       await linkAssessment({ analysisId, assessmentId: addPvId });
       setAddPvId("");
+      toast.success("PVV koblet til analysen.");
     } catch (e) {
-      window.alert(e instanceof Error ? e.message : "Kunne ikke koble.");
+      toast.error(e instanceof Error ? e.message : "Kunne ikke koble.");
     }
   }
 
   async function onUnlink(linkId: Id<"rosAnalysisAssessments">) {
     try {
       await unlinkAssessment({ linkId });
+      toast.success("PVV-kobling fjernet.");
     } catch (e) {
-      window.alert(e instanceof Error ? e.message : "Kunne ikke fjerne.");
+      toast.error(e instanceof Error ? e.message : "Kunne ikke fjerne.");
     }
   }
 
@@ -1165,6 +1187,11 @@ export function RosAnalysisEditor({
         note: versionNote.trim() || undefined,
       });
       setVersionNote("");
+      toast.success("Versjon lagret.");
+    } catch (e) {
+      toast.error(
+        e instanceof Error ? e.message : "Kunne ikke lagre versjon.",
+      );
     } finally {
       setSnapshotBusy(false);
     }
@@ -1182,8 +1209,9 @@ export function RosAnalysisEditor({
     try {
       await restoreVersion({ analysisId, version });
       setDirty(false);
+      toast.success(`Versjon ${version} er gjenopprettet.`);
     } catch (e) {
-      window.alert(e instanceof Error ? e.message : "Gjenoppretting feilet.");
+      toast.error(e instanceof Error ? e.message : "Gjenoppretting feilet.");
     }
   }
 
@@ -1205,6 +1233,11 @@ export function RosAnalysisEditor({
       setTaskDesc("");
       setTaskAssignee("");
       setTaskPriority(3);
+      toast.success("Oppgave opprettet.");
+    } catch (e) {
+      toast.error(
+        e instanceof Error ? e.message : "Kunne ikke opprette oppgave.",
+      );
     } finally {
       setTaskBusy(false);
     }
@@ -2029,7 +2062,9 @@ export function RosAnalysisEditor({
           afterSeparate={useSeparateAfterAxes}
           onJumpToCell={handleJumpToCell}
           onJournalConflict={() =>
-            window.alert("Journalen kunne ikke lagres: analysen har nyere revisjon på serveren. Oppdater siden og prøv igjen.")
+            toast.error(
+              "Journalen kunne ikke lagres: analysen har nyere revisjon på serveren. Oppdater siden og prøv igjen.",
+            )
           }
         />
       </div>

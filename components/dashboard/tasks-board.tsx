@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { Textarea } from "@/components/ui/textarea";
 import { TaskGithubControls } from "@/components/tasks/task-github-controls";
+import { toast } from "@/lib/app-toast";
 import { effectiveGithubDefaultRepos } from "@/lib/github-workspace-helpers";
 import { api } from "@/convex/_generated/api";
 import type { Doc, Id } from "@/convex/_generated/dataModel";
@@ -319,14 +320,36 @@ export function TasksBoard() {
 
   async function saveEdit() {
     if (!editTask) return;
-    await updateTask({
-      taskId: editTask._id,
-      title: editTitle.trim(),
-      description: editDescription.trim() || null,
-      priority: editPriority,
-      dueAt: editDue ? new Date(editDue).getTime() : null,
-    });
-    setEditTask(null);
+    try {
+      await updateTask({
+        taskId: editTask._id,
+        title: editTitle.trim(),
+        description: editDescription.trim() || null,
+        priority: editPriority,
+        dueAt: editDue ? new Date(editDue).getTime() : null,
+      });
+      setEditTask(null);
+      toast.success("Oppgave lagret.");
+    } catch (e) {
+      toast.error(
+        e instanceof Error ? e.message : "Kunne ikke lagre oppgaven.",
+      );
+    }
+  }
+
+  async function deleteTaskWithToast(
+    taskId: Id<"assessmentTasks">,
+  ): Promise<boolean> {
+    try {
+      await removeTask({ taskId });
+      toast.success("Oppgave slettet.");
+      return true;
+    } catch (e) {
+      toast.error(
+        e instanceof Error ? e.message : "Kunne ikke slette oppgaven.",
+      );
+      return false;
+    }
   }
 
   async function handleListDragEnd(event: DragEndEvent) {
@@ -489,7 +512,7 @@ export function TasksBoard() {
             <DoneDropList
               tasks={doneTasks}
               onEdit={openEdit}
-              onRemove={(id) => void removeTask({ taskId: id })}
+              onRemove={(id) => void deleteTaskWithToast(id)}
               onReopen={(id) =>
                 void moveTask({
                   taskId: id,
@@ -640,9 +663,11 @@ export function TasksBoard() {
                       editTask &&
                       window.confirm("Slette oppgaven permanent?")
                     ) {
-                      void removeTask({ taskId: editTask._id }).then(() =>
-                        setEditTask(null),
-                      );
+                      void (async () => {
+                        if (await deleteTaskWithToast(editTask._id)) {
+                          setEditTask(null);
+                        }
+                      })();
                     }
                   }}
                 >

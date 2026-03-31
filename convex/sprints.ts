@@ -1,5 +1,6 @@
 import { v } from "convex/values";
-import { mutation, query } from "./_generated/server";
+import type { Id } from "./_generated/dataModel";
+import { internalMutation, mutation, query } from "./_generated/server";
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { requireUserId, requireWorkspaceMember } from "./lib/access";
 
@@ -47,5 +48,60 @@ export const create = mutation({
       createdByUserId: userId,
       createdAt: now,
     });
+  },
+});
+
+/** Synkronisering fra GitHub Projects — kun via internal action. */
+export const applyGithubIterationsSync = internalMutation({
+  args: {
+    workspaceId: v.id("workspaces"),
+    createdByUserId: v.id("users"),
+    items: v.array(
+      v.object({
+        githubIterationId: v.string(),
+        name: v.string(),
+        startAt: v.number(),
+        endAt: v.number(),
+      }),
+    ),
+  },
+  handler: async (ctx, args) => {
+    const now = Date.now();
+    const existing = await ctx.db
+      .query("sprints")
+      .withIndex("by_workspace", (q) => q.eq("workspaceId", args.workspaceId))
+      .collect();
+    const byGh = new Map<string, Id<"sprints">>();
+    for (const s of existing) {
+      if (s.githubIterationId) {
+        byGh.set(s.githubIterationId, s._id);
+      }
+    }
+    let created = 0;
+    let updated = 0;
+    for (const it of args.items) {
+      const sid = byGh.get(it.githubIterationId);
+      if (sid) {
+        await ctx.db.patch(sid, {
+          name: it.name,
+          startAt: it.startAt,
+          endAt: it.endAt,
+          githubIterationId: it.githubIterationId,
+        });
+        updated++;
+      } else {
+        await ctx.db.insert("sprints", {
+          workspaceId: args.workspaceId,
+          name: it.name,
+          startAt: it.startAt,
+          endAt: it.endAt,
+          githubIterationId: it.githubIterationId,
+          createdByUserId: args.createdByUserId,
+          createdAt: now,
+        });
+        created++;
+      }
+    }
+    return { created, updated };
   },
 });

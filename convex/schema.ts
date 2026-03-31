@@ -164,6 +164,47 @@ export default defineSchema({
     githubAutoRegisterProcessOnCreate: v.optional(v.boolean()),
     /** Single-select option-id for Status (må matche prosjektets felt) */
     githubAutoRegisterProcessStatusOptionId: v.optional(v.string()),
+    /**
+     * Hvilket enkeltvalg-felt i prosjektet som styrer «kolonne»/status i PVV.
+     * Tom = automatisk: felt som heter «Status», ellers første enkeltvalg-felt.
+     */
+    githubProjectSingleSelectFieldId: v.optional(v.string()),
+    /** Cache av Status-felt fra GitHub Projects (GraphQL) — reduserer rate limit */
+    githubProjectStatusFieldCacheAt: v.optional(v.number()),
+    githubProjectStatusFieldCache: v.optional(
+      v.object({
+        forProjectNodeId: v.string(),
+        /** __auto__ eller valgt felt-id (matcher githubProjectSingleSelectFieldId) */
+        preferredFieldKey: v.optional(v.string()),
+        fieldId: v.string(),
+        fieldName: v.string(),
+        options: v.array(v.object({ id: v.string(), name: v.string() })),
+      }),
+    ),
+    /**
+     * Hvilket iterasjonsfelt i GitHub-prosjektet som svarer til PVV-sprinter.
+     * Tom = første ProjectV2IterationField i prosjektet.
+     */
+    githubProjectIterationFieldId: v.optional(v.string()),
+    /** Cache av iterasjoner (synk til leveranse-sprinter) — reduserer rate limit */
+    githubProjectIterationFieldCacheAt: v.optional(v.number()),
+    githubProjectIterationFieldCache: v.optional(
+      v.object({
+        forProjectNodeId: v.string(),
+        /** __auto__ eller valgt felt-id (matcher githubProjectIterationFieldId) */
+        preferredFieldKey: v.optional(v.string()),
+        fieldId: v.string(),
+        fieldName: v.string(),
+        iterations: v.array(
+          v.object({
+            githubIterationId: v.string(),
+            name: v.string(),
+            startAt: v.number(),
+            endAt: v.number(),
+          }),
+        ),
+      }),
+    ),
   }).index("by_owner", ["ownerUserId"]),
 
   /**
@@ -222,6 +263,8 @@ export default defineSchema({
     startAt: v.number(),
     endAt: v.number(),
     goal: v.optional(v.string()),
+    /** Når satt: synkronisert fra GitHub Projects iterasjonsfelt */
+    githubIterationId: v.optional(v.string()),
     createdByUserId: v.id("users"),
     createdAt: v.number(),
   }).index("by_workspace", ["workspaceId"]),
@@ -291,12 +334,17 @@ export default defineSchema({
     githubProjectItemNodeId: v.optional(v.string()),
     /** Siste valgte status (single select option id) i prosjektet */
     githubProjectStatusOptionId: v.optional(v.string()),
+    /** Når kortet er konvertert til ekte issue: repo (normalisert små bokstaver) + nummer for REST/webhook */
+    githubRepoFullName: v.optional(v.string()),
+    githubIssueNumber: v.optional(v.number()),
+    githubIssueNodeId: v.optional(v.string()),
     createdByUserId: v.id("users"),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
     .index("by_workspace", ["workspaceId"])
-    .index("by_workspace_code", ["workspaceId", "code"]),
+    .index("by_workspace_code", ["workspaceId", "code"])
+    .index("by_github_issue", ["githubRepoFullName", "githubIssueNumber"]),
 
   workspaceMembers: defineTable({
     workspaceId: v.id("workspaces"),

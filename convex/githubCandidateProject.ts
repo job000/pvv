@@ -3,8 +3,17 @@ import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import type { ActionCtx } from "./_generated/server";
-import { action } from "./_generated/server";
+import { action, internalAction, internalMutation } from "./_generated/server";
+import {
+  githubGraphql,
+  isGithubGraphqlRateLimitError,
+} from "./lib/githubGraphql";
+import {
+  fetchGithubSubIssuesSummary,
+  type GithubSubIssuesSummary,
+} from "./lib/githubSubIssues";
 import { normalizeGithubRepoFullName } from "./lib/github";
+import { formatPvvSyncBlock } from "./lib/githubCandidateSync";
 import { resolveGithubToken } from "./githubTasks";
 import {
   PIPELINE_STATUS_LABELS,
@@ -12,6 +21,71 @@ import {
 } from "../lib/assessment-pipeline";
 
 const GITHUB_DRAFT_BODY_MAX = 65_000;
+
+/** Cache for Status-feltliste fra GitHub GraphQL (unngå rate limit ved tab-bytte / re-render). */
+const GITHUB_STATUS_OPTIONS_CACHE_TTL_MS = 10 * 60 * 1000;
+
+export const saveGithubProjectStatusOptionsCache = internalMutation({
+  args: {
+    workspaceId: v.id("workspaces"),
+    projectNodeId: v.string(),
+    preferredFieldKey: v.string(),
+    fieldId: v.string(),
+    fieldName: v.string(),
+    options: v.array(v.object({ id: v.string(), name: v.string() })),
+  },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.workspaceId, {
+      githubProjectStatusFieldCacheAt: Date.now(),
+      githubProjectStatusFieldCache: {
+        forProjectNodeId: args.projectNodeId,
+        preferredFieldKey: args.preferredFieldKey,
+        fieldId: args.fieldId,
+        fieldName: args.fieldName,
+        options: args.options,
+      },
+    });
+  },
+});
+
+const GITHUB_REST_HEADERS = {
+  Accept: "application/vnd.github+json",
+  "X-GitHub-Api-Version": "2022-11-28",
+} as const;
+
+async function restPatchGithubIssue(
+  token: string,
+  repoFullName: string,
+  issueNumber: number,
+  title: string,
+  body: string,
+): Promise<void> {
+  const parts = repoFullName.split("/").filter(Boolean);
+  if (parts.length < 2) {
+    throw new Error("Ugyldig repo-navn for GitHub-issue.");
+  }
+  const owner = parts[0]!;
+  const repo = parts.slice(1).join("/");
+  const url = `https://api.github.com/repos/${owner}/${repo}/issues/${issueNumber}`;
+  const res = await fetch(url, {
+    method: "PATCH",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      ...GITHUB_REST_HEADERS,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      title: title.slice(0, 256),
+      body,
+    }),
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(
+      `GitHub kunne ikke oppdatere issue (HTTP ${res.status}). ${text.slice(0, 280)}`,
+    );
+  }
+}
 
 const COMPLIANCE_NB: Record<string, string> = {
   not_started: "Ikke startet",
@@ -29,6 +103,8 @@ export type CandidateGithubSyncContext = {
   candidate: Doc<"candidates">;
   workspaceName: string;
   workspaceId: Id<"workspaces">;
+  /** Navn og/eller e-post for brukeren som opprettet prosessen (vises på GitHub) */
+  createdByLabel: string | null;
   orgUnitName: string | null;
   linkedAssessments: Array<{
     assessmentId: Id<"assessments">;
@@ -73,29 +149,39 @@ export function formatCandidateGithubMarkdown(
     `- **Prosess-ID:** ${c.code}`,
     `- **Navn:** ${c.name}`,
   ];
+  if (ctx.createdByLabel) {
+    lines.push(`- **Registrert i PVV av:** ${ctx.createdByLabel}`);
+  }
   if (ctx.orgUnitName) {
     lines.push(`- **Organisasjon (PVV):** ${ctx.orgUnitName}`);
   }
-  if (c.notes?.trim()) {
-    lines.push("", "### Notat til teamet", c.notes.trim());
-  }
-  if (c.linkHintBusinessOwner?.trim()) {
-    lines.push(
-      "",
-      "### Ansvarlig / eier (til vurdering)",
-      c.linkHintBusinessOwner.trim(),
-    );
-  }
-  if (c.linkHintSystems?.trim()) {
-    lines.push("", "### Systemer og data", c.linkHintSystems.trim());
-  }
-  if (c.linkHintComplianceNotes?.trim()) {
-    lines.push(
-      "",
-      "### Sikkerhet og personvern",
-      c.linkHintComplianceNotes.trim(),
-    );
-  }
+  lines.push(
+    "",
+    "### Notat til teamet",
+    "",
+    formatPvvSyncBlock("notes", c.notes?.trim() ?? ""),
+  );
+  lines.push(
+    "",
+    "### Ansvarlig / eier (til vurdering)",
+    "",
+    formatPvvSyncBlock("owner", c.linkHintBusinessOwner?.trim() ?? ""),
+  );
+  lines.push(
+    "",
+    "### Systemer og data",
+    "",
+    formatPvvSyncBlock("systems", c.linkHintSystems?.trim() ?? ""),
+  );
+  lines.push(
+    "",
+    "### Sikkerhet og personvern",
+    "",
+    formatPvvSyncBlock(
+      "compliance",
+      c.linkHintComplianceNotes?.trim() ?? "",
+    ),
+  );
   if (ctx.linkedAssessments.length > 0) {
     lines.push("", "## PVV-vurderinger koblet til denne prosessen");
     for (const a of ctx.linkedAssessments) {
@@ -178,48 +264,6 @@ export function formatCandidateGithubMarkdown(
   return body;
 }
 
-const GITHUB_GRAPHQL = "https://api.github.com/graphql";
-
-type GraphqlPayload = {
-  data?: unknown;
-  errors?: { message: string }[];
-};
-
-async function githubGraphql(
-  token: string,
-  query: string,
-  variables: Record<string, unknown>,
-): Promise<GraphqlPayload> {
-  const res = await fetch(GITHUB_GRAPHQL, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ query, variables }),
-  });
-  const text = await res.text();
-  let json: GraphqlPayload;
-  try {
-    json = JSON.parse(text) as GraphqlPayload;
-  } catch {
-    throw new Error(
-      `GitHub GraphQL: ugyldig svar (HTTP ${res.status}). ${text.slice(0, 200)}`,
-    );
-  }
-  if (!res.ok) {
-    throw new Error(
-      `GitHub GraphQL: HTTP ${res.status}. ${text.slice(0, 240)}`,
-    );
-  }
-  if (json.errors?.length) {
-    throw new Error(
-      json.errors.map((e) => e.message).join("; ") || "GraphQL feilet.",
-    );
-  }
-  return json;
-}
-
 /** Hva prosjektkortet peker på: utkast, ekte issue i repo, eller PR. */
 export type GithubProjectItemShapeResult = {
   kind: "draft" | "issue" | "pull_request" | "unknown" | "no_item";
@@ -231,6 +275,10 @@ export type GithubProjectItemShapeResult = {
     title: string;
     state: string;
     repoFullName: string;
+    /** GraphQL node id (Issue) */
+    nodeId?: string;
+    /** Under-saker (GitHub sub-issues), når API returnerer data */
+    subIssuesSummary?: GithubSubIssuesSummary;
   };
   pullRequest?: {
     number: number;
@@ -323,6 +371,7 @@ export async function fetchGithubProjectItemShape(
   }
   if (tn === "Issue") {
     const c = content as {
+      id?: string;
       number?: number;
       url?: string;
       title?: string;
@@ -343,14 +392,28 @@ export async function fetchGithubProjectItemShape(
         ? null
         : repoFullName.length > 0 &&
           workspaceDefaultRepos.includes(repoFullName);
+    const issueNumber = typeof c.number === "number" ? c.number : 0;
+    let subIssuesSummary: GithubSubIssuesSummary | undefined;
+    if (repoFullName.length > 0 && issueNumber > 0) {
+      const sub = await fetchGithubSubIssuesSummary(
+        token,
+        repoFullName,
+        issueNumber,
+      );
+      if (sub) {
+        subIssuesSummary = sub;
+      }
+    }
     return {
       kind: "issue",
       issue: {
-        number: typeof c.number === "number" ? c.number : 0,
+        number: issueNumber,
         url: typeof c.url === "string" ? c.url : "",
         title: typeof c.title === "string" ? c.title : "",
         state: typeof c.state === "string" ? c.state : "",
         repoFullName,
+        nodeId: typeof c.id === "string" ? c.id : undefined,
+        ...(subIssuesSummary ? { subIssuesSummary } : {}),
       },
       workspaceDefaultRepos,
       issueMatchesDefaultRepo,
@@ -398,17 +461,6 @@ export async function fetchGithubProjectItemShape(
   };
 }
 
-async function graphqlDraftIssueIdFromProjectItem(
-  token: string,
-  projectItemId: string,
-): Promise<string | null> {
-  const shape = await fetchGithubProjectItemShape(token, projectItemId, []);
-  if (shape.kind !== "draft" || !shape.draftIssueId) {
-    return null;
-  }
-  return shape.draftIssueId;
-}
-
 async function updateDraftIssueBodyAndTitle(
   token: string,
   draftIssueId: string,
@@ -429,13 +481,13 @@ async function updateDraftIssueBodyAndTitle(
   });
 }
 
-async function pushCandidateMarkdownToGithubDraft(
+async function pushCandidateMarkdownToGithub(
   ctx: ActionCtx,
   candidateId: Id<"candidates">,
   userId: Id<"users">,
   mode: "silent" | "throw",
 ): Promise<void> {
-  const { candidate } = await assertMemberForCandidate(
+  const { candidate, workspace } = await assertMemberForCandidate(
     ctx,
     candidateId,
     userId,
@@ -459,7 +511,7 @@ async function pushCandidateMarkdownToGithubDraft(
   }
   const token = await resolveGithubToken(ctx, candidate.workspaceId);
   const basePath = `/w/${syncCtx.workspaceId}`;
-  const body = formatCandidateGithubMarkdown(
+  const mdBody = formatCandidateGithubMarkdown(
     syncCtx as CandidateGithubSyncContext,
     basePath,
   );
@@ -467,16 +519,58 @@ async function pushCandidateMarkdownToGithubDraft(
     0,
     256,
   );
-  const draftId = await graphqlDraftIssueIdFromProjectItem(token, itemNodeId);
-  if (!draftId) {
-    if (mode === "throw") {
-      throw new Error(
-        "Fant ikke utkast på GitHub (konvertert til issue?). Synk gjelder prosjekt-utkast.",
-      );
-    }
+  const defaultRepos = collectWorkspaceDefaultRepos(workspace);
+  const shape = await fetchGithubProjectItemShape(
+    token,
+    itemNodeId,
+    defaultRepos,
+  );
+
+  if (shape.kind === "draft" && shape.draftIssueId) {
+    await updateDraftIssueBodyAndTitle(
+      token,
+      shape.draftIssueId,
+      title,
+      mdBody,
+    );
+    await ctx.runMutation(internal.candidates.clearGithubIssueLink, {
+      candidateId,
+    });
     return;
   }
-  await updateDraftIssueBodyAndTitle(token, draftId, title, body);
+
+  if (
+    shape.kind === "issue" &&
+    shape.issue &&
+    shape.issue.repoFullName &&
+    shape.issue.number > 0
+  ) {
+    await restPatchGithubIssue(
+      token,
+      shape.issue.repoFullName,
+      shape.issue.number,
+      title,
+      mdBody,
+    );
+    await ctx.runMutation(internal.candidates.setGithubIssueLinkFromGithub, {
+      candidateId,
+      githubRepoFullName: shape.issue.repoFullName,
+      githubIssueNumber: shape.issue.number,
+      githubIssueNodeId: shape.issue.nodeId,
+    });
+    return;
+  }
+
+  if (mode === "throw") {
+    if (shape.kind === "pull_request") {
+      throw new Error(
+        "Prosjektkortet er en pull request. Synk gjelder utkast eller issue.",
+      );
+    }
+    throw new Error(
+      "Fant ikke utkast eller issue på GitHub — sjekk at prosjektkortet er koblet.",
+    );
+  }
 }
 
 type SingleSelectField = {
@@ -486,8 +580,10 @@ type SingleSelectField = {
   options: { id: string; name: string }[];
 };
 
-function pickStatusField(nodes: unknown): SingleSelectField | null {
-  if (!Array.isArray(nodes)) return null;
+function parseAllSingleSelectFields(nodes: unknown): SingleSelectField[] {
+  if (!Array.isArray(nodes)) {
+    return [];
+  }
   const selects: SingleSelectField[] = [];
   for (const n of nodes) {
     if (
@@ -505,11 +601,67 @@ function pickStatusField(nodes: unknown): SingleSelectField | null {
       }
     }
   }
-  if (selects.length === 0) return null;
+  return selects;
+}
+
+function resolveSingleSelectFieldFromList(
+  selects: SingleSelectField[],
+  preferredFieldId: string | null | undefined,
+): SingleSelectField | null {
+  if (selects.length === 0) {
+    return null;
+  }
+  const trimmed = preferredFieldId?.trim();
+  if (trimmed) {
+    const found = selects.find((f) => f.id === trimmed);
+    if (!found) {
+      throw new Error(
+        "Valgt prosjektkolonne finnes ikke i GitHub-prosjektet. Velg felt på nytt under Innstillinger → GitHub.",
+      );
+    }
+    return found;
+  }
   const byName = selects.find(
     (f) => f.name.trim().toLowerCase() === "status",
   );
   return byName ?? selects[0] ?? null;
+}
+
+const PROJECT_V2_SINGLE_SELECT_FIELDS_QUERY = `query($id: ID!) {
+  node(id: $id) {
+    ... on ProjectV2 {
+      id
+      fields(first: 50) {
+        nodes {
+          __typename
+          ... on ProjectV2SingleSelectField {
+            id
+            name
+            options { id name }
+          }
+        }
+      }
+    }
+  }
+}`;
+
+async function fetchProjectV2SingleSelectFieldsFromGithub(
+  token: string,
+  projectNodeId: string,
+): Promise<SingleSelectField[]> {
+  const json = await githubGraphql(token, PROJECT_V2_SINGLE_SELECT_FIELDS_QUERY, {
+    id: projectNodeId.trim(),
+  });
+  const rawNodes = (
+    json.data as {
+      node?: { fields?: { nodes?: unknown[] } };
+    }
+  )?.node?.fields?.nodes;
+  return parseAllSingleSelectFields(rawNodes ?? []);
+}
+
+function preferredFieldKeyFromWorkspace(workspace: Doc<"workspaces">): string {
+  return workspace.githubProjectSingleSelectFieldId?.trim() || "__auto__";
 }
 
 async function assertMemberForCandidate(
@@ -538,42 +690,23 @@ export type ListGithubProjectStatusOptionsResult = {
   fieldId: string;
   fieldName: string;
   options: { id: string; name: string }[];
+  /** True når GitHub svarte rate limit og vi ikke hadde lagret cache — tom liste, ikke kastet feil. */
+  githubRateLimited?: boolean;
 };
 
 export async function fetchProjectStatusFieldOptions(
   token: string,
   projectNodeId: string,
+  preferredFieldId?: string | null,
 ): Promise<{ fieldId: string; fieldName: string; options: { id: string; name: string }[] }> {
-  const query = `query($id: ID!) {
-    node(id: $id) {
-      ... on ProjectV2 {
-        id
-        fields(first: 50) {
-          nodes {
-            __typename
-            ... on ProjectV2SingleSelectField {
-              id
-              name
-              options { id name }
-            }
-          }
-        }
-      }
-    }
-  }`;
-  const json = await githubGraphql(token, query, { id: projectNodeId.trim() });
-  const node = (
-    json.data as {
-      node?: {
-        fields?: { nodes?: unknown[] };
-      };
-    }
-  )?.node;
-  const rawNodes = node?.fields?.nodes;
-  const field = pickStatusField(rawNodes ?? []);
+  const selects = await fetchProjectV2SingleSelectFieldsFromGithub(
+    token,
+    projectNodeId,
+  );
+  const field = resolveSingleSelectFieldFromList(selects, preferredFieldId);
   if (!field || field.options.length === 0) {
     throw new Error(
-      "Fant ingen enkeltvalg-felt (f.eks. Status) i prosjektet. Sjekk prosjektet på GitHub.",
+      "Fant ingen enkeltvalg-felt (kolonne) i prosjektet. Legg til et enkeltvalg-felt på GitHub, eller velg et annet felt under Innstillinger.",
     );
   }
   return {
@@ -583,8 +716,144 @@ export async function fetchProjectStatusFieldOptions(
   };
 }
 
+/**
+ * Bruker workspace-cache for statusfelt (samme TTL som listGithubProjectStatusOptions)
+ * slik at registrering/oppdatering ikke treffer GraphQL feltliste hver gang (rate limit).
+ */
+async function getProjectStatusFieldMetaWithCache(
+  ctx: ActionCtx,
+  args: {
+    workspaceId: Id<"workspaces">;
+    workspace: Doc<"workspaces">;
+    projectNodeId: string;
+    token: string;
+  },
+): Promise<{
+  fieldId: string;
+  fieldName: string;
+  options: { id: string; name: string }[];
+}> {
+  const { workspaceId, workspace, projectNodeId, token } = args;
+  const prefKey = preferredFieldKeyFromWorkspace(workspace);
+  const cache = workspace.githubProjectStatusFieldCache;
+  const cachedAt = workspace.githubProjectStatusFieldCacheAt;
+  const now = Date.now();
+
+  if (
+    cache &&
+    cachedAt != null &&
+    cache.forProjectNodeId === projectNodeId &&
+    (cache.preferredFieldKey ?? "__auto__") === prefKey &&
+    now - cachedAt < GITHUB_STATUS_OPTIONS_CACHE_TTL_MS
+  ) {
+    return {
+      fieldId: cache.fieldId,
+      fieldName: cache.fieldName,
+      options: cache.options,
+    };
+  }
+
+  try {
+    const meta = await fetchProjectStatusFieldOptions(
+      token,
+      projectNodeId,
+      workspace.githubProjectSingleSelectFieldId?.trim() || null,
+    );
+    await ctx.runMutation(
+      internal.githubCandidateProject.saveGithubProjectStatusOptionsCache,
+      {
+        workspaceId,
+        projectNodeId,
+        preferredFieldKey: prefKey,
+        fieldId: meta.fieldId,
+        fieldName: meta.fieldName,
+        options: meta.options,
+      },
+    );
+    return meta;
+  } catch (e) {
+    if (
+      isGithubGraphqlRateLimitError(e) &&
+      cache &&
+      cache.forProjectNodeId === projectNodeId &&
+      (cache.preferredFieldKey ?? "__auto__") === prefKey
+    ) {
+      return {
+        fieldId: cache.fieldId,
+        fieldName: cache.fieldName,
+        options: cache.options,
+      };
+    }
+    throw e;
+  }
+}
+
+function sanitizeGithubCommentLine(s: string, max: number): string {
+  const t = s.replace(/\r\n/g, "\n").replace(/\n/g, " ").trim();
+  const cut = t.slice(0, max);
+  return cut.replace(/\*/g, "·");
+}
+
+/** Intern: legg inn issue-kommentar når ROS-status settes til fullført (kun ved overgang til completed). */
+export const postRosCompletedGithubComment = internalAction({
+  args: { assessmentId: v.id("assessments") },
+  handler: async (ctx, args) => {
+    const context = await ctx.runQuery(
+      internal.candidates.getGithubRosCompletedCommentContext,
+      { assessmentId: args.assessmentId },
+    );
+    if (!context) {
+      return { posted: false as const, reason: "no_context" as const };
+    }
+    let token: string;
+    try {
+      token = await resolveGithubToken(ctx, context.workspaceId);
+    } catch {
+      return { posted: false as const, reason: "no_token" as const };
+    }
+    const parts = context.githubRepoFullName.split("/").filter(Boolean);
+    if (parts.length < 2) {
+      return { posted: false as const, reason: "bad_repo" as const };
+    }
+    const owner = parts[0]!;
+    const repo = parts.slice(1).join("/");
+    const titleSafe = sanitizeGithubCommentLine(context.assessmentTitle, 200);
+    const body =
+      `**PVV:** ROS er satt til **fullført** for prosess \`${context.processCode}\` (${sanitizeGithubCommentLine(context.processName, 120)}) · vurdering «${titleSafe}».`;
+    const url = `https://api.github.com/repos/${owner}/${repo}/issues/${context.githubIssueNumber}/comments`;
+    try {
+      const res = await fetch(url, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          ...GITHUB_REST_HEADERS,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ body }),
+      });
+      if (!res.ok) {
+        const text = await res.text();
+        console.error(
+          "[postRosCompletedGithubComment] GitHub HTTP",
+          res.status,
+          text.slice(0, 300),
+        );
+        return { posted: false as const, reason: "http_error" as const };
+      }
+      return { posted: true as const };
+    } catch (e) {
+      console.error("[postRosCompletedGithubComment]", e);
+      return { posted: false as const, reason: "fetch_error" as const };
+    }
+  },
+});
+
 export const listGithubProjectStatusOptions = action({
-  args: { workspaceId: v.id("workspaces") },
+  args: {
+    workspaceId: v.id("workspaces"),
+    /** Tving nytt kall til GitHub (f.eks. etter endring av prosjekt på GitHub). */
+    forceRefresh: v.optional(v.boolean()),
+  },
   handler: async (ctx, args): Promise<ListGithubProjectStatusOptionsResult> => {
     const userId = await getAuthUserId(ctx);
     if (!userId) {
@@ -609,13 +878,125 @@ export const listGithubProjectStatusOptions = action({
         "Ingen GitHub-prosjekt-node-ID er lagret for arbeidsområdet. Konfigurer under Innstillinger → GitHub.",
       );
     }
+    const now = Date.now();
+    const prefKey = preferredFieldKeyFromWorkspace(workspace);
+    const cache = workspace.githubProjectStatusFieldCache;
+    const cachedAt = workspace.githubProjectStatusFieldCacheAt;
+    if (
+      !args.forceRefresh &&
+      cache &&
+      cachedAt != null &&
+      cache.forProjectNodeId === projectNodeId &&
+      (cache.preferredFieldKey ?? "__auto__") === prefKey &&
+      now - cachedAt < GITHUB_STATUS_OPTIONS_CACHE_TTL_MS
+    ) {
+      return {
+        projectNodeId,
+        fieldId: cache.fieldId,
+        fieldName: cache.fieldName,
+        options: cache.options,
+      };
+    }
     const token = await resolveGithubToken(ctx, args.workspaceId);
-    const meta = await fetchProjectStatusFieldOptions(token, projectNodeId);
-    return { projectNodeId, ...meta };
+    try {
+      const meta = await fetchProjectStatusFieldOptions(
+        token,
+        projectNodeId,
+        workspace.githubProjectSingleSelectFieldId?.trim() || null,
+      );
+      await ctx.runMutation(
+        internal.githubCandidateProject.saveGithubProjectStatusOptionsCache,
+        {
+          workspaceId: args.workspaceId,
+          projectNodeId,
+          preferredFieldKey: prefKey,
+          fieldId: meta.fieldId,
+          fieldName: meta.fieldName,
+          options: meta.options,
+        },
+      );
+      return { projectNodeId, ...meta };
+    } catch (e) {
+      if (!isGithubGraphqlRateLimitError(e)) {
+        throw e;
+      }
+      if (
+        cache &&
+        cache.forProjectNodeId === projectNodeId &&
+        (cache.preferredFieldKey ?? "__auto__") === prefKey
+      ) {
+        return {
+          projectNodeId,
+          fieldId: cache.fieldId,
+          fieldName: cache.fieldName,
+          options: cache.options,
+        };
+      }
+      return {
+        projectNodeId,
+        fieldId: "",
+        fieldName: "Status",
+        options: [],
+        githubRateLimited: true,
+      };
+    }
   },
 });
 
-/** Sjekker om prosjektkortet er utkast, ekte issue i repo, eller PR — og om repo matcher standard-repo. */
+export type GithubProjectSingleSelectFieldRow = {
+  id: string;
+  name: string;
+  optionCount: number;
+};
+
+/** Lister alle enkeltvalg-felt (kolonner) i prosjektet — velg hvilket PVV skal styre under innstillinger. */
+export const listGithubProjectSingleSelectFields = action({
+  args: { workspaceId: v.id("workspaces") },
+  handler: async (
+    ctx,
+    args,
+  ): Promise<{ fields: GithubProjectSingleSelectFieldRow[] }> => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) {
+      throw new Error("Du må være innlogget.");
+    }
+    await ctx.runQuery(internal.candidates.assertMemberForWorkspace, {
+      workspaceId: args.workspaceId,
+      userId,
+    });
+    const workspace: Doc<"workspaces"> | null = await ctx.runQuery(
+      internal.githubTasks.getWorkspaceDoc,
+      { workspaceId: args.workspaceId },
+    );
+    if (!workspace) {
+      throw new Error("Arbeidsområde finnes ikke.");
+    }
+    const projectNodeId = workspace.githubProjectNodeId?.trim();
+    if (!projectNodeId) {
+      throw new Error(
+        "Lagre GitHub-prosjekt (node-ID) først, så kan vi hente kolonner.",
+      );
+    }
+    const token = await resolveGithubToken(ctx, args.workspaceId);
+    const selects = await fetchProjectV2SingleSelectFieldsFromGithub(
+      token,
+      projectNodeId,
+    );
+    return {
+      fields: selects.map((f) => ({
+        id: f.id,
+        name: f.name,
+        optionCount: f.options.length,
+      })),
+    };
+  },
+});
+
+/**
+ * Sjekker om prosjektkortet er utkast, ekte issue i repo, eller PR — og om repo matcher standard-repo.
+ * Skriver ikke til databasen (unngår Convex-konflikt ved mange parallelle kall + GitHub rate limit).
+ * Repo/issue-kobling lagres ved «Synk til GitHub» (`pushCandidateMarkdownToGithub`).
+ */
 export const describeGithubProjectItemForCandidate = action({
   args: { candidateId: v.id("candidates") },
   handler: async (ctx, args): Promise<GithubProjectItemShapeResult> => {
@@ -639,6 +1020,104 @@ export const describeGithubProjectItemForCandidate = action({
     }
     const token = await resolveGithubToken(ctx, candidate.workspaceId);
     return await fetchGithubProjectItemShape(token, itemId, defaultRepos);
+  },
+});
+
+/** Henter Markdown-body fra prosjektkort (utkast, issue eller PR). */
+async function fetchGithubProjectItemMarkdownBody(
+  token: string,
+  projectItemNodeId: string,
+): Promise<string | null> {
+  const q = `query($id: ID!) {
+    node(id: $id) {
+      ... on ProjectV2Item {
+        content {
+          __typename
+          ... on DraftIssue {
+            body
+          }
+          ... on Issue {
+            body
+          }
+          ... on PullRequest {
+            body
+          }
+        }
+      }
+    }
+  }`;
+  const json = await githubGraphql(token, q, { id: projectItemNodeId.trim() });
+  const content = (
+    json.data as {
+      node?: {
+        content?: { __typename?: string; body?: string | null } | null;
+      } | null;
+    }
+  )?.node?.content;
+  if (!content || typeof content !== "object") {
+    return null;
+  }
+  const b = (content as { body?: string | null }).body;
+  return typeof b === "string" ? b : null;
+}
+
+export type ImportPvvFieldsFromGithubResult =
+  | { ok: true; updatedKeys: string[] }
+  | {
+      ok: false;
+      reason:
+        | "empty_body"
+        | "no_markers"
+        | "no_extracted_fields";
+    };
+
+/**
+ * Leser synkbare felt fra GitHub (markører `<!-- pvv:b64:… -->`) inn i prosessregisteret.
+ * PVV/ROS som full Markdown genereres ved «Send til GitHub»; tilbakehenting gjelder merkede blokker.
+ */
+export const importPvvFieldsFromGithubProjectItem = action({
+  args: { candidateId: v.id("candidates") },
+  handler: async (ctx, args): Promise<ImportPvvFieldsFromGithubResult> => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) {
+      throw new Error("Du må være innlogget.");
+    }
+    const { candidate } = await assertMemberForCandidate(
+      ctx,
+      args.candidateId,
+      userId,
+    );
+    const itemId = candidate.githubProjectItemNodeId?.trim();
+    if (!itemId) {
+      throw new Error(
+        "Koble prosessen til prosjektet («Legg til i tavle») før du henter fra GitHub.",
+      );
+    }
+    const token = await resolveGithubToken(ctx, candidate.workspaceId);
+    const bodyText = await fetchGithubProjectItemMarkdownBody(token, itemId);
+    if (bodyText === null || bodyText.trim() === "") {
+      return {
+        ok: false as const,
+        reason: "empty_body" as const,
+      };
+    }
+    const result = await ctx.runMutation(
+      internal.candidates.applyPvvSyncedMarkersFromBody,
+      {
+        candidateId: args.candidateId,
+        body: bodyText,
+      },
+    );
+    if (result.applied === false) {
+      return {
+        ok: false as const,
+        reason: result.reason,
+      };
+    }
+    return {
+      ok: true as const,
+      updatedKeys: result.updatedKeys,
+    };
   },
 });
 
@@ -669,7 +1148,12 @@ export const registerCandidateToGithubProject = action({
       );
     }
     const token = await resolveGithubToken(ctx, candidate.workspaceId);
-    const meta = await fetchProjectStatusFieldOptions(token, projectNodeId);
+    const meta = await getProjectStatusFieldMetaWithCache(ctx, {
+      workspaceId: candidate.workspaceId,
+      workspace,
+      projectNodeId,
+      token,
+    });
     if (!meta.options.some((o) => o.id === args.statusOptionId)) {
       throw new Error("Ugyldig status — hent statuslisten på nytt.");
     }
@@ -748,7 +1232,7 @@ export const syncCandidateGithubDraft = action({
         "Prosessen er ikke i GitHub-prosjektet — bruk «Legg til i tavle» først.",
       );
     }
-    await pushCandidateMarkdownToGithubDraft(
+    await pushCandidateMarkdownToGithub(
       ctx,
       args.candidateId,
       userId,
@@ -784,7 +1268,12 @@ export const updateCandidateGithubProjectStatus = action({
       throw new Error("Arbeidsområdet mangler prosjekt-node-ID.");
     }
     const token = await resolveGithubToken(ctx, candidate.workspaceId);
-    const meta = await fetchProjectStatusFieldOptions(token, projectNodeId);
+    const meta = await getProjectStatusFieldMetaWithCache(ctx, {
+      workspaceId: candidate.workspaceId,
+      workspace,
+      projectNodeId,
+      token,
+    });
     if (!meta.options.some((o) => o.id === args.statusOptionId)) {
       throw new Error("Ugyldig status — hent statuslisten på nytt.");
     }
@@ -807,7 +1296,7 @@ export const updateCandidateGithubProjectStatus = action({
       statusOptionId: args.statusOptionId,
     });
     try {
-      await pushCandidateMarkdownToGithubDraft(
+      await pushCandidateMarkdownToGithub(
         ctx,
         args.candidateId,
         userId,

@@ -220,10 +220,18 @@ export const update = mutation({
     githubAutoRegisterProcessStatusOptionId: v.optional(
       v.union(v.string(), v.null()),
     ),
+    githubProjectSingleSelectFieldId: v.optional(
+      v.union(v.string(), v.null()),
+    ),
+    githubProjectIterationFieldId: v.optional(v.union(v.string(), v.null())),
   },
   handler: async (ctx, args) => {
     const userId = await requireUserId(ctx);
     await requireWorkspaceMember(ctx, args.workspaceId, userId, "admin");
+    const existing = await ctx.db.get(args.workspaceId);
+    if (!existing) {
+      throw new Error("Arbeidsområdet finnes ikke.");
+    }
     const patch: {
       name?: string;
       notes?: string;
@@ -234,6 +242,12 @@ export const update = mutation({
       githubProjectNodeId?: string;
       githubAutoRegisterProcessOnCreate?: boolean;
       githubAutoRegisterProcessStatusOptionId?: string;
+      githubProjectSingleSelectFieldId?: string;
+      githubProjectIterationFieldId?: string;
+      githubProjectStatusFieldCacheAt?: undefined;
+      githubProjectStatusFieldCache?: undefined;
+      githubProjectIterationFieldCacheAt?: undefined;
+      githubProjectIterationFieldCache?: undefined;
     } = {};
     if (args.name !== undefined) {
       patch.name = args.name.trim() || "Uten navn";
@@ -285,6 +299,14 @@ export const update = mutation({
       const raw = args.githubProjectNodeId;
       patch.githubProjectNodeId =
         raw === null || raw.trim() === "" ? undefined : raw.trim();
+      const oldP = existing.githubProjectNodeId?.trim() ?? "";
+      const newP = patch.githubProjectNodeId ?? "";
+      if (oldP !== newP) {
+        patch.githubProjectStatusFieldCacheAt = undefined;
+        patch.githubProjectStatusFieldCache = undefined;
+        patch.githubProjectIterationFieldCacheAt = undefined;
+        patch.githubProjectIterationFieldCache = undefined;
+      }
     }
     if (args.githubAutoRegisterProcessOnCreate !== undefined) {
       patch.githubAutoRegisterProcessOnCreate =
@@ -298,6 +320,28 @@ export const update = mutation({
         raw === null || raw.trim() === ""
           ? undefined
           : raw.trim();
+    }
+    if (args.githubProjectSingleSelectFieldId !== undefined) {
+      const raw = args.githubProjectSingleSelectFieldId;
+      patch.githubProjectSingleSelectFieldId =
+        raw === null || raw.trim() === "" ? undefined : raw.trim();
+      const oldF = existing.githubProjectSingleSelectFieldId?.trim() ?? "";
+      const newF = patch.githubProjectSingleSelectFieldId ?? "";
+      if (oldF !== newF) {
+        patch.githubProjectStatusFieldCacheAt = undefined;
+        patch.githubProjectStatusFieldCache = undefined;
+      }
+    }
+    if (args.githubProjectIterationFieldId !== undefined) {
+      const raw = args.githubProjectIterationFieldId;
+      patch.githubProjectIterationFieldId =
+        raw === null || raw.trim() === "" ? undefined : raw.trim();
+      const oldIt = existing.githubProjectIterationFieldId?.trim() ?? "";
+      const newIt = patch.githubProjectIterationFieldId ?? "";
+      if (oldIt !== newIt) {
+        patch.githubProjectIterationFieldCacheAt = undefined;
+        patch.githubProjectIterationFieldCache = undefined;
+      }
     }
     await ctx.db.patch(args.workspaceId, patch);
     return null;

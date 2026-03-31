@@ -5,12 +5,23 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import type { Doc, Id } from "@/convex/_generated/dataModel";
+import { toast } from "@/lib/app-toast";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ORG_UNIT_KIND_LABELS } from "@/lib/helsesector-labels";
+import { GithubSubIssuesProgress } from "@/components/github/github-sub-issues-progress";
 import { prosessRegisterCopy } from "@/lib/prosess-register-copy";
-import { Building2, GitBranch, Hash, Loader2, Settings2, StickyNote } from "lucide-react";
+import {
+  Building2,
+  Download,
+  GitBranch,
+  Hash,
+  Loader2,
+  Settings2,
+  StickyNote,
+  Upload,
+} from "lucide-react";
 
 export function WorkspaceCandidateRow({
   workspaceId,
@@ -23,6 +34,8 @@ export function WorkspaceCandidateRow({
   syncGithubDraft,
   describeGithubItem,
   githubProject,
+  importFromGithub,
+  as = "li",
 }: {
   workspaceId: Id<"workspaces">;
   candidate: Doc<"candidates">;
@@ -43,6 +56,11 @@ export function WorkspaceCandidateRow({
       title: string;
       state: string;
       repoFullName: string;
+      subIssuesSummary?: {
+        total: number;
+        completed: number;
+        percentCompleted: number | null;
+      };
     };
     pullRequest?: {
       number: number;
@@ -82,6 +100,18 @@ export function WorkspaceCandidateRow({
     ) => Promise<unknown>;
     remove: (candidateId: Id<"candidates">) => Promise<unknown>;
   };
+  /** `div` når raden vises i dialog (unngå `<li>` uten `<ul>`). */
+  as?: "li" | "div";
+  /** Hent PVV-markerte felt fra GitHub-prosjektkort inn i skjemaet. */
+  importFromGithub?: (
+    candidateId: Id<"candidates">,
+  ) => Promise<
+    | { ok: true; updatedKeys: string[] }
+    | {
+        ok: false;
+        reason: "empty_body" | "no_markers" | "no_extracted_fields";
+      }
+  >;
 }) {
   const [name, setName] = useState(c.name);
   const [code, setCode] = useState(c.code);
@@ -101,6 +131,11 @@ export function WorkspaceCandidateRow({
       title: string;
       state: string;
       repoFullName: string;
+      subIssuesSummary?: {
+        total: number;
+        completed: number;
+        percentCompleted: number | null;
+      };
     };
     pullRequest?: {
       number: number;
@@ -115,22 +150,47 @@ export function WorkspaceCandidateRow({
   const [githubItemShapeErr, setGithubItemShapeErr] = useState<string | null>(
     null,
   );
+  /** 0 = ikke bedt om henting; >0 = kjør henting (økes for «oppdater»). */
+  const [githubCardShapeFetchKey, setGithubCardShapeFetchKey] = useState(0);
+  const [importBusy, setImportBusy] = useState(false);
+  const [pushGithubBusy, setPushGithubBusy] = useState(false);
+
+  const describeGithubItemRef = useRef(describeGithubItem);
+  describeGithubItemRef.current = describeGithubItem;
 
   useEffect(() => {
+    if (!canEdit) {
+      setGithubCardShapeFetchKey(0);
+      setGithubItemShape(null);
+      setGithubItemShapeErr(null);
+      return;
+    }
+    setGithubCardShapeFetchKey(c.githubProjectItemNodeId ? 1 : 0);
+    setGithubItemShape(null);
+    setGithubItemShapeErr(null);
+  }, [c._id, c.githubProjectItemNodeId, canEdit]);
+
+  useEffect(() => {
+    if (githubCardShapeFetchKey === 0) {
+      return;
+    }
     if (
+      !canEdit ||
       !describeGithubItem ||
       !githubProject?.enabled ||
       !c.githubProjectItemNodeId ||
       githubProject.loading ||
       githubProject.error
     ) {
-      setGithubItemShape(null);
-      setGithubItemShapeErr(null);
       return;
     }
     let cancelled = false;
     setGithubItemShapeErr(null);
-    void describeGithubItem(c._id)
+    const fn = describeGithubItemRef.current;
+    if (!fn) {
+      return;
+    }
+    void fn(c._id)
       .then((r) => {
         if (!cancelled) {
           setGithubItemShape(r);
@@ -150,10 +210,10 @@ export function WorkspaceCandidateRow({
       cancelled = true;
     };
   }, [
+    canEdit,
+    githubCardShapeFetchKey,
     c._id,
     c.githubProjectItemNodeId,
-    c.updatedAt,
-    describeGithubItem,
     githubProject?.enabled,
     githubProject?.loading,
     githubProject?.error,
@@ -176,42 +236,36 @@ export function WorkspaceCandidateRow({
     const nameT = name.trim();
     const codeT = code.trim();
     if (!nameT || !codeT) {
-      window.alert(
+      toast.error(
         "Prosessnavn og prosess-ID kan ikke være tomme. Prosess-ID er den korte koden som kobler til PVV og ROS (f.eks. INN-01).",
       );
       return;
     }
-    await onUpdate({
-      candidateId: c._id,
-      name: nameT,
-      code: codeT,
-      notes: notes.trim() === "" ? null : notes.trim(),
-      orgUnitId: orgUnitId === "" ? null : (orgUnitId as Id<"orgUnits">),
-      linkHintBusinessOwner:
-        linkOwner.trim() === "" ? null : linkOwner.trim(),
-      linkHintSystems: linkSystems.trim() === "" ? null : linkSystems.trim(),
-      linkHintComplianceNotes:
-        linkComp.trim() === "" ? null : linkComp.trim(),
-    });
-    if (
-      syncGithubDraft &&
-      githubProject?.enabled &&
-      c.githubProjectItemNodeId
-    ) {
-      try {
-        await syncGithubDraft(c._id);
-      } catch (e) {
-        window.alert(
-          e instanceof Error
-            ? e.message
-            : "Kunne ikke oppdatere GitHub-utkast med ny tekst.",
-        );
-      }
+    try {
+      await onUpdate({
+        candidateId: c._id,
+        name: nameT,
+        code: codeT,
+        notes: notes.trim() === "" ? null : notes.trim(),
+        orgUnitId: orgUnitId === "" ? null : (orgUnitId as Id<"orgUnits">),
+        linkHintBusinessOwner:
+          linkOwner.trim() === "" ? null : linkOwner.trim(),
+        linkHintSystems: linkSystems.trim() === "" ? null : linkSystems.trim(),
+        linkHintComplianceNotes:
+          linkComp.trim() === "" ? null : linkComp.trim(),
+      });
+      toast.success("Endringer lagret.");
+    } catch (e) {
+      toast.error(
+        e instanceof Error ? e.message : "Kunne ikke lagre endringene.",
+      );
     }
   }
 
+  const Wrapper = as === "div" ? "div" : "li";
+
   return (
-    <li
+    <Wrapper
       id={`cand-detail-${c._id}`}
       className="scroll-mt-24 rounded-2xl border border-border/70 bg-card p-4 shadow-sm sm:p-5"
     >
@@ -374,32 +428,167 @@ export function WorkspaceCandidateRow({
         </div>
       </div>
 
-      {githubProject?.enabled && canEdit ? (
+      {githubProject?.enabled ? (
         <div className="mt-5 space-y-3 rounded-xl border border-border/60 bg-muted/15 p-4">
-          <p className="text-foreground flex items-center gap-2 text-sm font-medium">
-            <GitBranch className="text-muted-foreground size-4" aria-hidden />
-            GitHub-prosjekt
-          </p>
+          <div className="flex flex-wrap items-start justify-between gap-2">
+            <p className="text-foreground flex items-center gap-2 text-sm font-medium">
+              <GitBranch className="text-muted-foreground size-4" aria-hidden />
+              GitHub-prosjekt
+            </p>
+            <p className="text-muted-foreground text-[11px] leading-snug">
+              <Link
+                href={`/w/${workspaceId}/vurderinger`}
+                className="text-primary font-medium underline underline-offset-2"
+              >
+                PVV-vurderinger
+              </Link>
+              {" · "}
+              <Link
+                href={`/w/${workspaceId}/ros`}
+                className="text-primary font-medium underline underline-offset-2"
+              >
+                ROS
+              </Link>
+            </p>
+          </div>
+          {!canEdit ? (
+            <p className="text-muted-foreground text-xs leading-relaxed">
+              Som leser kan du se koblingen til arbeidsområdets GitHub-prosjekt.{" "}
+              <strong className="text-foreground font-medium">Hent til PVV</strong>,{" "}
+              <strong className="text-foreground font-medium">Send til GitHub</strong> og
+              redigering av tavle krever medlem-rolle.
+            </p>
+          ) : (
           <p className="text-muted-foreground text-xs leading-relaxed">
-            PVV legger inn et <strong className="text-foreground font-medium">utkast</strong>{" "}
-            i prosjektet. Konverterer du kortet til et ekte issue i et repo på
-            GitHub, vises det under. Ved lagring oppdateres utkasttekst fra PVV;
-            for ekte issues må kroppen oppdateres i repo eller utvides senere.
-            Kommentarer på GitHub synkroniseres ikke tilbake til PVV.
+            <strong className="text-foreground font-medium">Hent til PVV</strong>{" "}
+            leser merkede tekstfelt fra GitHub.{" "}
+            <strong className="text-foreground font-medium">Send til GitHub</strong>{" "}
+            oppdaterer kortet med prosess + koblede vurderinger/ROS.{" "}
+            <strong className="text-foreground font-medium">Lagre</strong> lagrer i PVV.
+            Bruk <strong className="text-foreground font-medium">Send til GitHub</strong> når
+            tavlen skal oppdateres.
           </p>
-          {c.githubProjectItemNodeId && !githubProject.loading ? (
+          )}
+          {canEdit &&
+          c.githubProjectItemNodeId &&
+          (importFromGithub || syncGithubDraft) ? (
+            <div className="flex flex-wrap gap-2">
+              {importFromGithub ? (
+              <Button
+                type="button"
+                size="sm"
+                variant="secondary"
+                className="gap-2"
+                disabled={importBusy || pushGithubBusy}
+                onClick={() => {
+                  setImportBusy(true);
+                  void importFromGithub(c._id)
+                    .then((r) => {
+                      if (r.ok) {
+                        toast.success(
+                          r.updatedKeys.length > 0
+                            ? `Oppdatert fra GitHub: ${r.updatedKeys.join(", ")}.`
+                            : "Ingen felt å oppdatere.",
+                        );
+                      } else if (r.reason === "empty_body") {
+                        toast.error(
+                          "Tom brødtekst på GitHub — bruk «Send til GitHub» fra PVV først.",
+                        );
+                      } else if (r.reason === "no_markers") {
+                        toast.error(
+                          "Ingen PVV-synkmarkører i GitHub-teksten. Bruk «Send til GitHub» én gang, eller behold <!-- pvv:b64:… -->-blokkene når du redigerer på GitHub.",
+                        );
+                      } else {
+                        toast.error(
+                          "Fant markører men kunne ikke lese felt — sjekk at teksten ikke er ødelagt.",
+                        );
+                      }
+                    })
+                    .catch((e) =>
+                      toast.error(
+                        e instanceof Error ? e.message : "Kunne ikke hente fra GitHub.",
+                      ),
+                    )
+                    .finally(() => setImportBusy(false));
+                }}
+              >
+                {importBusy ? (
+                  <Loader2 className="size-4 shrink-0 animate-spin" aria-hidden />
+                ) : (
+                  <Download className="size-4 shrink-0" aria-hidden />
+                )}
+                Hent til PVV
+              </Button>
+              ) : null}
+              {syncGithubDraft ? (
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="gap-2"
+                disabled={importBusy || pushGithubBusy}
+                onClick={() => {
+                  setPushGithubBusy(true);
+                  void syncGithubDraft(c._id)
+                    .then(() => {
+                      toast.success("GitHub-kort er oppdatert fra PVV.");
+                    })
+                    .catch((e) =>
+                      toast.error(
+                        e instanceof Error
+                          ? e.message
+                          : "Kunne ikke sende til GitHub.",
+                      ),
+                    )
+                    .finally(() => setPushGithubBusy(false));
+                }}
+              >
+                {pushGithubBusy ? (
+                  <Loader2 className="size-4 shrink-0 animate-spin" aria-hidden />
+                ) : (
+                  <Upload className="size-4 shrink-0" aria-hidden />
+                )}
+                Send til GitHub
+              </Button>
+              ) : null}
+            </div>
+          ) : null}
+          {canEdit &&
+          c.githubProjectItemNodeId &&
+          !githubProject.loading ? (
             <div
               className="rounded-lg border border-border/50 bg-background/60 px-3 py-2 text-xs leading-relaxed"
               role="status"
             >
               {githubItemShapeErr ? (
-                <p className="text-destructive">{githubItemShapeErr}</p>
+                <div className="space-y-2">
+                  <p className="text-destructive">{githubItemShapeErr}</p>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      setGithubItemShape(null);
+                      setGithubItemShapeErr(null);
+                      setGithubCardShapeFetchKey((k) => k + 1);
+                    }}
+                  >
+                    Prøv igjen
+                  </Button>
+                </div>
+              ) : !githubItemShape ? (
+                <p className="text-muted-foreground flex items-center gap-2">
+                  <Loader2 className="size-4 shrink-0 animate-spin" aria-hidden />
+                  Sjekker kort på GitHub …
+                </p>
               ) : githubItemShape?.kind === "draft" ? (
                 <p className="text-muted-foreground">
                   <span className="text-foreground font-medium">GitHub:</span>{" "}
                   fortsatt <strong className="text-foreground">utkast</strong>{" "}
                   (draft) — ikke et issue i et repo. Da kan PVV oppdatere tittel og
-                  brødtekst via API.
+                  brødtekst via API. Under-saker og fremdriftslinje som på GitHub-tavlen
+                  finnes bare for kort som er koblet til et issue i et repo — ikke for
+                  utkast.
                 </p>
               ) : githubItemShape?.kind === "issue" && githubItemShape.issue ? (
                 <div className="space-y-1">
@@ -433,6 +622,13 @@ export function WorkspaceCandidateRow({
                       Matcher et av standard-repoene under innstillinger.
                     </p>
                   ) : null}
+                  {githubItemShape.issue.subIssuesSummary &&
+                  githubItemShape.issue.subIssuesSummary.total > 0 ? (
+                    <GithubSubIssuesProgress
+                      className="mt-2"
+                      summary={githubItemShape.issue.subIssuesSummary}
+                    />
+                  ) : null}
                 </div>
               ) : githubItemShape?.kind === "pull_request" &&
                 githubItemShape.pullRequest ? (
@@ -455,16 +651,32 @@ export function WorkspaceCandidateRow({
                   API-type).
                 </p>
               ) : (
-                <p className="text-muted-foreground">Sjekker kort på GitHub …</p>
+                <p className="text-muted-foreground">
+                  Uventet svar fra GitHub.
+                </p>
               )}
+              {githubItemShape && !githubItemShapeErr ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="mt-2 h-8 text-xs text-muted-foreground"
+                  onClick={() => {
+                    setGithubItemShape(null);
+                    setGithubCardShapeFetchKey((k) => k + 1);
+                  }}
+                >
+                  Oppdater kortinfo
+                </Button>
+              ) : null}
             </div>
           ) : null}
-          {githubProject.loading ? (
+          {canEdit && githubProject.loading ? (
             <p className="text-muted-foreground flex items-center gap-2 text-sm">
               <Loader2 className="size-4 shrink-0 animate-spin" aria-hidden />
               Laster statuskolonner …
             </p>
-          ) : githubProject.error ? (
+          ) : canEdit && githubProject.error ? (
             <div className="space-y-2">
               <p className="text-destructive text-sm" role="alert">
                 {githubProject.error}
@@ -478,7 +690,8 @@ export function WorkspaceCandidateRow({
                 Prøv på nytt
               </Button>
             </div>
-          ) : githubProject.statusOptions &&
+          ) : canEdit &&
+            githubProject.statusOptions &&
             githubProject.statusOptions.length > 0 ? (
             <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
               <div className="min-w-[12rem] space-y-1">
@@ -510,8 +723,9 @@ export function WorkspaceCandidateRow({
                       setGithubBusy(true);
                       void githubProject
                         .updateStatus(c._id, selectedProjectStatus)
+                        .then(() => toast.success("Status oppdatert på GitHub."))
                         .catch((e) =>
-                          window.alert(
+                          toast.error(
                             e instanceof Error
                               ? e.message
                               : "Kunne ikke oppdatere status.",
@@ -544,8 +758,11 @@ export function WorkspaceCandidateRow({
                         setGithubBusy(true);
                         void githubProject
                           .remove(c._id)
+                          .then(() =>
+                            toast.success("Kort fjernet fra GitHub-prosjekt."),
+                          )
                           .catch((e) =>
-                            window.alert(
+                            toast.error(
                               e instanceof Error
                                 ? e.message
                                 : "Kunne ikke fjerne fra prosjekt.",
@@ -574,8 +791,11 @@ export function WorkspaceCandidateRow({
                     setGithubBusy(true);
                     void githubProject
                       .register(c._id, selectedProjectStatus)
+                      .then(() =>
+                        toast.success("Prosess registrert i GitHub-prosjekt."),
+                      )
                       .catch((e) =>
-                        window.alert(
+                        toast.error(
                           e instanceof Error
                             ? e.message
                             : "Kunne ikke registrere i prosjekt.",
@@ -594,15 +814,15 @@ export function WorkspaceCandidateRow({
                 </Button>
               )}
             </div>
-          ) : (
+          ) : canEdit ? (
             <p className="text-muted-foreground text-sm">
               Ingen statuskolonner funnet for dette prosjektet.
             </p>
-          )}
+          ) : null}
         </div>
       ) : null}
 
-      {!githubProject?.enabled && canEdit ? (
+      {!githubProject?.enabled ? (
         <div className="mt-5 space-y-3 rounded-xl border border-amber-500/35 bg-amber-500/[0.08] p-4">
           <p className="text-foreground flex items-center gap-2 text-sm font-medium">
             <GitBranch className="text-amber-700 dark:text-amber-300 size-4" aria-hidden />
@@ -644,7 +864,7 @@ export function WorkspaceCandidateRow({
           >
             Lagre endringer
           </Button>
-          {isAdmin ? (
+          {canEdit ? (
             <Button
               type="button"
               size="sm"
@@ -659,7 +879,18 @@ export function WorkspaceCandidateRow({
                       : "Slette denne prosessen fra registeret? Eksisterende PVV-koblinger bør ryddes manuelt.",
                   )
                 ) {
-                  void onRemove({ candidateId: c._id });
+                  void (async () => {
+                    try {
+                      await onRemove({ candidateId: c._id });
+                      toast.success("Prosess slettet.");
+                    } catch (e) {
+                      toast.error(
+                        e instanceof Error
+                          ? e.message
+                          : "Kunne ikke slette prosessen.",
+                      );
+                    }
+                  })();
                 }
               }}
             >
@@ -668,6 +899,6 @@ export function WorkspaceCandidateRow({
           ) : null}
         </div>
       ) : null}
-    </li>
+    </Wrapper>
   );
 }

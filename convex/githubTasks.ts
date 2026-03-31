@@ -18,6 +18,7 @@ import {
   requireUserId,
   requireWorkspaceMember,
 } from "./lib/access";
+import { fetchGithubSubIssuesSummary } from "./lib/githubSubIssues";
 import { normalizeGithubRepoFullName, parseGithubIssueUrl } from "./lib/github";
 
 const GITHUB_API_HEADERS = {
@@ -258,6 +259,21 @@ export const getTaskForAction = internalQuery({
     if (!task) return null;
     const workspace = await ctx.db.get(task.workspaceId);
     return { task, workspace };
+  },
+});
+
+export const assertWorkspaceViewerForTask = internalQuery({
+  args: {
+    taskId: v.id("assessmentTasks"),
+    userId: v.id("users"),
+  },
+  handler: async (ctx, args) => {
+    const task = await ctx.db.get(args.taskId);
+    if (!task) {
+      throw new Error("Fant ikke oppgaven.");
+    }
+    await requireWorkspaceMember(ctx, task.workspaceId, args.userId, "viewer");
+    return { task };
   },
 });
 
@@ -1284,6 +1300,37 @@ export const pushToGithub = action({
     await ctx.runAction(internal.githubTasks.pushToGithubAction, {
       taskId: args.taskId,
     });
+  },
+});
+
+/**
+ * Fremdrift på GitHub under-saker for oppgavens koblede issue (krever PAT med issues).
+ */
+export const getGithubSubIssuesSummaryForTask = action({
+  args: { taskId: v.id("assessmentTasks") },
+  handler: async (ctx, args) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) {
+      throw new Error("Du må være innlogget.");
+    }
+    const { task } = await ctx.runQuery(
+      internal.githubTasks.assertWorkspaceViewerForTask,
+      {
+        taskId: args.taskId,
+        userId,
+      },
+    );
+    const repo = task.githubRepoFullName?.trim();
+    if (!repo || task.githubIssueNumber == null) {
+      return { summary: null };
+    }
+    const token = await resolveGithubToken(ctx, task.workspaceId);
+    const summary = await fetchGithubSubIssuesSummary(
+      token,
+      repo,
+      task.githubIssueNumber,
+    );
+    return { summary };
   },
 });
 
