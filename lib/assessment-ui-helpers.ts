@@ -50,3 +50,26 @@ export function compliancePlainLine(
   }
   return "Risiko og personvern: pågår";
 }
+
+/** Prioritet som vises i lister: manuell overstyrer beregnet cache. */
+export function effectiveAssessmentPriority(a: {
+  manualPriorityOverride?: number | null;
+  cachedPriorityScore?: number | null;
+}): number {
+  const m = a.manualPriorityOverride;
+  if (m !== undefined && m !== null && Number.isFinite(m)) {
+    return m;
+  }
+  const c = a.cachedPriorityScore;
+  return c !== undefined && c !== null && Number.isFinite(c) ? c : 0;
+}
+
+/** Tailwind-klasser for venstreaksent på kort (prioritet 0–100). */
+export function priorityBorderAccentClass(score: number): string {
+  if (!Number.isFinite(score)) {
+    return "border-l-slate-400/50";
+  }
+  if (score >= 70) return "border-l-emerald-500/80";
+  if (score >= 45) return "border-l-amber-500/80";
+  return "border-l-slate-400/60";
+}

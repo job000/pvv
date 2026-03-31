@@ -9,15 +9,18 @@ export default function WorkspaceAssessmentsPage() {
   const workspaceId = params.workspaceId as Id<"workspaces">;
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="font-heading text-2xl font-semibold">Vurderinger</h1>
-        <p className="text-muted-foreground mt-1 max-w-2xl text-sm leading-relaxed">
-          Samle fakta om en prosess, få en foreslått prioritet og følg den videre
-          i leveranse. Alt lagres fortløpende; du trenger ikke fullføre alt på én
-          gang.
+    <div className="mx-auto w-full max-w-6xl space-y-10 pb-8">
+      <header className="space-y-3 border-b border-border/60 pb-8">
+        <h1 className="font-heading text-3xl font-semibold tracking-tight md:text-4xl">
+          Vurderinger
+        </h1>
+        <p className="text-muted-foreground max-w-2xl text-base leading-relaxed">
+          Samle fakta om prosessen, tall og risiko — få modellerte anbefalinger
+          for automasjon og prioritering. Alt lagres fortløpende; du trenger ikke
+          fullføre alt på én gang. Når dere er klare, flytter dere saken i{" "}
+          <span className="text-foreground/90 font-medium">leveranse</span>.
         </p>
-      </div>
+      </header>
       <WorkspaceAssessmentsPanel workspaceId={workspaceId} />
     </div>
   );

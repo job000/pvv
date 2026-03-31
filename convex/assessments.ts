@@ -44,6 +44,8 @@ async function refreshCachedPriority(
   );
   await ctx.db.patch(assessmentId, {
     cachedPriorityScore: computed.priorityScore,
+    cachedAp: computed.ap,
+    cachedCriticality: computed.criticality,
   });
 }
 
@@ -159,6 +161,8 @@ export const create = mutation({
       shareWithWorkspace: args.shareWithWorkspace,
       pipelineStatus: "not_assessed",
       cachedPriorityScore: computed.priorityScore,
+      cachedAp: computed.ap,
+      cachedCriticality: computed.criticality,
       kanbanRank: now,
     });
     await ctx.db.insert("assessmentCollaborators", {
@@ -278,6 +282,8 @@ export const createVersion = mutation({
     await ctx.db.patch(assessment._id, {
       updatedAt: now,
       cachedPriorityScore: computed.priorityScore,
+      cachedAp: computed.ap,
+      cachedCriticality: computed.criticality,
     });
     return nextVersion;
   },

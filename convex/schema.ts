@@ -236,6 +236,10 @@ export default defineSchema({
     sprintId: v.optional(v.id("sprints")),
     /** Fra siste utkast (oppdateres ved lagring) */
     cachedPriorityScore: v.optional(v.number()),
+    /** Automatiseringspotensial % — cache for oversikter */
+    cachedAp: v.optional(v.number()),
+    /** Viktighet / konsekvens % — cache for oversikter */
+    cachedCriticality: v.optional(v.number()),
     /** 0–100 manuell justering av prioritet (overstyrer visning når satt) */
     manualPriorityOverride: v.optional(v.number()),
     /** Rekkefølge i Kanban-kolonne (lavere = høyere) */
@@ -315,6 +319,15 @@ export default defineSchema({
     .index("by_assessment", ["assessmentId"])
     .index("by_workspace", ["workspaceId"])
     .index("by_assignee", ["assigneeUserId"]),
+
+  /** Korte team-notater på vurderingen (samarbeid / hvem sa hva) */
+  assessmentNotes: defineTable({
+    workspaceId: v.id("workspaces"),
+    assessmentId: v.id("assessments"),
+    authorUserId: v.id("users"),
+    body: v.string(),
+    createdAt: v.number(),
+  }).index("by_assessment", ["assessmentId"]),
 
   /**
    * Tidsbegrenset offentlig lenke (kun sammendrag, ingen redigering).

@@ -19,9 +19,11 @@ async function enrichTask(ctx: QueryCtx, row: Doc<"assessmentTasks">) {
   const assignee = row.assigneeUserId
     ? await ctx.db.get(row.assigneeUserId)
     : null;
+  const creator = await ctx.db.get(row.createdByUserId);
   return {
     ...row,
     assigneeName: assignee?.name ?? assignee?.email ?? null,
+    creatorName: creator?.name ?? creator?.email ?? null,
   };
 }
 

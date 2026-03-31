@@ -6,6 +6,9 @@
 export type Likert5 = 1 | 2 | 3 | 4 | 5;
 
 export function clampLikert5(n: number): Likert5 {
+  if (!Number.isFinite(n)) {
+    return 3;
+  }
   const x = Math.round(n);
   if (x < 1) return 1;
   if (x > 5) return 5;
@@ -96,9 +99,25 @@ export function easeOfImplementationFinalPercent(args: {
 export function easeDifficultyLabel(
   percent: number,
 ): "Enkel" | "Middels" | "Vanskelig" {
-  if (percent >= 65) return "Enkel";
-  if (percent >= 35) return "Middels";
+  const p = Number.isFinite(percent) ? percent : 0;
+  if (p >= 65) return "Enkel";
+  if (p >= 35) return "Middels";
   return "Vanskelig";
+}
+
+/**
+ * Porteføljeprioritet 0–100: geometrisk middel av automasjonspotensial og
+ * viktighet. Krever at begge er høye for topp-score (mer robust enn enkel snitt).
+ */
+export function portfolioPriorityScore(apPercent: number, criticalityPercent: number): number {
+  const a = Math.min(100, Math.max(0, apPercent));
+  const c = Math.min(100, Math.max(0, criticalityPercent));
+  const g = Math.sqrt(a * c);
+  return Math.round(g * 10) / 10;
+}
+
+function finiteOr(n: number, fallback: number): number {
+  return Number.isFinite(n) ? n : fallback;
 }
 
 export function totalHoursPerYear(args: {
@@ -275,23 +294,25 @@ export function computeAllResults(input: AssessmentInputSnapshot): ComputedSnaps
   const benHPerEmp = perEmployee(benH, input.employees);
   const benCPerEmp = perEmployee(benC, input.employees);
   const benFtePerEmp = perEmployee(benFte, input.employees);
-  const priorityScore = Math.round(((ap + criticality) / 2) * 10) / 10;
+  const apSafe = finiteOr(ap, 0);
+  const critSafe = finiteOr(criticality, 0);
+  const priorityScore = portfolioPriorityScore(apSafe, critSafe);
   return {
-    ap,
+    ap: apSafe,
     feasible,
-    easeBase,
-    ease,
-    easeLabel: easeDifficultyLabel(ease),
-    criticality,
-    hoursY,
-    fte,
-    costY,
-    benH,
-    benC,
-    benFte,
-    benHPerEmp,
-    benCPerEmp,
-    benFtePerEmp,
+    easeBase: finiteOr(easeBase, 0),
+    ease: finiteOr(ease, 0),
+    easeLabel: easeDifficultyLabel(finiteOr(ease, 0)),
+    criticality: critSafe,
+    hoursY: finiteOr(hoursY, 0),
+    fte: finiteOr(fte, 0),
+    costY: finiteOr(costY, 0),
+    benH: finiteOr(benH, 0),
+    benC: finiteOr(benC, 0),
+    benFte: finiteOr(benFte, 0),
+    benHPerEmp: finiteOr(benHPerEmp, 0),
+    benCPerEmp: finiteOr(benCPerEmp, 0),
+    benFtePerEmp: finiteOr(benFtePerEmp, 0),
     priorityScore,
   };
 }

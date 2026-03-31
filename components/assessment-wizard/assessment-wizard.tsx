@@ -1,5 +1,6 @@
 "use client";
 
+import { AssessmentCollaborationPanel } from "@/components/assessment-wizard/assessment-collaboration-panel";
 import { AssessmentContextCard } from "@/components/assessment-wizard/assessment-context-card";
 import { AssessmentExportPanel } from "@/components/assessment-wizard/assessment-export-panel";
 import { ProcessProfileSection } from "@/components/assessment-wizard/process-profile-section";
@@ -60,12 +61,31 @@ const SLIDE_LABELS = [
 
 const SAMARBEID_SLIDE_INDEX = SLIDE_LABELS.indexOf("Samarbeid");
 
+const KPI_DEFAULTS = {
+  baselineHours: 800,
+  reworkHours: 50,
+  auditHours: 40,
+  avgCostPerYear: 850000,
+  workingDays: 230,
+  workingHoursPerDay: 7.5,
+  employees: 3,
+} as const;
+
+function parseKpiNumber(
+  raw: string,
+  fallback: number,
+  current: number,
+): number {
+  if (raw.trim() === "") return fallback;
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : current;
+}
+
 type Props = { assessmentId: Id<"assessments"> };
 
 export function AssessmentWizard({ assessmentId }: Props) {
   const data = useQuery(api.assessments.getDraft, { assessmentId });
   const access = useQuery(api.assessments.getMyAccess, { assessmentId });
-  const versions = useQuery(api.assessments.listVersions, { assessmentId });
   const collaborators = useQuery(api.assessments.listCollaborators, {
     assessmentId,
   });
@@ -75,26 +95,7 @@ export function AssessmentWizard({ assessmentId }: Props) {
       ? { workspaceId: data.assessment.workspaceId }
       : "skip",
   );
-  const workspaceMembers = useQuery(
-    api.workspaces.listMembers,
-    data?.assessment
-      ? { workspaceId: data.assessment.workspaceId }
-      : "skip",
-  );
-  const assessmentTasks = useQuery(
-    api.assessmentTasks.listByAssessment,
-    data?.assessment ? { assessmentId } : "skip",
-  );
-
   const saveDraft = useMutation(api.assessments.saveDraft);
-  const createVersion = useMutation(api.assessments.createVersion);
-  const restoreDraftFromVersion = useMutation(
-    api.assessments.restoreDraftFromVersion,
-  );
-  const invite = useMutation(api.assessments.inviteCollaborator);
-  const setShare = useMutation(api.assessments.setShareWithWorkspace);
-  const createAssessmentTask = useMutation(api.assessmentTasks.create);
-  const setAssessmentTaskStatus = useMutation(api.assessmentTasks.setStatus);
 
   const [payload, setPayload] = useState<AssessmentPayload | null>(null);
   const [emblaRef, emblaApi] = useEmblaCarousel({
@@ -173,14 +174,7 @@ export function AssessmentWizard({ assessmentId }: Props) {
     return () => window.removeEventListener("hashchange", go);
   }, [emblaApi]);
 
-  const [inviteEmail, setInviteEmail] = useState("");
-  const [inviteRole, setInviteRole] = useState<"editor" | "reviewer" | "viewer">(
-    "reviewer",
-  );
-  const [versionNote, setVersionNote] = useState("");
   const [candidatePickerKey, setCandidatePickerKey] = useState(0);
-  const [taskTitle, setTaskTitle] = useState("");
-  const [taskAssignee, setTaskAssignee] = useState<Id<"users"> | "">("");
 
   function update<K extends keyof AssessmentPayload>(
     key: K,
@@ -667,9 +661,17 @@ export function AssessmentWizard({ assessmentId }: Props) {
                       id={`kpi-${key}`}
                       type="number"
                       value={payload[key]}
-                      onChange={(e) =>
-                        update(key, Number(e.target.value))
-                      }
+                      onChange={(e) => {
+                        const k = key as keyof typeof KPI_DEFAULTS;
+                        update(
+                          k,
+                          parseKpiNumber(
+                            e.target.value,
+                            KPI_DEFAULTS[k],
+                            payload[k] as number,
+                          ) as AssessmentPayload[typeof k],
+                        );
+                      }}
                       disabled={!canEdit}
                     />
                   </div>
@@ -679,264 +681,18 @@ export function AssessmentWizard({ assessmentId }: Props) {
 
             <Slide>
               <CardHeader>
-                <CardTitle>Samarbeid og versjoner</CardTitle>
+                <CardTitle>Samarbeid</CardTitle>
                 <CardDescription>
-                  Inviter, del med arbeidsområdet, opprett oppgaver og lag
-                  versjonspunkter — alt synlig for de som har tilgang.
+                  Team, oppgaver med tildeling og frist, notater og
+                  versjonspunkter — samlet slik at alle ser hvem som gjør hva.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
-                  <div className="flex-1 space-y-2">
-                    <Label>E-post</Label>
-                    <Input
-                      value={inviteEmail}
-                      onChange={(e) => setInviteEmail(e.target.value)}
-                      disabled={!canEdit}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Rolle</Label>
-                    <select
-                      className="flex h-9 w-full rounded-lg border border-input bg-background px-2 text-sm"
-                      value={inviteRole}
-                      onChange={(e) =>
-                        setInviteRole(
-                          e.target.value as "editor" | "reviewer" | "viewer",
-                        )
-                      }
-                      disabled={!canEdit}
-                    >
-                      <option value="editor">Redaktør</option>
-                      <option value="reviewer">Gjennomganger</option>
-                      <option value="viewer">Visning</option>
-                    </select>
-                  </div>
-                  <Button
-                    disabled={!canEdit || !inviteEmail.trim()}
-                    onClick={() =>
-                      void invite({
-                        assessmentId,
-                        email: inviteEmail.trim(),
-                        role: inviteRole,
-                      }).then(() => setInviteEmail(""))
-                    }
-                  >
-                    Inviter
-                  </Button>
-                </div>
-
-                <div className="flex items-center gap-3">
-                  <Checkbox
-                    id="share"
-                    checked={access?.shareWithWorkspace ?? false}
-                    onCheckedChange={(c) =>
-                      canEdit &&
-                      void setShare({
-                        assessmentId,
-                        shareWithWorkspace: c === true,
-                      })
-                    }
-                    disabled={!canEdit}
-                  />
-                  <Label htmlFor="share">
-                    Synlig for alle med tilgang til arbeidsområdet
-                  </Label>
-                </div>
-
-                <div className="bg-muted/20 space-y-3 rounded-xl border p-4">
-                  <div>
-                    <p className="font-medium text-sm">Oppgaver</p>
-                    <p className="text-muted-foreground text-xs">
-                      Korte gjøremål (f.eks. «innhent ROS»). Tildel til
-                      medlemmer i arbeidsområdet.
-                    </p>
-                  </div>
-                  {(assessmentTasks ?? []).length === 0 ? (
-                    <p className="text-muted-foreground text-sm">
-                      Ingen oppgaver ennå.
-                    </p>
-                  ) : (
-                    <ul className="space-y-2">
-                      {(assessmentTasks ?? []).map((t) => (
-                        <li
-                          key={t._id}
-                          className="bg-card flex flex-wrap items-start justify-between gap-2 rounded-lg border px-3 py-2 text-sm"
-                        >
-                          <div className="min-w-0">
-                            <p
-                              className={
-                                t.status === "done"
-                                  ? "text-muted-foreground line-through"
-                                  : "font-medium"
-                              }
-                            >
-                              {t.title}
-                            </p>
-                            {t.assigneeName ? (
-                              <p className="text-muted-foreground text-xs">
-                                {t.assigneeName}
-                              </p>
-                            ) : null}
-                          </div>
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            disabled={!canEdit}
-                            onClick={() =>
-                              void setAssessmentTaskStatus({
-                                taskId: t._id,
-                                status:
-                                  t.status === "open" ? "done" : "open",
-                              })
-                            }
-                          >
-                            {t.status === "done" ? "Gjenåpne" : "Fullført"}
-                          </Button>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                  <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
-                    <div className="min-w-0 flex-1 space-y-1">
-                      <Label htmlFor="task-title">Ny oppgave</Label>
-                      <Input
-                        id="task-title"
-                        value={taskTitle}
-                        onChange={(e) => setTaskTitle(e.target.value)}
-                        placeholder="F.eks. Ferdigstill PDD-utkast"
-                        disabled={!canEdit}
-                      />
-                    </div>
-                    <div className="w-full space-y-1 sm:w-48">
-                      <Label htmlFor="task-assignee">Tildelt</Label>
-                      <select
-                        id="task-assignee"
-                        className="border-input bg-background flex h-9 w-full rounded-lg border px-2 text-sm"
-                        value={taskAssignee}
-                        onChange={(e) =>
-                          setTaskAssignee(
-                            e.target.value === ""
-                              ? ""
-                              : (e.target.value as Id<"users">),
-                          )
-                        }
-                        disabled={!canEdit}
-                      >
-                        <option value="">— Velg —</option>
-                        {(workspaceMembers ?? []).map((m) => (
-                          <option key={m.userId} value={m.userId}>
-                            {m.name ?? m.email ?? m.userId}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <Button
-                      type="button"
-                      disabled={
-                        !canEdit || !taskTitle.trim() || !workspaceMembers
-                      }
-                      onClick={() => {
-                        const title = taskTitle.trim();
-                        if (!title) return;
-                        void createAssessmentTask({
-                          assessmentId,
-                          title,
-                          assigneeUserId:
-                            taskAssignee === "" ? undefined : taskAssignee,
-                        }).then(() => {
-                          setTaskTitle("");
-                          setTaskAssignee("");
-                        });
-                      }}
-                    >
-                      Legg til
-                    </Button>
-                  </div>
-                </div>
-
-                <Separator />
-
-                <div className="space-y-2">
-                  <Label>Nytt versjonspunkt (valgfritt notat)</Label>
-                  <Input
-                    value={versionNote}
-                    onChange={(e) => setVersionNote(e.target.value)}
-                    placeholder="F.eks. Etter workshop uke 12"
-                    disabled={!canEdit}
-                  />
-                  <Button
-                    variant="secondary"
-                    disabled={!canEdit}
-                    onClick={() =>
-                      void createVersion({
-                        assessmentId,
-                        note: versionNote || undefined,
-                      }).then(() => setVersionNote(""))
-                    }
-                  >
-                    Lagre versjon
-                  </Button>
-                </div>
-
-                <div id="versjoner" className="scroll-mt-28 space-y-3">
-                  <p className="mb-2 font-medium text-sm">Inviterte / team</p>
-                  <ul className="mb-4 max-h-32 space-y-1 overflow-y-auto text-sm">
-                    {(collaborators ?? []).map((c) => (
-                      <li key={c._id} className="text-muted-foreground">
-                        {(c.name ?? c.email ?? c.userId) + ` · ${c.role}`}
-                      </li>
-                    ))}
-                  </ul>
-                  <p className="mb-2 font-medium text-sm">Versjonshistorikk</p>
-                  <p className="text-muted-foreground mb-2 text-xs leading-relaxed">
-                    Hvert lagret versjonspunkt kan gjenopprettes til utkastet.
-                    Historikken slettes ikke.
-                  </p>
-                  <ul className="max-h-52 space-y-2 overflow-y-auto text-sm">
-                    {(versions ?? []).map((v) => (
-                      <li
-                        key={v._id}
-                        className="flex flex-col gap-2 rounded-lg border bg-muted/20 px-3 py-2 sm:flex-row sm:items-center sm:justify-between"
-                      >
-                        <div className="min-w-0">
-                          <span className="font-medium">v{v.version}</span>
-                          <span className="text-muted-foreground ml-2 text-xs">
-                            {new Date(v.createdAt).toLocaleString("nb-NO")}
-                          </span>
-                          {v.note ? (
-                            <p className="text-muted-foreground mt-0.5 truncate text-xs">
-                              {v.note}
-                            </p>
-                          ) : null}
-                        </div>
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          className="shrink-0"
-                          disabled={!canEdit}
-                          onClick={() => {
-                            if (
-                              typeof window !== "undefined" &&
-                              window.confirm(
-                                `Gjenopprette utkast fra v${v.version}? Nåværende utkast i editoren erstattes.`,
-                              )
-                            ) {
-                              void restoreDraftFromVersion({
-                                assessmentId,
-                                version: v.version,
-                              });
-                            }
-                          }}
-                        >
-                          Gjenopprett utkast
-                        </Button>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
+                <AssessmentCollaborationPanel
+                  assessmentId={assessmentId}
+                  workspaceId={assessment.workspaceId}
+                  canEdit={canEdit}
+                />
               </CardContent>
             </Slide>
 
@@ -1001,8 +757,9 @@ export function AssessmentWizard({ assessmentId }: Props) {
                         value={`${computed.criticality.toFixed(1)} %`}
                       />
                       <ScoreCard
-                        label="Foreslått prioritet (snitt)"
+                        label="Foreslått porteføljeprioritet"
                         value={computed.priorityScore.toFixed(1)}
+                        sub="Kombinasjon av automasjonspotensial og viktighet (√ AP × viktighet, 0–100)."
                       />
                       <ScoreCard
                         label="Trygg nok prosess og systemer?"
@@ -1018,18 +775,18 @@ export function AssessmentWizard({ assessmentId }: Props) {
                       som minst middels forutsigbare (steg «Trygghet»).
                     </p>
                     <div className="space-y-2">
-                      <div className="flex justify-between text-sm">
-                        <span className="text-muted-foreground">
-                          Hvor krevende er det å bygge? (kompleksitet)
+                      <div className="flex justify-between gap-3 text-sm">
+                        <span className="text-muted-foreground max-w-[min(100%,18rem)]">
+                          Gjennomførbarhet (høyere % = enklere å bygge og drift)
                         </span>
-                        <span>
+                        <span className="shrink-0 tabular-nums">
                           {computed.ease.toFixed(1)} % · {computed.easeLabel}
                         </span>
                       </div>
                       <Progress value={computed.ease}>
                         <div className="flex w-full justify-between gap-2 pb-2">
                           <ProgressLabel className="text-muted-foreground">
-                            Vanskelighetsgrad
+                            Enklere mot høyre
                           </ProgressLabel>
                           <ProgressValue />
                         </div>
@@ -1174,11 +931,24 @@ function Slide({
   );
 }
 
-function ScoreCard({ label, value }: { label: string; value: string }) {
+function ScoreCard({
+  label,
+  value,
+  sub,
+}: {
+  label: string;
+  value: string;
+  sub?: string;
+}) {
   return (
     <div className="rounded-xl border bg-muted/30 px-4 py-3">
       <p className="text-muted-foreground text-xs">{label}</p>
       <p className="font-heading text-xl font-semibold">{value}</p>
+      {sub ? (
+        <p className="text-muted-foreground mt-1 text-[11px] leading-snug">
+          {sub}
+        </p>
+      ) : null}
     </div>
   );
 }

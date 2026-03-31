@@ -8,6 +8,7 @@
  * @module
  */
 
+import type * as assessmentNotes from "../assessmentNotes.js";
 import type * as assessmentShareLinks from "../assessmentShareLinks.js";
 import type * as assessmentTasks from "../assessmentTasks.js";
 import type * as assessments from "../assessments.js";
@@ -31,6 +32,7 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  assessmentNotes: typeof assessmentNotes;
   assessmentShareLinks: typeof assessmentShareLinks;
   assessmentTasks: typeof assessmentTasks;
   assessments: typeof assessments;
