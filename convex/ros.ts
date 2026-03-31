@@ -303,6 +303,92 @@ export const listAnalyses = query({
   },
 });
 
+/**
+ * Lettvekts «kommandosenter» for ROS-arbeidsflaten: tellere, hull i dekning,
+ * siste aktivitet — uten å lese hele matrisen (billig abonnement).
+ */
+export const workspaceHub = query({
+  args: { workspaceId: v.id("workspaces") },
+  handler: async (ctx, args) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) {
+      return null;
+    }
+    await requireWorkspaceMember(ctx, args.workspaceId, userId, "viewer");
+
+    const templateRows = await ctx.db
+      .query("rosTemplates")
+      .withIndex("by_workspace", (q) => q.eq("workspaceId", args.workspaceId))
+      .collect();
+
+    const analysisRows = await ctx.db
+      .query("rosAnalyses")
+      .withIndex("by_workspace", (q) => q.eq("workspaceId", args.workspaceId))
+      .collect();
+
+    const axisRows = await ctx.db
+      .query("rosAxisLists")
+      .withIndex("by_workspace", (q) => q.eq("workspaceId", args.workspaceId))
+      .collect();
+
+    const candidateRows = await ctx.db
+      .query("candidates")
+      .withIndex("by_workspace", (q) => q.eq("workspaceId", args.workspaceId))
+      .collect();
+
+    const covered = new Set<Id<"candidates">>();
+    for (const a of analysisRows) {
+      covered.add(a.candidateId);
+    }
+
+    const withoutRos = candidateRows
+      .filter((c) => !covered.has(c._id))
+      .sort((a, b) =>
+        a.name.localeCompare(b.name, "nb", { sensitivity: "base" }),
+      );
+
+    const taskRows = await ctx.db
+      .query("rosTasks")
+      .withIndex("by_workspace", (q) => q.eq("workspaceId", args.workspaceId))
+      .collect();
+    const openRosTasksCount = taskRows.filter((t) => t.status === "open").length;
+
+    const candById = new Map(
+      candidateRows.map((c) => [c._id, c] as const),
+    );
+    const recent = [...analysisRows]
+      .sort((a, b) => b.updatedAt - a.updatedAt)
+      .slice(0, 8)
+      .map((r) => {
+        const cand = candById.get(r.candidateId);
+        return {
+          analysisId: r._id,
+          title: r.title,
+          candidateCode: cand?.code ?? "",
+          updatedAt: r.updatedAt,
+        };
+      });
+
+    return {
+      templateCount: templateRows.length,
+      analysisCount: analysisRows.length,
+      axisListCount: axisRows.length,
+      candidateCount: candidateRows.length,
+      candidatesWithoutRosCount: withoutRos.length,
+      candidatesWithoutRos: withoutRos.slice(0, 16).map((c) => ({
+        _id: c._id,
+        name: c.name,
+        code: c.code,
+      })),
+      openRosTasksCount,
+      /** Når kun én mal finnes — brukes til forhåndsvalg ved ny analyse. */
+      defaultTemplateId:
+        templateRows.length === 1 ? templateRows[0]!._id : null,
+      recentAnalyses: recent,
+    };
+  },
+});
+
 /** Aggregerer matrisedata for oversikt og sammenligning på tvers av ROS-analyser. */
 export const workspaceDashboard = query({
   args: {

@@ -10,15 +10,18 @@ export default function RosPage() {
   const workspaceId = params.workspaceId as Id<"workspaces">;
 
   return (
-    <div className="mx-auto w-full max-w-6xl space-y-10 pb-10">
+    <div className="mx-auto w-full max-w-7xl space-y-10 pb-10">
       <header className="space-y-4 border-b border-border/60 pb-8">
         <h1 className="font-heading text-3xl font-semibold tracking-tight md:text-4xl">
           ROS — risiko og sårbarhet
         </h1>
-        <p className="text-muted-foreground max-w-2xl text-base leading-relaxed">
-          Du fyller ikke ut risiko et annet sted og «flytter» til matrisen —{" "}
-          <strong>du klikker inn vurderingen direkte i hvert kryss</strong> (se «Slik
-          fungerer ROS» under). Bygg{" "}
+        <p className="text-muted-foreground max-w-3xl text-base leading-relaxed">
+          Verktøyet er laget for team som skal gjennomføre ROS i stor skala:{" "}
+          <strong>felles maler</strong>,{" "}
+          <strong>sporbarhet mot PVV</strong> og{" "}
+          <strong>oversikt på tvers</strong> — uten dobbeltarbeid. Du legger
+          risiko inn <strong>direkte i matrisen</strong> (hvert kryss), ikke i et
+          eget skjema som må overføres. Bygg{" "}
           <strong>maler</strong> (akser og etiketter), opprett{" "}
           <strong>analyser</strong> med fargekodet matrise, og koble til{" "}
           <strong>PVV-vurderinger</strong> og{" "}
@@ -27,18 +30,17 @@ export default function RosPage() {
             className="text-primary font-medium underline-offset-4 hover:underline"
           >
             prosesskandidater
-          </Link>{" "}
-          fra samme arbeidsområde — slik følger dere én rød tråd fra vurdering
-          til risiko. Under{" "}
+          </Link>
+          . Under{" "}
           <Link
             href={`/w/${workspaceId}/ros/akser`}
             className="text-primary font-medium underline-offset-4 hover:underline"
           >
             ROS-akser
           </Link>{" "}
-          vedlikeholder dere gjenbrukbare etikettlister med beskrivelser. Fanen{" "}
-          <strong>Oversikt</strong> viser søylediagram, nøkkeltall og sammenligning
-          på tvers av alle analyser.
+          vedlikeholder dere gjenbrukbare etikettlister.{" "}
+          <strong>Oversikt</strong> summerer alle analyser; kontrollpanelet under
+          viser hull i dekning, siste aktivitet og hurtigvalg.
         </p>
       </header>
       <RosWorkspace workspaceId={workspaceId} />

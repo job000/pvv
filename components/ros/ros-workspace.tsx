@@ -25,6 +25,7 @@ import { cn } from "@/lib/utils";
 import { useMutation, useQuery } from "convex/react";
 import { RosDashboardPanel } from "@/components/ros/ros-dashboard-panel";
 import { RosMethodologyGuide } from "@/components/ros/ros-methodology-guide";
+import { RosWorkspaceHub } from "@/components/ros/ros-workspace-hub";
 import {
   RosTemplatePreviewMini,
 } from "@/components/ros/ros-template-preview";
@@ -44,6 +45,7 @@ import {
   Info,
   LayoutGrid,
   Plus,
+  Search,
   Sparkles,
   Trash2,
 } from "lucide-react";
@@ -126,9 +128,12 @@ function RosFlowStrip({ tab }: { tab: Tab }) {
   );
 }
 
+type AnalysisSort = "updated" | "title" | "candidate";
+
 export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> }) {
   const templates = useQuery(api.ros.listTemplates, { workspaceId });
   const analyses = useQuery(api.ros.listAnalyses, { workspaceId });
+  const hub = useQuery(api.ros.workspaceHub, { workspaceId });
   const candidates = useQuery(api.candidates.listByWorkspace, { workspaceId });
 
   const createTemplate = useMutation(api.ros.createTemplate);
@@ -160,6 +165,8 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
   const [templateDialogOpen, setTemplateDialogOpen] = useState(false);
   /** Når true: tittel på ny analyse oppdateres automatisk fra valgt kandidat */
   const [anaTitleAuto, setAnaTitleAuto] = useState(true);
+  const [analysisSearch, setAnalysisSearch] = useState("");
+  const [analysisSort, setAnalysisSort] = useState<AnalysisSort>("updated");
 
   const matchingAssessments = useQuery(
     api.ros.listMatchingAssessments,
@@ -245,12 +252,67 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
     [templates, anaTemplateId],
   );
 
+  const filteredSortedAnalyses = useMemo(() => {
+    const list = analyses ?? [];
+    const q = analysisSearch.trim().toLowerCase();
+    const filtered = q
+      ? list.filter((a) => {
+          const blob = `${a.title} ${a.candidateName} ${a.candidateCode}`.toLowerCase();
+          return blob.includes(q);
+        })
+      : [...list];
+    const rows = [...filtered];
+    if (analysisSort === "title") {
+      rows.sort((a, b) =>
+        a.title.localeCompare(b.title, "nb", { sensitivity: "base" }),
+      );
+    } else if (analysisSort === "candidate") {
+      rows.sort((a, b) =>
+        a.candidateName.localeCompare(b.candidateName, "nb", {
+          sensitivity: "base",
+        }),
+      );
+    } else {
+      rows.sort((a, b) => b.updatedAt - a.updatedAt);
+    }
+    return rows;
+  }, [analyses, analysisSearch, analysisSort]);
+
+  const startAnalysisForCandidate = useCallback(
+    (candidateId: Id<"candidates">) => {
+      setTab("analyser");
+      setAnaCandidateId(candidateId);
+      setSelectedAssessmentIds([]);
+      setExtraAssessmentPickerKey((k) => k + 1);
+      setAnaTitleAuto(true);
+      if (templates && templates.length === 1) {
+        setAnaTemplateId(templates[0]!._id);
+      } else if (hub?.defaultTemplateId) {
+        setAnaTemplateId(hub.defaultTemplateId);
+      }
+    },
+    [templates, hub?.defaultTemplateId],
+  );
+
+  const openNewTemplateDialog = useCallback(() => {
+    resetTemplateForm();
+    setTemplateDialogOpen(true);
+  }, [resetTemplateForm]);
+
   useEffect(() => {
     if (!anaTitleAuto || !anaCandidateId || !candidates) return;
     const c = candidates.find((x) => x._id === anaCandidateId);
     if (!c) return;
     setAnaTitle(`ROS — ${c.name} (${c.code})`);
   }, [anaTitleAuto, anaCandidateId, candidates]);
+
+  /** Én mal i arbeidsområdet → forhåndsvelg (mindre friksjon for store organisasjoner). */
+  useEffect(() => {
+    if (templates === undefined || templates.length !== 1) return;
+    setAnaTemplateId((prev) =>
+      prev === "" ? templates[0]!._id : prev,
+    );
+  }, [templates]);
 
   async function submitTemplate(e: React.FormEvent) {
     e.preventDefault();
@@ -362,9 +424,18 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
         ))}
       </div>
 
+      <RosWorkspaceHub
+        workspaceId={workspaceId}
+        hub={hub}
+        activeTab={tab}
+        onTab={setTab}
+        onStartAnalysisForCandidate={startAnalysisForCandidate}
+        onOpenTemplateDialog={openNewTemplateDialog}
+      />
+
       <RosFlowStrip tab={tab} />
 
-      <RosMethodologyGuide workspaceId={workspaceId} variant="page" />
+      <RosMethodologyGuide workspaceId={workspaceId} variant="compact" />
 
       {tab === "oversikt" ? (
         <RosDashboardPanel workspaceId={workspaceId} />
@@ -385,8 +456,7 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
               type="button"
               className="shrink-0 gap-2"
               onClick={() => {
-                resetTemplateForm();
-                setTemplateDialogOpen(true);
+                openNewTemplateDialog();
               }}
             >
               <LayoutGrid className="size-4" aria-hidden />
@@ -404,8 +474,7 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
                 variant="secondary"
                 className="mt-4 gap-2"
                 onClick={() => {
-                  resetTemplateForm();
-                  setTemplateDialogOpen(true);
+                  openNewTemplateDialog();
                 }}
               >
                 <Sparkles className="size-4" aria-hidden />
@@ -664,6 +733,38 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
               Du kan koble <strong>én eller flere PVV-vurderinger</strong>{" "}
               (matcher kandidatkode og/eller andre i arbeidsområdet).
             </p>
+            {analysesList.length > 0 ? (
+              <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-end">
+                <div className="relative min-w-[12rem] flex-1">
+                  <Search className="text-muted-foreground pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2" />
+                  <Input
+                    type="search"
+                    value={analysisSearch}
+                    onChange={(e) => setAnalysisSearch(e.target.value)}
+                    placeholder="Søk i tittel eller prosess …"
+                    className="pl-9"
+                    aria-label="Filtrer analyser"
+                  />
+                </div>
+                <div className="flex items-center gap-2">
+                  <Label htmlFor="ros-ana-sort" className="text-muted-foreground shrink-0 text-xs">
+                    Sorter
+                  </Label>
+                  <select
+                    id="ros-ana-sort"
+                    className="border-input bg-background flex h-10 rounded-lg border px-2 text-sm"
+                    value={analysisSort}
+                    onChange={(e) =>
+                      setAnalysisSort(e.target.value as AnalysisSort)
+                    }
+                  >
+                    <option value="updated">Sist oppdatert</option>
+                    <option value="title">Tittel A–Å</option>
+                    <option value="candidate">Prosess</option>
+                  </select>
+                </div>
+              </div>
+            ) : null}
             {analysesList.length === 0 ? (
               <p className="text-muted-foreground rounded-xl border border-dashed py-8 text-center text-sm leading-relaxed">
                 Ingen analyser ennå. Du trenger minst én{" "}
@@ -678,9 +779,20 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
                 , deretter fyll ut skjemaet (på store skjermer til høyre, på
                 mobil under).
               </p>
+            ) : filteredSortedAnalyses.length === 0 ? (
+              <p className="text-muted-foreground rounded-xl border border-dashed py-8 text-center text-sm">
+                Ingen analyser matcher søket.{" "}
+                <button
+                  type="button"
+                  className="text-primary font-medium underline-offset-4 hover:underline"
+                  onClick={() => setAnalysisSearch("")}
+                >
+                  Nullstill filter
+                </button>
+              </p>
             ) : (
               <ul className="space-y-2">
-                {analysesList.map((a) => (
+                {filteredSortedAnalyses.map((a) => (
                   <li key={a._id}>
                     <Link
                       href={`/w/${workspaceId}/ros/a/${a._id}`}
