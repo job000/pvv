@@ -6,6 +6,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { LandingMesh } from "@/components/marketing/landing-mesh";
+import { BrandMark } from "@/components/brand-mark";
 import { ThemeModeToggle } from "@/components/theme-mode-toggle";
 import { cn } from "@/lib/utils";
 import {
@@ -13,7 +14,6 @@ import {
   ClipboardCheck,
   LayoutDashboard,
   Shield,
-  Sparkles,
   Users,
 } from "lucide-react";
 import Link from "next/link";
@@ -59,12 +59,10 @@ export function HomeLanding() {
         <div className="mx-auto flex h-14 max-w-6xl items-center justify-between gap-4 px-4 sm:px-6">
           <Link
             href="/"
-            className="font-heading text-foreground flex items-center gap-2 text-lg font-semibold tracking-tight"
+            className="font-heading text-foreground flex items-center gap-2.5 rounded-lg text-lg font-semibold tracking-tight outline-none ring-offset-background focus-visible:ring-2 focus-visible:ring-ring"
+            aria-label="FRO — forsiden"
           >
-            <span className="bg-primary/12 text-primary flex size-8 items-center justify-center rounded-lg">
-              <Sparkles className="size-4" aria-hidden />
-            </span>
-            PVV
+            <BrandMark size={28} />
           </Link>
           <nav className="flex flex-wrap items-center justify-end gap-2 sm:gap-3">
             <ThemeModeToggle />
@@ -102,8 +100,8 @@ export function HomeLanding() {
             </p>
             <h1 className="font-heading text-foreground text-balance text-4xl font-semibold tracking-tight sm:text-5xl md:text-6xl md:leading-[1.08]">
               Én plattform for{" "}
-              <span className="text-primary">PVV-vurderinger</span> og risiko i
-              praksis
+              <span className="text-primary">prioriterte oppgaver</span>,{" "}
+              vurderinger og risiko
             </h1>
             <p className="text-muted-foreground mx-auto mt-6 max-w-2xl text-balance text-lg leading-relaxed sm:text-xl">
               Kartlegg prosesser, gjennomfør vurderinger med tydelig sporbarhet,
@@ -144,7 +142,7 @@ export function HomeLanding() {
                 360°
               </p>
               <p className="text-muted-foreground mt-2 text-sm font-medium">
-                Prosess + PVV + ROS i samme flyt
+                Prosess + vurderinger + ROS i samme flyt
               </p>
             </div>
             <div className="rounded-2xl border border-border/50 bg-card/50 px-6 py-8 text-center backdrop-blur-sm">
@@ -177,7 +175,7 @@ export function HomeLanding() {
               </p>
             </div>
             <div className="mt-12 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-              <FeatureCard icon={ClipboardCheck} title="PVV-vurderinger">
+              <FeatureCard icon={ClipboardCheck} title="Vurderinger og prosess">
                 Veiledede skjemaer, roller og historikk slik at dere leverer
                 konsistent kvalitet på tvers av prosesser.
               </FeatureCard>
@@ -241,7 +239,9 @@ export function HomeLanding() {
 
       <footer className="border-border/40 mt-auto border-t py-10">
         <div className="text-muted-foreground mx-auto flex max-w-6xl flex-col items-center justify-between gap-4 px-4 text-sm sm:flex-row sm:px-6">
-          <p>© {new Date().getFullYear()} PVV · Prosess og personvern</p>
+          <p>
+            © {new Date().getFullYear()} FRO · prioriter og utfør
+          </p>
           <div className="flex gap-6">
             <Link
               href="/sign-in"

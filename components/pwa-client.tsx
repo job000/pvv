@@ -138,7 +138,7 @@ export function PwaClient() {
           </div>
           <div className="min-w-0 flex-1 space-y-1">
             <p className="text-foreground text-sm font-semibold leading-tight">
-              Installer PVV på telefonen
+              Installer FRO på telefonen
             </p>
             <p className="text-muted-foreground text-xs leading-relaxed">
               {ios ? (

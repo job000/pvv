@@ -1,9 +1,12 @@
 "use client";
 
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { Monitor, Moon, Sun } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useSyncExternalStore } from "react";
+
+const THEME_CYCLE = ["system", "light", "dark"] as const;
 
 function useIsClient() {
   return useSyncExternalStore(
@@ -14,82 +17,56 @@ function useIsClient() {
 }
 
 /**
- * Tredelt valg: lyst, mørkt eller system (next-themes).
+ * Én knapp: syklus system → lyst → mørkt → system.
  */
 export function ThemeModeToggle({ className }: { className?: string }) {
   const { theme, setTheme } = useTheme();
   const isClient = useIsClient();
 
+  const stored =
+    theme === "light" || theme === "dark" || theme === "system"
+      ? theme
+      : "system";
+  const label =
+    stored === "light" ? "Lyst" : stored === "dark" ? "Mørkt" : "System";
+
+  const cycle = () => {
+    const i = THEME_CYCLE.indexOf(stored);
+    const next = THEME_CYCLE[(i < 0 ? 0 : i + 1) % THEME_CYCLE.length];
+    setTheme(next);
+  };
+
+  const Icon = stored === "light" ? Sun : stored === "dark" ? Moon : Monitor;
+
   if (!isClient) {
     return (
-      <span
-        className={cn(
-          "border-border/60 bg-muted/30 inline-flex h-9 rounded-lg border p-0.5",
-          className,
-        )}
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon"
+        className={cn("size-9 rounded-full", className)}
+        disabled
         aria-hidden
       >
-        <span className="size-8" />
-        <span className="size-8" />
-        <span className="size-8" />
-      </span>
+        <span className="size-5" />
+      </Button>
     );
   }
 
   return (
-    <div
+    <Button
+      type="button"
+      variant="ghost"
+      size="icon"
       className={cn(
-        "border-border/60 bg-muted/40 inline-flex rounded-lg border p-0.5 shadow-sm",
+        "text-muted-foreground hover:text-foreground size-9 rounded-full",
         className,
       )}
-      role="group"
-      aria-label="Fargetema"
+      onClick={cycle}
+      aria-label={`Tema: ${label}. Velg neste.`}
+      title={`${label} — klikk for å bytte`}
     >
-      <button
-        type="button"
-        className={cn(
-          "inline-flex size-8 items-center justify-center rounded-md transition-colors",
-          theme === "light"
-            ? "bg-background text-foreground shadow-sm"
-            : "text-muted-foreground hover:text-foreground",
-        )}
-        onClick={() => setTheme("light")}
-        aria-pressed={theme === "light"}
-        aria-label="Lyst tema"
-        title="Lyst"
-      >
-        <Sun className="size-4" />
-      </button>
-      <button
-        type="button"
-        className={cn(
-          "inline-flex size-8 items-center justify-center rounded-md transition-colors",
-          theme === "dark"
-            ? "bg-background text-foreground shadow-sm"
-            : "text-muted-foreground hover:text-foreground",
-        )}
-        onClick={() => setTheme("dark")}
-        aria-pressed={theme === "dark"}
-        aria-label="Mørkt tema"
-        title="Mørkt"
-      >
-        <Moon className="size-4" />
-      </button>
-      <button
-        type="button"
-        className={cn(
-          "inline-flex size-8 items-center justify-center rounded-md transition-colors",
-          theme === "system"
-            ? "bg-background text-foreground shadow-sm"
-            : "text-muted-foreground hover:text-foreground",
-        )}
-        onClick={() => setTheme("system")}
-        aria-pressed={theme === "system"}
-        aria-label="Følg system"
-        title="System"
-      >
-        <Monitor className="size-4" />
-      </button>
-    </div>
+      <Icon className="size-5" aria-hidden />
+    </Button>
   );
 }

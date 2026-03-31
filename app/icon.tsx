@@ -15,20 +15,21 @@ export default function Icon() {
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          background: "#171717",
+          background: "linear-gradient(145deg, #0f172a 0%, #0d9488 100%)",
           borderRadius: 6,
         }}
       >
         <span
           style={{
-            color: "#fafafa",
-            fontSize: 18,
-            fontWeight: 700,
+            color: "#f8fafc",
+            fontSize: 9,
+            fontWeight: 800,
+            letterSpacing: "-0.04em",
             fontFamily:
               "ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, sans-serif",
           }}
         >
-          P
+          FRO
         </span>
       </div>
     ),

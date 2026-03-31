@@ -3,10 +3,10 @@ import type { MetadataRoute } from "next";
 export default function manifest(): MetadataRoute.Manifest {
   return {
     id: "/",
-    name: "PVV — Prosess og personvern",
-    short_name: "PVV",
+    name: "FRO — prioriter og utfør",
+    short_name: "FRO",
     description:
-      "PVV-vurderinger, prosessregister, ROS og leveranse — samarbeid i arbeidsområder.",
+      "Prioriter oppgaver, prosessvurderinger, ROS og leveranse — samarbeid i arbeidsområder.",
     start_url: "/",
     scope: "/",
     display: "standalone",
@@ -19,13 +19,13 @@ export default function manifest(): MetadataRoute.Manifest {
     dir: "ltr",
     icons: [
       {
-        src: "/icons/pvv.svg",
+        src: "/icons/fro-mark.svg",
         sizes: "512x512",
         type: "image/svg+xml",
         purpose: "any",
       },
       {
-        src: "/icons/pvv.svg",
+        src: "/icons/fro-mark.svg",
         sizes: "512x512",
         type: "image/svg+xml",
         purpose: "maskable",

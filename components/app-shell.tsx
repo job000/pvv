@@ -86,7 +86,7 @@ export function AppShell({
                 href="/dashboard"
                 className="font-heading shrink-0 text-base font-semibold tracking-tight text-foreground"
               >
-                PVV
+                FRO
               </Link>
               <Link
                 href="/dashboard"

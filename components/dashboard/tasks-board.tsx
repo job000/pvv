@@ -360,26 +360,47 @@ export function TasksBoard() {
 
   if (tasks === undefined) {
     return (
-      <div className="text-muted-foreground flex items-center gap-2 py-8 text-sm">
-        <span className="size-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
-        Henter oppgaver …
-      </div>
+      <section className="space-y-4" aria-labelledby="tasks-board-heading">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <h2
+              id="tasks-board-heading"
+              className="font-heading text-xl font-semibold tracking-tight sm:text-2xl"
+            >
+              Oppgaver på tvers av arbeidsområder
+            </h2>
+            <p className="text-muted-foreground mt-1 max-w-2xl text-sm leading-relaxed">
+              Dra for å prioritere eller flytte mellom kolonner.
+            </p>
+          </div>
+        </div>
+        <div className="text-muted-foreground flex items-center gap-3 rounded-2xl border border-border/70 bg-muted/20 px-5 py-10 text-sm">
+          <span className="border-primary size-5 shrink-0 animate-spin rounded-full border-2 border-t-transparent" />
+          Henter oppgaver …
+        </div>
+      </section>
     );
   }
 
   return (
-    <section className="space-y-4" aria-labelledby="tasks-board-heading">
+    <section className="space-y-5" aria-labelledby="tasks-board-heading">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h2
-            id="tasks-board-heading"
-            className="font-heading text-xl font-semibold tracking-tight"
-          >
-            Oppgaver på tvers av arbeidsområder
-          </h2>
-          <p className="text-muted-foreground mt-1 max-w-2xl text-sm leading-relaxed">
+          <div className="flex items-center gap-2">
+            <div className="bg-primary/12 text-primary flex size-9 items-center justify-center rounded-lg">
+              <LayoutGrid className="size-4" aria-hidden />
+            </div>
+            <h2
+              id="tasks-board-heading"
+              className="font-heading text-xl font-semibold tracking-tight sm:text-2xl"
+            >
+              Oppgaver på tvers av arbeidsområder
+            </h2>
+          </div>
+          <p className="text-muted-foreground mt-2 max-w-2xl pl-11 text-sm leading-relaxed">
             Dra for å prioritere eller flytte mellom kolonner. Rediger for full
-            CRUD (tekst, frist, tildeling). Data vises kun der du har tilgang.
+            kontroll (tekst, frist, tildeling). Data vises kun der du har
+            tilgang.
           </p>
         </div>
         <div
@@ -410,10 +431,24 @@ export function TasksBoard() {
       </div>
 
       {tasks.length === 0 ? (
-        <p className="text-muted-foreground rounded-xl border border-dashed py-12 text-center text-sm">
-          Ingen oppgaver ennå. Opprett under en vurdering (Samarbeid) eller vent
-          på at andre tildeler deg.
-        </p>
+        <div className="border-border/70 bg-muted/15 relative overflow-hidden rounded-2xl border border-dashed px-6 py-14 text-center">
+          <div
+            className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_50%_0%,hsl(var(--primary)/0.12),transparent_55%)]"
+            aria-hidden
+          />
+          <div className="relative mx-auto max-w-md space-y-3">
+            <div className="bg-muted text-muted-foreground mx-auto flex size-12 items-center justify-center rounded-2xl">
+              <List className="size-6" aria-hidden />
+            </div>
+            <p className="text-foreground font-heading text-base font-semibold">
+              Ingen oppgaver ennå
+            </p>
+            <p className="text-muted-foreground text-sm leading-relaxed">
+              Opprett oppgaver under en vurdering (Samarbeid), eller vent på at
+              andre tildeler deg.
+            </p>
+          </div>
+        </div>
       ) : view === "list" ? (
         <DndContext
           sensors={sensors}

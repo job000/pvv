@@ -34,17 +34,17 @@ export const viewport = {
 
 export const metadata: Metadata = {
   metadataBase: new URL(appUrl),
-  applicationName: "PVV",
+  applicationName: "FRO",
   title: {
-    default: "PVV — Prosess og personvern",
-    template: "%s · PVV",
+    default: "FRO — prioriter og utfør",
+    template: "%s · FRO",
   },
   description:
-    "PVV-vurderinger, prosessregister, ROS og leveranse — samarbeid i arbeidsområder.",
+    "Prioriter oppgaver, prosessvurderinger, ROS og leveranse — samarbeid i arbeidsområder.",
   manifest: "/manifest.webmanifest",
   appleWebApp: {
     capable: true,
-    title: "PVV",
+    title: "FRO",
     statusBarStyle: "default",
   },
   formatDetection: {

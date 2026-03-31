@@ -15,20 +15,21 @@ export default function AppleIcon() {
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          background: "linear-gradient(145deg, #171717 0%, #3f3f46 100%)",
+          background: "linear-gradient(145deg, #0f172a 0%, #0d9488 100%)",
           borderRadius: 40,
         }}
       >
         <span
           style={{
             color: "#fafafa",
-            fontSize: 56,
-            fontWeight: 700,
+            fontSize: 46,
+            fontWeight: 800,
+            letterSpacing: "-0.03em",
             fontFamily:
               "ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, sans-serif",
           }}
         >
-          PVV
+          FRO
         </span>
       </div>
     ),
