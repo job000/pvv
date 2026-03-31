@@ -1,3 +1,6 @@
+import { ConvexClientProvider } from "@/components/providers/convex-provider";
+import { ThemeProvider } from "@/components/providers/theme-provider";
+import { ConvexAuthNextjsServerProvider } from "@convex-dev/auth/nextjs/server";
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
@@ -12,13 +15,22 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+export const dynamic = "force-dynamic";
+
+export const viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 5,
+  viewportFit: "cover" as const,
+};
+
 export const metadata: Metadata = {
   title: "PVV — Prosess vurdering verktøy",
   description:
     "RPA-kandidatvurdering med matematisk utregning (UiPath Automation Hub-prinsipper).",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
@@ -27,8 +39,15 @@ export default function RootLayout({
     <html
       lang="nb"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      suppressHydrationWarning
     >
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="flex min-h-full flex-col">
+        <ConvexAuthNextjsServerProvider>
+          <ConvexClientProvider>
+            <ThemeProvider>{children}</ThemeProvider>
+          </ConvexClientProvider>
+        </ConvexAuthNextjsServerProvider>
+      </body>
     </html>
   );
 }
