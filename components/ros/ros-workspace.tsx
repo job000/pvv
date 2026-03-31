@@ -315,6 +315,39 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
     );
   }, [templates]);
 
+  /** Anker #ros-metode-standarder ligger i lukkede `<details>`; åpne ytre + indre og scroll. */
+  useEffect(() => {
+    const anchorId = "ros-metode-standarder";
+    const outerSelector = "[data-ros-methodology-panel]";
+
+    const openAndScroll = () => {
+      if (typeof window === "undefined") return;
+      if (window.location.hash !== `#${anchorId}`) return;
+
+      const outer = document.querySelector(outerSelector);
+      if (outer instanceof HTMLDetailsElement) {
+        outer.open = true;
+      }
+      const inner = document.getElementById(anchorId);
+      if (inner instanceof HTMLDetailsElement) {
+        inner.open = true;
+      }
+
+      const scroll = () => {
+        document.getElementById(anchorId)?.scrollIntoView({
+          behavior: "smooth",
+          block: "start",
+        });
+      };
+      requestAnimationFrame(() => requestAnimationFrame(scroll));
+      window.setTimeout(scroll, 80);
+    };
+
+    openAndScroll();
+    window.addEventListener("hashchange", openAndScroll);
+    return () => window.removeEventListener("hashchange", openAndScroll);
+  }, []);
+
   async function submitTemplate(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true);
@@ -436,9 +469,14 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
 
       <RosFlowStrip tab={tab} />
 
-      <RosComplianceNotice standardsDetailHref="#ros-metode-standarder" />
+      <RosComplianceNotice
+        standardsDetailHref={`/w/${workspaceId}/ros#ros-metode-standarder`}
+      />
 
-      <details className="border-border/60 bg-muted/10 group rounded-2xl border open:bg-muted/15">
+      <details
+        data-ros-methodology-panel
+        className="border-border/60 bg-muted/10 group rounded-2xl border open:bg-muted/15"
+      >
         <summary className="hover:bg-muted/30 flex cursor-pointer list-none items-center gap-2 rounded-2xl px-4 py-3 text-sm font-medium [&::-webkit-details-marker]:hidden">
           <HelpCircle className="text-primary size-4 shrink-0" aria-hidden />
           <span className="min-w-0 flex-1">

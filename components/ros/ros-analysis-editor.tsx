@@ -3,6 +3,7 @@
 import { RosAxisOverview } from "@/components/ros/ros-axis-overview";
 import { RosComplianceNotice } from "@/components/ros/ros-compliance-notice";
 import { RosJournalPanel } from "@/components/ros/ros-journal-panel";
+import { RosLifecycleCompliancePanel } from "@/components/ros/ros-lifecycle-compliance-panel";
 import { RosMatrix } from "@/components/ros/ros-matrix";
 import { RosLabelLevelsEditor } from "@/components/ros/ros-label-levels-editor";
 import { RosMethodologyGuide } from "@/components/ros/ros-methodology-guide";
@@ -39,7 +40,13 @@ import {
   parseLabelLines,
   resizeNumberMatrix,
 } from "@/lib/ros-matrix-resize";
+import {
+  COMPLIANCE_STATUS_LABELS,
+  type ComplianceStatusKey,
+} from "@/lib/helsesector-labels";
+import { ROS_PDD_ALIGNMENT_HINT_NB } from "@/lib/ros-compliance";
 import { cn } from "@/lib/utils";
+import type { RosRequirementRef } from "@/lib/ros-requirement-catalog";
 import { downloadRosAnalysisPdf } from "@/lib/ros-pdf";
 import {
   ChevronLeft,
@@ -67,6 +74,11 @@ function tsToDatetimeLocal(ms: number): string {
 
 const ROS_EDITOR_SECTIONS = [
   { id: "detaljer", label: "Detaljer", hint: "Tittel, notat, revisjon" },
+  {
+    id: "livssyklus",
+    label: "Livssyklus og krav",
+    hint: "ISO 31000, rammer, EU/EØS",
+  },
   { id: "oppsummering", label: "Oppsummering", hint: "Auto fra matriser" },
   { id: "pvv", label: "PVV-koblinger", hint: "Koble vurderinger" },
   { id: "versjoner", label: "Versjoner", hint: "Snapshot" },
@@ -80,6 +92,45 @@ const ROS_EDITOR_SECTIONS = [
 const ROS_MATRISE_SECTION_INDEX = ROS_EDITOR_SECTIONS.findIndex(
   (s) => s.id === "matrise",
 );
+
+/** Hovedvalg (enkel flyt — som «fyll ut → rapport» i KS-løsninger, her for IKT/ROS). */
+const ROS_PRIMARY_NAV: readonly {
+  id: string;
+  sectionIndex: number;
+  label: string;
+  short: string;
+}[] = [
+  {
+    id: "matrise",
+    sectionIndex: 7,
+    label: "Risikomatrise",
+    short: "Sett nivå i cellene",
+  },
+  {
+    id: "oppsummering",
+    sectionIndex: 2,
+    label: "Liste & tall",
+    short: "Oppsummering og register",
+  },
+  {
+    id: "pvv",
+    sectionIndex: 3,
+    label: "PVV-koblinger",
+    short: "Koble personvern",
+  },
+] as const;
+
+const ROS_MORE_NAV: readonly {
+  sectionIndex: number;
+  label: string;
+}[] = [
+  { sectionIndex: 0, label: "Kontekst" },
+  { sectionIndex: 1, label: "Livssyklus" },
+  { sectionIndex: 6, label: "Etter tiltak" },
+  { sectionIndex: 4, label: "Versjoner" },
+  { sectionIndex: 5, label: "Oppgaver" },
+  { sectionIndex: 8, label: "Journal" },
+] as const;
 
 function RosPvvLinkFields({
   linkId,
@@ -207,12 +258,19 @@ export function RosAnalysisEditor({
   const router = useRouter();
   const data = useQuery(api.ros.getAnalysis, { analysisId });
   const workspace = useQuery(api.workspaces.get, { workspaceId });
-  const journalEntries = useQuery(api.ros.listJournalEntries, { analysisId });
+  const [isDeleting, setIsDeleting] = useState(false);
+  /** Etter sletting (eller mens den pågår) — ikke abonner på child-queries som kaster. */
+  const rosChildQueryArgs =
+    data === null || isDeleting ? ("skip" as const) : { analysisId };
+  const journalEntries = useQuery(
+    api.ros.listJournalEntries,
+    rosChildQueryArgs,
+  );
   const allAssessments = useQuery(api.ros.listAssessmentsForWorkspace, {
     workspaceId,
   });
-  const versions = useQuery(api.ros.listVersions, { analysisId });
-  const tasks = useQuery(api.ros.listTasksByRosAnalysis, { analysisId });
+  const versions = useQuery(api.ros.listVersions, rosChildQueryArgs);
+  const tasks = useQuery(api.ros.listTasksByRosAnalysis, rosChildQueryArgs);
   const members = useQuery(api.workspaces.listMembers, { workspaceId });
 
   const updateAnalysis = useMutation(api.ros.updateAnalysis);
@@ -235,6 +293,17 @@ export function RosAnalysisEditor({
   const [notes, setNotes] = useState("");
   const [nextReviewLocal, setNextReviewLocal] = useState("");
   const [reviewRoutineNotes, setReviewRoutineNotes] = useState("");
+  const [methodologyStatement, setMethodologyStatement] = useState("");
+  const [contextSummary, setContextSummary] = useState("");
+  const [scopeAndCriteria, setScopeAndCriteria] = useState("");
+  const [riskCriteriaVersion, setRiskCriteriaVersion] = useState("");
+  const [axisScaleNotes, setAxisScaleNotes] = useState("");
+  const [complianceScopeTags, setComplianceScopeTags] = useState<string[]>(
+    [],
+  );
+  const [requirementRefs, setRequirementRefs] = useState<RosRequirementRef[]>(
+    [],
+  );
   const [matrix, setMatrix] = useState<number[][]>([]);
   const [cellItemsMatrix, setCellItemsMatrix] =
     useState<RosCellItemMatrix>([]);
@@ -256,6 +325,7 @@ export function RosAnalysisEditor({
 
   const analysisRevisionRef = useRef<number | null>(null);
   const rosSaveQueueRef = useRef(Promise.resolve());
+  const deletingRef = useRef(false);
 
   const [rosSection, setRosSection] = useState(ROS_MATRISE_SECTION_INDEX);
 
@@ -334,6 +404,19 @@ export function RosAnalysisEditor({
       data.nextReviewAt != null ? tsToDatetimeLocal(data.nextReviewAt) : "",
     );
     setReviewRoutineNotes(data.reviewRoutineNotes ?? "");
+    setMethodologyStatement(data.methodologyStatement ?? "");
+    setContextSummary(data.contextSummary ?? "");
+    setScopeAndCriteria(data.scopeAndCriteria ?? "");
+    setRiskCriteriaVersion(data.riskCriteriaVersion ?? "");
+    setAxisScaleNotes(data.axisScaleNotes ?? "");
+    setComplianceScopeTags(
+      data.complianceScopeTags ? [...data.complianceScopeTags] : [],
+    );
+    setRequirementRefs(
+      data.requirementRefs
+        ? data.requirementRefs.map((r) => ({ ...r }))
+        : [],
+    );
     setDirty(false);
   // Synk kun ved server-oppdatering (id/tidsstempel), ikke ved hver query-referanse
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -578,6 +661,16 @@ export function RosAnalysisEditor({
   const beforeStats = useMemo(() => statsFor(matrix), [matrix, statsFor]);
   const afterStats = useMemo(() => statsFor(matrixAfter), [matrixAfter, statsFor]);
 
+  const pddAlignmentHint = useMemo(() => {
+    if (!data) return false;
+    const high = beforeStats.max >= 4 || afterStats.max >= 4;
+    if (!high) return false;
+    return data.linkedAssessments.some((l) => {
+      const s = l.pddStatus ?? "not_started";
+      return s === "not_started" || s === "in_progress";
+    });
+  }, [data, beforeStats.max, afterStats.max]);
+
   const afterMatrixInvalid =
     matrixView === "after" &&
     useSeparateAfterAxes &&
@@ -666,6 +759,12 @@ export function RosAnalysisEditor({
           return;
         }
         const rev = analysisRevisionRef.current ?? data.revision ?? 0;
+        const cleanedRefs = requirementRefs.map((r) => ({
+          source: r.source,
+          article: r.article?.trim() || undefined,
+          note: r.note?.trim() || undefined,
+          documentationUrl: r.documentationUrl?.trim() || undefined,
+        }));
         const result = await updateAnalysis({
           analysisId,
           expectedRevision: rev,
@@ -673,6 +772,15 @@ export function RosAnalysisEditor({
           notes: notes.trim() || null,
           nextReviewAt: parsedNextMs === null ? null : parsedNextMs,
           reviewRoutineNotes: reviewRoutineNotes.trim() || null,
+          methodologyStatement: methodologyStatement.trim() || null,
+          contextSummary: contextSummary.trim() || null,
+          scopeAndCriteria: scopeAndCriteria.trim() || null,
+          riskCriteriaVersion: riskCriteriaVersion.trim() || null,
+          axisScaleNotes: axisScaleNotes.trim() || null,
+          complianceScopeTags:
+            complianceScopeTags.length === 0 ? null : complianceScopeTags,
+          requirementRefs:
+            cleanedRefs.length === 0 ? null : cleanedRefs,
           matrixValues: matrix,
           cellItems: cellItemsMatrix,
           matrixValuesAfter: matrixAfterToSave,
@@ -730,6 +838,29 @@ export function RosAnalysisEditor({
       pdfRows,
       pdfCols,
     );
+    const requirementRefLines = requirementRefs.map((r) => {
+      const src =
+        r.source === "gdpr"
+          ? "GDPR"
+          : r.source === "nis2"
+            ? "NIS2"
+            : r.source === "iso31000"
+              ? "ISO 31000"
+              : r.source === "iso27005"
+                ? "ISO/IEC 27005"
+                : r.source === "norwegian_law"
+                  ? "Norsk lov"
+                  : "Internt";
+      return [src, r.article, r.note, r.documentationUrl]
+        .filter(Boolean)
+        .join(" · ");
+    });
+    const openTaskLines =
+      tasks?.filter((t) => t.status === "open").map((t) => {
+        const due = t.dueAt ? ` · frist ${formatTs(t.dueAt)}` : "";
+        return `${t.title}${due}`;
+      }) ?? [];
+
     downloadRosAnalysisPdf({
       title: title.trim() || data.title,
       workspaceName: workspace?.name ?? null,
@@ -757,6 +888,16 @@ export function RosAnalysisEditor({
         : data.colAxisTitle,
       afterSeparateLayout: useSeparateAfterAxes,
       analysisNotes: notes.trim() || null,
+      methodologyStatement: methodologyStatement.trim() || null,
+      contextSummary: contextSummary.trim() || null,
+      scopeAndCriteria: scopeAndCriteria.trim() || null,
+      riskCriteriaVersion: riskCriteriaVersion.trim() || null,
+      axisScaleNotes: axisScaleNotes.trim() || null,
+      complianceScopeTagIds:
+        complianceScopeTags.length > 0 ? complianceScopeTags : undefined,
+      requirementRefLines:
+        requirementRefLines.length > 0 ? requirementRefLines : undefined,
+      openTaskLines: openTaskLines.length > 0 ? openTaskLines : undefined,
       linkedPvvTitles: data.linkedAssessments.map((l) => l.title),
       journalEntries: (journalEntries ?? []).map((e) => ({
         body: e.body,
@@ -917,80 +1058,140 @@ export function RosAnalysisEditor({
           <Button
             type="button"
             variant="outline"
+            disabled={isDeleting}
             onClick={() => {
               if (
                 typeof window !== "undefined" &&
                 window.confirm("Slette denne ROS-analysen?")
               ) {
-                void removeAnalysis({ analysisId }).then(() => {
-                  window.location.href = `/w/${workspaceId}/ros`;
-                });
+                deletingRef.current = true;
+                setIsDeleting(true);
+                router.replace(`/w/${workspaceId}/ros`);
+                void removeAnalysis({ analysisId });
               }
             }}
           >
-            Slett
+            {isDeleting ? "Sletter…" : "Slett"}
           </Button>
         </div>
       </div>
 
-      <RosComplianceNotice
-        standardsDetailHref={`/w/${workspaceId}/ros#ros-metode-standarder`}
-      />
-
       <p className="sr-only">
-        Piltastene venstre og høyre bytter steg når fokus ikke er i et felt. På
-        matrisen er de reservert til matrisen. Bruk fanene eller Forrige / Neste
-        nederst.
+        Piltastene venstre og høyre bytter del når fokus ikke er i et felt. På
+        matrisen er de reservert til matrisen. Bruk knappene under eller Forrige /
+        Neste nederst.
       </p>
 
-      <div className="flex flex-col gap-3 rounded-2xl border border-border/60 bg-gradient-to-r from-muted/40 via-card to-muted/30 p-3 shadow-sm">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <p className="text-muted-foreground text-xs leading-snug">
-            <span className="text-foreground font-medium">Enkel flyt:</span> fyll
-            matrisen og koble PVV — resten er støtte (versjon, journal, oppgaver).
+      <div className="border-border/60 bg-card space-y-4 rounded-2xl border p-4 shadow-sm">
+        <div className="space-y-1">
+          <p className="text-foreground text-sm font-medium leading-snug">
+            ROS for IKT-løsning
           </p>
-          <label htmlFor="ros-section-jump" className="sr-only">
-            Hopp til del
-          </label>
-          <select
-            id="ros-section-jump"
-            className="border-input bg-background h-9 min-w-[11rem] shrink-0 rounded-lg border px-2 text-sm shadow-xs"
-            value={rosSection}
-            onChange={(e) => setRosSection(Number(e.target.value))}
-          >
-            {ROS_EDITOR_SECTIONS.map((sec, i) => (
-              <option key={sec.id} value={i}>
-                {sec.label}
-                {sec.hint ? ` — ${sec.hint}` : ""}
-              </option>
-            ))}
-          </select>
+          <p className="text-muted-foreground max-w-3xl text-xs leading-relaxed">
+            Tre steg som i en enkel avviks-/KS-flyt:{" "}
+            <strong className="text-foreground">vurder risiko</strong> i matrisen,{" "}
+            <strong className="text-foreground">se liste og tall</strong>,{" "}
+            <strong className="text-foreground">koble PVV</strong> der det trengs.
+            Alt annet ligger under «Mer» — versjon, journal, kontekst.
+          </p>
         </div>
+
+        <details className="border-border/60 group rounded-xl border bg-muted/15">
+          <summary className="hover:bg-muted/40 flex cursor-pointer list-none items-center gap-2 px-3 py-2.5 text-xs font-medium [&::-webkit-details-marker]:hidden">
+            <span className="text-muted-foreground shrink-0 group-open:hidden">
+              Vis
+            </span>
+            <span className="text-muted-foreground hidden shrink-0 group-open:inline">
+              Skjul
+            </span>
+            <span>
+              Krav, ISO og personvern{" "}
+              <span className="text-muted-foreground font-normal">
+                (anbefales ved revisjon)
+              </span>
+            </span>
+          </summary>
+          <div className="border-border/50 border-t px-2 pb-3 pt-2">
+            <RosComplianceNotice
+              standardsDetailHref={`/w/${workspaceId}/ros#ros-metode-standarder`}
+            />
+          </div>
+        </details>
+
         <nav
-          className="-mx-1 flex gap-1 overflow-x-auto pb-1 [scrollbar-width:thin]"
-          aria-label="Del av ROS-analysen"
+          className="flex flex-col gap-3"
+          aria-label="Hoveddel av ROS-analysen"
+        >
+          <div className="grid gap-2 sm:grid-cols-3">
+            {ROS_PRIMARY_NAV.map((item) => {
+              const active = rosSection === item.sectionIndex;
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => setRosSection(item.sectionIndex)}
+                  className={cn(
+                    "flex flex-col items-start gap-0.5 rounded-xl border px-4 py-3 text-left transition-all",
+                    active
+                      ? "border-primary bg-primary text-primary-foreground shadow-md"
+                      : "border-border/70 bg-background hover:border-primary/35 hover:bg-muted/30",
+                  )}
+                >
+                  <span className="text-sm font-semibold">{item.label}</span>
+                  <span
+                    className={cn(
+                      "text-xs leading-snug",
+                      active ? "text-primary-foreground/90" : "text-muted-foreground",
+                    )}
+                  >
+                    {item.short}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+          <div className="flex flex-wrap items-center gap-x-1 gap-y-1 border-t border-border/40 pt-3 text-xs">
+            <span className="text-muted-foreground mr-1 font-medium">Mer</span>
+            {ROS_MORE_NAV.map((item, i) => (
+              <span key={item.label} className="inline-flex items-center">
+                {i > 0 ? (
+                  <span className="text-muted-foreground/50 mx-1" aria-hidden>
+                    ·
+                  </span>
+                ) : null}
+                <button
+                  type="button"
+                  onClick={() => setRosSection(item.sectionIndex)}
+                  className={cn(
+                    "rounded-md px-1.5 py-0.5 font-medium underline-offset-4 hover:underline",
+                    rosSection === item.sectionIndex
+                      ? "bg-primary/10 text-primary"
+                      : "text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  {item.label}
+                </button>
+              </span>
+            ))}
+          </div>
+        </nav>
+
+        <label htmlFor="ros-section-jump" className="sr-only">
+          Alle deler (komplett liste)
+        </label>
+        <select
+          id="ros-section-jump"
+          className="border-input bg-muted/20 h-9 w-full max-w-md rounded-lg border px-2 text-xs shadow-xs"
+          value={rosSection}
+          onChange={(e) => setRosSection(Number(e.target.value))}
         >
           {ROS_EDITOR_SECTIONS.map((sec, i) => (
-            <button
-              key={sec.id}
-              type="button"
-              aria-current={rosSection === i ? "true" : undefined}
-              title={sec.hint}
-              onClick={() => setRosSection(i)}
-              className={cn(
-                "shrink-0 rounded-full px-3 py-1.5 text-xs font-medium transition-colors",
-                rosSection === i
-                  ? "bg-primary text-primary-foreground shadow-sm"
-                  : "bg-muted/80 text-muted-foreground hover:bg-muted hover:text-foreground",
-                sec.id === "matrise" && rosSection !== i
-                  ? "ring-primary/25 ring-1"
-                  : null,
-              )}
-            >
+            <option key={sec.id} value={i}>
               {sec.label}
-            </button>
+              {sec.hint ? ` — ${sec.hint}` : ""}
+            </option>
           ))}
-        </nav>
+        </select>
       </div>
 
       {rosSection === 0 && (
@@ -1091,6 +1292,42 @@ export function RosAnalysisEditor({
       )}
 
       {rosSection === 1 && (
+        <RosLifecycleCompliancePanel
+          methodologyStatement={methodologyStatement}
+          contextSummary={contextSummary}
+          scopeAndCriteria={scopeAndCriteria}
+          riskCriteriaVersion={riskCriteriaVersion}
+          axisScaleNotes={axisScaleNotes}
+          complianceScopeTags={complianceScopeTags}
+          requirementRefs={requirementRefs}
+          onChange={(patch) => {
+            if (patch.methodologyStatement !== undefined) {
+              setMethodologyStatement(patch.methodologyStatement);
+            }
+            if (patch.contextSummary !== undefined) {
+              setContextSummary(patch.contextSummary);
+            }
+            if (patch.scopeAndCriteria !== undefined) {
+              setScopeAndCriteria(patch.scopeAndCriteria);
+            }
+            if (patch.riskCriteriaVersion !== undefined) {
+              setRiskCriteriaVersion(patch.riskCriteriaVersion);
+            }
+            if (patch.axisScaleNotes !== undefined) {
+              setAxisScaleNotes(patch.axisScaleNotes);
+            }
+            if (patch.complianceScopeTags !== undefined) {
+              setComplianceScopeTags(patch.complianceScopeTags);
+            }
+            if (patch.requirementRefs !== undefined) {
+              setRequirementRefs(patch.requirementRefs);
+            }
+            setDirty(true);
+          }}
+        />
+      )}
+
+      {rosSection === 2 && (
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Oppsummering og risikoliste</CardTitle>
@@ -1152,7 +1389,7 @@ export function RosAnalysisEditor({
       </Card>
       )}
 
-      {rosSection === 2 && (
+      {rosSection === 3 && (
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-base">
@@ -1166,6 +1403,15 @@ export function RosAnalysisEditor({
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
+          {pddAlignmentHint ? (
+            <Alert className="border-amber-500/35 bg-amber-500/[0.06]">
+              <AlertTitle className="text-sm">Samsvar ROS og PDD</AlertTitle>
+              <AlertDescription className="text-muted-foreground text-sm leading-relaxed">
+                {ROS_PDD_ALIGNMENT_HINT_NB} Status for personvern (PDD) på hver
+                koblet vurdering vises nedenfor — én sannhetskilde i PVV-skjemaet.
+              </AlertDescription>
+            </Alert>
+          ) : null}
           {data.legacyAssessmentId ? (
             <div className="bg-muted/40 flex flex-col gap-2 rounded-xl border p-3 text-sm sm:flex-row sm:items-center sm:justify-between">
               <p>
@@ -1209,12 +1455,37 @@ export function RosAnalysisEditor({
                   className="space-y-3 rounded-lg border px-3 py-3"
                 >
                   <div className="flex flex-wrap items-center justify-between gap-2">
-                    <Link
-                      href={`/w/${workspaceId}/a/${l.assessmentId}`}
-                      className="text-primary font-medium hover:underline"
-                    >
-                      {l.title}
-                    </Link>
+                    <div className="min-w-0 space-y-1">
+                      <Link
+                        href={`/w/${workspaceId}/a/${l.assessmentId}`}
+                        className="text-primary font-medium hover:underline"
+                      >
+                        {l.title}
+                      </Link>
+                      <p className="text-muted-foreground text-xs">
+                        PDD (PVV):{" "}
+                        <span className="text-foreground font-medium">
+                          {COMPLIANCE_STATUS_LABELS[
+                            (l.pddStatus ??
+                              "not_started") as ComplianceStatusKey
+                          ]}
+                        </span>
+                        {l.pddUrl ? (
+                          <>
+                            {" "}
+                            ·{" "}
+                            <a
+                              href={l.pddUrl}
+                              className="text-primary underline-offset-4 hover:underline"
+                              target="_blank"
+                              rel="noopener noreferrer"
+                            >
+                              lenke
+                            </a>
+                          </>
+                        ) : null}
+                      </p>
+                    </div>
                     <Button
                       type="button"
                       variant="ghost"
@@ -1280,7 +1551,7 @@ export function RosAnalysisEditor({
       </Card>
       )}
 
-      {rosSection === 3 && (
+      {rosSection === 4 && (
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-base">
@@ -1353,7 +1624,7 @@ export function RosAnalysisEditor({
       </Card>
       )}
 
-      {rosSection === 4 && (
+      {rosSection === 5 && (
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-base">
@@ -1488,6 +1759,26 @@ export function RosAnalysisEditor({
                             ? ` · Frist ${formatTs(t.dueAt)}`
                             : ""}
                         </p>
+                        {t.matrixRow != null &&
+                        t.matrixCol != null &&
+                        t.matrixPhase ? (
+                          <p className="text-muted-foreground text-xs">
+                            Matrise: rad {t.matrixRow + 1}, kol {t.matrixCol + 1}{" "}
+                            ({t.matrixPhase === "before" ? "før tiltak" : "etter tiltak"})
+                          </p>
+                        ) : null}
+                        {t.riskTreatmentKind ? (
+                          <p className="text-muted-foreground text-xs">
+                            Behandling:{" "}
+                            {t.riskTreatmentKind === "mitigate"
+                              ? "Redusere"
+                              : t.riskTreatmentKind === "accept"
+                                ? "Akseptere rest"
+                                : t.riskTreatmentKind === "transfer"
+                                  ? "Overføre"
+                                  : "Unngå"}
+                          </p>
+                        ) : null}
                       </div>
                       <div className="flex flex-wrap gap-2">
                         <Button
@@ -1537,7 +1828,7 @@ export function RosAnalysisEditor({
       </Card>
       )}
 
-      {rosSection === 5 && (
+      {rosSection === 6 && (
       <Card className="overflow-hidden border-border/70 shadow-md">
         <CardHeader className="border-border/50 space-y-3 border-b bg-gradient-to-br from-violet-500/[0.07] via-background to-cyan-500/[0.06] pb-5">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
@@ -1678,7 +1969,7 @@ export function RosAnalysisEditor({
       </Card>
       )}
 
-      {rosSection === 6 && (
+      {rosSection === 7 && (
       <Card className="overflow-hidden border-primary/15">
         <CardHeader className="border-b border-border/50 bg-muted/20">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -1852,7 +2143,7 @@ export function RosAnalysisEditor({
       </Card>
       )}
 
-      {rosSection === 7 && (
+      {rosSection === 8 && (
       <RosJournalPanel
         analysisId={analysisId}
         expectedRevision={data.revision ?? 0}
@@ -1885,15 +2176,13 @@ export function RosAnalysisEditor({
               Forrige
             </Button>
           </div>
-          <div className="flex min-w-0 flex-col items-center justify-center gap-0.5 text-center">
-            <span className="text-muted-foreground text-xs tabular-nums">
-              Steg {rosSection + 1} av {ROS_EDITOR_SECTIONS.length}
+          <div className="flex min-w-0 flex-col items-center justify-center gap-0.5 px-2 text-center">
+            <span className="text-foreground max-w-[min(100%,12rem)] truncate text-xs font-medium sm:max-w-none">
+              {ROS_EDITOR_SECTIONS[rosSection]?.label ?? ""}
             </span>
-            {rosSection >= ROS_EDITOR_SECTIONS.length - 1 ? (
-              <span className="text-muted-foreground text-[11px] font-medium">
-                Siste steg
-              </span>
-            ) : null}
+            <span className="text-muted-foreground text-[11px]">
+              ROS for IKT · bruk knappene over for å hoppe
+            </span>
           </div>
           <div className="flex justify-end">
             {rosSection >= ROS_EDITOR_SECTIONS.length - 1 ? (

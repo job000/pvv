@@ -15,6 +15,21 @@ export const ROS_COMPLIANCE_PDF_DISCLAIMER_NB =
   "relevante ISO- og sektorstandarder (f.eks. via Standard Norge / NS-ISO), og interne krav. " +
   "Eksporten er ikke juridisk rådgivning, sertifisering eller attestasjon.";
 
+/** MVP-omfang: hva produktet legger opp til først (ISO/GDPR-spor), og hva som er valgfritt (NIS2-profil). */
+export const ROS_PRODUCT_SCOPE_MVP_NB =
+  "MVP i PVV: strukturert ROS med matrise, livssyklusfelt, krav-referanser og sporbarhet mot PVV — i tråd med vanlig praksis etter ISO 31000 / ISO/IEC 27005 og med støtte for å dokumentere personvernforpliktelser (GDPR, norsk lov) via kobling til PDD. " +
+  "NIS2-relevant profil er valgfri merking og sjekkpunkter, ikke full implementering av alle NIS2-prosesser i verktøyet.";
+
+/** Utvidet «hva PVV gjør / ikke gjør» — vises i etterlevelsesdelen av ROS-editoren. */
+export const ROS_PRODUCT_RESPONSIBILITY_LONG_NB =
+  "PVV hjelper dere å dokumentere risikovurdering, valg av metode, rammer og tiltak med sporbarhet. " +
+  "Dere er selv ansvarlige for å velge riktig prosess for deres virksomhet og sektor, for å oppfylle krav i gjeldende lov og interne retningslinjer, og for å innhente nødvendig faglig eller juridisk bistand. " +
+  "Ingen funksjon i PVV utgjør sertifisering, revisjonsuttalelse eller bekreftelse overfor tilsyn.";
+
+/** Kort banner når ROS viser høy risiko mens tilknyttet PVV mangler ferdig PDD (hint, ikke blokkering). */
+export const ROS_PDD_ALIGNMENT_HINT_NB =
+  "Matrisen viser høy eller kritisk risiko (nivå 4–5). Vurder om personvernkonsekvens (PDD/DPIA) er dokumentert på den koblede PVV-vurderingen — se status under PVV-koblinger.";
+
 export type RosComplianceFramework = {
   id: string;
   title: string;

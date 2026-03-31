@@ -104,6 +104,21 @@ export const complianceStatusValidator = v.union(
   v.literal("not_applicable"),
 );
 
+/** Strukturert peker til rammeverk (EU/Norge/ISO/intern) — brukt på ROS-analyse og PVV-kobling */
+export const rosRequirementRefValidator = v.object({
+  source: v.union(
+    v.literal("gdpr"),
+    v.literal("nis2"),
+    v.literal("iso31000"),
+    v.literal("iso27005"),
+    v.literal("norwegian_law"),
+    v.literal("internal"),
+  ),
+  article: v.optional(v.string()),
+  note: v.optional(v.string()),
+  documentationUrl: v.optional(v.string()),
+});
+
 /** RPA / CoE-leveranse (iterativ, raskere enn klassisk utvikling) */
 export const pipelineStatusValidator = v.union(
   v.literal("not_assessed"),
@@ -494,6 +509,17 @@ export default defineSchema({
     reviewRoutineNotes: v.optional(v.string()),
     /** Siste e-post om forfalt planlagt ROS-revisjon */
     lastReviewDueReminderAt: v.optional(v.number()),
+    /** ISO 31000-inspirert kontekst og metode (valgfritt) */
+    methodologyStatement: v.optional(v.string()),
+    contextSummary: v.optional(v.string()),
+    scopeAndCriteria: v.optional(v.string()),
+    riskCriteriaVersion: v.optional(v.string()),
+    /** F.eks. definisjon av nivå 0–5 — vises i PDF */
+    axisScaleNotes: v.optional(v.string()),
+    /** ID-er fra kuratert katalog (f.eks. iso31000, gdpr, nis2_profile) */
+    complianceScopeTags: v.optional(v.array(v.string())),
+    /** Strukturerte krav-/kildehenvisninger */
+    requirementRefs: v.optional(v.array(rosRequirementRefValidator)),
   })
     .index("by_workspace", ["workspaceId"])
     .index("by_workspace_updated", ["workspaceId", "updatedAt"])
@@ -532,6 +558,8 @@ export default defineSchema({
     highlightForPvv: v.optional(v.boolean()),
     /** Kort notat til PVV-kontekst (følger koblingen) */
     pvvLinkNote: v.optional(v.string()),
+    /** Strukturerte kravhenvisninger på denne koblingen */
+    requirementRefs: v.optional(v.array(rosRequirementRefValidator)),
     createdByUserId: v.id("users"),
     createdAt: v.number(),
   })
@@ -584,6 +612,13 @@ export default defineSchema({
     rowLabelsAfter: v.optional(v.array(v.string())),
     colLabelsAfter: v.optional(v.array(v.string())),
     notes: v.optional(v.string()),
+    methodologyStatement: v.optional(v.string()),
+    contextSummary: v.optional(v.string()),
+    scopeAndCriteria: v.optional(v.string()),
+    riskCriteriaVersion: v.optional(v.string()),
+    axisScaleNotes: v.optional(v.string()),
+    complianceScopeTags: v.optional(v.array(v.string())),
+    requirementRefs: v.optional(v.array(rosRequirementRefValidator)),
     createdByUserId: v.id("users"),
     createdAt: v.number(),
   })
@@ -602,6 +637,22 @@ export default defineSchema({
     priority: v.optional(v.number()),
     dueAt: v.optional(v.number()),
     dashboardRank: v.optional(v.number()),
+    /** Valgfri kobling til matrisecelle (risikobehandling) */
+    matrixRow: v.optional(v.number()),
+    matrixCol: v.optional(v.number()),
+    matrixPhase: v.optional(
+      v.union(v.literal("before"), v.literal("after")),
+    ),
+    riskTreatmentKind: v.optional(
+      v.union(
+        v.literal("mitigate"),
+        v.literal("accept"),
+        v.literal("transfer"),
+        v.literal("avoid"),
+      ),
+    ),
+    residualRiskAcceptedAt: v.optional(v.number()),
+    residualRiskAcceptedNote: v.optional(v.string()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })

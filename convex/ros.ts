@@ -24,6 +24,7 @@ import {
   computeRosSummary,
   type RosSummary,
 } from "../lib/ros-summary";
+import { rosRequirementRefValidator } from "./schema";
 import {
   DEFAULT_ROS_COL_AXIS,
   DEFAULT_ROS_COL_LABELS,
@@ -219,14 +220,15 @@ function clampRosPriority(p: number | undefined): number {
   return Math.min(5, Math.max(1, Math.round(p)));
 }
 
-async function requireRosAnalysisRead(
-  ctx: QueryCtx | MutationCtx,
+/** Lesetilgang uten kast når dokumentet er slettet (unngår feil i abonnement etter sletting). */
+async function optionalRosAnalysisRead(
+  ctx: QueryCtx,
   analysisId: Id<"rosAnalyses">,
   userId: Id<"users">,
-): Promise<Doc<"rosAnalyses">> {
+): Promise<Doc<"rosAnalyses"> | null> {
   const row = await ctx.db.get(analysisId);
   if (!row) {
-    throw new Error("ROS-analyse finnes ikke.");
+    return null;
   }
   await requireWorkspaceMember(ctx, row.workspaceId, userId, "viewer");
   return row;
@@ -673,6 +675,9 @@ export const getAnalysis = query({
       flags: string[] | undefined;
       highlightForPvv: boolean | undefined;
       pvvLinkNote: string | undefined;
+      requirementRefs: Doc<"rosAnalysisAssessments">["requirementRefs"];
+      pddStatus: string | undefined;
+      pddUrl: string | undefined;
     }> = [];
     for (const l of links) {
       const a = await ctx.db.get(l.assessmentId);
@@ -687,6 +692,9 @@ export const getAnalysis = query({
         flags: l.flags,
         highlightForPvv: l.highlightForPvv,
         pvvLinkNote: l.pvvLinkNote,
+        requirementRefs: l.requirementRefs,
+        pddStatus: a.pddStatus,
+        pddUrl: a.pddUrl,
       });
     }
     let legacyAssessmentTitle: string | null = null;
@@ -739,7 +747,9 @@ export const listJournalEntries = query({
     if (!userId) {
       return [];
     }
-    await requireRosAnalysisRead(ctx, args.analysisId, userId);
+    if (!(await optionalRosAnalysisRead(ctx, args.analysisId, userId))) {
+      return [];
+    }
     const rows = await ctx.db
       .query("rosAnalysisJournalEntries")
       .withIndex("by_ros_analysis", (q) =>
@@ -1059,6 +1069,15 @@ export const updateAnalysis = mutation({
     notes: v.optional(v.union(v.string(), v.null())),
     nextReviewAt: v.optional(v.union(v.number(), v.null())),
     reviewRoutineNotes: v.optional(v.union(v.string(), v.null())),
+    methodologyStatement: v.optional(v.union(v.string(), v.null())),
+    contextSummary: v.optional(v.union(v.string(), v.null())),
+    scopeAndCriteria: v.optional(v.union(v.string(), v.null())),
+    riskCriteriaVersion: v.optional(v.union(v.string(), v.null())),
+    axisScaleNotes: v.optional(v.union(v.string(), v.null())),
+    complianceScopeTags: v.optional(v.union(v.array(v.string()), v.null())),
+    requirementRefs: v.optional(
+      v.union(v.array(rosRequirementRefValidator), v.null()),
+    ),
   },
   handler: async (ctx, args) => {
     const userId = await requireUserId(ctx);
@@ -1274,6 +1293,53 @@ export const updateAnalysis = mutation({
           ? undefined
           : args.reviewRoutineNotes.trim() || undefined;
     }
+    if (args.methodologyStatement !== undefined) {
+      patch.methodologyStatement =
+        args.methodologyStatement === null
+          ? undefined
+          : args.methodologyStatement.trim() || undefined;
+    }
+    if (args.contextSummary !== undefined) {
+      patch.contextSummary =
+        args.contextSummary === null
+          ? undefined
+          : args.contextSummary.trim() || undefined;
+    }
+    if (args.scopeAndCriteria !== undefined) {
+      patch.scopeAndCriteria =
+        args.scopeAndCriteria === null
+          ? undefined
+          : args.scopeAndCriteria.trim() || undefined;
+    }
+    if (args.riskCriteriaVersion !== undefined) {
+      patch.riskCriteriaVersion =
+        args.riskCriteriaVersion === null
+          ? undefined
+          : args.riskCriteriaVersion.trim() || undefined;
+    }
+    if (args.axisScaleNotes !== undefined) {
+      patch.axisScaleNotes =
+        args.axisScaleNotes === null
+          ? undefined
+          : args.axisScaleNotes.trim() || undefined;
+    }
+    if (args.complianceScopeTags !== undefined) {
+      patch.complianceScopeTags =
+        args.complianceScopeTags === null
+          ? undefined
+          : args.complianceScopeTags.filter(Boolean).slice(0, 32);
+    }
+    if (args.requirementRefs !== undefined) {
+      patch.requirementRefs =
+        args.requirementRefs === null
+          ? undefined
+          : args.requirementRefs.slice(0, 48).map((r) => ({
+              source: r.source,
+              article: r.article?.trim() || undefined,
+              note: r.note?.trim() || undefined,
+              documentationUrl: r.documentationUrl?.trim() || undefined,
+            }));
+    }
     const fresh = await ctx.db.get(args.analysisId);
     if (!fresh) {
       throw new Error("ROS-analysen finnes ikke.");
@@ -1451,6 +1517,7 @@ export const linkAssessment = mutation({
     flags: v.optional(v.array(v.string())),
     highlightForPvv: v.optional(v.boolean()),
     pvvLinkNote: v.optional(v.string()),
+    requirementRefs: v.optional(v.array(rosRequirementRefValidator)),
   },
   handler: async (ctx, args) => {
     const userId = await requireUserId(ctx);
@@ -1474,6 +1541,12 @@ export const linkAssessment = mutation({
       throw new Error("Denne PVV-vurderingen er allerede koblet.");
     }
     const now = Date.now();
+    const refs = args.requirementRefs?.slice(0, 48).map((r) => ({
+      source: r.source,
+      article: r.article?.trim() || undefined,
+      note: r.note?.trim() || undefined,
+      documentationUrl: r.documentationUrl?.trim() || undefined,
+    }));
     return await ctx.db.insert("rosAnalysisAssessments", {
       workspaceId: analysis.workspaceId,
       rosAnalysisId: args.analysisId,
@@ -1482,6 +1555,7 @@ export const linkAssessment = mutation({
       flags: args.flags,
       highlightForPvv: args.highlightForPvv,
       pvvLinkNote: args.pvvLinkNote?.trim() || undefined,
+      requirementRefs: refs,
       createdByUserId: userId,
       createdAt: now,
     });
@@ -1495,6 +1569,9 @@ export const updateRosAssessmentLink = mutation({
     flags: v.optional(v.array(v.string())),
     highlightForPvv: v.optional(v.boolean()),
     pvvLinkNote: v.optional(v.union(v.string(), v.null())),
+    requirementRefs: v.optional(
+      v.union(v.array(rosRequirementRefValidator), v.null()),
+    ),
   },
   handler: async (ctx, args) => {
     const userId = await requireUserId(ctx);
@@ -1516,6 +1593,17 @@ export const updateRosAssessmentLink = mutation({
     if (args.pvvLinkNote !== undefined) {
       patch.pvvLinkNote =
         args.pvvLinkNote === null ? undefined : args.pvvLinkNote.trim() || undefined;
+    }
+    if (args.requirementRefs !== undefined) {
+      patch.requirementRefs =
+        args.requirementRefs === null
+          ? undefined
+          : args.requirementRefs.slice(0, 48).map((r) => ({
+              source: r.source,
+              article: r.article?.trim() || undefined,
+              note: r.note?.trim() || undefined,
+              documentationUrl: r.documentationUrl?.trim() || undefined,
+            }));
     }
     await ctx.db.patch(args.linkId, patch);
     return null;
@@ -1637,7 +1725,9 @@ export const listVersions = query({
     if (!userId) {
       return [];
     }
-    await requireRosAnalysisRead(ctx, args.analysisId, userId);
+    if (!(await optionalRosAnalysisRead(ctx, args.analysisId, userId))) {
+      return [];
+    }
     const rows = await ctx.db
       .query("rosAnalysisVersions")
       .withIndex("by_ros_version", (q) =>
@@ -1703,6 +1793,17 @@ export const createVersion = mutation({
         ? [...analysis.colLabelsAfter]
         : undefined,
       notes: analysis.notes,
+      methodologyStatement: analysis.methodologyStatement,
+      contextSummary: analysis.contextSummary,
+      scopeAndCriteria: analysis.scopeAndCriteria,
+      riskCriteriaVersion: analysis.riskCriteriaVersion,
+      axisScaleNotes: analysis.axisScaleNotes,
+      complianceScopeTags: analysis.complianceScopeTags
+        ? [...analysis.complianceScopeTags]
+        : undefined,
+      requirementRefs: analysis.requirementRefs
+        ? analysis.requirementRefs.map((r) => ({ ...r }))
+        : undefined,
       createdByUserId: userId,
       createdAt: now,
     });
@@ -1784,6 +1885,17 @@ export const restoreVersion = mutation({
         ? [...ver.colLabelsAfter]
         : undefined,
       notes: ver.notes,
+      methodologyStatement: ver.methodologyStatement,
+      contextSummary: ver.contextSummary,
+      scopeAndCriteria: ver.scopeAndCriteria,
+      riskCriteriaVersion: ver.riskCriteriaVersion,
+      axisScaleNotes: ver.axisScaleNotes,
+      complianceScopeTags: ver.complianceScopeTags
+        ? [...ver.complianceScopeTags]
+        : undefined,
+      requirementRefs: ver.requirementRefs
+        ? ver.requirementRefs.map((r) => ({ ...r }))
+        : undefined,
       updatedAt: now,
       revision: prevRev + 1,
     });
@@ -1798,7 +1910,9 @@ export const listTasksByRosAnalysis = query({
     if (!userId) {
       return [];
     }
-    await requireRosAnalysisRead(ctx, args.analysisId, userId);
+    if (!(await optionalRosAnalysisRead(ctx, args.analysisId, userId))) {
+      return [];
+    }
     const rows = await ctx.db
       .query("rosTasks")
       .withIndex("by_ros_analysis", (q) =>
@@ -1830,6 +1944,20 @@ export const createRosTask = mutation({
     assigneeUserId: v.optional(v.id("users")),
     priority: v.optional(v.number()),
     dueAt: v.optional(v.number()),
+    matrixRow: v.optional(v.number()),
+    matrixCol: v.optional(v.number()),
+    matrixPhase: v.optional(
+      v.union(v.literal("before"), v.literal("after")),
+    ),
+    riskTreatmentKind: v.optional(
+      v.union(
+        v.literal("mitigate"),
+        v.literal("accept"),
+        v.literal("transfer"),
+        v.literal("avoid"),
+      ),
+    ),
+    residualRiskAcceptedNote: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const userId = await requireUserId(ctx);
@@ -1837,6 +1965,28 @@ export const createRosTask = mutation({
     const title = args.title.trim();
     if (!title) {
       throw new Error("Oppgavetekst mangler.");
+    }
+    const hasCell =
+      args.matrixRow !== undefined && args.matrixCol !== undefined;
+    if (
+      (args.matrixRow !== undefined) !== (args.matrixCol !== undefined)
+    ) {
+      throw new Error("Oppgi både rad og kolonne for cellekobling, eller ingen.");
+    }
+    if (hasCell) {
+      if (args.matrixPhase === undefined) {
+        throw new Error("Velg fase (før eller etter tiltak) for cellekobling.");
+      }
+      const dim = afterDimensions(analysis);
+      const rows =
+        args.matrixPhase === "after" ? dim.rows : analysis.rowLabels.length;
+      const cols =
+        args.matrixPhase === "after" ? dim.cols : analysis.colLabels.length;
+      const i = args.matrixRow!;
+      const j = args.matrixCol!;
+      if (i < 0 || j < 0 || i >= rows || j >= cols) {
+        throw new Error("Ugyldig cellekobling for oppgave.");
+      }
     }
     const now = Date.now();
     return await ctx.db.insert("rosTasks", {
@@ -1849,6 +1999,16 @@ export const createRosTask = mutation({
       status: "open",
       priority: clampRosPriority(args.priority),
       dueAt: args.dueAt,
+      matrixRow: hasCell ? args.matrixRow : undefined,
+      matrixCol: hasCell ? args.matrixCol : undefined,
+      matrixPhase: hasCell ? args.matrixPhase : undefined,
+      riskTreatmentKind: args.riskTreatmentKind,
+      residualRiskAcceptedAt:
+        args.riskTreatmentKind === "accept" ? now : undefined,
+      residualRiskAcceptedNote:
+        args.riskTreatmentKind === "accept"
+          ? args.residualRiskAcceptedNote?.trim() || undefined
+          : undefined,
       dashboardRank: now,
       createdAt: now,
       updatedAt: now,
@@ -1865,6 +2025,22 @@ export const updateRosTask = mutation({
     priority: v.optional(v.number()),
     dueAt: v.optional(v.union(v.number(), v.null())),
     status: v.optional(v.union(v.literal("open"), v.literal("done"))),
+    matrixRow: v.optional(v.union(v.number(), v.null())),
+    matrixCol: v.optional(v.union(v.number(), v.null())),
+    matrixPhase: v.optional(
+      v.union(v.literal("before"), v.literal("after"), v.null()),
+    ),
+    riskTreatmentKind: v.optional(
+      v.union(
+        v.literal("mitigate"),
+        v.literal("accept"),
+        v.literal("transfer"),
+        v.literal("avoid"),
+        v.null(),
+      ),
+    ),
+    residualRiskAcceptedAt: v.optional(v.union(v.number(), v.null())),
+    residualRiskAcceptedNote: v.optional(v.union(v.string(), v.null())),
   },
   handler: async (ctx, args) => {
     const userId = await requireUserId(ctx);
@@ -1872,7 +2048,7 @@ export const updateRosTask = mutation({
     if (!row) {
       throw new Error("Fant ikke oppgaven.");
     }
-    await requireRosAnalysisEdit(ctx, row.rosAnalysisId, userId);
+    const analysis = await requireRosAnalysisEdit(ctx, row.rosAnalysisId, userId);
     const patch: Record<string, unknown> = { updatedAt: Date.now() };
     if (args.title !== undefined) {
       const t = args.title.trim();
@@ -1895,6 +2071,79 @@ export const updateRosTask = mutation({
     }
     if (args.status !== undefined) {
       patch.status = args.status;
+    }
+    if (
+      args.matrixRow !== undefined ||
+      args.matrixCol !== undefined ||
+      args.matrixPhase !== undefined
+    ) {
+      const mr =
+        args.matrixRow !== undefined
+          ? args.matrixRow
+          : row.matrixRow ?? null;
+      const mc =
+        args.matrixCol !== undefined
+          ? args.matrixCol
+          : row.matrixCol ?? null;
+      const mp =
+        args.matrixPhase !== undefined
+          ? args.matrixPhase
+          : row.matrixPhase ?? null;
+      const hasCell = mr !== null && mc !== null && mp !== null;
+      if ((mr !== null) !== (mc !== null) || (mr !== null && mp === null)) {
+        throw new Error("Oppgi rad, kolonne og fase sammen for cellekobling.");
+      }
+      if (hasCell && mr !== null && mc !== null && mp !== null) {
+        const dim = afterDimensions(analysis);
+        const rows = mp === "after" ? dim.rows : analysis.rowLabels.length;
+        const cols = mp === "after" ? dim.cols : analysis.colLabels.length;
+        if (mr < 0 || mc < 0 || mr >= rows || mc >= cols) {
+          throw new Error("Ugyldig cellekobling.");
+        }
+        patch.matrixRow = mr;
+        patch.matrixCol = mc;
+        patch.matrixPhase = mp;
+      } else {
+        patch.matrixRow = undefined;
+        patch.matrixCol = undefined;
+        patch.matrixPhase = undefined;
+      }
+    }
+    if (args.riskTreatmentKind !== undefined) {
+      if (args.riskTreatmentKind === null) {
+        patch.riskTreatmentKind = undefined;
+        patch.residualRiskAcceptedAt = undefined;
+        patch.residualRiskAcceptedNote = undefined;
+      } else {
+        patch.riskTreatmentKind = args.riskTreatmentKind;
+        if (args.riskTreatmentKind === "accept") {
+          patch.residualRiskAcceptedAt =
+            args.residualRiskAcceptedAt !== undefined
+              ? args.residualRiskAcceptedAt === null
+                ? undefined
+                : args.residualRiskAcceptedAt
+              : row.residualRiskAcceptedAt ?? Date.now();
+          patch.residualRiskAcceptedNote =
+            args.residualRiskAcceptedNote !== undefined
+              ? args.residualRiskAcceptedNote === null
+                ? undefined
+                : args.residualRiskAcceptedNote.trim() || undefined
+              : row.residualRiskAcceptedNote;
+        } else {
+          patch.residualRiskAcceptedAt = undefined;
+          patch.residualRiskAcceptedNote = undefined;
+        }
+      }
+    } else if (args.residualRiskAcceptedNote !== undefined) {
+      patch.residualRiskAcceptedNote =
+        args.residualRiskAcceptedNote === null
+          ? undefined
+          : args.residualRiskAcceptedNote.trim() || undefined;
+    } else if (args.residualRiskAcceptedAt !== undefined) {
+      patch.residualRiskAcceptedAt =
+        args.residualRiskAcceptedAt === null
+          ? undefined
+          : args.residualRiskAcceptedAt;
     }
     await ctx.db.patch(args.taskId, patch);
     return null;

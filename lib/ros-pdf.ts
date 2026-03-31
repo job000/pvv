@@ -1,6 +1,7 @@
 import { jsPDF } from "jspdf";
 
 import { ROS_COMPLIANCE_PDF_DISCLAIMER_NB } from "@/lib/ros-compliance";
+import { ROS_COMPLIANCE_SCOPE_TAGS } from "@/lib/ros-requirement-catalog";
 import { legendItems, pdfRiskLevelStyle } from "@/lib/ros-risk-colors";
 
 export type RosPdfJournalLine = {
@@ -35,6 +36,16 @@ export type RosPdfInput = {
   afterColAxisTitle: string;
   afterSeparateLayout: boolean;
   analysisNotes: string | null;
+  /** Livssyklus / ISO — valgfritt */
+  methodologyStatement?: string | null;
+  contextSummary?: string | null;
+  scopeAndCriteria?: string | null;
+  riskCriteriaVersion?: string | null;
+  axisScaleNotes?: string | null;
+  complianceScopeTagIds?: string[];
+  requirementRefLines?: string[];
+  /** Åpne oppfølgingsoppgaver (én linje per oppgave) */
+  openTaskLines?: string[];
   linkedPvvTitles: string[];
   journalEntries: RosPdfJournalLine[];
   generatedAt: Date;
@@ -128,6 +139,65 @@ export function downloadRosAnalysisPdf(data: RosPdfInput): void {
     y += 4;
     addHeading("Notat (analyse)", 12);
     addPara(data.analysisNotes.trim());
+  }
+
+  const scopeLabels =
+    data.complianceScopeTagIds?.length && data.complianceScopeTagIds.length > 0
+      ? data.complianceScopeTagIds
+          .map(
+            (id) =>
+              ROS_COMPLIANCE_SCOPE_TAGS.find((t) => t.id === id)?.label ?? id,
+          )
+          .join("; ")
+      : "";
+
+  const hasLifecycle =
+    (data.methodologyStatement?.trim() ?? "") !== "" ||
+    (data.contextSummary?.trim() ?? "") !== "" ||
+    (data.scopeAndCriteria?.trim() ?? "") !== "" ||
+    (data.riskCriteriaVersion?.trim() ?? "") !== "" ||
+    (data.axisScaleNotes?.trim() ?? "") !== "" ||
+    scopeLabels !== "" ||
+    (data.requirementRefLines?.length ?? 0) > 0;
+
+  if (hasLifecycle) {
+    y += 4;
+    addHeading("Livssyklus, rammer og krav (tilsynspakke)", 12);
+    if (data.methodologyStatement?.trim()) {
+      addRow("Metodikk", data.methodologyStatement.trim());
+    }
+    if (data.contextSummary?.trim()) {
+      addRow("Kontekst", data.contextSummary.trim());
+    }
+    if (data.scopeAndCriteria?.trim()) {
+      addRow("Omfang og kriterier", data.scopeAndCriteria.trim());
+    }
+    if (data.riskCriteriaVersion?.trim()) {
+      addRow("Versjon av kriterier/skala", data.riskCriteriaVersion.trim());
+    }
+    if (data.axisScaleNotes?.trim()) {
+      y += 2;
+      addHeading("Definisjon av nivåer (0–5)", 11);
+      addPara(data.axisScaleNotes.trim());
+    }
+    if (scopeLabels) {
+      addRow("Valgte rammer", scopeLabels);
+    }
+    if (data.requirementRefLines && data.requirementRefLines.length > 0) {
+      y += 2;
+      addHeading("Krav- og kildehenvisninger", 11);
+      for (const line of data.requirementRefLines) {
+        addPara(`• ${line}`, 9);
+      }
+    }
+  }
+
+  if (data.openTaskLines && data.openTaskLines.length > 0) {
+    y += 4;
+    addHeading("Åpne oppfølgingsoppgaver", 12);
+    for (const line of data.openTaskLines) {
+      addPara(`• ${line}`, 9);
+    }
   }
 
   /** Risikologg: siste 40 hendelser, kronologisk (eldste først i utdraget). */
