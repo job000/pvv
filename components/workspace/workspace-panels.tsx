@@ -1,6 +1,6 @@
 "use client";
 
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import {
   Card,
   CardContent,
@@ -38,11 +38,13 @@ import {
   LayoutGrid,
   Search,
   Sparkles,
+  Users,
 } from "lucide-react";
 
 import { WorkspaceDeleteDialog } from "@/components/workspace/workspace-delete-dialog";
 import { useRouter } from "next/navigation";
 
+import { prosessRegisterCopy } from "@/lib/prosess-register-copy";
 import { WorkspaceCandidateRow } from "./workspace-candidate-row";
 
 export function WorkspaceSettingsPanel({
@@ -383,8 +385,11 @@ export function WorkspaceTeamPanel({
 
 export function WorkspaceCandidatesPanel({
   workspaceId,
+  hubMode = false,
 }: {
   workspaceId: Id<"workspaces">;
+  /** Når true: vist under PVV-hub med tydeligere forklaring og layout */
+  hubMode?: boolean;
 }) {
   const membership = useQuery(api.workspaces.getMyMembership, { workspaceId });
   const candidates = useQuery(api.candidates.listByWorkspace, { workspaceId });
@@ -449,58 +454,137 @@ export function WorkspaceCandidatesPanel({
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Kandidater</CardTitle>
-        <CardDescription>
-          Registrer prosesser med kort kode (referanse i vurderinger). Du kan
-          knytte kandidaten til avdeling/seksjon i organisasjonskartet. Sletting
-          krever admin.
-        </CardDescription>
+    <Card
+      className={
+        hubMode
+          ? "overflow-hidden border-emerald-500/20 shadow-md"
+          : undefined
+      }
+    >
+      <CardHeader
+        className={
+          hubMode
+            ? "border-b border-border/50 bg-gradient-to-br from-emerald-500/[0.05] via-card to-card pb-6"
+            : undefined
+        }
+      >
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="space-y-1">
+            <CardTitle className="text-xl">
+              {hubMode ? "Prosesser" : "Kandidater"}
+            </CardTitle>
+            <CardDescription className="max-w-2xl text-base leading-relaxed">
+              {hubMode ? (
+                <>
+                  Her registrerer dere <strong>forretningsprosesser</strong> som
+                  skal vurderes — typisk på tvers av HF, avdeling og seksjon. Hver
+                  prosess får et <strong>lesbart navn</strong> og en{" "}
+                  <strong>prosess-ID</strong> (kort kode) som er den faste
+                  tekniske nøkkelen i PVV og ROS. Organisasjonsfeltet er valgfritt
+                  og sier hvor dere svarer først — ikke hvor prosessen stopper.
+                </>
+              ) : (
+                <>
+                  Registrer prosesser med navn og prosess-ID. Du kan knytte til
+                  organisasjonskart (HF/avdeling/seksjon). Sletting krever admin.
+                </>
+              )}
+            </CardDescription>
+          </div>
+          {hubMode ? (
+            <span className="bg-emerald-500/15 text-emerald-900 dark:text-emerald-100 inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold tabular-nums">
+              <Users className="size-3.5" aria-hidden />
+              {candidates.length}{" "}
+              {candidates.length === 1 ? "prosess" : "prosesser"}
+            </span>
+          ) : null}
+        </div>
       </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="grid gap-3 sm:grid-cols-2">
+      <CardContent className="space-y-5 pt-6">
+        <div className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-2">
-            <Label htmlFor="cand-name">Navn</Label>
+            <Label htmlFor="cand-name">{prosessRegisterCopy.displayName.label}</Label>
             <Input
               id="cand-name"
               value={cName}
               onChange={(e) => setCName(e.target.value)}
-              placeholder="F.eks. Fakturaprosess"
+              placeholder="F.eks. Fakturamottak"
               required
               autoComplete="off"
+              className="h-11"
             />
+            <p className="text-muted-foreground text-[11px] leading-snug">
+              {prosessRegisterCopy.displayName.hint}
+            </p>
           </div>
           <div className="space-y-2">
-            <Label htmlFor="cand-code">Kode</Label>
+            <Label htmlFor="cand-code" className="flex flex-wrap items-center gap-1">
+              {prosessRegisterCopy.referenceCode.label}
+              <span className="text-destructive">*</span>
+            </Label>
             <Input
               id="cand-code"
               value={cCode}
               onChange={(e) => setCCode(e.target.value)}
-              placeholder="F.eks. FAKT-01"
+              placeholder={prosessRegisterCopy.referenceCode.placeholder}
               required
               autoComplete="off"
+              className="h-11 font-mono"
             />
+            <p className="text-muted-foreground text-[11px] leading-snug">
+              {prosessRegisterCopy.referenceCode.hint}
+            </p>
           </div>
         </div>
         <div className="space-y-2">
-          <Label>Notater (valgfritt)</Label>
+          <Label htmlFor="cand-notes">{prosessRegisterCopy.notes.label}</Label>
           <Textarea
+            id="cand-notes"
             value={cNotes}
             onChange={(e) => setCNotes(e.target.value)}
             rows={2}
+            placeholder="Valgfritt — f.eks. systemnavn, kontaktperson …"
+            className="resize-y"
           />
+          <p className="text-muted-foreground text-[11px] leading-snug">
+            {prosessRegisterCopy.notes.hint}
+          </p>
         </div>
         <Button
           type="button"
+          size="lg"
+          className="h-11"
           disabled={!cName.trim() || !cCode.trim()}
           onClick={() => void addCandidate()}
         >
-          Legg til kandidat
+          {hubMode ? "Legg til prosess" : "Legg til kandidat"}
         </Button>
         <Separator />
         {candidates.length === 0 ? (
-          <p className="text-muted-foreground text-sm">Ingen kandidater ennå.</p>
+          <div className="rounded-2xl border border-dashed border-emerald-500/25 bg-emerald-500/[0.03] px-6 py-12 text-center">
+            <div className="bg-muted/80 mx-auto mb-3 flex size-12 items-center justify-center rounded-2xl">
+              <Users className="text-muted-foreground size-6" aria-hidden />
+            </div>
+            <p className="text-foreground text-sm font-medium">
+              Ingen prosesser ennå
+            </p>
+            <p className="text-muted-foreground mx-auto mt-2 max-w-sm text-sm leading-relaxed">
+              Når du legger til én, kan du velge samme kode i{" "}
+              <strong className="text-foreground">PVV-vurdering</strong> under
+              fanen «PVV-vurderinger».
+            </p>
+            {hubMode ? (
+              <Link
+                href={`/w/${workspaceId}/vurderinger`}
+                className={cn(
+                  buttonVariants({ variant: "outline", size: "sm" }),
+                  "mt-5 inline-flex",
+                )}
+              >
+                Gå til PVV-vurderinger
+              </Link>
+            ) : null}
+          </div>
         ) : (
           <ul className="space-y-3">
             {candidates.map((c) => (
@@ -523,8 +607,10 @@ export function WorkspaceCandidatesPanel({
 
 export function WorkspaceAssessmentsPanel({
   workspaceId,
+  hubMode = false,
 }: {
   workspaceId: Id<"workspaces">;
+  hubMode?: boolean;
 }) {
   const workspace = useQuery(api.workspaces.get, { workspaceId });
   const assessments = useQuery(api.assessments.listByWorkspace, {
@@ -578,6 +664,23 @@ export function WorkspaceAssessmentsPanel({
 
   return (
     <div className="space-y-10">
+      {hubMode ? (
+        <div className="flex flex-col gap-3 rounded-2xl border border-dashed border-primary/25 bg-primary/[0.04] px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-muted-foreground text-sm leading-relaxed">
+            <span className="text-foreground font-medium">
+              Mangler du en prosess å koble til?
+            </span>{" "}
+            Registrer den under fanen{" "}
+            <Link
+              href={`/w/${workspaceId}/vurderinger?fane=prosesser`}
+              className="text-primary font-medium underline-offset-4 hover:underline"
+            >
+              Prosesser
+            </Link>{" "}
+            først — deretter velger du koden i veiviseren.
+          </p>
+        </div>
+      ) : null}
       <Card className="relative overflow-hidden border-border/60 shadow-md">
         <div
           className="pointer-events-none absolute inset-0 bg-[radial-gradient(900px_circle_at_0%_-20%,hsl(var(--primary)/0.12),transparent_55%),radial-gradient(700px_circle_at_100%_0%,hsl(var(--primary)/0.06),transparent_50%)]"

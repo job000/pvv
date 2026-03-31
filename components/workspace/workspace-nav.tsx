@@ -14,7 +14,8 @@ import {
   Users,
 } from "lucide-react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
+import { Suspense } from "react";
 
 const items = (wid: string) =>
   [
@@ -23,64 +24,94 @@ const items = (wid: string) =>
       label: "Oversikt",
       icon: LayoutDashboard,
       exact: true,
+      kind: "default" as const,
     },
     {
       href: `/w/${wid}/vurderinger`,
       label: "Vurderinger",
       icon: ClipboardList,
       exact: false,
+      kind: "vurderinger" as const,
     },
     {
       href: `/w/${wid}/leveranse`,
       label: "Leveranse",
       icon: LayoutGrid,
       exact: false,
+      kind: "default" as const,
     },
     {
       href: `/w/${wid}/organisasjon`,
       label: "Organisasjon",
       icon: Building2,
       exact: false,
+      kind: "default" as const,
     },
     {
-      href: `/w/${wid}/kandidater`,
-      label: "Kandidater",
+      href: `/w/${wid}/vurderinger?fane=prosesser`,
+      label: "Prosesser",
       icon: Users,
       exact: false,
+      kind: "prosesser" as const,
     },
     {
       href: `/w/${wid}/ros`,
       label: "ROS",
       icon: Shield,
       exact: false,
+      kind: "default" as const,
     },
     {
       href: `/w/${wid}/delinger`,
       label: "Delinger",
       icon: Share2,
       exact: false,
+      kind: "default" as const,
     },
     {
       href: `/w/${wid}/varslinger`,
       label: "Varslinger",
       icon: Bell,
       exact: false,
+      kind: "default" as const,
     },
     {
       href: `/w/${wid}/innstillinger`,
       label: "Innstillinger",
       icon: Settings2,
       exact: false,
+      kind: "default" as const,
     },
   ] as const;
 
-function isActive(pathname: string, href: string, exact: boolean) {
-  if (exact) {
-    return pathname === href;
+function isActive(
+  pathname: string | null,
+  href: string,
+  exact: boolean,
+  wid: string,
+  fane: string | null,
+  kind: "default" | "vurderinger" | "prosesser",
+) {
+  if (!pathname) return false;
+
+  if (kind === "prosesser") {
+    return (
+      pathname === `/w/${wid}/vurderinger` && fane === "prosesser"
+    );
   }
-  if (href.endsWith("/vurderinger")) {
+
+  if (kind === "vurderinger") {
     const singleAssessment = /^\/w\/[^/]+\/a\/[^/]+$/.test(pathname);
-    return pathname.startsWith(href) || singleAssessment;
+    if (singleAssessment) return true;
+    if (pathname.startsWith(`/w/${wid}/vurderinger`)) {
+      if (fane === "prosesser") return false;
+      return true;
+    }
+    return false;
+  }
+
+  if (exact) {
+    return pathname === href.split("?")[0];
   }
   if (href.endsWith("/ros")) {
     return pathname.startsWith(href);
@@ -88,7 +119,7 @@ function isActive(pathname: string, href: string, exact: boolean) {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
-export function WorkspaceNav({
+function WorkspaceNavInner({
   workspaceId,
   workspaceName,
   onNavigate,
@@ -100,8 +131,10 @@ export function WorkspaceNav({
   className?: string;
 }) {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const wid = String(workspaceId);
   const nav = items(wid);
+  const fane = searchParams.get("fane");
 
   return (
     <nav
@@ -120,8 +153,8 @@ export function WorkspaceNav({
         </p>
       </div>
       <ul className="flex min-h-0 flex-1 flex-col gap-1 overflow-hidden py-1">
-        {nav.map(({ href, label, icon: Icon, exact }) => {
-          const active = pathname ? isActive(pathname, href, exact) : false;
+        {nav.map(({ href, label, icon: Icon, exact, kind }) => {
+          const active = isActive(pathname, href, exact, wid, fane, kind);
           return (
             <li key={href} className="shrink-0">
               <Link
@@ -142,5 +175,30 @@ export function WorkspaceNav({
         })}
       </ul>
     </nav>
+  );
+}
+
+export function WorkspaceNav(props: {
+  workspaceId: Id<"workspaces">;
+  workspaceName?: string;
+  onNavigate?: () => void;
+  className?: string;
+}) {
+  return (
+    <Suspense
+      fallback={
+        <nav
+          className={cn(
+            "flex h-full min-h-0 flex-col gap-1 overflow-hidden p-3",
+            props.className,
+          )}
+          aria-label="Arbeidsområde"
+        >
+          <div className="text-muted-foreground px-3 py-2 text-sm">Laster …</div>
+        </nav>
+      }
+    >
+      <WorkspaceNavInner {...props} />
+    </Suspense>
   );
 }

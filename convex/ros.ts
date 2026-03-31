@@ -149,6 +149,127 @@ export const listAnalyses = query({
   },
 });
 
+/** Aggregerer matrisedata for oversikt og sammenligning på tvers av ROS-analyser. */
+export const workspaceDashboard = query({
+  args: { workspaceId: v.id("workspaces") },
+  handler: async (ctx, args) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) {
+      return null;
+    }
+    await requireWorkspaceMember(ctx, args.workspaceId, userId, "viewer");
+    const rows = await ctx.db
+      .query("rosAnalyses")
+      .withIndex("by_workspace_updated", (q) =>
+        q.eq("workspaceId", args.workspaceId),
+      )
+      .order("desc")
+      .collect();
+
+    const workspaceCounts = [0, 0, 0, 0, 0, 0] as [
+      number,
+      number,
+      number,
+      number,
+      number,
+      number,
+    ];
+    let maxAcrossAll = 0;
+
+    const analyses: Array<{
+      analysisId: Id<"rosAnalyses">;
+      title: string;
+      candidateName: string;
+      candidateCode: string;
+      updatedAt: number;
+      linkedPvvCount: number;
+      cellCount: number;
+      assessedCells: number;
+      maxLevel: number;
+      avgAssessed: number;
+      highRiskCells: number;
+      counts: [number, number, number, number, number, number];
+    }> = [];
+
+    for (const r of rows) {
+      const cand = await ctx.db.get(r.candidateId);
+      const links = await ctx.db
+        .query("rosAnalysisAssessments")
+        .withIndex("by_ros_analysis", (q) =>
+          q.eq("rosAnalysisId", r._id),
+        )
+        .collect();
+      let linkedPvvCount = 0;
+      for (const l of links) {
+        const a = await ctx.db.get(l.assessmentId);
+        if (a && (await canReadAssessment(ctx, a, userId))) {
+          linkedPvvCount++;
+        }
+      }
+
+      const counts = [0, 0, 0, 0, 0, 0] as [
+        number,
+        number,
+        number,
+        number,
+        number,
+        number,
+      ];
+      let maxLevel = 0;
+      let assessedCells = 0;
+      let sumAssessed = 0;
+      let highRiskCells = 0;
+      let cellCount = 0;
+      for (const row of r.matrixValues) {
+        for (const raw of row) {
+          cellCount++;
+          const v = Math.min(5, Math.max(0, Math.round(raw)));
+          counts[v]++;
+          workspaceCounts[v]++;
+          if (v > maxLevel) maxLevel = v;
+          if (v > 0) {
+            assessedCells++;
+            sumAssessed += v;
+            if (v >= 4) highRiskCells++;
+          }
+        }
+      }
+      if (maxLevel > maxAcrossAll) maxAcrossAll = maxLevel;
+
+      analyses.push({
+        analysisId: r._id,
+        title: r.title,
+        candidateName: cand?.name ?? "—",
+        candidateCode: cand?.code ?? "",
+        updatedAt: r.updatedAt,
+        linkedPvvCount,
+        cellCount,
+        assessedCells,
+        maxLevel,
+        avgAssessed:
+          assessedCells > 0 ? Math.round((sumAssessed / assessedCells) * 10) / 10 : 0,
+        highRiskCells,
+        counts,
+      });
+    }
+
+    const totalCells = workspaceCounts.reduce((a, b) => a + b, 0);
+    const assessedWorkspace = workspaceCounts
+      .map((c, i) => (i > 0 ? c : 0))
+      .reduce((a, b) => a + b, 0);
+
+    return {
+      analysisCount: analyses.length,
+      totalCells,
+      assessedCells: assessedWorkspace,
+      notAssessedCells: workspaceCounts[0],
+      maxAcrossAll,
+      workspaceCounts,
+      analyses,
+    };
+  },
+});
+
 export const getAnalysis = query({
   args: { analysisId: v.id("rosAnalyses") },
   handler: async (ctx, args) => {

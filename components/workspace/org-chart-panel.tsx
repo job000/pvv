@@ -194,11 +194,11 @@ function MerkantilContactsBlock({
   return (
     <div className="space-y-3">
       <p className="text-muted-foreground text-[0.65rem] font-semibold uppercase tracking-wide">
-        Merkantile kontakter
+        Kontaktpersoner
       </p>
       <p className="text-muted-foreground text-xs leading-relaxed">
-        Du kan registrere flere personer per enhet (innkjøp, avtaler, faktura
-        osv.).
+        Registrer én eller flere personer per enhet — f.eks. økonomi, innkjøp,
+        IT, avtaler eller annet som er relevant for deres bransje.
       </p>
 
       {contacts.length === 0 && hasLegacy ? (
@@ -251,7 +251,7 @@ function MerkantilContactsBlock({
           ))}
         </ul>
       ) : !hasLegacy ? (
-        <p className="text-muted-foreground text-xs">Ingen merkantile kontakter ennå.</p>
+        <p className="text-muted-foreground text-xs">Ingen kontaktpersoner ennå.</p>
       ) : null}
 
       {canEdit ? (
@@ -340,22 +340,22 @@ function OrgBranch({
 }) {
   const contactsForUnit = contactsByUnit.get(unit._id) ?? [];
   const kids = childrenByParent.get(unit._id) ?? [];
-  const [open, setOpen] = useState(depth < 2);
+  const [open, setOpen] = useState(depth === 0);
 
   return (
     <li className="list-none">
       <div
-        className="rounded-xl border bg-card"
+        className="rounded-xl border bg-card shadow-sm"
         style={{ marginLeft: depth === 0 ? 0 : Math.min(depth * 12, 48) }}
       >
         <button
           type="button"
-          className="flex w-full items-start gap-2 px-4 py-3 text-left"
+          className="hover:bg-muted/30 flex w-full items-start gap-2 rounded-t-xl px-4 py-3 text-left transition-colors"
           onClick={() => setOpen(!open)}
           aria-expanded={open}
         >
           <ChevronRight
-            className={`text-muted-foreground mt-0.5 size-4 shrink-0 transition ${
+            className={`text-muted-foreground mt-0.5 size-4 shrink-0 transition-transform duration-200 ${
               open ? "rotate-90" : ""
             }`}
           />
@@ -365,69 +365,82 @@ function OrgBranch({
               {unit.localCode ? ` · ${unit.localCode}` : ""}
             </p>
             <p className="font-heading font-semibold">{unit.name}</p>
-            {unit.shortName ? (
+            {!open && kids.length > 0 ? (
+              <p className="text-muted-foreground mt-0.5 text-xs">
+                {kids.length} underenhet{kids.length === 1 ? "" : "er"} ·{" "}
+                {contactsForUnit.length} kontakt
+                {contactsForUnit.length === 1 ? "" : "er"}
+              </p>
+            ) : null}
+            {open && unit.shortName ? (
               <p className="text-muted-foreground text-sm">{unit.shortName}</p>
             ) : null}
-            {unit.extraInfo ? (
+            {open && unit.extraInfo ? (
               <p className="text-muted-foreground mt-2 text-xs leading-relaxed whitespace-pre-wrap">
                 {unit.extraInfo}
               </p>
             ) : null}
           </div>
         </button>
-        <div className="border-t px-4 py-3">
-          <MerkantilContactsBlock
-            unit={unit}
-            contacts={contactsForUnit}
-            canEdit={canEdit}
-          />
-        </div>
-        {canEdit ? (
-          <div className="flex flex-wrap gap-2 border-t px-4 py-2">
-            <a
-              href={`#add-child-${unit._id}`}
-              className={cn(buttonVariants({ variant: "outline", size: "sm" }))}
-            >
-              Legg til underenhet
-            </a>
-            {isAdmin ? (
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="text-destructive"
-                onClick={() => {
-                  if (
-                    typeof window !== "undefined" &&
-                    window.confirm(
-                      `Slette «${unit.name}»? Krever at den ikke har underenheter eller koblinger.`,
-                    )
-                  ) {
-                    void onRemove(unit._id);
-                  }
-                }}
-              >
-                <Trash2 className="size-4" />
-                Slett
-              </Button>
-            ) : null}
-          </div>
-        ) : null}
-        {open && kids.length > 0 ? (
-          <ul className="space-y-2 border-t px-2 py-3">
-            {kids.map((ch) => (
-              <OrgBranch
-                key={ch._id}
-                unit={ch}
-                childrenByParent={childrenByParent}
-                contactsByUnit={contactsByUnit}
-                depth={depth + 1}
+        {open ? (
+          <>
+            <div className="border-t px-4 py-3">
+              <MerkantilContactsBlock
+                unit={unit}
+                contacts={contactsForUnit}
                 canEdit={canEdit}
-                isAdmin={isAdmin}
-                onRemove={onRemove}
               />
-            ))}
-          </ul>
+            </div>
+            {canEdit ? (
+              <div className="flex flex-wrap gap-2 border-t px-4 py-2">
+                <a
+                  href={`#add-child-${unit._id}`}
+                  className={cn(
+                    buttonVariants({ variant: "outline", size: "sm" }),
+                  )}
+                >
+                  Legg til underenhet
+                </a>
+                {isAdmin ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="text-destructive"
+                    onClick={() => {
+                      if (
+                        typeof window !== "undefined" &&
+                        window.confirm(
+                          `Slette «${unit.name}»? Krever at den ikke har underenheter eller koblinger.`,
+                        )
+                      ) {
+                        void onRemove(unit._id);
+                      }
+                    }}
+                  >
+                    <Trash2 className="size-4" />
+                    Slett
+                  </Button>
+                ) : null}
+              </div>
+            ) : null}
+            {kids.length > 0 ? (
+              <ul className="space-y-2 border-t px-2 py-3">
+                {kids.map((ch) => (
+                  <OrgBranch
+                    key={ch._id}
+                    unit={ch}
+                    childrenByParent={childrenByParent}
+                    contactsByUnit={contactsByUnit}
+                    depth={depth + 1}
+                    canEdit={canEdit}
+                    isAdmin={isAdmin}
+                    onRemove={onRemove}
+                  />
+                ))}
+              </ul>
+            ) : null}
+          </>
         ) : null}
       </div>
       {canEdit ? (
@@ -502,7 +515,7 @@ function AddChildForm({
           value={name}
           onChange={(e) => setName(e.target.value)}
           required
-          placeholder="F.eks. Medisinsk klinikk"
+          placeholder="F.eks. Salg Nord eller HR"
         />
       </div>
       <div className="space-y-2">
@@ -512,7 +525,7 @@ function AddChildForm({
           value={extra}
           onChange={(e) => setExtra(e.target.value)}
           rows={2}
-          placeholder="Åpningstider, avtalereferanser, rom …"
+          placeholder="Koststed, lokasjon, særlige forhold …"
         />
       </div>
       {msg ? (
@@ -527,7 +540,7 @@ function AddChildForm({
   );
 }
 
-function AddHelseforetakForm({
+function AddRootOrganizationForm({
   workspaceId,
 }: {
   workspaceId: Id<"workspaces">;
@@ -556,34 +569,34 @@ function AddHelseforetakForm({
       setShortName("");
       setLocalCode("");
       setExtra("");
-      setMsg("Helseforetak opprettet.");
+      setMsg("Hovedenhet opprettet.");
     } catch (err) {
       setMsg(err instanceof Error ? err.message : "Kunne ikke opprette.");
     }
   }
 
   return (
-    <Card id="ny-helseforetak">
+    <Card id="ny-hovedenhet" className="border-primary/15">
       <CardHeader>
-        <CardTitle className="text-base">Nytt helseforetak</CardTitle>
+        <CardTitle className="text-base">Ny hovedenhet (øverste nivå)</CardTitle>
         <CardDescription>
-          Start organisasjonskartet her. Merkantile kontakter legges inn under
-          hver enhet etter opprettelse (flere personer per HF/avdeling/seksjon).
-          Under hvert helseforetak legger du avdelinger, og under avdelinger
-          seksjoner.
+          Dette er rot-nivået i kartet — typisk selskap, konsern eller én juridisk
+          enhet. Under den legger du avdelinger eller forretningsenheter, og
+          deretter team eller grupper. Kontaktpersoner registreres på hvert nivå
+          etter at enheten er opprettet.
         </CardDescription>
       </CardHeader>
       <CardContent>
         <form onSubmit={(e) => void submit(e)} className="space-y-4">
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2 sm:col-span-2">
-              <Label htmlFor="hf-name">Navn på helseforetak</Label>
+              <Label htmlFor="hf-name">Navn</Label>
               <Input
                 id="hf-name"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 required
-                placeholder="F.eks. Helse Bergen HF"
+                placeholder="F.eks. Acme AS, Kommune X, eller Helseforetak Y"
               />
             </div>
             <div className="space-y-2">
@@ -592,25 +605,27 @@ function AddHelseforetakForm({
                 id="hf-short"
                 value={shortName}
                 onChange={(e) => setShortName(e.target.value)}
+                placeholder="F.eks. Acme"
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="hf-code">Lokal kode (valgfritt)</Label>
+              <Label htmlFor="hf-code">Intern kode (valgfritt)</Label>
               <Input
                 id="hf-code"
                 value={localCode}
                 onChange={(e) => setLocalCode(e.target.value)}
+                placeholder="F.eks. regnskapskode eller avdelings-ID"
               />
             </div>
           </div>
           <div className="space-y-2">
-            <Label htmlFor="hf-extra">Annen nødvendig informasjon</Label>
+            <Label htmlFor="hf-extra">Tilleggsinformasjon (valgfritt)</Label>
             <Textarea
               id="hf-extra"
               value={extra}
               onChange={(e) => setExtra(e.target.value)}
               rows={3}
-              placeholder="F.eks. avtalereferanser, åpningstider, interne kanaler …"
+              placeholder="F.eks. organisasjonsnummer i notat, hovedkontor, felles tjenester …"
             />
           </div>
           {msg ? (
@@ -619,7 +634,7 @@ function AddHelseforetakForm({
             </p>
           ) : null}
           <Button type="submit" disabled={!name.trim()}>
-            Opprett helseforetak
+            Opprett hovedenhet
           </Button>
         </form>
       </CardContent>
@@ -704,22 +719,34 @@ export function OrgChartPanel({
 
   return (
     <div className="space-y-8">
-      <Card>
-        <CardHeader>
-          <CardTitle>Organisasjonskart</CardTitle>
-          <CardDescription>
-            Hierarki: helseforetak → avdeling → seksjon. Legg inn flere
-            merkantile kontakter per enhet (innkjøp, avtaler, faktura osv.).
-            Strukturen støtter flere helseforetak i samme arbeidsområde.
-          </CardDescription>
-        </CardHeader>
-      </Card>
+      <details className="group border-border/60 bg-muted/20 rounded-2xl border px-4 py-3">
+        <summary className="cursor-pointer list-none font-medium leading-snug [&::-webkit-details-marker]:hidden">
+          <span className="inline-flex items-center gap-2">
+            <ChevronRight className="text-muted-foreground size-4 shrink-0 transition-transform group-open:rotate-90" />
+            Slik fungerer organisasjonskartet
+          </span>
+        </summary>
+        <div className="text-muted-foreground mt-3 space-y-2 border-t border-border/50 pt-3 text-sm leading-relaxed">
+          <p>
+            Kartet har <strong className="text-foreground">tre nivåer</strong>:
+            øverst selskap eller konsern, deretter avdeling eller
+            forretningsenhet, og innerst team eller gruppe. Dette passer
+            ulike bransjer — dere bruker navn som matcher deres egen modell.
+          </p>
+          <p>
+            Hvert nivå kan ha <strong className="text-foreground">kontaktpersoner</strong>{" "}
+            (fold ut enheten for å se eller redigere). Trykk på pilen ved en
+            enhet for å skjule eller vise detaljer.
+          </p>
+        </div>
+      </details>
 
-      {canEdit ? <AddHelseforetakForm workspaceId={workspaceId} /> : null}
+      {canEdit ? <AddRootOrganizationForm workspaceId={workspaceId} /> : null}
 
       {roots.length === 0 ? (
         <p className="text-muted-foreground text-sm leading-relaxed">
-          Ingen enheter ennå. {canEdit ? "Opprett et helseforetak over." : ""}
+          Ingen enheter ennå.{" "}
+          {canEdit ? "Opprett en hovedenhet (øverste nivå) over." : ""}
         </p>
       ) : (
         <ul className="space-y-4">

@@ -127,4 +127,8 @@
   html {
     @apply font-sans;
   }
+  /* Ekstra plass når PWA-banner er synlig (unngår at innhold skjules bak bunnlinje) */
+  html[data-pwa-hint="1"] main {
+    padding-bottom: max(6.5rem, env(safe-area-inset-bottom));
+  }
 }

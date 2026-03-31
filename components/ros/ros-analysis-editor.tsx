@@ -1,6 +1,7 @@
 "use client";
 
 import { RosMatrix } from "@/components/ros/ros-matrix";
+import { RosMethodologyGuide } from "@/components/ros/ros-methodology-guide";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -121,6 +122,18 @@ export function RosAnalysisEditor({
     },
     [],
   );
+
+  const matrixStats = useMemo(() => {
+    let max = 0;
+    let highOrCritical = 0;
+    for (const row of matrix) {
+      for (const v of row) {
+        if (v > max) max = v;
+        if (v >= 4) highOrCritical += 1;
+      }
+    }
+    return { max, highOrCritical };
+  }, [matrix]);
 
   async function save() {
     if (!data) return;
@@ -292,6 +305,11 @@ export function RosAnalysisEditor({
         </div>
       </div>
 
+      <RosMethodologyGuide
+        variant="compact"
+        workspaceId={workspaceId}
+      />
+
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Detaljer</CardTitle>
@@ -447,8 +465,9 @@ export function RosAnalysisEditor({
             Versjonskontroll
           </CardTitle>
           <CardDescription>
-            Lagre øyeblikksbilder av matrise og notat. Gjenopprett en eldre
-            versjon når du trenger å rulle tilbake.
+            Bruk versjoner til å dokumentere <strong className="text-foreground">før og
+            etter</strong> tiltak: lagre et bilde før endring, oppdater matrisen, lagre
+            ny versjon. Gjenopprett eldre stand ved behov.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -694,11 +713,38 @@ export function RosAnalysisEditor({
 
       <Card className="overflow-hidden border-primary/15">
         <CardHeader className="border-b border-border/50 bg-muted/20">
-          <CardTitle className="text-base">Risikomatrise</CardTitle>
-          <CardDescription>
-            {data.rowAxisTitle} (rader) × {data.colAxisTitle} (kolonner). Celle
-            0 = ikke vurdert, 1–5 = stigende risiko.
-          </CardDescription>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <CardTitle className="text-base">Risikomatrise</CardTitle>
+              <CardDescription>
+                {data.rowAxisTitle} (rader) × {data.colAxisTitle} (kolonner).
+                Klikk en celle for å velge nivå 0–5 (0 = ikke vurdert).
+              </CardDescription>
+            </div>
+            {matrix.length > 0 ? (
+              <div className="flex flex-wrap gap-2 text-xs">
+                <Badge variant="secondary" className="font-normal">
+                  Høyeste nivå i matrise:{" "}
+                  <span className="text-foreground font-semibold tabular-nums">
+                    {matrixStats.max}
+                  </span>
+                </Badge>
+                {matrixStats.highOrCritical > 0 ? (
+                  <Badge
+                    variant="outline"
+                    className="border-orange-500/40 bg-orange-500/10 font-normal"
+                  >
+                    {matrixStats.highOrCritical} celle
+                    {matrixStats.highOrCritical === 1 ? "" : "r"} med nivå 4–5
+                  </Badge>
+                ) : (
+                  <Badge variant="outline" className="font-normal">
+                    Ingen celler på nivå 4–5
+                  </Badge>
+                )}
+              </div>
+            ) : null}
+          </div>
         </CardHeader>
         <CardContent className="pt-6">
           {matrix.length > 0 ? (

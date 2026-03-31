@@ -17,21 +17,114 @@ import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import {
   DEFAULT_ROS_COL_AXIS,
+  DEFAULT_ROS_COL_LABELS,
   DEFAULT_ROS_ROW_AXIS,
+  DEFAULT_ROS_ROW_LABELS,
 } from "@/lib/ros-defaults";
 import { cn } from "@/lib/utils";
 import { useMutation, useQuery } from "convex/react";
+import { RosDashboardPanel } from "@/components/ros/ros-dashboard-panel";
+import { RosMethodologyGuide } from "@/components/ros/ros-methodology-guide";
 import {
+  RosTemplatePreviewMini,
+} from "@/components/ros/ros-template-preview";
+import {
+  Dialog,
+  DialogBody,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+} from "@/components/ui/dialog";
+import { ROS_TEMPLATE_PRESETS, presetToFormState } from "@/lib/ros-template-presets";
+import {
+  BarChart3,
   ClipboardList,
   Grid3x3,
+  HelpCircle,
   Info,
+  LayoutGrid,
   Plus,
+  Sparkles,
   Trash2,
 } from "lucide-react";
 import Link from "next/link";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
-type Tab = "maler" | "analyser";
+type Tab = "maler" | "analyser" | "oversikt";
+
+function RosFlowStrip({ tab }: { tab: Tab }) {
+  const steps = [
+    {
+      id: "maler" as const,
+      n: 1,
+      label: "Maler",
+      hint: "Definer akser og spørsmål (rader × kolonner)",
+    },
+    {
+      id: "analyser" as const,
+      n: 2,
+      label: "Analyser",
+      hint: "Koble prosess og PVV, fyll fargekodet matrise",
+    },
+    {
+      id: "oversikt" as const,
+      n: 3,
+      label: "Oversikt",
+      hint: "Dashboard, søyler og sammenligning",
+    },
+  ];
+  const activeIdx = steps.findIndex((s) => s.id === tab);
+  return (
+    <div className="border-border/60 bg-muted/15 rounded-2xl border p-4">
+      <p className="text-muted-foreground mb-3 text-xs font-medium tracking-wide uppercase">
+        Arbeidsflyt
+      </p>
+      <ol className="flex flex-col gap-4 sm:flex-row sm:items-start sm:gap-0">
+        {steps.map((s, i) => {
+          const active = tab === s.id;
+          const done = activeIdx > i;
+          return (
+            <li key={s.id} className="flex min-w-0 flex-1 items-start gap-3">
+              <span
+                className={cn(
+                  "flex size-9 shrink-0 items-center justify-center rounded-full text-sm font-bold tabular-nums",
+                  active
+                    ? "bg-primary text-primary-foreground shadow-sm"
+                    : done
+                      ? "bg-emerald-500/20 text-emerald-800 dark:text-emerald-200"
+                      : "bg-muted text-muted-foreground",
+                )}
+              >
+                {done ? "✓" : s.n}
+              </span>
+              <div className="min-w-0">
+                <p
+                  className={cn(
+                    "font-medium leading-tight",
+                    active && "text-foreground",
+                  )}
+                >
+                  {s.label}
+                </p>
+                <p className="text-muted-foreground mt-0.5 text-xs leading-snug">
+                  {s.hint}
+                </p>
+              </div>
+              {i < steps.length - 1 ? (
+                <div
+                  className="text-muted-foreground/40 hidden shrink-0 px-2 pt-2 sm:block"
+                  aria-hidden
+                >
+                  →
+                </div>
+              ) : null}
+            </li>
+          );
+        })}
+      </ol>
+    </div>
+  );
+}
 
 export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> }) {
   const templates = useQuery(api.ros.listTemplates, { workspaceId });
@@ -64,6 +157,9 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
     Id<"assessments">[]
   >([]);
   const [extraAssessmentPickerKey, setExtraAssessmentPickerKey] = useState(0);
+  const [templateDialogOpen, setTemplateDialogOpen] = useState(false);
+  /** Når true: tittel på ny analyse oppdateres automatisk fra valgt kandidat */
+  const [anaTitleAuto, setAnaTitleAuto] = useState(true);
 
   const matchingAssessments = useQuery(
     api.ros.listMatchingAssessments,
@@ -126,6 +222,36 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
     [],
   );
 
+  const previewRowLabels = useMemo(() => {
+    const rowLabels = tplRows
+      .split("\n")
+      .map((s) => s.trim())
+      .filter(Boolean);
+    if (rowLabels.length >= 2) return rowLabels;
+    return [...DEFAULT_ROS_ROW_LABELS];
+  }, [tplRows]);
+
+  const previewColLabels = useMemo(() => {
+    const colLabels = tplCols
+      .split("\n")
+      .map((s) => s.trim())
+      .filter(Boolean);
+    if (colLabels.length >= 2) return colLabels;
+    return [...DEFAULT_ROS_COL_LABELS];
+  }, [tplCols]);
+
+  const selectedTemplateForAnalysis = useMemo(
+    () => (templates ?? []).find((t) => t._id === anaTemplateId),
+    [templates, anaTemplateId],
+  );
+
+  useEffect(() => {
+    if (!anaTitleAuto || !anaCandidateId || !candidates) return;
+    const c = candidates.find((x) => x._id === anaCandidateId);
+    if (!c) return;
+    setAnaTitle(`ROS — ${c.name} (${c.code})`);
+  }, [anaTitleAuto, anaCandidateId, candidates]);
+
   async function submitTemplate(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true);
@@ -170,6 +296,7 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
         });
       }
       resetTemplateForm();
+      setTemplateDialogOpen(false);
     } finally {
       setBusy(false);
     }
@@ -196,11 +323,17 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
     }
   }
 
-  if (templates === undefined || analyses === undefined) {
+  if (
+    (tab === "maler" || tab === "analyser") &&
+    (templates === undefined || analyses === undefined)
+  ) {
     return (
-      <p className="text-muted-foreground text-sm">Henter ROS-maler …</p>
+      <p className="text-muted-foreground text-sm">Henter ROS-data …</p>
     );
   }
+
+  const templatesList = templates ?? [];
+  const analysesList = analyses ?? [];
 
   return (
     <div className="space-y-8">
@@ -209,6 +342,7 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
           [
             ["maler", "Maler", Grid3x3],
             ["analyser", "ROS-analyser", ClipboardList],
+            ["oversikt", "Oversikt", BarChart3],
           ] as const
         ).map(([id, label, Icon]) => (
           <button
@@ -228,161 +362,296 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
         ))}
       </div>
 
-      {tab === "maler" ? (
-        <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,22rem)]">
-          <div className="space-y-4">
-            <h2 className="font-heading text-lg font-semibold">
-              Gjenbrukbare maler
-            </h2>
-            <p className="text-muted-foreground text-sm leading-relaxed">
-              Hver mal definerer rader (typisk sannsynlighet) og kolonner
-              (typisk konsekvens). Analyser kopierer strukturen slik at maler kan
-              endres uten å ødelegge eldre analyser.
-            </p>
-            {templates.length === 0 ? (
-              <p className="text-muted-foreground rounded-xl border border-dashed py-8 text-center text-sm">
-                Ingen maler ennå — bruk skjemaet til høyre for å opprette en
-                standard 5×5 eller tilpasset matrise.
+      <RosFlowStrip tab={tab} />
+
+      <RosMethodologyGuide workspaceId={workspaceId} variant="page" />
+
+      {tab === "oversikt" ? (
+        <RosDashboardPanel workspaceId={workspaceId} />
+      ) : tab === "maler" ? (
+        <div className="space-y-6">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h2 className="font-heading text-lg font-semibold">
+                Gjenbrukbare maler
+              </h2>
+              <p className="text-muted-foreground mt-1 max-w-2xl text-sm leading-relaxed">
+                Hver mal definerer rader og kolonner (typisk sannsynlighet ×
+                konsekvens). Analyser kopierer strukturen. Bruk veiledningen i
+                dialogen for hurtigstart og fargeforhåndsvisning.
               </p>
-            ) : (
-              <ul className="grid gap-3 sm:grid-cols-2">
-                {templates.map((t) => (
-                  <li key={t._id}>
-                    <Card className="h-full border-border/70 shadow-sm transition-shadow hover:shadow-md">
-                      <CardHeader className="pb-2">
-                        <CardTitle className="text-base">{t.name}</CardTitle>
-                        <CardDescription className="line-clamp-2 text-xs">
-                          {t.description || "Ingen beskrivelse"}
-                        </CardDescription>
-                      </CardHeader>
-                      <CardContent className="text-muted-foreground text-xs">
-                        {t.rowLabels.length} × {t.colLabels.length} ·{" "}
-                        {t.rowAxisTitle} / {t.colAxisTitle}
-                      </CardContent>
-                      <CardFooter className="flex flex-wrap gap-2 border-t pt-3">
-                        <Button
-                          type="button"
-                          variant="secondary"
-                          size="sm"
-                          onClick={() => loadTemplateForEdit(t)}
-                        >
-                          Rediger
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          className="text-destructive"
-                          onClick={() => {
-                            if (
-                              typeof window !== "undefined" &&
-                              window.confirm(
-                                "Slette denne malen? Eksisterende analyser beholder sin kopi.",
-                              )
-                            ) {
-                              void removeTemplate({ templateId: t._id });
-                            }
-                          }}
-                        >
-                          <Trash2 className="size-3.5" />
-                          Slett
-                        </Button>
-                      </CardFooter>
-                    </Card>
-                  </li>
-                ))}
-              </ul>
-            )}
+            </div>
+            <Button
+              type="button"
+              className="shrink-0 gap-2"
+              onClick={() => {
+                resetTemplateForm();
+                setTemplateDialogOpen(true);
+              }}
+            >
+              <LayoutGrid className="size-4" aria-hidden />
+              Ny mal
+            </Button>
           </div>
 
-          <Card className="border-primary/20 bg-gradient-to-b from-primary/[0.04] to-card shadow-md">
-            <CardHeader>
-              <CardTitle className="text-base">
-                {editingId ? "Rediger mal" : "Ny mal"}
-              </CardTitle>
-              <CardDescription className="text-xs leading-relaxed">
-                {defaultLabelsHint}
-              </CardDescription>
-            </CardHeader>
-            <form onSubmit={(e) => void submitTemplate(e)}>
-              <CardContent className="space-y-3">
-                <div className="space-y-1.5">
-                  <Label htmlFor="tpl-name">Navn</Label>
-                  <Input
-                    id="tpl-name"
-                    value={tplName}
-                    onChange={(e) => setTplName(e.target.value)}
-                    placeholder="F.eks. Standard ROS 5×5"
-                    required
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="tpl-desc">Beskrivelse (valgfritt)</Label>
-                  <Textarea
-                    id="tpl-desc"
-                    value={tplDesc}
-                    onChange={(e) => setTplDesc(e.target.value)}
-                    rows={2}
-                    className="min-h-0 resize-y"
-                  />
-                </div>
-                <div className="grid gap-2 sm:grid-cols-2">
-                  <div className="space-y-1.5">
-                    <Label htmlFor="tpl-row-axis">Akse rader</Label>
-                    <Input
-                      id="tpl-row-axis"
-                      value={tplRowAxis}
-                      onChange={(e) => setTplRowAxis(e.target.value)}
-                    />
+          {templatesList.length === 0 ? (
+            <div className="rounded-2xl border border-dashed bg-muted/10 py-12 text-center">
+              <p className="text-muted-foreground text-sm">
+                Ingen maler ennå.
+              </p>
+              <Button
+                type="button"
+                variant="secondary"
+                className="mt-4 gap-2"
+                onClick={() => {
+                  resetTemplateForm();
+                  setTemplateDialogOpen(true);
+                }}
+              >
+                <Sparkles className="size-4" aria-hidden />
+                Opprett første mal med veiledning
+              </Button>
+            </div>
+          ) : (
+            <ul className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+              {templatesList.map((t) => (
+                <li key={t._id}>
+                  <Card className="flex h-full flex-col overflow-hidden border-border/70 shadow-sm transition-shadow hover:shadow-md">
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-base">{t.name}</CardTitle>
+                      <CardDescription className="line-clamp-2 text-xs">
+                        {t.description || "Ingen beskrivelse"}
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="flex flex-1 flex-col gap-3 text-xs">
+                      <RosTemplatePreviewMini
+                        rowLabels={t.rowLabels}
+                        colLabels={t.colLabels}
+                        className="shrink-0"
+                      />
+                      <p className="text-muted-foreground">
+                        {t.rowLabels.length} × {t.colLabels.length} ·{" "}
+                        {t.rowAxisTitle} / {t.colAxisTitle}
+                      </p>
+                    </CardContent>
+                    <CardFooter className="mt-auto flex flex-wrap gap-2 border-t pt-3">
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => {
+                          loadTemplateForEdit(t);
+                          setTemplateDialogOpen(true);
+                        }}
+                      >
+                        Rediger
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="text-destructive"
+                        onClick={() => {
+                          if (
+                            typeof window !== "undefined" &&
+                            window.confirm(
+                              "Slette denne malen? Eksisterende analyser beholder sin kopi.",
+                            )
+                          ) {
+                            void removeTemplate({ templateId: t._id });
+                          }
+                        }}
+                      >
+                        <Trash2 className="size-3.5" />
+                        Slett
+                      </Button>
+                    </CardFooter>
+                  </Card>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          <Dialog
+            open={templateDialogOpen}
+            onOpenChange={(open) => {
+              setTemplateDialogOpen(open);
+              if (!open) resetTemplateForm();
+            }}
+          >
+            <DialogContent
+              size="2xl"
+              titleId="ros-tpl-dialog-title"
+              descriptionId="ros-tpl-dialog-desc"
+            >
+              <DialogHeader>
+                <p
+                  id="ros-tpl-dialog-title"
+                  className="font-heading text-lg font-semibold"
+                >
+                  {editingId ? "Rediger mal" : "Ny ROS-mal"}
+                </p>
+                <p
+                  id="ros-tpl-dialog-desc"
+                  className="text-muted-foreground text-sm leading-relaxed"
+                >
+                  {defaultLabelsHint} Fargene i forhåndsvisningen følger
+                  risikonivå 1–5 (grønn → rød).
+                </p>
+              </DialogHeader>
+              <DialogBody>
+                <form
+                  id="ros-template-form"
+                  onSubmit={(e) => void submitTemplate(e)}
+                  className="space-y-4"
+                >
+                  <div className="flex flex-wrap gap-2">
+                    <p className="text-muted-foreground w-full text-xs font-medium">
+                      Hurtigstart
+                    </p>
+                    {ROS_TEMPLATE_PRESETS.map((p) => (
+                      <Button
+                        key={p.id}
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="h-auto min-h-9 flex-col items-start gap-0.5 py-2 text-left"
+                        onClick={() => {
+                          const s = presetToFormState(p);
+                          setTplRowAxis(s.tplRowAxis);
+                          setTplColAxis(s.tplColAxis);
+                          setTplRows(s.tplRows);
+                          setTplCols(s.tplCols);
+                        }}
+                      >
+                        <span className="font-medium">{p.name}</span>
+                        <span className="text-muted-foreground max-w-[14rem] text-[11px] font-normal leading-snug">
+                          {p.description}
+                        </span>
+                      </Button>
+                    ))}
                   </div>
-                  <div className="space-y-1.5">
-                    <Label htmlFor="tpl-col-axis">Akse kolonner</Label>
-                    <Input
-                      id="tpl-col-axis"
-                      value={tplColAxis}
-                      onChange={(e) => setTplColAxis(e.target.value)}
-                    />
+
+                  <details className="border-border/60 bg-muted/15 rounded-xl border px-3 py-2">
+                    <summary className="flex cursor-pointer list-none items-center gap-2 text-sm font-medium [&::-webkit-details-marker]:hidden">
+                      <HelpCircle className="text-muted-foreground size-4" />
+                      Hva er rader og kolonner?
+                    </summary>
+                    <p className="text-muted-foreground mt-2 text-xs leading-relaxed">
+                      <strong className="text-foreground">Rader</strong> er ofte
+                      sannsynlighet eller sannsynlig utfall.{" "}
+                      <strong className="text-foreground">Kolonner</strong> er
+                      ofte konsekvens eller påvirkning. Du kan bruke egne
+                      betegnelser — det viktige er at teamet forstår skalaen.
+                      Celleverdier 0–5 i analysen angir risiko etter at mal er
+                      lagret.
+                    </p>
+                  </details>
+
+                  <div className="grid gap-4 lg:grid-cols-2">
+                    <div className="space-y-3">
+                      <div className="space-y-1.5">
+                        <Label htmlFor="tpl-name">Navn på mal</Label>
+                        <Input
+                          id="tpl-name"
+                          value={tplName}
+                          onChange={(e) => setTplName(e.target.value)}
+                          placeholder="F.eks. Standard ROS 5×5"
+                          required
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label htmlFor="tpl-desc">Beskrivelse (valgfritt)</Label>
+                        <Textarea
+                          id="tpl-desc"
+                          value={tplDesc}
+                          onChange={(e) => setTplDesc(e.target.value)}
+                          rows={2}
+                          className="min-h-0 resize-y"
+                        />
+                      </div>
+                      <div className="grid gap-2 sm:grid-cols-2">
+                        <div className="space-y-1.5">
+                          <Label htmlFor="tpl-row-axis">Akse rader</Label>
+                          <Input
+                            id="tpl-row-axis"
+                            value={tplRowAxis}
+                            onChange={(e) => setTplRowAxis(e.target.value)}
+                          />
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label htmlFor="tpl-col-axis">Akse kolonner</Label>
+                          <Input
+                            id="tpl-col-axis"
+                            value={tplColAxis}
+                            onChange={(e) => setTplColAxis(e.target.value)}
+                          />
+                        </div>
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label htmlFor="tpl-rows">
+                          Etiketter rader (én per linje)
+                        </Label>
+                        <Textarea
+                          id="tpl-rows"
+                          value={tplRows}
+                          onChange={(e) => setTplRows(e.target.value)}
+                          rows={5}
+                          placeholder="Tom = standard 5 nivåer"
+                          className="font-mono text-xs"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label htmlFor="tpl-cols">
+                          Etiketter kolonner (én per linje)
+                        </Label>
+                        <Textarea
+                          id="tpl-cols"
+                          value={tplCols}
+                          onChange={(e) => setTplCols(e.target.value)}
+                          rows={5}
+                          placeholder="Tom = standard 5 nivåer"
+                          className="font-mono text-xs"
+                        />
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-muted-foreground text-xs uppercase tracking-wide">
+                        Forhåndsvisning (farger)
+                      </Label>
+                      <RosTemplatePreviewMini
+                        rowLabels={previewRowLabels}
+                        colLabels={previewColLabels}
+                      />
+                    </div>
                   </div>
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="tpl-rows">Etiketter rader (én per linje)</Label>
-                  <Textarea
-                    id="tpl-rows"
-                    value={tplRows}
-                    onChange={(e) => setTplRows(e.target.value)}
-                    rows={5}
-                    placeholder="Tom = standard 5 nivåer"
-                    className="font-mono text-xs"
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="tpl-cols">Etiketter kolonner (én per linje)</Label>
-                  <Textarea
-                    id="tpl-cols"
-                    value={tplCols}
-                    onChange={(e) => setTplCols(e.target.value)}
-                    rows={5}
-                    placeholder="Tom = standard 5 nivåer"
-                    className="font-mono text-xs"
-                  />
-                </div>
-              </CardContent>
-              <CardFooter className="flex flex-wrap gap-2 border-t">
-                <Button type="submit" disabled={busy || !tplName.trim()}>
-                  {editingId ? "Lagre endringer" : "Opprett mal"}
+                </form>
+              </DialogBody>
+              <DialogFooter>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    resetTemplateForm();
+                    setTemplateDialogOpen(false);
+                  }}
+                >
+                  Avbryt
                 </Button>
-                {editingId ? (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={resetTemplateForm}
-                  >
-                    Avbryt
-                  </Button>
-                ) : null}
-              </CardFooter>
-            </form>
-          </Card>
+                <Button
+                  type="submit"
+                  form="ros-template-form"
+                  disabled={busy || !tplName.trim()}
+                >
+                  {busy
+                    ? "Lagrer …"
+                    : editingId
+                      ? "Lagre endringer"
+                      : "Opprett mal"}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         </div>
       ) : (
         <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,22rem)]">
@@ -395,13 +664,13 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
               Du kan koble <strong>én eller flere PVV-vurderinger</strong>{" "}
               (matcher kandidatkode og/eller andre i arbeidsområdet).
             </p>
-            {analyses.length === 0 ? (
+            {analysesList.length === 0 ? (
               <p className="text-muted-foreground rounded-xl border border-dashed py-8 text-center text-sm leading-relaxed">
                 Ingen analyser ennå. Du trenger minst én{" "}
                 <strong>mal</strong> og én <strong>kandidat</strong> (prosess)
                 — opprett kandidater under{" "}
                 <Link
-                  href={`/w/${workspaceId}/kandidater`}
+                  href={`/w/${workspaceId}/vurderinger?fane=prosesser`}
                   className="text-primary font-medium underline-offset-4 hover:underline"
                 >
                   Kandidater
@@ -411,7 +680,7 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
               </p>
             ) : (
               <ul className="space-y-2">
-                {analyses.map((a) => (
+                {analysesList.map((a) => (
                   <li key={a._id}>
                     <Link
                       href={`/w/${workspaceId}/ros/a/${a._id}`}
@@ -449,7 +718,7 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
             </CardHeader>
             <form onSubmit={(e) => void submitAnalysis(e)}>
               <CardContent className="space-y-3">
-                {templates.length === 0 ? (
+                {templatesList.length === 0 ? (
                   <Alert className="border-amber-500/35 bg-amber-500/[0.06]">
                     <Info className="text-amber-700 dark:text-amber-400" />
                     <AlertTitle>Ingen ROS-mal</AlertTitle>
@@ -474,7 +743,7 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
                       ROS-analyse må knyttes til en <strong>kandidat</strong>{" "}
                       (PVV-prosess). Opprett minst én under{" "}
                       <Link
-                        href={`/w/${workspaceId}/kandidater`}
+                        href={`/w/${workspaceId}/vurderinger?fane=prosesser`}
                         className="text-primary font-medium"
                       >
                         Kandidater
@@ -500,12 +769,23 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
                     required
                   >
                     <option value="">— Velg mal —</option>
-                    {templates.map((t) => (
+                    {templatesList.map((t) => (
                       <option key={t._id} value={t._id}>
                         {t.name} ({t.rowLabels.length}×{t.colLabels.length})
                       </option>
                     ))}
                   </select>
+                  {selectedTemplateForAnalysis ? (
+                    <div className="pt-1">
+                      <p className="text-muted-foreground mb-1 text-[11px] font-medium uppercase tracking-wide">
+                        Malens rutenett
+                      </p>
+                      <RosTemplatePreviewMini
+                        rowLabels={selectedTemplateForAnalysis.rowLabels}
+                        colLabels={selectedTemplateForAnalysis.colLabels}
+                      />
+                    </div>
+                  ) : null}
                 </div>
                 <div className="space-y-1.5">
                   <Label htmlFor="ana-cand">Kandidat (PVV-prosess)</Label>
@@ -525,6 +805,7 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
                       );
                       setSelectedAssessmentIds([]);
                       setExtraAssessmentPickerKey((k) => k + 1);
+                      setAnaTitleAuto(true);
                     }}
                     required
                   >
@@ -553,7 +834,28 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
                 {anaCandidateId ? (
                   <div className="space-y-3">
                     <div className="space-y-2">
-                      <Label>PVV som matcher kandidaten (valgfritt)</Label>
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <Label>PVV som matcher kandidaten (valgfritt)</Label>
+                        {(matchingAssessments ?? []).length > 0 ? (
+                          <Button
+                            type="button"
+                            variant="secondary"
+                            size="sm"
+                            className="h-7 text-xs"
+                            onClick={() =>
+                              setSelectedAssessmentIds((prev) => {
+                                const s = new Set(
+                                  (matchingAssessments ?? []).map((x) => x._id),
+                                );
+                                for (const id of prev) s.add(id);
+                                return [...s];
+                              })
+                            }
+                          >
+                            Koble alle som matcher
+                          </Button>
+                        ) : null}
+                      </div>
                       {(matchingAssessments ?? []).length === 0 ? (
                         <p className="text-muted-foreground text-xs">
                           Ingen vurderinger med samme referansekode som denne
@@ -661,12 +963,36 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
                   </div>
                 ) : null}
                 <div className="space-y-1.5">
-                  <Label htmlFor="ana-title">Tittel på analysen</Label>
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <Label htmlFor="ana-title">Tittel på analysen</Label>
+                    {anaCandidateId && candidates ? (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="text-muted-foreground h-7 text-xs"
+                        onClick={() => {
+                          const c = candidates.find(
+                            (x) => x._id === anaCandidateId,
+                          );
+                          if (c) {
+                            setAnaTitle(`ROS — ${c.name} (${c.code})`);
+                            setAnaTitleAuto(true);
+                          }
+                        }}
+                      >
+                        Fyll fra kandidat
+                      </Button>
+                    ) : null}
+                  </div>
                   <Input
                     id="ana-title"
                     value={anaTitle}
-                    onChange={(e) => setAnaTitle(e.target.value)}
-                    placeholder="F.eks. ROS — fakturaflyt Q1"
+                    onChange={(e) => {
+                      setAnaTitle(e.target.value);
+                      setAnaTitleAuto(false);
+                    }}
+                    placeholder="Fylles automatisk fra kandidat — eller skriv egen"
                     required
                   />
                 </div>
@@ -680,20 +1006,20 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
                     !anaTemplateId ||
                     !anaCandidateId ||
                     !anaTitle.trim() ||
-                    templates.length === 0 ||
+                    templatesList.length === 0 ||
                     (candidates?.length ?? 0) === 0
                   }
                 >
                   Opprett og åpne matrise
                 </Button>
                 {(candidates?.length ?? 0) === 0 ||
-                templates.length === 0 ? (
+                templatesList.length === 0 ? (
                   <p className="text-muted-foreground pt-1 text-center text-[11px]">
                     {[
                       (candidates?.length ?? 0) === 0
                         ? "Opprett kandidat før knappen aktiveres."
                         : null,
-                      templates.length === 0
+                      templatesList.length === 0
                         ? "Opprett mal under fanen Maler først."
                         : null,
                     ]

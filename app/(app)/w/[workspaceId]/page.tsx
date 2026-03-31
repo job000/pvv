@@ -68,9 +68,9 @@ export default function WorkspaceOverviewPage() {
       icon: Building2,
     },
     {
-      href: `/w/${wid}/kandidater`,
-      title: "Kandidater",
-      desc: "Registrer prosesser og referanser",
+      href: `/w/${wid}/vurderinger?fane=prosesser`,
+      title: "Prosesser",
+      desc: "Stamdata og koder før PVV-saker",
       icon: Users,
     },
     {
@@ -128,7 +128,7 @@ export default function WorkspaceOverviewPage() {
             <CardTitle className="text-2xl font-semibold tabular-nums">
               {candidates.length}
             </CardTitle>
-            <CardDescription>kandidater</CardDescription>
+            <CardDescription>prosesser</CardDescription>
           </CardHeader>
         </Card>
         <Card>

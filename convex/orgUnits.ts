@@ -20,19 +20,25 @@ function assertValidHierarchy(
   if (!parent) {
     if (kind !== "helseforetak") {
       throw new Error(
-        "Kun helseforetak kan ligge øverst (uten overordnet enhet).",
+        "Kun øverste nivå (selskap/konsern) kan opprettes uten overordnet enhet.",
       );
     }
     return;
   }
   if (parent.kind === "helseforetak" && kind !== "avdeling") {
-    throw new Error("Under helseforetak kan det bare opprettes avdelinger.");
+    throw new Error(
+      "Under hovedselskap kan det bare opprettes avdelinger eller forretningsenheter.",
+    );
   }
   if (parent.kind === "avdeling" && kind !== "seksjon") {
-    throw new Error("Under avdeling kan det bare opprettes seksjoner.");
+    throw new Error(
+      "Under avdeling kan det bare opprettes team, grupper eller seksjoner.",
+    );
   }
   if (parent.kind === "seksjon") {
-    throw new Error("Seksjon kan ikke ha underenheter i dette hierarkiet.");
+    throw new Error(
+      "Laveste nivå (team/gruppe) kan ikke ha underenheter i dette hierarkiet.",
+    );
   }
 }
 

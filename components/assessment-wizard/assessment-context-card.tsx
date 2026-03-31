@@ -179,8 +179,16 @@ export function AssessmentContextCard({
             </h3>
           </div>
           <p className="text-muted-foreground text-xs leading-relaxed">
-            Vis hvor langt dere er kommet, og legg inn lenke til ferdig dokument
-            eller sak når den finnes.
+            Her registrerer dere <strong className="text-foreground">status og lenke</strong>{" "}
+            til ROS-arbeid. Den <strong className="text-foreground">detaljerte
+            risikomatrisen</strong> (celle for celle, før/etter via versjoner) ligger i{" "}
+            <Link
+              href={`/w/${workspaceId}/ros`}
+              className="text-primary font-medium underline-offset-4 hover:underline"
+            >
+              ROS — arbeidsområde
+            </Link>
+            , med kobling til denne PVV når dere kobler analyse og kandidat der.
           </p>
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
@@ -396,7 +404,7 @@ export function AssessmentContextCard({
 }
 
 const ORG_SHORT: Record<Doc<"orgUnits">["kind"], string> = {
-  helseforetak: "HF",
+  helseforetak: "Selsk.",
   avdeling: "Avd.",
-  seksjon: "Seks.",
+  seksjon: "Team",
 };

@@ -53,7 +53,7 @@ export function AppShell({
 
   return (
     <div className="flex min-h-full flex-col bg-background">
-      <header className="sticky top-0 z-40 border-b border-border/60 bg-background/90 shadow-sm backdrop-blur-md supports-[backdrop-filter]:bg-background/75">
+      <header className="sticky top-0 z-40 border-b border-border/60 bg-background/90 pt-[env(safe-area-inset-top)] shadow-sm backdrop-blur-md supports-[backdrop-filter]:bg-background/75">
         <div className="mx-auto flex h-14 w-full max-w-[100rem] items-center justify-between gap-4 px-4 sm:px-6">
           <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-4">
             {workspaceChrome?.hasWorkspace ? (
@@ -140,7 +140,9 @@ export function AppShell({
           </div>
         </div>
       </header>
-      <main className="flex min-h-0 w-full flex-1 flex-col">{children}</main>
+      <main className="flex min-h-0 w-full flex-1 flex-col pb-[env(safe-area-inset-bottom)]">
+        {children}
+      </main>
     </div>
   );
 }

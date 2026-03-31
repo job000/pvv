@@ -2,6 +2,7 @@
 
 import { RosWorkspace } from "@/components/ros/ros-workspace";
 import type { Id } from "@/convex/_generated/dataModel";
+import Link from "next/link";
 import { useParams } from "next/navigation";
 
 export default function RosPage() {
@@ -10,15 +11,25 @@ export default function RosPage() {
 
   return (
     <div className="mx-auto w-full max-w-6xl space-y-10 pb-10">
-      <header className="space-y-2 border-b border-border/60 pb-8">
+      <header className="space-y-4 border-b border-border/60 pb-8">
         <h1 className="font-heading text-3xl font-semibold tracking-tight md:text-4xl">
           ROS — risiko og sårbarhet
         </h1>
         <p className="text-muted-foreground max-w-2xl text-base leading-relaxed">
-          Gjenbrukbare <strong>maler</strong> med sannsynlighets- og
-          konsekvensakser, og <strong>analyser</strong> du fyller ut celle for
-          celle. Koble hver analyse til en <strong>kandidat</strong> (prosess) og
-          valgfritt til en <strong>PVV-vurdering</strong> med samme referansekode.
+          Vurderingspunktene er <strong>hvert kryss i matrisen</strong> (rader ×
+          kolonner fra malen) — se boksen «Slik fungerer ROS» under. Bygg{" "}
+          <strong>maler</strong> (akser og etiketter), opprett{" "}
+          <strong>analyser</strong> med fargekodet matrise, og koble til{" "}
+          <strong>PVV-vurderinger</strong> og{" "}
+          <Link
+            href={`/w/${workspaceId}/vurderinger?fane=prosesser`}
+            className="text-primary font-medium underline-offset-4 hover:underline"
+          >
+            prosesskandidater
+          </Link>{" "}
+          fra samme arbeidsområde — slik følger dere én rød tråd fra vurdering
+          til risiko. Fanen <strong>Oversikt</strong> viser søylediagram,
+          nøkkeltall og sammenligning på tvers av alle analyser.
         </p>
       </header>
       <RosWorkspace workspaceId={workspaceId} />

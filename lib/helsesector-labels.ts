@@ -1,9 +1,12 @@
-/** Etiketter for organisasjonsenheter (offentlig sektor / sykehus) */
-
+/**
+ * Etiketter for organisasjonsenheter.
+ * Nøklene (helseforetak / avdeling / seksjon) er historiske i databasen;
+ * visningstekstene er generelle for alle typer virksomheter.
+ */
 export const ORG_UNIT_KIND_LABELS = {
-  helseforetak: "Helseforetak",
-  avdeling: "Avdeling",
-  seksjon: "Seksjon",
+  helseforetak: "Hovedselskap eller konsern",
+  avdeling: "Avdeling eller forretningsenhet",
+  seksjon: "Team, gruppe eller seksjon",
 } as const;
 
 /** Status for risiko- og personvernsdokumentasjon (kort språk i lister) */

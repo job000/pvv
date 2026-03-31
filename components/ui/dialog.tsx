@@ -1,0 +1,158 @@
+"use client";
+
+import * as React from "react";
+import { createPortal } from "react-dom";
+
+import { cn } from "@/lib/utils";
+
+type DialogCtx = {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+};
+
+const DialogContext = React.createContext<DialogCtx | null>(null);
+
+export function Dialog({
+  open,
+  onOpenChange,
+  children,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <DialogContext.Provider value={{ open, onOpenChange }}>
+      {children}
+    </DialogContext.Provider>
+  );
+}
+
+export function DialogContent({
+  className,
+  children,
+  /** max width: sm | md | lg | xl | 2xl */
+  size = "lg",
+  titleId,
+  descriptionId,
+}: {
+  className?: string;
+  children: React.ReactNode;
+  size?: "sm" | "md" | "lg" | "xl" | "2xl";
+  titleId?: string;
+  descriptionId?: string;
+}) {
+  const ctx = React.useContext(DialogContext);
+  if (!ctx) {
+    throw new Error("DialogContent must be used inside Dialog");
+  }
+  const { open, onOpenChange } = ctx;
+  const [mounted, setMounted] = React.useState(false);
+
+  React.useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  React.useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onOpenChange(false);
+    };
+    document.addEventListener("keydown", onKey);
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.body.style.overflow = prev;
+    };
+  }, [open, onOpenChange]);
+
+  if (!mounted || !open) {
+    return null;
+  }
+
+  const maxW = {
+    sm: "max-w-sm",
+    md: "max-w-md",
+    lg: "max-w-lg",
+    xl: "max-w-xl",
+    "2xl": "max-w-2xl",
+  }[size];
+
+  return createPortal(
+    <div className="fixed inset-0 z-50 flex items-end justify-center p-4 sm:items-center">
+      <button
+        type="button"
+        aria-label="Lukk"
+        className="absolute inset-0 bg-black/50 backdrop-blur-[1px]"
+        onClick={() => onOpenChange(false)}
+      />
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        aria-describedby={descriptionId}
+        className={cn(
+          "border-border/80 bg-background relative z-10 flex max-h-[min(92vh,44rem)] w-full flex-col overflow-hidden rounded-2xl border shadow-2xl",
+          maxW,
+          className,
+        )}
+      >
+        {children}
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
+export function DialogHeader({
+  className,
+  children,
+}: {
+  className?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div
+      className={cn(
+        "border-border/60 bg-muted/15 shrink-0 border-b px-5 py-4",
+        className,
+      )}
+    >
+      {children}
+    </div>
+  );
+}
+
+export function DialogBody({
+  className,
+  children,
+}: {
+  className?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className={cn("min-h-0 flex-1 overflow-y-auto px-5 py-4", className)}>
+      {children}
+    </div>
+  );
+}
+
+export function DialogFooter({
+  className,
+  children,
+}: {
+  className?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div
+      className={cn(
+        "border-border/60 bg-muted/10 flex shrink-0 flex-wrap items-center justify-end gap-2 border-t px-5 py-3",
+        className,
+      )}
+    >
+      {children}
+    </div>
+  );
+}
