@@ -111,6 +111,12 @@ function defaultPayload(): AssessmentPayload {
     employees: 3,
     criticalityBusinessImpact: 3,
     criticalityRegulatoryRisk: 3,
+    hfOperationsSupportLevel: "unsure",
+    hfSecurityInformationNotes: "",
+    hfOrganizationalBreadthNotes: "",
+    hfEconomicRationaleNotes: "",
+    hfCriticalManualGapNotes: "",
+    hfOperationsSupportNotes: "",
   };
 }
 

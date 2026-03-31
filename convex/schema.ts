@@ -49,6 +49,28 @@ export const assessmentPayloadFields = {
   /** Kritikalitet: forretningspåvirkning, regulatorisk risiko (Likert 1–5) */
   criticalityBusinessImpact: v.number(),
   criticalityRegulatoryRisk: v.number(),
+
+  /** —— Krav og kontekst (helseforetak / offentlig sektor) —— Tekst påvirker ikke modellscore */
+  /** Forventet tjenestenivå for drift og videre utvikling (1./2./3. linje) */
+  hfOperationsSupportLevel: v.optional(
+    v.union(
+      v.literal("unsure"),
+      v.literal("l1"),
+      v.literal("l2"),
+      v.literal("l3"),
+      v.literal("mixed"),
+    ),
+  ),
+  /** Sikkerhet, tilgangsstyring, logging, personvern og tilstrekkelig dokumentasjon */
+  hfSecurityInformationNotes: v.optional(v.string()),
+  /** Organisasjonsbredde: HF, avdelinger, samhandling, koordinering */
+  hfOrganizationalBreadthNotes: v.optional(v.string()),
+  /** Besparelse, økonomisk effekt, kritikalitet i kroner og ressurs */
+  hfEconomicRationaleNotes: v.optional(v.string()),
+  /** Arbeid som ikke utføres i dag og der RPA/automatisering er kritisk */
+  hfCriticalManualGapNotes: v.optional(v.string()),
+  /** Krav og forventning til utviklere, drift, avtaler (SLA), beredskap */
+  hfOperationsSupportNotes: v.optional(v.string()),
 };
 
 export const assessmentPayloadValidator = v.object(assessmentPayloadFields);
@@ -70,7 +92,7 @@ export const computedSnapshotValidator = v.object({
   benHPerEmp: v.number(),
   benCPerEmp: v.number(),
   benFtePerEmp: v.number(),
-  /** Samlet prioritet: snitt av AP og kritikalitet */
+  /** Samlet porteføljeprioritet (geometrisk av AP og kritikalitet) */
   priorityScore: v.number(),
 });
 
@@ -328,6 +350,98 @@ export default defineSchema({
     body: v.string(),
     createdAt: v.number(),
   }).index("by_assessment", ["assessmentId"]),
+
+  /**
+   * Gjenbrukbar ROS-mal: sannsynlighet × konsekvens (etiketter per rad/kolonne).
+   */
+  rosTemplates: defineTable({
+    workspaceId: v.id("workspaces"),
+    name: v.string(),
+    description: v.optional(v.string()),
+    rowAxisTitle: v.string(),
+    colAxisTitle: v.string(),
+    rowLabels: v.array(v.string()),
+    colLabels: v.array(v.string()),
+    createdByUserId: v.id("users"),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_workspace", ["workspaceId"]),
+
+  /**
+   * Utfylt ROS-analyse med matrise (0–5 per celle). Kobles til kandidat.
+   * @deprecated assessmentId — bruk rosAnalysisAssessments for PVV-kobling (mange-til-mange).
+   */
+  rosAnalyses: defineTable({
+    workspaceId: v.id("workspaces"),
+    templateId: v.optional(v.id("rosTemplates")),
+    title: v.string(),
+    rowAxisTitle: v.string(),
+    colAxisTitle: v.string(),
+    rowLabels: v.array(v.string()),
+    colLabels: v.array(v.string()),
+    /** 0 = ikke vurdert, 1–5 = risikonivå */
+    matrixValues: v.array(v.array(v.number())),
+    candidateId: v.id("candidates"),
+    assessmentId: v.optional(v.id("assessments")),
+    notes: v.optional(v.string()),
+    createdByUserId: v.id("users"),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_workspace", ["workspaceId"])
+    .index("by_workspace_updated", ["workspaceId", "updatedAt"])
+    .index("by_candidate", ["candidateId"])
+    .index("by_assessment", ["assessmentId"]),
+
+  /** Mange-til-mange: ROS-analyse ↔ PVV-vurdering */
+  rosAnalysisAssessments: defineTable({
+    workspaceId: v.id("workspaces"),
+    rosAnalysisId: v.id("rosAnalyses"),
+    assessmentId: v.id("assessments"),
+    note: v.optional(v.string()),
+    createdByUserId: v.id("users"),
+    createdAt: v.number(),
+  })
+    .index("by_ros_analysis", ["rosAnalysisId"])
+    .index("by_assessment", ["assessmentId"])
+    .index("by_ros_and_assessment", ["rosAnalysisId", "assessmentId"]),
+
+  /** Versjonspunkter for ROS-analyse (snapshot av matrise og notat) */
+  rosAnalysisVersions: defineTable({
+    workspaceId: v.id("workspaces"),
+    rosAnalysisId: v.id("rosAnalyses"),
+    version: v.number(),
+    note: v.optional(v.string()),
+    rowAxisTitle: v.string(),
+    colAxisTitle: v.string(),
+    rowLabels: v.array(v.string()),
+    colLabels: v.array(v.string()),
+    matrixValues: v.array(v.array(v.number())),
+    notes: v.optional(v.string()),
+    createdByUserId: v.id("users"),
+    createdAt: v.number(),
+  })
+    .index("by_ros_analysis", ["rosAnalysisId"])
+    .index("by_ros_version", ["rosAnalysisId", "version"]),
+
+  /** Oppgaver på ROS-analyse (tildeling, frist, prioritet) */
+  rosTasks: defineTable({
+    workspaceId: v.id("workspaces"),
+    rosAnalysisId: v.id("rosAnalyses"),
+    title: v.string(),
+    description: v.optional(v.string()),
+    assigneeUserId: v.optional(v.id("users")),
+    createdByUserId: v.id("users"),
+    status: v.union(v.literal("open"), v.literal("done")),
+    priority: v.optional(v.number()),
+    dueAt: v.optional(v.number()),
+    dashboardRank: v.optional(v.number()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_ros_analysis", ["rosAnalysisId"])
+    .index("by_workspace", ["workspaceId"])
+    .index("by_assignee", ["assigneeUserId"]),
 
   /**
    * Tidsbegrenset offentlig lenke (kun sammendrag, ingen redigering).

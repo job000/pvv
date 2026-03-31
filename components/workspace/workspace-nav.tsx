@@ -10,6 +10,7 @@ import {
   LayoutGrid,
   Settings2,
   Share2,
+  Shield,
   Users,
 } from "lucide-react";
 import Link from "next/link";
@@ -48,6 +49,12 @@ const items = (wid: string) =>
       exact: false,
     },
     {
+      href: `/w/${wid}/ros`,
+      label: "ROS",
+      icon: Shield,
+      exact: false,
+    },
+    {
       href: `/w/${wid}/delinger`,
       label: "Delinger",
       icon: Share2,
@@ -72,10 +79,11 @@ function isActive(pathname: string, href: string, exact: boolean) {
     return pathname === href;
   }
   if (href.endsWith("/vurderinger")) {
-    return (
-      pathname.startsWith(href) ||
-      pathname.includes("/a/") /* enkeltvurdering */
-    );
+    const singleAssessment = /^\/w\/[^/]+\/a\/[^/]+$/.test(pathname);
+    return pathname.startsWith(href) || singleAssessment;
+  }
+  if (href.endsWith("/ros")) {
+    return pathname.startsWith(href);
   }
   return pathname === href || pathname.startsWith(`${href}/`);
 }

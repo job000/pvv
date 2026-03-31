@@ -22,3 +22,15 @@ export const COMPLIANCE_STATUS_ORDER: ComplianceStatusKey[] = [
   "completed",
   "not_applicable",
 ];
+
+/** Tjenestenivå drift / videre utvikling (enkle forklaringer) */
+export const OPERATIONS_SUPPORT_LEVEL_LABELS = {
+  unsure: "Ikke avklart ennå",
+  l1: "1. linje — førstelinje (brukerstøtte, superbruker, intern hjelp)",
+  l2: "2. linje — spesialister og driftsmiljø (intern kompetanse)",
+  l3: "3. linje — leverandør eller dyp teknisk støtte (ekstern)",
+  mixed: "Blandet — flere nivåer etter type henvendelse",
+} as const;
+
+export type OperationsSupportLevelKey =
+  keyof typeof OPERATIONS_SUPPORT_LEVEL_LABELS;

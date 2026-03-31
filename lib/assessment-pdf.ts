@@ -1,5 +1,7 @@
 import { jsPDF } from "jspdf";
 
+import { OPERATIONS_SUPPORT_LEVEL_LABELS } from "@/lib/helsesector-labels";
+
 export type AssessmentPdfInput = {
   title: string;
   workspaceName: string | null;
@@ -13,6 +15,12 @@ export type AssessmentPdfInput = {
   processVolumeNotes?: string;
   processConstraints?: string;
   processFollowUp?: string;
+  hfOperationsSupportLevel?: "unsure" | "l1" | "l2" | "l3" | "mixed";
+  hfSecurityInformationNotes?: string;
+  hfOrganizationalBreadthNotes?: string;
+  hfEconomicRationaleNotes?: string;
+  hfCriticalManualGapNotes?: string;
+  hfOperationsSupportNotes?: string;
   pipelineLabel: string;
   rosLabel: string;
   pddLabel: string;
@@ -106,6 +114,21 @@ export function downloadAssessmentPdf(data: AssessmentPdfInput): void {
     Math.round(data.computed.benC).toLocaleString("nb-NO"),
   );
 
+  const lvl = data.hfOperationsSupportLevel;
+  if (lvl && lvl !== "unsure") {
+    y += 4;
+    doc.setFontSize(12);
+    doc.setFont("helvetica", "bold");
+    doc.text("Krav (helseforetak / virksomhet)", margin, y);
+    y += 7;
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(10);
+    addRow(
+      "Tjenestenivå drift og utvikling",
+      OPERATIONS_SUPPORT_LEVEL_LABELS[lvl],
+    );
+  }
+
   const processSections: Array<[string, string | undefined]> = [
     ["Prosessbeskrivelse", data.processDescription],
     ["Mål og verdi", data.processGoal],
@@ -115,6 +138,11 @@ export function downloadAssessmentPdf(data: AssessmentPdfInput): void {
     ["Volum og mønster", data.processVolumeNotes],
     ["Begrensninger og risiko", data.processConstraints],
     ["Videre og oppfølging", data.processFollowUp],
+    ["Sikkerhet og informasjon", data.hfSecurityInformationNotes],
+    ["Organisasjonsbredde og samordning", data.hfOrganizationalBreadthNotes],
+    ["Besparelse og økonomisk gevinst", data.hfEconomicRationaleNotes],
+    ["Kritisk gap (ikke gjøres i dag)", data.hfCriticalManualGapNotes],
+    ["Krav til utvikling og drift", data.hfOperationsSupportNotes],
   ];
   for (const [heading, text] of processSections) {
     const t = text?.trim();

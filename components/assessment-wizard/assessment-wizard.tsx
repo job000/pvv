@@ -3,6 +3,7 @@
 import { AssessmentCollaborationPanel } from "@/components/assessment-wizard/assessment-collaboration-panel";
 import { AssessmentContextCard } from "@/components/assessment-wizard/assessment-context-card";
 import { AssessmentExportPanel } from "@/components/assessment-wizard/assessment-export-panel";
+import { HfRequirementsSection } from "@/components/assessment-wizard/hf-requirements-section";
 import { ProcessProfileSection } from "@/components/assessment-wizard/process-profile-section";
 import { LikertField } from "@/components/rpa-assessment/likert-field";
 import { Badge } from "@/components/ui/badge";
@@ -120,6 +121,12 @@ export function AssessmentWizard({ assessmentId }: Props) {
         processConstraints: raw.processConstraints ?? "",
         processFollowUp: raw.processFollowUp ?? "",
         processScope: raw.processScope ?? "unsure",
+        hfOperationsSupportLevel: raw.hfOperationsSupportLevel ?? "unsure",
+        hfSecurityInformationNotes: raw.hfSecurityInformationNotes ?? "",
+        hfOrganizationalBreadthNotes: raw.hfOrganizationalBreadthNotes ?? "",
+        hfEconomicRationaleNotes: raw.hfEconomicRationaleNotes ?? "",
+        hfCriticalManualGapNotes: raw.hfCriticalManualGapNotes ?? "",
+        hfOperationsSupportNotes: raw.hfOperationsSupportNotes ?? "",
       });
     }
   }, [data?.draft?.payload, data?.draft?._id]);
@@ -262,9 +269,9 @@ export function AssessmentWizard({ assessmentId }: Props) {
               <CardHeader className="space-y-2 pb-2">
                 <CardTitle className="text-xl sm:text-2xl">Prosess</CardTitle>
                 <CardDescription className="text-sm leading-relaxed">
-                  Koble til kandidat, fyll ut prosessprofilen og angi
-                  organisatorisk omfang. Neste steg er organisasjon og ROS/PDD —
-                  da ligger konteksten klar.
+                  Koble til kandidat, dokumenter prosessen, og fyll ut krav som
+                  helseforetak typisk trenger (sikkerhet, bredde, økonomi,
+                  kritikalitet, drift). Deretter: organisasjon og ROS/PDD.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-8">
@@ -366,6 +373,14 @@ export function AssessmentWizard({ assessmentId }: Props) {
                 </div>
 
                 <ProcessProfileSection
+                  payload={payload}
+                  canEdit={canEdit}
+                  update={update}
+                />
+
+                <Separator className="my-2" />
+
+                <HfRequirementsSection
                   payload={payload}
                   canEdit={canEdit}
                   update={update}
@@ -729,6 +744,18 @@ export function AssessmentWizard({ assessmentId }: Props) {
                             processConstraints: payload.processConstraints,
                             processFollowUp: payload.processFollowUp,
                             processScope: payload.processScope,
+                            hfOperationsSupportLevel:
+                              payload.hfOperationsSupportLevel,
+                            hfSecurityInformationNotes:
+                              payload.hfSecurityInformationNotes,
+                            hfOrganizationalBreadthNotes:
+                              payload.hfOrganizationalBreadthNotes,
+                            hfEconomicRationaleNotes:
+                              payload.hfEconomicRationaleNotes,
+                            hfCriticalManualGapNotes:
+                              payload.hfCriticalManualGapNotes,
+                            hfOperationsSupportNotes:
+                              payload.hfOperationsSupportNotes,
                             priorityScore: computed.priorityScore,
                             pipelineLabel:
                               PIPELINE_STATUS_LABELS[

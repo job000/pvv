@@ -16,6 +16,7 @@ import {
   LayoutGrid,
   Settings2,
   Share2,
+  Shield,
   Users,
 } from "lucide-react";
 import Link from "next/link";
@@ -71,6 +72,12 @@ export default function WorkspaceOverviewPage() {
       title: "Kandidater",
       desc: "Registrer prosesser og referanser",
       icon: Users,
+    },
+    {
+      href: `/w/${wid}/ros`,
+      title: "ROS",
+      desc: "Maler og risikomatrise koblet til kandidat og PVV",
+      icon: Shield,
     },
     {
       href: `/w/${wid}/delinger`,

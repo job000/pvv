@@ -31,4 +31,17 @@ export type AssessmentPayload = {
   employees: number;
   criticalityBusinessImpact: number;
   criticalityRegulatoryRisk: number;
+
+  /** Krav helseforetak / virksomhet (tekst; ikke i modellscore) */
+  hfOperationsSupportLevel?:
+    | "unsure"
+    | "l1"
+    | "l2"
+    | "l3"
+    | "mixed";
+  hfSecurityInformationNotes?: string;
+  hfOrganizationalBreadthNotes?: string;
+  hfEconomicRationaleNotes?: string;
+  hfCriticalManualGapNotes?: string;
+  hfOperationsSupportNotes?: string;
 };

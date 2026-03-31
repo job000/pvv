@@ -427,12 +427,18 @@ export function WorkspaceCandidatesPanel({
   }
 
   async function addCandidate() {
+    const name = cName.trim();
+    const code = cCode.trim();
+    if (!name || !code) {
+      window.alert("Fyll inn både navn og kode (kode kan ikke bare være mellomrom).");
+      return;
+    }
     try {
       await createCandidate({
         workspaceId,
-        name: cName,
-        code: cCode,
-        notes: cNotes.trim() === "" ? undefined : cNotes,
+        name,
+        code,
+        notes: cNotes.trim() === "" ? undefined : cNotes.trim(),
       });
       setCName("");
       setCCode("");
@@ -455,19 +461,25 @@ export function WorkspaceCandidatesPanel({
       <CardContent className="space-y-4">
         <div className="grid gap-3 sm:grid-cols-2">
           <div className="space-y-2">
-            <Label>Navn</Label>
+            <Label htmlFor="cand-name">Navn</Label>
             <Input
+              id="cand-name"
               value={cName}
               onChange={(e) => setCName(e.target.value)}
               placeholder="F.eks. Fakturaprosess"
+              required
+              autoComplete="off"
             />
           </div>
           <div className="space-y-2">
-            <Label>Kode</Label>
+            <Label htmlFor="cand-code">Kode</Label>
             <Input
+              id="cand-code"
               value={cCode}
               onChange={(e) => setCCode(e.target.value)}
               placeholder="F.eks. FAKT-01"
+              required
+              autoComplete="off"
             />
           </div>
         </div>
@@ -479,7 +491,11 @@ export function WorkspaceCandidatesPanel({
             rows={2}
           />
         </div>
-        <Button type="button" onClick={() => void addCandidate()}>
+        <Button
+          type="button"
+          disabled={!cName.trim() || !cCode.trim()}
+          onClick={() => void addCandidate()}
+        >
           Legg til kandidat
         </Button>
         <Separator />

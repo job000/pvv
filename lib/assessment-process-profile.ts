@@ -14,6 +14,11 @@ export const PROCESS_TEXT_FIELD_KEYS = [
   "processVolumeNotes",
   "processConstraints",
   "processFollowUp",
+  "hfSecurityInformationNotes",
+  "hfOrganizationalBreadthNotes",
+  "hfEconomicRationaleNotes",
+  "hfCriticalManualGapNotes",
+  "hfOperationsSupportNotes",
 ] as const;
 
 export type ProcessTextFieldKey = (typeof PROCESS_TEXT_FIELD_KEYS)[number];

@@ -1,3 +1,5 @@
+import { OPERATIONS_SUPPORT_LEVEL_LABELS } from "@/lib/helsesector-labels";
+
 /**
  * Bygger én tekstblokk som kan sendes til KI for sortering, oppsummering eller
  * klassifisering — uten å eksponere rå databasefelter utenfor appen.
@@ -17,6 +19,12 @@ export function buildAssessmentContextForAi(args: {
   processScope?: "single" | "multi" | "unsure";
   priorityScore?: number;
   pipelineLabel?: string;
+  hfOperationsSupportLevel?: "unsure" | "l1" | "l2" | "l3" | "mixed";
+  hfSecurityInformationNotes?: string;
+  hfOrganizationalBreadthNotes?: string;
+  hfEconomicRationaleNotes?: string;
+  hfCriticalManualGapNotes?: string;
+  hfOperationsSupportNotes?: string;
 }): string {
   const scopeLine =
     args.processScope === "single"
@@ -45,6 +53,18 @@ export function buildAssessmentContextForAi(args: {
   pushIf("Volum og mønster", args.processVolumeNotes);
   pushIf("Begrensninger og risiko", args.processConstraints);
   pushIf("Videre og oppfølging", args.processFollowUp);
+
+  const lvl = args.hfOperationsSupportLevel;
+  if (lvl && lvl !== "unsure") {
+    parts.push(
+      `Forventet tjenestenivå (1./2./3. linje): ${OPERATIONS_SUPPORT_LEVEL_LABELS[lvl]}`,
+    );
+  }
+  pushIf("Sikkerhet og informasjon", args.hfSecurityInformationNotes);
+  pushIf("Organisasjonsbredde og samordning", args.hfOrganizationalBreadthNotes);
+  pushIf("Besparelse og økonomisk gevinst", args.hfEconomicRationaleNotes);
+  pushIf("Kritisk gap (ikke gjøres i dag)", args.hfCriticalManualGapNotes);
+  pushIf("Krav til utvikling og drift", args.hfOperationsSupportNotes);
 
   if (args.priorityScore !== undefined) {
     parts.push(`Foreslått prioritet (modell): ${args.priorityScore.toFixed(1)}`);
