@@ -1,5 +1,6 @@
 import { jsPDF } from "jspdf";
 
+import { ROS_COMPLIANCE_PDF_DISCLAIMER_NB } from "@/lib/ros-compliance";
 import { legendItems, pdfRiskLevelStyle } from "@/lib/ros-risk-colors";
 
 export type RosPdfJournalLine = {
@@ -462,6 +463,12 @@ export function downloadRosAnalysisPdf(data: RosPdfInput): void {
       ".",
     7,
   );
+
+  y += 4;
+  doc.setFontSize(6.5);
+  doc.setTextColor(85, 90, 100);
+  addPara(ROS_COMPLIANCE_PDF_DISCLAIMER_NB, 6.5);
+  doc.setTextColor(0);
 
   const safe = data.title
     .replace(/[^\wæøåÆØÅ\- ]/gi, "")

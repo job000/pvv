@@ -1,5 +1,13 @@
 "use client";
 
+import {
+  ROS_COMPLIANCE_EXTERNAL_LINKS_NB,
+  ROS_COMPLIANCE_FRAMEWORKS_NB,
+  ROS_COMPLIANCE_METHODOLOGY_BRIDGE_NB,
+  ROS_COMPLIANCE_METHODOLOGY_INTRO_NB,
+  ROS_COMPLIANCE_OFFICIAL_RESOURCES_NB,
+  ROS_COMPLIANCE_PVV_PARAGRAPH_NB,
+} from "@/lib/ros-compliance";
 import type { ComponentType, ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import {
@@ -8,6 +16,7 @@ import {
   CircleHelp,
   GitBranch,
   Grid3x3,
+  Library,
   Link2,
   ListOrdered,
 } from "lucide-react";
@@ -54,13 +63,16 @@ export function RosMethodologyGuide({
   variant?: Variant;
   workspaceId?: string;
 }) {
+  /** På kompakt visning er alt lukket som standard — mindre støy, samme innhold ved behov. */
+  const expandFirstBlock = variant === "page";
+
   const blocks = (
     <>
       <DetailsBlock
         id="ros-metode-rekkefoelge"
         title="Skal jeg vurdere hver linje (sannsynlighet, konsekvens) først — og så legge inn i matrisen?"
         icon={ListOrdered}
-        defaultOpen
+        defaultOpen={expandFirstBlock}
       >
         <p>
           <strong className="text-foreground">Nei, ikke som to separate steg i
@@ -170,6 +182,74 @@ export function RosMethodologyGuide({
       </DetailsBlock>
 
       <DetailsBlock
+        id="ros-metode-standarder"
+        title="Standarder, EU/Norge og ulike måter å måle risiko på"
+        icon={Library}
+        defaultOpen={false}
+      >
+        <p className="leading-relaxed">{ROS_COMPLIANCE_METHODOLOGY_INTRO_NB}</p>
+        <p className="leading-relaxed">{ROS_COMPLIANCE_METHODOLOGY_BRIDGE_NB}</p>
+        <p className="text-foreground text-sm font-medium">
+          Rammeverk med offisiell dokumentasjon (ISO, EU, Norge)
+        </p>
+        <ul className="list-inside list-disc space-y-2 pl-1">
+          {ROS_COMPLIANCE_FRAMEWORKS_NB.map((fw) => (
+            <li key={fw.id} className="leading-relaxed">
+              <strong className="text-foreground">{fw.title}</strong> —{" "}
+              {fw.description}{" "}
+              {fw.documentationUrl ? (
+                <a
+                  href={fw.documentationUrl}
+                  className="text-primary ml-0.5 inline font-medium underline-offset-4 hover:underline"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  {fw.documentationLabel ?? "Dokumentasjon"}
+                </a>
+              ) : null}
+            </li>
+          ))}
+        </ul>
+        <p className="text-foreground text-sm font-medium">
+          Flere offisielle kilder på nett
+        </p>
+        <ul className="list-inside list-disc space-y-1.5 pl-1 text-sm">
+          {ROS_COMPLIANCE_OFFICIAL_RESOURCES_NB.map((r) => (
+            <li key={r.href}>
+              <a
+                href={r.href}
+                className="text-primary font-medium underline-offset-4 hover:underline"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                {r.label}
+              </a>
+            </li>
+          ))}
+        </ul>
+        <p className="leading-relaxed">{ROS_COMPLIANCE_PVV_PARAGRAPH_NB}</p>
+        <p className="text-xs leading-relaxed">
+          Nasjonale myndigheter og standardisering:{" "}
+          {ROS_COMPLIANCE_EXTERNAL_LINKS_NB.map((l, i, arr) => (
+            <span key={l.href}>
+              {i === 0 ? null : i === arr.length - 1 ? " og " : ", "}
+              <a
+                href={l.href}
+                className="text-primary font-medium underline-offset-4 hover:underline"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                {l.label}
+              </a>
+              {l.label === "Datatilsynet" ? " (personvern)" : null}
+              {l.label === "NSM" ? " (IKT-sikkerhet)" : null}
+            </span>
+          ))}
+          .
+        </p>
+      </DetailsBlock>
+
+      <DetailsBlock
         id="ros-metode-pvv"
         title="Kobling til PVV — én rød tråd"
         icon={Link2}
@@ -211,9 +291,9 @@ export function RosMethodologyGuide({
           className,
         )}
       >
-        <p className="text-muted-foreground px-1 py-2 flex items-center gap-2 text-xs font-medium">
+        <p className="text-muted-foreground flex items-center gap-2 px-1 py-2 text-xs font-medium">
           <CircleHelp className="size-3.5 shrink-0" aria-hidden />
-          Metode og spørsmål
+          Samme veiledning som på ROS-siden — utvid under for ISO, EU/EØS og PVV
         </p>
         {blocks}
       </div>
@@ -232,8 +312,9 @@ export function RosMethodologyGuide({
         Slik fungerer ROS i dette arbeidsområdet
       </h2>
       <p className="text-muted-foreground mb-4 text-sm leading-relaxed">
-        Her forklares hvor «spørsmålene» sitter, hvordan før/etter håndteres, og hvordan
-        dette henger sammen med PVV.
+        Her forklares hvor «spørsmålene» sitter, hvordan før/etter håndteres, kobling
+        til PVV, og hvordan dette forholder seg til vanlig praksis og rammeverk (ISO,
+        EU/EØS, Norge).
       </p>
       {blocks}
     </div>

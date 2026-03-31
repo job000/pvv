@@ -1057,6 +1057,8 @@ export const updateAnalysis = mutation({
     colLabelsAfter: v.optional(v.array(v.string())),
     title: v.optional(v.string()),
     notes: v.optional(v.union(v.string(), v.null())),
+    nextReviewAt: v.optional(v.union(v.number(), v.null())),
+    reviewRoutineNotes: v.optional(v.union(v.string(), v.null())),
   },
   handler: async (ctx, args) => {
     const userId = await requireUserId(ctx);
@@ -1261,6 +1263,16 @@ export const updateAnalysis = mutation({
     if (args.notes !== undefined) {
       patch.notes =
         args.notes === null ? undefined : args.notes.trim() || undefined;
+    }
+    if (args.nextReviewAt !== undefined) {
+      patch.nextReviewAt =
+        args.nextReviewAt === null ? undefined : args.nextReviewAt;
+    }
+    if (args.reviewRoutineNotes !== undefined) {
+      patch.reviewRoutineNotes =
+        args.reviewRoutineNotes === null
+          ? undefined
+          : args.reviewRoutineNotes.trim() || undefined;
     }
     const fresh = await ctx.db.get(args.analysisId);
     if (!fresh) {

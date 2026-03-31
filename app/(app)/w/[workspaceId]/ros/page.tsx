@@ -2,7 +2,6 @@
 
 import { RosWorkspace } from "@/components/ros/ros-workspace";
 import type { Id } from "@/convex/_generated/dataModel";
-import Link from "next/link";
 import { useParams } from "next/navigation";
 
 export default function RosPage() {
@@ -16,31 +15,14 @@ export default function RosPage() {
           ROS — risiko og sårbarhet
         </h1>
         <p className="text-muted-foreground max-w-3xl text-base leading-relaxed">
-          Verktøyet er laget for team som skal gjennomføre ROS i stor skala:{" "}
-          <strong>felles maler</strong>,{" "}
-          <strong>sporbarhet mot PVV</strong> og{" "}
-          <strong>oversikt på tvers</strong> — uten dobbeltarbeid. Du legger
-          risiko inn <strong>direkte i matrisen</strong> (hvert kryss), ikke i et
-          eget skjema som må overføres. Bygg{" "}
-          <strong>maler</strong> (akser og etiketter), opprett{" "}
-          <strong>analyser</strong> med fargekodet matrise, og koble til{" "}
-          <strong>PVV-vurderinger</strong> og{" "}
-          <Link
-            href={`/w/${workspaceId}/vurderinger?fane=prosesser`}
-            className="text-primary font-medium underline-offset-4 hover:underline"
-          >
-            prosesskandidater
-          </Link>
-          . Under{" "}
-          <Link
-            href={`/w/${workspaceId}/ros/akser`}
-            className="text-primary font-medium underline-offset-4 hover:underline"
-          >
-            ROS-akser
-          </Link>{" "}
-          vedlikeholder dere gjenbrukbare etikettlister.{" "}
-          <strong>Oversikt</strong> summerer alle analyser; kontrollpanelet under
-          viser hull i dekning, siste aktivitet og hurtigvalg.
+          <strong className="text-foreground">Kort fortalt:</strong> mal → analyse
+          med matrise → koble PVV. Risiko settes i{" "}
+          <strong className="text-foreground">cellene</strong> (ikke eget skjema ved
+          siden av). Under finner du maler, analyser og oversikt; utvid{" "}
+          <span className="text-foreground font-medium">
+            Metode og retningslinjer
+          </span>{" "}
+          når du trenger ISO, personvern og kobling mot PVV i detalj.
         </p>
       </header>
       <RosWorkspace workspaceId={workspaceId} />

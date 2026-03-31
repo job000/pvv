@@ -338,6 +338,38 @@ export const remove = mutation({
   },
 });
 
+export const listWorkspaceInvites = query({
+  args: { workspaceId: v.id("workspaces") },
+  handler: async (ctx, args) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) {
+      return [];
+    }
+    await requireWorkspaceMember(ctx, args.workspaceId, userId, "admin");
+    const rows = await ctx.db
+      .query("workspaceInvites")
+      .withIndex("by_workspace", (q) =>
+        q.eq("workspaceId", args.workspaceId),
+      )
+      .collect();
+    return rows.sort((a, b) => b.createdAt - a.createdAt);
+  },
+});
+
+export const cancelWorkspaceInvite = mutation({
+  args: { inviteId: v.id("workspaceInvites") },
+  handler: async (ctx, args) => {
+    const userId = await requireUserId(ctx);
+    const inv = await ctx.db.get(args.inviteId);
+    if (!inv) {
+      throw new Error("Invitasjonen finnes ikke.");
+    }
+    await requireWorkspaceMember(ctx, inv.workspaceId, userId, "admin");
+    await ctx.db.delete(args.inviteId);
+    return null;
+  },
+});
+
 export const inviteMember = mutation({
   args: {
     workspaceId: v.id("workspaces"),

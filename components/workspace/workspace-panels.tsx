@@ -45,6 +45,10 @@ import { WorkspaceDeleteDialog } from "@/components/workspace/workspace-delete-d
 import { useRouter } from "next/navigation";
 
 import { prosessRegisterCopy } from "@/lib/prosess-register-copy";
+import {
+  WORKSPACE_ROLE_DESC_NB,
+  WORKSPACE_ROLE_LABEL_NB,
+} from "@/lib/role-labels-nb";
 import { WorkspaceCandidateRow } from "./workspace-candidate-row";
 
 export function WorkspaceSettingsPanel({
@@ -217,9 +221,15 @@ export function WorkspaceTeamPanel({
 }) {
   const membership = useQuery(api.workspaces.getMyMembership, { workspaceId });
   const members = useQuery(api.workspaces.listMembers, { workspaceId });
+  const pendingInvites = useQuery(api.workspaces.listWorkspaceInvites, {
+    workspaceId,
+  });
   const inviteMember = useMutation(api.workspaces.inviteMember);
   const removeMember = useMutation(api.workspaces.removeMember);
   const updateMemberRole = useMutation(api.workspaces.updateMemberRole);
+  const cancelWorkspaceInvite = useMutation(
+    api.workspaces.cancelWorkspaceInvite,
+  );
 
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState<"admin" | "member" | "viewer">(
@@ -255,107 +265,192 @@ export function WorkspaceTeamPanel({
 
   if (isAdmin) {
     return (
-      <Card>
-        <CardHeader>
-          <CardTitle>Team og tilgang</CardTitle>
-          <CardDescription>
-            Inviter via e-post. Eksisterende brukere legges inn med en gang.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
-            <div className="min-w-0 flex-1 space-y-2">
-              <Label htmlFor="invite-email">E-post</Label>
-              <Input
-                id="invite-email"
-                type="email"
-                value={inviteEmail}
-                onChange={(e) => setInviteEmail(e.target.value)}
-                placeholder="kollega@firma.no"
-              />
+      <div className="space-y-4">
+        <Card>
+          <CardHeader>
+            <CardTitle>Team og tilgang</CardTitle>
+            <CardDescription>
+              Inviter via e-post — brukere som allerede finnes i systemet legges
+              inn med en gang. Ventende invitasjoner kan trekkes tilbake når som
+              helst.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+              <div className="min-w-0 flex-1 space-y-2">
+                <Label htmlFor="invite-email">E-post</Label>
+                <Input
+                  id="invite-email"
+                  type="email"
+                  value={inviteEmail}
+                  onChange={(e) => setInviteEmail(e.target.value)}
+                  placeholder="kollega@firma.no"
+                />
+              </div>
+              <div className="w-full space-y-2 sm:w-44">
+                <Label htmlFor="invite-role">Rolle</Label>
+                <select
+                  id="invite-role"
+                  className="border-input bg-background h-9 w-full rounded-lg border px-3 text-sm shadow-xs outline-none"
+                  value={inviteRole}
+                  onChange={(e) =>
+                    setInviteRole(
+                      e.target.value as "admin" | "member" | "viewer",
+                    )
+                  }
+                >
+                  <option value="admin">Administrator</option>
+                  <option value="member">Medlem</option>
+                  <option value="viewer">Kun visning</option>
+                </select>
+              </div>
+              <Button type="button" onClick={() => void sendInvite()}>
+                Inviter
+              </Button>
             </div>
-            <div className="w-full space-y-2 sm:w-40">
-              <Label htmlFor="invite-role">Rolle</Label>
-              <select
-                id="invite-role"
-                className="border-input bg-background h-9 w-full rounded-lg border px-3 text-sm shadow-xs outline-none"
-                value={inviteRole}
-                onChange={(e) =>
-                  setInviteRole(
-                    e.target.value as "admin" | "member" | "viewer",
-                  )
-                }
-              >
-                <option value="admin">Admin</option>
-                <option value="member">Medlem</option>
-                <option value="viewer">Visning</option>
-              </select>
+            {inviteMsg ? (
+              <p className="text-muted-foreground text-sm">{inviteMsg}</p>
+            ) : null}
+            <Separator />
+            <div>
+              <p className="text-foreground mb-2 text-sm font-medium">
+                Ventende invitasjoner
+              </p>
+              {pendingInvites === undefined ? (
+                <p className="text-muted-foreground text-sm">Laster …</p>
+              ) : pendingInvites.length === 0 ? (
+                <p className="text-muted-foreground text-sm">
+                  Ingen ventende invitasjoner.
+                </p>
+              ) : (
+                <ul className="space-y-2">
+                  {pendingInvites.map((inv) => (
+                    <li
+                      key={inv._id}
+                      className="flex flex-col gap-2 rounded-lg border border-dashed bg-muted/15 px-3 py-2 sm:flex-row sm:items-center sm:justify-between"
+                    >
+                      <div>
+                        <p className="text-sm font-medium">{inv.email}</p>
+                        <p className="text-muted-foreground text-xs">
+                          {WORKSPACE_ROLE_LABEL_NB[inv.role] ?? inv.role} ·{" "}
+                          {new Date(inv.createdAt).toLocaleString("nb-NO", {
+                            dateStyle: "medium",
+                            timeStyle: "short",
+                          })}
+                        </p>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() =>
+                          void cancelWorkspaceInvite({ inviteId: inv._id })
+                        }
+                      >
+                        Trekk invitasjon
+                      </Button>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
-            <Button type="button" onClick={() => void sendInvite()}>
-              Inviter
-            </Button>
-          </div>
-          {inviteMsg ? (
-            <p className="text-muted-foreground text-sm">{inviteMsg}</p>
-          ) : null}
-          <Separator />
-          <ul className="space-y-3">
-            {members.map((m) => (
-              <li
-                key={m._id}
-                className="flex flex-col gap-2 rounded-lg border bg-muted/20 px-3 py-2 sm:flex-row sm:items-center sm:justify-between"
-              >
-                <div>
-                  <p className="font-medium text-sm">
-                    {m.name ?? m.email ?? m.userId}
-                  </p>
-                  <p className="text-muted-foreground text-xs">
-                    {m.email ?? "—"} · {m.role}
-                  </p>
-                </div>
-                {m.role !== "owner" ? (
-                  <div className="flex flex-wrap gap-2">
-                    <select
-                      className="border-input h-8 rounded-md border bg-background px-2 text-xs"
-                      value={m.role}
-                      onChange={(e) => {
-                        const v = e.target.value as
-                          | "admin"
-                          | "member"
-                          | "viewer";
-                        void updateMemberRole({
-                          workspaceId,
-                          targetUserId: m.userId,
-                          role: v,
-                        });
-                      }}
-                    >
-                      <option value="admin">Admin</option>
-                      <option value="member">Medlem</option>
-                      <option value="viewer">Visning</option>
-                    </select>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() =>
-                        void removeMember({
-                          workspaceId,
-                          targetUserId: m.userId,
-                        })
-                      }
-                    >
-                      Fjern
-                    </Button>
-                  </div>
-                ) : (
-                  <span className="text-muted-foreground text-xs">Eier</span>
-                )}
-              </li>
-            ))}
-          </ul>
-        </CardContent>
-      </Card>
+            <Separator />
+            <div>
+              <p className="text-foreground mb-2 text-sm font-medium">
+                Medlemmer
+              </p>
+              <ul className="space-y-3">
+                {members.map((m) => (
+                  <li
+                    key={m._id}
+                    className="flex flex-col gap-2 rounded-lg border bg-muted/20 px-3 py-2 sm:flex-row sm:items-center sm:justify-between"
+                  >
+                    <div>
+                      <p className="font-medium text-sm">
+                        {m.name ?? m.email ?? m.userId}
+                      </p>
+                      <p className="text-muted-foreground text-xs">
+                        {m.email ?? "—"} ·{" "}
+                        <span className="text-foreground/90">
+                          {WORKSPACE_ROLE_LABEL_NB[m.role] ?? m.role}
+                        </span>
+                      </p>
+                      <p className="text-muted-foreground mt-1 max-w-prose text-[11px] leading-snug">
+                        {WORKSPACE_ROLE_DESC_NB[m.role] ?? ""}
+                      </p>
+                    </div>
+                    {m.role !== "owner" ? (
+                      <div className="flex flex-wrap gap-2">
+                        <select
+                          className="border-input h-8 rounded-md border bg-background px-2 text-xs"
+                          value={m.role}
+                          onChange={(e) => {
+                            const next = e.target.value as
+                              | "admin"
+                              | "member"
+                              | "viewer";
+                            void updateMemberRole({
+                              workspaceId,
+                              targetUserId: m.userId,
+                              role: next,
+                            });
+                          }}
+                        >
+                          <option value="admin">Administrator</option>
+                          <option value="member">Medlem</option>
+                          <option value="viewer">Kun visning</option>
+                        </select>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() =>
+                            void removeMember({
+                              workspaceId,
+                              targetUserId: m.userId,
+                            })
+                          }
+                        >
+                          Fjern fra område
+                        </Button>
+                      </div>
+                    ) : (
+                      <span className="text-muted-foreground text-xs">
+                        {WORKSPACE_ROLE_DESC_NB.owner}
+                      </span>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="border-border/70 bg-muted/10">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">Roller i arbeidsområdet</CardTitle>
+            <CardDescription>
+              Kort forklaring — samme roller brukes i hele arbeidsområdet.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="text-muted-foreground space-y-2 text-sm leading-relaxed">
+            {(Object.keys(WORKSPACE_ROLE_DESC_NB) as Array<keyof typeof WORKSPACE_ROLE_DESC_NB>)
+              .filter((k) => k !== "owner")
+              .map((k) => (
+                <p key={k}>
+                  <strong className="text-foreground">
+                    {WORKSPACE_ROLE_LABEL_NB[k]}:
+                  </strong>{" "}
+                  {WORKSPACE_ROLE_DESC_NB[k]}
+                </p>
+              ))}
+            <p>
+              <strong className="text-foreground">Eier:</strong>{" "}
+              {WORKSPACE_ROLE_DESC_NB.owner}
+            </p>
+          </CardContent>
+        </Card>
+      </div>
     );
   }
 
@@ -364,7 +459,8 @@ export function WorkspaceTeamPanel({
       <CardHeader>
         <CardTitle>Team</CardTitle>
         <CardDescription>
-          Medlemmer med tilgang til dette arbeidsområdet.
+          Medlemmer med tilgang til dette arbeidsområdet. Kontakt en
+          administrator om du trenger høyere tilgang.
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -374,7 +470,7 @@ export function WorkspaceTeamPanel({
               <span className="text-foreground font-medium">
                 {m.name ?? m.email ?? m.userId}
               </span>{" "}
-              · {m.role}
+              · {WORKSPACE_ROLE_LABEL_NB[m.role] ?? m.role}
             </li>
           ))}
         </ul>

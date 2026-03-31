@@ -1,6 +1,9 @@
 import { internalAction } from "./_generated/server";
 import { internal } from "./_generated/api";
-import type { ComplianceReminderTarget } from "./reminderInternal";
+import type {
+  ComplianceReminderTarget,
+  ReviewDueReminderTarget,
+} from "./reminderInternal";
 
 export const runComplianceReminders = internalAction({
   args: {},
@@ -59,6 +62,85 @@ export const runComplianceReminders = internalAction({
       await ctx.runMutation(internal.reminderInternal.markComplianceReminderSent, {
         assessmentId: t.assessmentId,
       });
+      sent += 1;
+    }
+    return { sent, targets: targets.length };
+  },
+});
+
+export const runReviewDueReminders = internalAction({
+  args: {},
+  handler: async (
+    ctx,
+  ): Promise<
+    | { sent: number; targets: number; reason: "no_api_key" }
+    | { sent: number; targets: number }
+  > => {
+    const key = process.env.RESEND_API_KEY;
+    const from =
+      process.env.RESEND_FROM_EMAIL ?? "PVV <onboarding@resend.dev>";
+    const publicUrl = process.env.PUBLIC_APP_URL ?? "http://localhost:3000";
+
+    const targets: ReviewDueReminderTarget[] = await ctx.runQuery(
+      internal.reminderInternal.listReviewDueReminderTargets,
+      { now: Date.now() },
+    );
+
+    if (!key) {
+      console.log(
+        `[PVV] review due reminders: ${targets.length} mål (RESEND_API_KEY mangler — ingen e-post sendt)`,
+      );
+      return {
+        sent: 0,
+        targets: targets.length,
+        reason: "no_api_key" as const,
+      };
+    }
+
+    let sent = 0;
+    for (const t of targets) {
+      const base = publicUrl.replace(/\/$/, "");
+      const link =
+        t.kind === "assessment"
+          ? `${base}/w/${t.workspaceId}/a/${t.assessmentId}`
+          : `${base}/w/${t.workspaceId}/ros/a/${t.rosAnalysisId}`;
+      const kindLabel =
+        t.kind === "assessment"
+          ? "PVV-vurdering (ROS/PDD-rutine)"
+          : "ROS-analyse";
+      const safeTitle = escapeHtml(t.title);
+      const res = await fetch("https://api.resend.com/emails", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${key}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          from,
+          to: [t.toEmail],
+          subject: `[PVV] Påminnelse: ${t.title} — planlagt revisjon`,
+          html: `<p>Hei,</p>
+<p>Planlagt tidspunkt for ny gjennomgang er passert for <strong>${kindLabel}</strong>: <strong>${safeTitle}</strong>.</p>
+<p><a href="${link}">Åpne i PVV</a></p>
+<p>Du mottar denne e-posten fordi du er satt som eier/opprettet innholdet. Påminnelser sendes maks. én gang per uke per sak når fristen fortsatt gjelder.</p>`,
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.text();
+        console.error(`Resend feilet for ${t.kind}:`, err);
+        continue;
+      }
+      if (t.kind === "assessment") {
+        await ctx.runMutation(internal.reminderInternal.markReviewReminderSent, {
+          kind: "assessment",
+          assessmentId: t.assessmentId,
+        });
+      } else {
+        await ctx.runMutation(internal.reminderInternal.markReviewReminderSent, {
+          kind: "ros",
+          rosAnalysisId: t.rosAnalysisId,
+        });
+      }
       sent += 1;
     }
     return { sent, targets: targets.length };

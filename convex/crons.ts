@@ -10,4 +10,11 @@ crons.interval(
   {},
 );
 
+crons.interval(
+  "review due email reminders",
+  { hours: 24 },
+  internal.reminders.runReviewDueReminders,
+  {},
+);
+
 export default crons;

@@ -23,6 +23,7 @@ import type * as lib_rpaScoring from "../lib/rpaScoring.js";
 import type * as orgUnits from "../orgUnits.js";
 import type * as reminderInternal from "../reminderInternal.js";
 import type * as reminders from "../reminders.js";
+import type * as reviewSchedule from "../reviewSchedule.js";
 import type * as ros from "../ros.js";
 import type * as rosAxisLists from "../rosAxisLists.js";
 import type * as sprints from "../sprints.js";
@@ -50,6 +51,7 @@ declare const fullApi: ApiFromModules<{
   orgUnits: typeof orgUnits;
   reminderInternal: typeof reminderInternal;
   reminders: typeof reminders;
+  reviewSchedule: typeof reviewSchedule;
   ros: typeof ros;
   rosAxisLists: typeof rosAxisLists;
   sprints: typeof sprints;

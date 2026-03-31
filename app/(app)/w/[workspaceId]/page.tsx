@@ -19,6 +19,7 @@ import {
   Shield,
   Users,
 } from "lucide-react";
+import { WORKSPACE_ROLE_LABEL_NB } from "@/lib/role-labels-nb";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 
@@ -104,8 +105,13 @@ export default function WorkspaceOverviewPage() {
       <div>
         <h1 className="font-heading text-2xl font-semibold">{workspace.name}</h1>
         <p className="mt-1 text-muted-foreground text-sm">
-          Rolle: {membership?.role ?? "—"} · Bruk menyen til venstre for å
-          navigere.
+          Din rolle i arbeidsområdet:{" "}
+          <span className="text-foreground font-medium">
+            {membership?.role
+              ? WORKSPACE_ROLE_LABEL_NB[membership.role] ?? membership.role
+              : "—"}
+          </span>
+          . Bruk menyen til venstre for å navigere.
         </p>
         {workspace.notes ? (
           <p className="mt-4 rounded-xl border bg-muted/30 px-4 py-3 text-sm leading-relaxed">

@@ -736,6 +736,8 @@ export const updateAssessmentCompliance = mutation({
     pddUrl: v.optional(v.union(v.string(), v.null())),
     pddNotes: v.optional(v.union(v.string(), v.null())),
     pddCompletedAt: v.optional(v.union(v.number(), v.null())),
+    nextRosPvvReviewAt: v.optional(v.union(v.number(), v.null())),
+    rosPvvReviewRoutineNotes: v.optional(v.union(v.string(), v.null())),
   },
   handler: async (ctx, args) => {
     await requireAssessmentEdit(ctx, args.assessmentId);
@@ -750,6 +752,8 @@ export const updateAssessmentCompliance = mutation({
       pddUrl?: string;
       pddNotes?: string;
       pddCompletedAt?: number;
+      nextRosPvvReviewAt?: number;
+      rosPvvReviewRoutineNotes?: string;
     } = { updatedAt: now };
     const strOrClear = (val: string | null | undefined) => {
       if (val == null) {
@@ -787,6 +791,15 @@ export const updateAssessmentCompliance = mutation({
         args.pddCompletedAt === null ? undefined : args.pddCompletedAt;
     } else if (args.pddStatus === "completed") {
       patch.pddCompletedAt = now;
+    }
+    if (args.nextRosPvvReviewAt !== undefined) {
+      patch.nextRosPvvReviewAt =
+        args.nextRosPvvReviewAt === null ? undefined : args.nextRosPvvReviewAt;
+    }
+    if (args.rosPvvReviewRoutineNotes !== undefined) {
+      patch.rosPvvReviewRoutineNotes = strOrClear(
+        args.rosPvvReviewRoutineNotes,
+      );
     }
     await ctx.db.patch(args.assessmentId, patch);
   },
@@ -1018,8 +1031,16 @@ export const inviteCollaborator = mutation({
           role: args.role,
           addedAt: Date.now(),
         });
+        return { kind: "linked" as const };
       }
-      return { kind: "linked" as const };
+      if (existing.role === "owner") {
+        return { kind: "already" as const };
+      }
+      if (existing.role !== args.role) {
+        await ctx.db.patch(existing._id, { role: args.role });
+        return { kind: "updated" as const };
+      }
+      return { kind: "already" as const };
     }
     const token = `inv_${Date.now()}_${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`;
     await ctx.db.insert("assessmentInvites", {
@@ -1141,6 +1162,86 @@ export const getMyAccess = query({
       workspaceRole: wm?.role ?? null,
       shareWithWorkspace: assessment.shareWithWorkspace,
     };
+  },
+});
+
+export const listAssessmentInvites = query({
+  args: { assessmentId: v.id("assessments") },
+  handler: async (ctx, args) => {
+    await requireAssessmentEdit(ctx, args.assessmentId);
+    const rows = await ctx.db
+      .query("assessmentInvites")
+      .withIndex("by_assessment", (q) =>
+        q.eq("assessmentId", args.assessmentId),
+      )
+      .collect();
+    return rows.sort((a, b) => b.createdAt - a.createdAt);
+  },
+});
+
+export const removeCollaborator = mutation({
+  args: {
+    assessmentId: v.id("assessments"),
+    targetUserId: v.id("users"),
+  },
+  handler: async (ctx, args) => {
+    await requireAssessmentEdit(ctx, args.assessmentId);
+    const row = await ctx.db
+      .query("assessmentCollaborators")
+      .withIndex("by_user_assessment", (q) =>
+        q.eq("userId", args.targetUserId).eq("assessmentId", args.assessmentId),
+      )
+      .unique();
+    if (!row) {
+      throw new Error("Brukeren er ikke på teamet for denne vurderingen.");
+    }
+    if (row.role === "owner") {
+      throw new Error("Kan ikke fjerne eier.");
+    }
+    await ctx.db.delete(row._id);
+    return null;
+  },
+});
+
+export const updateCollaboratorRole = mutation({
+  args: {
+    assessmentId: v.id("assessments"),
+    targetUserId: v.id("users"),
+    role: v.union(
+      v.literal("editor"),
+      v.literal("reviewer"),
+      v.literal("viewer"),
+    ),
+  },
+  handler: async (ctx, args) => {
+    await requireAssessmentEdit(ctx, args.assessmentId);
+    const row = await ctx.db
+      .query("assessmentCollaborators")
+      .withIndex("by_user_assessment", (q) =>
+        q.eq("userId", args.targetUserId).eq("assessmentId", args.assessmentId),
+      )
+      .unique();
+    if (!row) {
+      throw new Error("Brukeren er ikke på teamet for denne vurderingen.");
+    }
+    if (row.role === "owner") {
+      throw new Error("Eierrollen kan ikke endres her.");
+    }
+    await ctx.db.patch(row._id, { role: args.role });
+    return null;
+  },
+});
+
+export const cancelAssessmentInvite = mutation({
+  args: { inviteId: v.id("assessmentInvites") },
+  handler: async (ctx, args) => {
+    const inv = await ctx.db.get(args.inviteId);
+    if (!inv) {
+      throw new Error("Invitasjonen finnes ikke.");
+    }
+    await requireAssessmentEdit(ctx, inv.assessmentId);
+    await ctx.db.delete(args.inviteId);
+    return null;
   },
 });
 

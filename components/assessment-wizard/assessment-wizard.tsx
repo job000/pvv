@@ -45,6 +45,10 @@ import {
 import { cn } from "@/lib/utils";
 import { payloadToSnapshot } from "@/convex/lib/payloadSnapshot";
 import { ASSESSMENT_WIZARD_STEP_LABELS } from "@/lib/assessment-wizard-steps";
+import {
+  ASSESSMENT_COLLAB_ROLE_LABEL_NB,
+  WORKSPACE_ROLE_LABEL_NB,
+} from "@/lib/role-labels-nb";
 import { clampLikert5, computeAllResults } from "@/lib/rpa-assessment/scoring";
 import { useMutation, useQuery } from "convex/react";
 import useEmblaCarousel from "embla-carousel-react";
@@ -498,7 +502,10 @@ export function AssessmentWizard({ assessmentId }: Props) {
               <p className="text-muted-foreground text-xs sm:text-sm">
                 Kun visning.
                 {access?.collaboratorRole
-                  ? ` · Rolle: ${access.collaboratorRole}`
+                  ? ` · Rolle på vurdering: ${ASSESSMENT_COLLAB_ROLE_LABEL_NB[access.collaboratorRole] ?? access.collaboratorRole}`
+                  : ""}
+                {access?.workspaceRole
+                  ? ` · Arbeidsområde: ${WORKSPACE_ROLE_LABEL_NB[access.workspaceRole] ?? access.workspaceRole}`
                   : ""}
               </p>
             </>
@@ -510,7 +517,10 @@ export function AssessmentWizard({ assessmentId }: Props) {
               redigere samtidig: hvis noen lagrer før deg, får du valg om å hente
               siste utkast eller overskrive med dine endringer.
               {access?.collaboratorRole
-                ? ` · Rolle: ${access.collaboratorRole}`
+                ? ` · Rolle på vurdering: ${ASSESSMENT_COLLAB_ROLE_LABEL_NB[access.collaboratorRole] ?? access.collaboratorRole}`
+                : ""}
+              {access?.workspaceRole
+                ? ` · Arbeidsområde: ${WORKSPACE_ROLE_LABEL_NB[access.workspaceRole] ?? access.workspaceRole}`
                 : ""}
             </p>
           ) : null}
@@ -519,7 +529,7 @@ export function AssessmentWizard({ assessmentId }: Props) {
           {access?.shareWithWorkspace ? (
             <Badge variant="secondary" className="gap-1">
               <Share2 className="size-3" />
-              Delt med workspace
+              Delt med arbeidsområdet
             </Badge>
           ) : null}
         </div>

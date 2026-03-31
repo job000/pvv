@@ -299,6 +299,12 @@ export default defineSchema({
     pddCompletedAt: v.optional(v.number()),
     /** Siste automatiske påminnelser om uferdig ROS/PDD (e-post) */
     lastComplianceReminderAt: v.optional(v.number()),
+    /** Planlagt neste gjennomgang av ROS/PDD på PVV-saken (påminnelse når dato passert) */
+    nextRosPvvReviewAt: v.optional(v.number()),
+    /** Kort rutine / hva som skal sjekkes ved neste revisjon */
+    rosPvvReviewRoutineNotes: v.optional(v.string()),
+    /** Siste e-post om forfalt planlagt gjennomgang (PVV) */
+    lastReviewDueReminderAt: v.optional(v.number()),
   })
     .index("by_workspace", ["workspaceId"])
     .index("by_workspace_updated", ["workspaceId", "updatedAt"]),
@@ -482,6 +488,12 @@ export default defineSchema({
     updatedAt: v.number(),
     /** Samtidig redigering — som PVV-utkast */
     revision: v.optional(v.number()),
+    /** Planlagt neste revisjon / gjennomgang av analysen */
+    nextReviewAt: v.optional(v.number()),
+    /** Rutine, referanse eller huskeliste for neste revisjon */
+    reviewRoutineNotes: v.optional(v.string()),
+    /** Siste e-post om forfalt planlagt ROS-revisjon */
+    lastReviewDueReminderAt: v.optional(v.number()),
   })
     .index("by_workspace", ["workspaceId"])
     .index("by_workspace_updated", ["workspaceId", "updatedAt"])

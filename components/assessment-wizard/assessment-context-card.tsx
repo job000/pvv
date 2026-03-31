@@ -63,6 +63,8 @@ export function AssessmentContextCard({
         assessment.rosNotes ?? "",
         assessment.pddUrl ?? "",
         assessment.pddNotes ?? "",
+        assessment.nextRosPvvReviewAt ?? "",
+        assessment.rosPvvReviewRoutineNotes ?? "",
       ].join("\x1e"),
     [
       assessment._id,
@@ -70,6 +72,8 @@ export function AssessmentContextCard({
       assessment.rosNotes,
       assessment.pddUrl,
       assessment.pddNotes,
+      assessment.nextRosPvvReviewAt,
+      assessment.rosPvvReviewRoutineNotes,
     ],
   );
 
@@ -77,6 +81,14 @@ export function AssessmentContextCard({
     "not_started") as ComplianceStatusKey;
   const pddStatus = (assessment.pddStatus ??
     "not_started") as ComplianceStatusKey;
+
+  const nextPvvReviewLocal = useMemo(() => {
+    const t = assessment.nextRosPvvReviewAt;
+    if (t == null) return "";
+    const d = new Date(t);
+    const pad = (n: number) => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  }, [assessment.nextRosPvvReviewAt]);
 
   return (
     <Card className="border-primary/15 bg-muted/10">
@@ -454,6 +466,70 @@ export function AssessmentContextCard({
                 Marker som pågår
               </Button>
             ) : null}
+          </div>
+        </section>
+
+        <section className="space-y-4 border-t pt-6">
+          <div className="flex flex-wrap items-center gap-2">
+            <Shield className="h-4 w-4 text-muted-foreground" aria-hidden />
+            <h3 className="text-foreground text-sm font-semibold">
+              Revisjon og rutiner (PVV)
+            </h3>
+          </div>
+          <p className="text-muted-foreground text-sm leading-relaxed">
+            Sett når ROS/PDD skal gjennomgås på nytt (f.eks. etter endring i
+            prosess eller regelverk). Du får e-postpåminnelse når tidspunktet er
+            passert — maks. én gang per uke per sak.
+          </p>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-2 sm:col-span-2">
+              <Label htmlFor="pvv-next-review">Neste gjennomgang (dato/tid)</Label>
+              <Input
+                key={`pvv-next-review-${complianceFieldsKey}`}
+                id="pvv-next-review"
+                type="datetime-local"
+                defaultValue={nextPvvReviewLocal}
+                disabled={!canEdit}
+                onBlur={(e) => {
+                  if (!canEdit) return;
+                  const raw = e.currentTarget.value.trim();
+                  if (raw === "") {
+                    void setCompliance({
+                      assessmentId,
+                      nextRosPvvReviewAt: null,
+                    });
+                    return;
+                  }
+                  const nextMs = new Date(raw).getTime();
+                  if (!Number.isFinite(nextMs)) return;
+                  void setCompliance({
+                    assessmentId,
+                    nextRosPvvReviewAt: nextMs,
+                  });
+                }}
+              />
+            </div>
+            <div className="space-y-2 sm:col-span-2">
+              <Label htmlFor="pvv-review-routine">
+                Rutine / hva som skal sjekkes
+              </Label>
+              <Textarea
+                key={`pvv-review-routine-${complianceFieldsKey}`}
+                id="pvv-review-routine"
+                defaultValue={assessment.rosPvvReviewRoutineNotes ?? ""}
+                disabled={!canEdit}
+                onBlur={(e) => {
+                  if (!canEdit) return;
+                  const v = e.currentTarget.value.trim();
+                  void setCompliance({
+                    assessmentId,
+                    rosPvvReviewRoutineNotes: v === "" ? null : v,
+                  });
+                }}
+                rows={2}
+                placeholder="F.eks. årlig ROS-oppdatering, ny PDD ved systembytte …"
+              />
+            </div>
           </div>
         </section>
       </CardContent>

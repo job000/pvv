@@ -1,13 +1,18 @@
 "use client";
 
 import type { ComponentType } from "react";
+import { useMemo } from "react";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { buttonVariants } from "@/components/ui/button";
+import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import { cn } from "@/lib/utils";
+import { useQuery } from "convex/react";
 import {
   AlertCircle,
   ArrowRight,
   BarChart3,
+  CalendarClock,
   ClipboardList,
   Grid3x3,
   Layers,
@@ -95,6 +100,15 @@ export function RosWorkspaceHub({
   onStartAnalysisForCandidate: (candidateId: Id<"candidates">) => void;
   onOpenTemplateDialog: () => void;
 }) {
+  const reviewSchedule = useQuery(api.reviewSchedule.listWorkspaceReviewItems, {
+    workspaceId,
+  });
+  const overdueReviewCount = useMemo(() => {
+    if (!reviewSchedule?.items?.length) return 0;
+    const now = Date.now();
+    return reviewSchedule.items.filter((i) => i.dueAt <= now).length;
+  }, [reviewSchedule]);
+
   if (hub === undefined) {
     return (
       <div className="border-border/60 bg-muted/15 flex min-h-[7rem] items-center justify-center rounded-2xl border">
@@ -116,6 +130,18 @@ export function RosWorkspaceHub({
 
   return (
     <div className="space-y-4">
+      {reviewSchedule !== undefined && overdueReviewCount > 0 ? (
+        <Alert className="border-amber-500/40 bg-amber-500/[0.07]">
+          <CalendarClock className="size-4 text-amber-800 dark:text-amber-200" />
+          <AlertTitle>Planlagt revisjon forfalt</AlertTitle>
+          <AlertDescription className="text-foreground/90">
+            {overdueReviewCount === 1
+              ? "Én ROS- eller PVV-gjennomgang har passert satt tidspunkt. Åpne analysen eller vurderingen og oppdater dato eller fullfør sjekken."
+              : `${overdueReviewCount} ROS- eller PVV-gjennomganger har passert satt tidspunkt. Oppdater dato eller dokumentasjon der det trengs.`}{" "}
+            E-post sendes også til eier (maks. én gang per uke per sak).
+          </AlertDescription>
+        </Alert>
+      ) : null}
       <div className="border-border/60 from-muted/25 via-card to-card rounded-2xl border bg-gradient-to-br p-5 shadow-sm">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
           <div className="min-w-0 space-y-1">

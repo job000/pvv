@@ -23,6 +23,7 @@ import {
 } from "@/lib/ros-defaults";
 import { cn } from "@/lib/utils";
 import { useMutation, useQuery } from "convex/react";
+import { RosComplianceNotice } from "@/components/ros/ros-compliance-notice";
 import { RosDashboardPanel } from "@/components/ros/ros-dashboard-panel";
 import { RosMethodologyGuide } from "@/components/ros/ros-methodology-guide";
 import { RosWorkspaceHub } from "@/components/ros/ros-workspace-hub";
@@ -36,6 +37,7 @@ import {
   DialogFooter,
   DialogHeader,
 } from "@/components/ui/dialog";
+import { RosLabelLevelsEditor } from "@/components/ros/ros-label-levels-editor";
 import { ROS_TEMPLATE_PRESETS, presetToFormState } from "@/lib/ros-template-presets";
 import {
   BarChart3,
@@ -225,12 +227,6 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
       setTplRows(t.rowLabels.join("\n"));
       setTplCols(t.colLabels.join("\n"));
     },
-    [],
-  );
-
-  const defaultLabelsHint = useMemo(
-    () =>
-      "Én etikett per linje. La feltet stå tomt for standard 5×5 (sannsynlighet × konsekvens).",
     [],
   );
 
@@ -440,7 +436,28 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
 
       <RosFlowStrip tab={tab} />
 
-      <RosMethodologyGuide workspaceId={workspaceId} variant="compact" />
+      <RosComplianceNotice standardsDetailHref="#ros-metode-standarder" />
+
+      <details className="border-border/60 bg-muted/10 group rounded-2xl border open:bg-muted/15">
+        <summary className="hover:bg-muted/30 flex cursor-pointer list-none items-center gap-2 rounded-2xl px-4 py-3 text-sm font-medium [&::-webkit-details-marker]:hidden">
+          <HelpCircle className="text-primary size-4 shrink-0" aria-hidden />
+          <span className="min-w-0 flex-1">
+            Metode og retningslinjer (ISO, personvern, kobling til PVV)
+            <span className="text-muted-foreground ml-1.5 font-normal">
+              — valgfritt, anbefales første gang
+            </span>
+          </span>
+          <span className="text-muted-foreground shrink-0 text-xs group-open:hidden">
+            Vis
+          </span>
+          <span className="text-muted-foreground hidden shrink-0 text-xs group-open:inline">
+            Skjul
+          </span>
+        </summary>
+        <div className="border-border/50 border-t px-3 pb-3 pt-1">
+          <RosMethodologyGuide workspaceId={workspaceId} variant="compact" />
+        </div>
+      </details>
 
       {tab === "oversikt" ? (
         <RosDashboardPanel workspaceId={workspaceId} />
@@ -569,8 +586,9 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
                   id="ros-tpl-dialog-desc"
                   className="text-muted-foreground text-sm leading-relaxed"
                 >
-                  {defaultLabelsHint} Fargene i forhåndsvisningen følger
-                  risikonivå 1–5 (grønn → rød).
+                  Under finner du forklaring på rader og kolonner. Tomme
+                  etikettfelt betyr innebygd 5×5 (du ser resultatet i
+                  forhåndsvisning). Fargene følger risikonivå 1–5 (grønn → rød).
                 </p>
               </DialogHeader>
               <DialogBody>
@@ -662,32 +680,26 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
                           />
                         </div>
                       </div>
-                      <div className="space-y-1.5">
-                        <Label htmlFor="tpl-rows">
-                          Etiketter rader (én per linje)
-                        </Label>
-                        <Textarea
-                          id="tpl-rows"
-                          value={tplRows}
-                          onChange={(e) => setTplRows(e.target.value)}
-                          rows={5}
-                          placeholder="Tom = standard 5 nivåer"
-                          className="font-mono text-xs"
-                        />
-                      </div>
-                      <div className="space-y-1.5">
-                        <Label htmlFor="tpl-cols">
-                          Etiketter kolonner (én per linje)
-                        </Label>
-                        <Textarea
-                          id="tpl-cols"
-                          value={tplCols}
-                          onChange={(e) => setTplCols(e.target.value)}
-                          rows={5}
-                          placeholder="Tom = standard 5 nivåer"
-                          className="font-mono text-xs"
-                        />
-                      </div>
+                      <RosLabelLevelsEditor
+                        id="tpl-rows"
+                        title="Etiketter rader"
+                        intro="Rader er ofte sannsynlighet eller «hvor sannsynlig er det uønskede utfallet?»"
+                        value={tplRows}
+                        onChange={setTplRows}
+                        defaultLabels={DEFAULT_ROS_ROW_LABELS}
+                        lowEndHint="lavest langs aksen"
+                        highEndHint="høyest langs aksen"
+                      />
+                      <RosLabelLevelsEditor
+                        id="tpl-cols"
+                        title="Etiketter kolonner"
+                        intro="Kolonner er ofte konsekvens eller «hvor stort er det negative utfallet?»"
+                        value={tplCols}
+                        onChange={setTplCols}
+                        defaultLabels={DEFAULT_ROS_COL_LABELS}
+                        lowEndHint="lavest langs aksen"
+                        highEndHint="høyest langs aksen"
+                      />
                     </div>
                     <div className="space-y-2">
                       <Label className="text-muted-foreground text-xs uppercase tracking-wide">
