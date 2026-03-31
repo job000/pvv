@@ -38,6 +38,7 @@ import {
   LayoutGrid,
   Search,
   Sparkles,
+  Trash2,
   Users,
 } from "lucide-react";
 
@@ -454,13 +455,13 @@ export function WorkspaceTeamPanel({
     );
   }
 
-  return (
+    return (
     <Card>
       <CardHeader>
-        <CardTitle>Team</CardTitle>
+        <CardTitle>Team og tilgang</CardTitle>
         <CardDescription>
-          Medlemmer med tilgang til dette arbeidsområdet. Kontakt en
-          administrator om du trenger høyere tilgang.
+          Hvem som er med i arbeidsområdet. Ta kontakt med en administrator hvis
+          du trenger annen rolle.
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -521,9 +522,10 @@ export function WorkspaceCandidatesPanel({
     return (
       <Card>
         <CardHeader>
-          <CardTitle>Kandidater</CardTitle>
+          <CardTitle>Prosessregister</CardTitle>
           <CardDescription>
-            Du har ikke tilgang til å administrere kandidater i dette området.
+            Du har ikke tilgang til å redigere prosessregisteret i dette
+            arbeidsområdet.
           </CardDescription>
         </CardHeader>
       </Card>
@@ -557,7 +559,7 @@ export function WorkspaceCandidatesPanel({
       setCSystems("");
       setCCompliance("");
     } catch (e) {
-      alert(e instanceof Error ? e.message : "Kunne ikke opprette kandidat.");
+      alert(e instanceof Error ? e.message : "Kunne ikke legge til prosess.");
     }
   }
 
@@ -578,30 +580,23 @@ export function WorkspaceCandidatesPanel({
       >
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="space-y-1">
-            <CardTitle className="text-xl">
-              {hubMode ? "Prosesser" : "Kandidater"}
-            </CardTitle>
+            <CardTitle className="text-xl">Prosessregister</CardTitle>
             <CardDescription className="max-w-2xl text-base leading-relaxed">
               {hubMode ? (
                 <>
-                  Alle medlemmer i arbeidsområdet kan registrere{" "}
-                  <strong>forretningsprosesser</strong> her (felles
-                  prosessregister). Hver prosess får en{" "}
-                  <strong>prosess-ID</strong> som er den faste nøkkelen i PVV og
-                  ROS. <strong>Én prosess kan</strong> ha{" "}
-                  <strong>ingen eller flere</strong> PVV-vurderinger;{" "}
-                  <strong>én vurdering</strong> peker på én prosess-ID via
-                  skjemaet. <strong>ROS</strong> knyttes til kandidater og
-                  kan samtidig kobles til <strong>flere</strong> vurderinger
-                  (mange-til-mange). Valgfrie felt under fletter inn i PVV når
-                  noen velger prosessen i vurderingen.
+                  Her registrerer dere <strong>forretningsprosesser</strong> med
+                  unik <strong>prosess-ID</strong>. ID-en brukes i vurderingen og
+                  når ROS kobles til. Én prosess kan ha flere vurderinger; én
+                  vurdering peker på én prosess-ID i skjemaet. ROS-analyser kan
+                  knyttes til både prosesser og vurderinger. Valgfrie felt under
+                  fylles inn i vurderingen første gang noen velger prosessen.
                 </>
               ) : (
                 <>
                   Registrer prosesser med navn og prosess-ID. Du kan knytte til
-                  organisasjonskart (HF/avdeling/seksjon). Sletting krever admin.
-                  En prosess kan brukes i flere PVV-vurderinger; ROS kan kobles
-                  til flere vurderinger og prosesser.
+                  organisasjonskart (HF/avdeling/seksjon). Sletting krever
+                  administrator. Samme prosess kan brukes i flere vurderinger; ROS
+                  kan kobles til flere vurderinger og prosesser.
                 </>
               )}
             </CardDescription>
@@ -667,17 +662,17 @@ export function WorkspaceCandidatesPanel({
         </div>
         <div className="rounded-xl border border-border/60 bg-muted/20 p-4">
           <p className="text-foreground mb-3 text-sm font-medium">
-            Knyttes til PVV når prosessen velges i skjemaet
+            Brukes i vurderingen når prosessen velges
           </p>
           <p className="text-muted-foreground mb-4 text-xs leading-relaxed">
-            Tomme felt hopper over. Ved første valg av prosessen i PVV fylles
-            tilsvarende felter i vurderingen hvis de er tomme (roller, systemer,
-            sikkerhet/personvern).
+            Tomme felt hoppes over. Ved første valg av prosessen i veiviseren
+            fylles tilsvarende felt i vurderingen hvis de er tomme (roller,
+            systemer, sikkerhet og personvern).
           </p>
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="space-y-1.5 sm:col-span-2">
               <Label htmlFor="cand-owner" className="text-xs">
-                Ansvarlig / eier (→ PVV «Roller og ansvar»)
+                Ansvarlig / eier (til «Roller og ansvar» i skjemaet)
               </Label>
               <Input
                 id="cand-owner"
@@ -689,7 +684,7 @@ export function WorkspaceCandidatesPanel({
             </div>
             <div className="space-y-1.5 sm:col-span-2">
               <Label htmlFor="cand-systems" className="text-xs">
-                Systemer og data (→ PVV «Systemer og data»)
+                Systemer og data (til «Systemer og data»)
               </Label>
               <Input
                 id="cand-systems"
@@ -701,7 +696,7 @@ export function WorkspaceCandidatesPanel({
             </div>
             <div className="space-y-1.5 sm:col-span-2">
               <Label htmlFor="cand-comp" className="text-xs">
-                Sikkerhet og personvern (→ PVV «Sikkerhet og informasjon»)
+                Sikkerhet og personvern (til «Sikkerhet og informasjon»)
               </Label>
               <Textarea
                 id="cand-comp"
@@ -721,7 +716,7 @@ export function WorkspaceCandidatesPanel({
           disabled={!cName.trim() || !cCode.trim()}
           onClick={() => void addCandidate()}
         >
-          {hubMode ? "Legg til prosess" : "Legg til kandidat"}
+          Legg til prosess
         </Button>
         <Separator />
         {candidates.length === 0 ? (
@@ -733,19 +728,18 @@ export function WorkspaceCandidatesPanel({
               Ingen prosesser ennå
             </p>
             <p className="text-muted-foreground mx-auto mt-2 max-w-sm text-sm leading-relaxed">
-              Når du legger til én, kan du velge samme kode i{" "}
-              <strong className="text-foreground">PVV-vurdering</strong> under
-              fanen «PVV-vurderinger».
+              Opprett en prosess over, eller gå til vurderinger og start en sak —
+              der velger du prosess-ID i veiviseren.
             </p>
             {hubMode ? (
               <Link
                 href={`/w/${workspaceId}/vurderinger`}
                 className={cn(
-                  buttonVariants({ variant: "outline", size: "sm" }),
+                  buttonVariants({ variant: "default", size: "sm" }),
                   "mt-5 inline-flex",
                 )}
               >
-                Gå til PVV-vurderinger
+                Gå til vurderinger
               </Link>
             ) : null}
           </div>
@@ -781,6 +775,7 @@ export function WorkspaceAssessmentsPanel({
     workspaceId,
   });
   const createAssessment = useMutation(api.assessments.create);
+  const deleteAssessment = useMutation(api.assessments.deleteAssessment);
 
   const [title, setTitle] = useState("");
   const [busy, setBusy] = useState(false);
@@ -831,15 +826,17 @@ export function WorkspaceAssessmentsPanel({
       {hubMode ? (
         <div className="rounded-lg border border-border/60 bg-muted/30 px-3 py-2">
           <p className="text-muted-foreground text-sm leading-snug">
-            <span className="text-foreground font-medium">Prosess i register?</span>{" "}
-            Opprett den under{" "}
+            <span className="text-foreground font-medium">
+              Ny prosess i registeret?
+            </span>{" "}
+            Legg den inn under{" "}
             <Link
               href={`/w/${workspaceId}/vurderinger?fane=prosesser`}
               className="text-primary font-medium underline-offset-4 hover:underline"
             >
-              fanen Prosesser
+              Prosessregister
             </Link>
-            , så kan du velge den i steg 1 i veiviseren.
+            , så kan du velge prosess-ID i steg 1 i veiviseren.
           </p>
         </div>
       ) : null}
@@ -854,7 +851,8 @@ export function WorkspaceAssessmentsPanel({
                 Ny vurdering
               </CardTitle>
               <CardDescription className="text-sm leading-snug">
-                Navn → veiviser. Alt lagres underveis.
+                Gi saken et navn og gå rett til veiviseren. Utkast lagres
+                fortløpende.
               </CardDescription>
             </div>
           </div>
@@ -865,7 +863,7 @@ export function WorkspaceAssessmentsPanel({
               className="text-muted-foreground text-xs font-medium"
               htmlFor="new-assessment-title"
             >
-              Navn på sak eller prosess
+              Tittel på vurderingen
             </Label>
             <Input
               id="new-assessment-title"
@@ -882,7 +880,7 @@ export function WorkspaceAssessmentsPanel({
             onClick={() => void handleCreate()}
             disabled={busy}
           >
-            {busy ? "Oppretter …" : "Start"}
+            {busy ? "Oppretter …" : "Start vurdering"}
             <ChevronRight className="size-4 opacity-90" aria-hidden />
           </Button>
         </CardFooter>
@@ -892,12 +890,12 @@ export function WorkspaceAssessmentsPanel({
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h2 className="font-heading text-lg font-semibold tracking-tight">
-              Dine vurderinger
+              Alle vurderinger
             </h2>
             <p className="text-muted-foreground mt-0.5 text-sm leading-snug">
               {assessments.length === 0
-                ? "Opprett over — listen fylles automatisk."
-                : `${assessments.length} ${assessments.length === 1 ? "sak" : "saker"} · søk eller filtrer.`}
+                ? "Ingen saker i listen — opprett med kortet over."
+                : `${assessments.length} ${assessments.length === 1 ? "vurdering" : "vurderinger"} · søk eller filtrer på status.`}
             </p>
           </div>
           <Link
@@ -945,10 +943,31 @@ export function WorkspaceAssessmentsPanel({
         ) : null}
 
         {assessments.length === 0 ? (
-          <div className="rounded-xl border border-dashed bg-muted/20 px-4 py-8 text-center sm:py-10">
-            <p className="text-muted-foreground mx-auto max-w-md text-sm leading-relaxed">
-              Ingen vurderinger ennå. Bruk skjemaet over for å starte.
+          <div className="rounded-xl border border-dashed border-border/60 bg-muted/15 px-4 py-10 text-center">
+            <p className="text-foreground mx-auto max-w-md text-sm font-semibold">
+              Ingen vurderinger ennå
             </p>
+            <p className="text-muted-foreground mx-auto mt-3 max-w-lg text-sm leading-relaxed">
+              <strong className="text-foreground">Vurdering</strong> er én sak om
+              automatisering: skjema, status i leveranse og prioritering.{" "}
+              <strong className="text-foreground">Prosessregisteret</strong> er den
+              felles listen over prosesser med ID — valgfritt før du oppretter
+              saken, men nyttig når flere saker skal bruke samme prosesskode.
+            </p>
+            <p className="text-muted-foreground mx-auto mt-3 max-w-md text-sm leading-relaxed">
+              <span className="text-foreground font-medium">Neste steg:</span> fyll
+              inn tittel i kortet over og velg{" "}
+              <span className="text-foreground font-medium">Start vurdering</span>.
+            </p>
+            <Link
+              href={`/w/${workspaceId}/vurderinger?fane=prosesser`}
+              className={cn(
+                buttonVariants({ variant: "outline", size: "sm" }),
+                "mt-5 inline-flex",
+              )}
+            >
+              Legg inn prosesser først (prosessregister)
+            </Link>
           </div>
         ) : filteredAssessments.length === 0 ? (
           <p className="text-muted-foreground rounded-xl border border-dashed px-4 py-8 text-center text-sm">
@@ -962,16 +981,16 @@ export function WorkspaceAssessmentsPanel({
               const ap = a.cachedAp;
               const crit = a.cachedCriticality;
               return (
-                <li key={a._id}>
+                <li key={a._id} className="group/card relative">
                   <Link
                     href={`/w/${workspaceId}/a/${a._id}`}
                     className={cn(
-                      "group bg-card hover:border-primary/35 block overflow-hidden rounded-xl border border-l-[3px] bg-gradient-to-br from-card to-muted/10 p-3.5 shadow-sm transition-all hover:shadow-md",
+                      "bg-card hover:border-primary/35 block overflow-hidden rounded-xl border border-l-[3px] bg-gradient-to-br from-card to-muted/10 p-3.5 shadow-sm transition-all hover:shadow-md",
                       priorityBorderAccentClass(prio),
                     )}
                   >
                     <div className="flex items-start justify-between gap-2">
-                      <span className="font-heading group-hover:text-primary line-clamp-2 min-w-0 text-[0.9375rem] font-semibold leading-snug transition-colors">
+                      <span className="font-heading group-hover/card:text-primary line-clamp-2 min-w-0 text-[0.9375rem] font-semibold leading-snug transition-colors">
                         {a.title}
                       </span>
                       <Badge
@@ -1004,7 +1023,7 @@ export function WorkspaceAssessmentsPanel({
                           </p>
                         ) : (
                           <p className="text-muted-foreground text-[11px]">
-                            Åpne for tall
+                            Fullfør skjema for poeng
                           </p>
                         )}
                       </div>
@@ -1015,13 +1034,30 @@ export function WorkspaceAssessmentsPanel({
                         >
                           {formatRelativeUpdatedAt(a.updatedAt)}
                         </span>
-                        <span className="mt-0.5 inline-flex items-center gap-0.5 font-medium text-foreground group-hover:text-primary">
+                        <span className="mt-0.5 inline-flex items-center gap-0.5 font-medium text-foreground group-hover/card:text-primary">
                           Åpne
                           <ChevronRight className="size-3.5 opacity-80" aria-hidden />
                         </span>
                       </div>
                     </div>
                   </Link>
+                  <button
+                    type="button"
+                    className="absolute right-2 top-2 rounded-md p-1.5 text-muted-foreground/50 opacity-0 transition-all hover:bg-destructive/10 hover:text-destructive group-hover/card:opacity-100"
+                    title="Slett vurdering"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (
+                        window.confirm(
+                          `Slette «${a.title}»?\n\nAlle utkast, versjoner, oppgaver, kommentarer og koblinger fjernes permanent.`,
+                        )
+                      ) {
+                        void deleteAssessment({ assessmentId: a._id });
+                      }
+                    }}
+                  >
+                    <Trash2 className="size-3.5" />
+                  </button>
                 </li>
               );
             })}

@@ -17,31 +17,30 @@ export default function WorkspaceLeveransePage() {
           Leveranse og prioritering
         </h1>
         <p className="text-muted-foreground text-base leading-relaxed">
-          Her ser du alle vurderinger i arbeidsområdet som en pipeline: sprint,
-          tavle eller liste, søk og filtre (inkl. ROS). Innstillingene lagres{" "}
-          <span className="text-foreground font-medium">per bruker</span> i
-          dette arbeidsområdet, så teamet kan jobbe med ulike visninger uten å
-          overskrive hverandre. Prioritet (P1–P5) bygger på vurderingsscore; du
-          kan justere manuelt når behovet endrer seg — også når prosjekter er
-          eldre eller flyttes mellom leveransemodeller.
+          Alle <strong className="text-foreground font-medium">vurderinger</strong>{" "}
+          i arbeidsområdet vises som kort: sprint, tavle eller liste, med søk og
+          filtre (også på ROS-status). Visning og sortering lagres{" "}
+          <span className="text-foreground font-medium">per bruker</span>, så
+          dere kan jobbe parallelt uten å overskrive hverandre. Prioritet (P1–P5)
+          hentes fra vurderingsscore og kan justeres manuelt.
         </p>
         <p className="text-muted-foreground text-base leading-relaxed">
+          Kortene kommer fra{" "}
           <Link
             href={`/w/${wid}/vurderinger`}
             className="text-primary font-medium underline-offset-4 hover:underline"
           >
-            Vurderinger
-          </Link>{" "}
-          er kilden til pipeline-kortene;{" "}
+            vurderingene
+          </Link>
+          ;{" "}
           <Link
             href={`/w/${wid}/ros`}
             className="text-primary font-medium underline-offset-4 hover:underline"
           >
             ROS
           </Link>{" "}
-          gir risiko- og sikkerhetsstatus som du kan filtrere på her. Samme
-          arbeidsflate dekker nye initiativer og eksisterende PVV-leveranser så
-          lenge de er knyttet til vurderinger i dette området.
+          viser risiko- og sikkerhetsstatus du kan filtrere på. Alt som ligger i
+          dette arbeidsområdet — nye og pågående saker — samles her.
         </p>
       </header>
       <LeveranseBoard workspaceId={workspaceId} />

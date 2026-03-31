@@ -1,5 +1,6 @@
 "use client";
 
+import { AssessmentObjectHeader } from "@/components/assessment/assessment-object-header";
 import { AssessmentCollaborationPanel } from "@/components/assessment-wizard/assessment-collaboration-panel";
 import { AssessmentContextCard } from "@/components/assessment-wizard/assessment-context-card";
 import { AssessmentExportPanel } from "@/components/assessment-wizard/assessment-export-panel";
@@ -41,6 +42,8 @@ import type { AssessmentPayload } from "@/lib/assessment-types";
 import {
   PIPELINE_STATUS_LABELS,
   normalizePipelineStatus,
+  nextStepHint,
+  type PipelineStatus,
 } from "@/lib/assessment-pipeline";
 import { cn } from "@/lib/utils";
 import { payloadToSnapshot } from "@/convex/lib/payloadSnapshot";
@@ -57,6 +60,7 @@ import {
   ChevronRight,
   ClipboardCopy,
   Share2,
+  Trash2,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -115,6 +119,9 @@ export function AssessmentWizard({ assessmentId }: Props) {
     assessmentId,
   });
   const versions = useQuery(api.assessments.listVersions, { assessmentId });
+  const rosContext = useQuery(api.ros.getRosContextForAssessment, {
+    assessmentId,
+  });
   const candidates = useQuery(
     api.candidates.listByWorkspace,
     data?.assessment
@@ -123,6 +130,7 @@ export function AssessmentWizard({ assessmentId }: Props) {
   );
   const saveDraft = useMutation(api.assessments.saveDraft);
   const updateAssessmentTitle = useMutation(api.assessments.updateAssessmentTitle);
+  const deleteAssessment = useMutation(api.assessments.deleteAssessment);
 
   const [payload, setPayload] = useState<AssessmentPayload | null>(null);
   const [titleDraft, setTitleDraft] = useState("");
@@ -434,6 +442,19 @@ export function AssessmentWizard({ assessmentId }: Props) {
 
   const { assessment } = data;
 
+  const pipelineStatusNorm = normalizePipelineStatus(
+    assessment.pipelineStatus,
+  ) as PipelineStatus;
+  const ownerCollab = collaborators?.find((c) => c.role === "owner");
+  const ownerDisplayName =
+    ownerCollab?.name ?? ownerCollab?.email ?? null;
+  const hasRosAnalysisLink =
+    rosContext !== undefined && rosContext.length > 0;
+  const firstRosAnalysisId =
+    rosContext && rosContext.length > 0
+      ? rosContext[0]!.rosAnalysisId
+      : null;
+
   const draftConflictIsSelf =
     draftConflict !== null &&
     access?.userId !== undefined &&
@@ -470,6 +491,20 @@ export function AssessmentWizard({ assessmentId }: Props) {
           <AlertDescription>{saveError}</AlertDescription>
         </Alert>
       ) : null}
+
+      {rosContext !== undefined ? (
+        <AssessmentObjectHeader
+          workspaceId={assessment.workspaceId}
+          pipelineStatus={pipelineStatusNorm}
+          ownerName={ownerDisplayName}
+          hasRosAnalysisLink={hasRosAnalysisLink}
+          nextStepLabel={nextStepHint(pipelineStatusNorm)}
+          firstRosAnalysisId={firstRosAnalysisId}
+        />
+      ) : (
+        <div className="bg-muted/30 h-24 animate-pulse rounded-xl border border-border/50" />
+      )}
+
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0 flex-1 space-y-1.5">
           {canEdit ? (
@@ -478,20 +513,19 @@ export function AssessmentWizard({ assessmentId }: Props) {
                 htmlFor="assessment-display-title"
                 className="text-muted-foreground text-xs font-medium"
               >
-                Navn på vurderingen (vises i lister)
+                Tittel (vises på kort og i rapporter)
               </Label>
               <Input
                 id="assessment-display-title"
                 value={titleDraft}
                 onChange={(e) => setTitleDraft(e.target.value)}
-                placeholder="Navn på saken"
+                placeholder="F.eks. Fakturamottak — leverandør"
                 autoComplete="off"
                 className="font-heading h-auto max-w-2xl border-0 border-b border-border/60 bg-transparent px-0 py-1 text-xl font-semibold shadow-none focus-visible:border-primary focus-visible:ring-0 sm:text-2xl"
               />
               <p className="text-muted-foreground max-w-2xl text-[11px] leading-snug">
-                Dette er det som står på kort i oversikten. «Prosessnavn» under
-                steget Prosess er et eget felt i skjemaet og endrer ikke navnet
-                her — med mindre du kopierer det selv.
+                Prosessnavn i steget «Prosess» er eget felt og oppdaterer ikke
+                tittelen automatisk.
               </p>
             </>
           ) : (
@@ -512,25 +546,45 @@ export function AssessmentWizard({ assessmentId }: Props) {
           )}
           {canEdit ? (
             <p className="text-muted-foreground text-xs sm:text-sm">
-              Skjema lagres automatisk mens du jobber — også når du bytter fane
-              eller går ut av siden (så langt nettleseren tillater). Flere kan
-              redigere samtidig: hvis noen lagrer før deg, får du valg om å hente
-              siste utkast eller overskrive med dine endringer.
+              Lagres automatisk. Ved samtidig redigering får du valg om å hente
+              siste utkast eller overskrive.
               {access?.collaboratorRole
-                ? ` · Rolle på vurdering: ${ASSESSMENT_COLLAB_ROLE_LABEL_NB[access.collaboratorRole] ?? access.collaboratorRole}`
+                ? ` · Rolle: ${ASSESSMENT_COLLAB_ROLE_LABEL_NB[access.collaboratorRole] ?? access.collaboratorRole}`
                 : ""}
               {access?.workspaceRole
-                ? ` · Arbeidsområde: ${WORKSPACE_ROLE_LABEL_NB[access.workspaceRole] ?? access.workspaceRole}`
+                ? ` · ${WORKSPACE_ROLE_LABEL_NB[access.workspaceRole] ?? access.workspaceRole} i arbeidsområdet`
                 : ""}
             </p>
           ) : null}
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {access?.shareWithWorkspace ? (
             <Badge variant="secondary" className="gap-1">
               <Share2 className="size-3" />
               Delt med arbeidsområdet
             </Badge>
+          ) : null}
+          {canEdit ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="gap-1.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+              onClick={() => {
+                if (
+                  window.confirm(
+                    `Slette «${assessment.title}»?\n\nAlle utkast, versjoner, oppgaver, kommentarer og koblinger fjernes permanent.`,
+                  )
+                ) {
+                  void deleteAssessment({ assessmentId }).then(() => {
+                    router.push(`/w/${assessment.workspaceId}/vurderinger`);
+                  });
+                }
+              }}
+            >
+              <Trash2 className="size-3.5" />
+              Slett
+            </Button>
           ) : null}
         </div>
       </div>

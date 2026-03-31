@@ -20,10 +20,11 @@ import {
   DEFAULT_ROS_COL_LABELS,
   DEFAULT_ROS_ROW_AXIS,
   DEFAULT_ROS_ROW_LABELS,
+  positionRiskLevel,
 } from "@/lib/ros-defaults";
+import { cellRiskClass } from "@/lib/ros-risk-colors";
 import { cn } from "@/lib/utils";
 import { useMutation, useQuery } from "convex/react";
-import { RosComplianceNotice } from "@/components/ros/ros-compliance-notice";
 import { RosDashboardPanel } from "@/components/ros/ros-dashboard-panel";
 import { RosMethodologyGuide } from "@/components/ros/ros-methodology-guide";
 import { RosWorkspaceHub } from "@/components/ros/ros-workspace-hub";
@@ -40,97 +41,107 @@ import {
 import { RosLabelLevelsEditor } from "@/components/ros/ros-label-levels-editor";
 import { ROS_TEMPLATE_PRESETS, presetToFormState } from "@/lib/ros-template-presets";
 import {
+  ArrowRight,
   BarChart3,
   ClipboardList,
+  Clock,
   Grid3x3,
   HelpCircle,
   Info,
-  LayoutGrid,
   Plus,
   Search,
-  Sparkles,
+  Shield,
   Trash2,
 } from "lucide-react";
 import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
+
+function formatRelative(ts: number | undefined): string {
+  if (!ts) return "—";
+  const diff = Date.now() - ts;
+  if (diff < 0) return "nå";
+  const mins = Math.floor(diff / 60_000);
+  if (mins < 1) return "nå";
+  if (mins < 60) return `${mins} min siden`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}t siden`;
+  const days = Math.floor(hours / 24);
+  if (days < 7) return `${days}d siden`;
+  try {
+    return new Intl.DateTimeFormat("nb-NO", { dateStyle: "medium" }).format(new Date(ts));
+  } catch {
+    return "—";
+  }
+}
 
 type Tab = "maler" | "analyser" | "oversikt";
 
-function RosFlowStrip({ tab }: { tab: Tab }) {
-  const steps = [
-    {
-      id: "maler" as const,
-      n: 1,
-      label: "Maler",
-      hint: "Definer akser og spørsmål (rader × kolonner)",
-    },
-    {
-      id: "analyser" as const,
-      n: 2,
-      label: "Analyser",
-      hint: "Koble prosess og PVV, fyll fargekodet matrise",
-    },
-    {
-      id: "oversikt" as const,
-      n: 3,
-      label: "Oversikt",
-      hint: "Dashboard, søyler og sammenligning",
-    },
-  ];
-  const activeIdx = steps.findIndex((s) => s.id === tab);
+const FLOW_STEPS = [
+  { id: "maler" as const, n: 1, label: "Maler", icon: Grid3x3, hint: "Definer risikoakser" },
+  { id: "analyser" as const, n: 2, label: "Analyser", icon: ClipboardList, hint: "Fyll risikomatrise" },
+  { id: "oversikt" as const, n: 3, label: "Oversikt", icon: BarChart3, hint: "Dashboard og rapport" },
+] as const;
+
+function RosFlowNav({
+  tab,
+  onTab,
+  counts,
+}: {
+  tab: Tab;
+  onTab: (t: Tab) => void;
+  counts?: { maler: number; analyser: number };
+}) {
+  const activeIdx = FLOW_STEPS.findIndex((s) => s.id === tab);
   return (
-    <div className="border-border/60 bg-muted/15 rounded-2xl border p-4">
-      <p className="text-muted-foreground mb-3 text-xs font-medium tracking-wide uppercase">
-        Arbeidsflyt
-      </p>
-      <ol className="flex list-none flex-row flex-nowrap items-start gap-0 overflow-x-auto pb-1 pl-0 [scrollbar-width:thin]">
-        {steps.map((s, i) => {
+    <div className="space-y-1">
+      <nav className="flex items-stretch gap-1 rounded-2xl border border-border/60 bg-muted/20 p-1" role="tablist">
+        {FLOW_STEPS.map((s, i) => {
           const active = tab === s.id;
           const done = activeIdx > i;
+          const Icon = s.icon;
+          const count =
+            s.id === "maler" ? counts?.maler : s.id === "analyser" ? counts?.analyser : undefined;
           return (
-            <li
+            <button
               key={s.id}
-              className="flex shrink-0 flex-row items-start"
+              type="button"
+              role="tab"
+              aria-selected={active}
+              onClick={() => onTab(s.id)}
+              className={cn(
+                "group relative flex flex-1 items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-sm font-medium transition-all sm:justify-start sm:px-4",
+                active
+                  ? "bg-card text-foreground shadow-sm ring-1 ring-border/50"
+                  : "text-muted-foreground hover:bg-card/50 hover:text-foreground",
+              )}
             >
-              <div className="flex min-w-[min(260px,78vw)] max-w-[280px] flex-row items-start gap-3 pr-1 sm:min-w-[200px] sm:max-w-none">
-                <span
-                  className={cn(
-                    "flex size-9 shrink-0 items-center justify-center rounded-full text-sm font-bold tabular-nums",
-                    active
-                      ? "bg-primary text-primary-foreground shadow-sm"
-                      : done
-                        ? "bg-emerald-500/20 text-emerald-800 dark:text-emerald-200"
-                        : "bg-muted text-muted-foreground",
-                  )}
-                >
-                  {done ? "✓" : s.n}
+              <span
+                className={cn(
+                  "flex size-6 shrink-0 items-center justify-center rounded-full text-[10px] font-bold tabular-nums transition-colors",
+                  active
+                    ? "bg-primary text-primary-foreground"
+                    : done
+                      ? "bg-emerald-500/20 text-emerald-700 dark:text-emerald-300"
+                      : "bg-muted text-muted-foreground group-hover:bg-muted/80",
+                )}
+              >
+                {done ? "✓" : s.n}
+              </span>
+              <span className="hidden sm:inline">{s.label}</span>
+              <Icon className="size-4 sm:hidden" aria-hidden />
+              {count !== undefined && count > 0 ? (
+                <span className="ml-auto hidden rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-muted-foreground sm:inline">
+                  {count}
                 </span>
-                <div className="min-w-0">
-                  <p
-                    className={cn(
-                      "font-medium leading-tight",
-                      active && "text-foreground",
-                    )}
-                  >
-                    {s.label}
-                  </p>
-                  <p className="text-muted-foreground mt-0.5 text-xs leading-snug">
-                    {s.hint}
-                  </p>
-                </div>
-              </div>
-              {i < steps.length - 1 ? (
-                <div
-                  className="text-muted-foreground/45 flex shrink-0 items-center self-center px-2 pt-1"
-                  aria-hidden
-                >
-                  →
-                </div>
               ) : null}
-            </li>
+            </button>
           );
         })}
-      </ol>
+      </nav>
+      <div className="flex items-center justify-center gap-1 px-2 text-[11px] text-muted-foreground">
+        <span>{FLOW_STEPS[activeIdx]?.hint}</span>
+      </div>
     </div>
   );
 }
@@ -147,8 +158,30 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
   const updateTemplate = useMutation(api.ros.updateTemplate);
   const removeTemplate = useMutation(api.ros.removeTemplate);
   const createAnalysis = useMutation(api.ros.createAnalysis);
+  const removeAnalysis = useMutation(api.ros.removeAnalysis);
 
-  const [tab, setTab] = useState<Tab>("maler");
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const rawFane = searchParams.get("fane");
+  const tab: Tab =
+    rawFane === "analyser" || rawFane === "oversikt" ? rawFane : "maler";
+
+  const setTab = useCallback(
+    (t: Tab) => {
+      const params = new URLSearchParams(searchParams.toString());
+      if (t === "maler") {
+        params.delete("fane");
+      } else {
+        params.set("fane", t);
+      }
+      const qs = params.toString();
+      router.replace(`/w/${workspaceId}/ros${qs ? `?${qs}` : ""}`, {
+        scroll: false,
+      });
+    },
+    [router, searchParams, workspaceId],
+  );
+
   const [busy, setBusy] = useState(false);
 
   const [tplName, setTplName] = useState("");
@@ -157,47 +190,17 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
   const [tplCols, setTplCols] = useState("");
   const [tplRowAxis, setTplRowAxis] = useState(DEFAULT_ROS_ROW_AXIS);
   const [tplColAxis, setTplColAxis] = useState(DEFAULT_ROS_COL_AXIS);
+  const [tplRowDescs, setTplRowDescs] = useState<string[]>([]);
+  const [tplColDescs, setTplColDescs] = useState<string[]>([]);
+  const [tplMatrixValues, setTplMatrixValues] = useState<number[][] | null>(null);
   const [editingId, setEditingId] = useState<Id<"rosTemplates"> | null>(null);
 
   const [anaTitle, setAnaTitle] = useState("");
   const [anaTemplateId, setAnaTemplateId] = useState<Id<"rosTemplates"> | "">("");
-  const [anaCandidateId, setAnaCandidateId] = useState<Id<"candidates"> | "">(
-    "",
-  );
-  /** Valgte PVV-koblinger (mange-til-mange) */
-  const [selectedAssessmentIds, setSelectedAssessmentIds] = useState<
-    Id<"assessments">[]
-  >([]);
-  const [extraAssessmentPickerKey, setExtraAssessmentPickerKey] = useState(0);
+  const [anaCandidateId, setAnaCandidateId] = useState<Id<"candidates"> | "">("");
   const [templateDialogOpen, setTemplateDialogOpen] = useState(false);
-  /** Når true: tittel på ny analyse oppdateres automatisk fra valgt kandidat */
-  const [anaTitleAuto, setAnaTitleAuto] = useState(true);
   const [analysisSearch, setAnalysisSearch] = useState("");
   const [analysisSort, setAnalysisSort] = useState<AnalysisSort>("updated");
-
-  const matchingAssessments = useQuery(
-    api.ros.listMatchingAssessments,
-    anaCandidateId
-      ? { workspaceId, candidateId: anaCandidateId }
-      : "skip",
-  );
-  const allWorkspaceAssessments = useQuery(
-    api.ros.listAssessmentsForWorkspace,
-    tab === "analyser" ? { workspaceId } : "skip",
-  );
-
-  const toggleAssessment = useCallback((id: Id<"assessments">) => {
-    setSelectedAssessmentIds((prev) =>
-      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
-    );
-  }, []);
-
-  const addAssessmentFromList = useCallback((id: Id<"assessments">) => {
-    setSelectedAssessmentIds((prev) =>
-      prev.includes(id) ? prev : [...prev, id],
-    );
-    setExtraAssessmentPickerKey((k) => k + 1);
-  }, []);
 
   const resetTemplateForm = useCallback(() => {
     setTplName("");
@@ -206,6 +209,9 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
     setTplCols("");
     setTplRowAxis(DEFAULT_ROS_ROW_AXIS);
     setTplColAxis(DEFAULT_ROS_COL_AXIS);
+    setTplRowDescs([]);
+    setTplColDescs([]);
+    setTplMatrixValues(null);
     setEditingId(null);
   }, []);
 
@@ -218,6 +224,9 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
       colAxisTitle: string;
       rowLabels: string[];
       colLabels: string[];
+      rowDescriptions?: string[];
+      colDescriptions?: string[];
+      defaultMatrixValues?: number[][];
     }) => {
       setEditingId(t._id);
       setTplName(t.name);
@@ -226,6 +235,9 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
       setTplColAxis(t.colAxisTitle);
       setTplRows(t.rowLabels.join("\n"));
       setTplCols(t.colLabels.join("\n"));
+      setTplRowDescs(t.rowDescriptions ?? []);
+      setTplColDescs(t.colDescriptions ?? []);
+      setTplMatrixValues(t.defaultMatrixValues ?? null);
     },
     [],
   );
@@ -248,17 +260,12 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
     return [...DEFAULT_ROS_COL_LABELS];
   }, [tplCols]);
 
-  const selectedTemplateForAnalysis = useMemo(
-    () => (templates ?? []).find((t) => t._id === anaTemplateId),
-    [templates, anaTemplateId],
-  );
-
   const filteredSortedAnalyses = useMemo(() => {
     const list = analyses ?? [];
     const q = analysisSearch.trim().toLowerCase();
     const filtered = q
       ? list.filter((a) => {
-          const blob = `${a.title} ${a.candidateName} ${a.candidateCode}`.toLowerCase();
+          const blob = `${a.title} ${a.candidateName ?? ""} ${a.candidateCode ?? ""}`.toLowerCase();
           return blob.includes(q);
         })
       : [...list];
@@ -269,7 +276,7 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
       );
     } else if (analysisSort === "candidate") {
       rows.sort((a, b) =>
-        a.candidateName.localeCompare(b.candidateName, "nb", {
+        (a.candidateName ?? "").localeCompare(b.candidateName ?? "", "nb", {
           sensitivity: "base",
         }),
       );
@@ -283,29 +290,21 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
     (candidateId: Id<"candidates">) => {
       setTab("analyser");
       setAnaCandidateId(candidateId);
-      setSelectedAssessmentIds([]);
-      setExtraAssessmentPickerKey((k) => k + 1);
-      setAnaTitleAuto(true);
+      const c = candidates?.find((x) => x._id === candidateId);
+      if (c) setAnaTitle(`ROS — ${c.name} (${c.code})`);
       if (templates && templates.length === 1) {
         setAnaTemplateId(templates[0]!._id);
       } else if (hub?.defaultTemplateId) {
         setAnaTemplateId(hub.defaultTemplateId);
       }
     },
-    [templates, hub?.defaultTemplateId],
+    [templates, hub?.defaultTemplateId, candidates],
   );
 
   const openNewTemplateDialog = useCallback(() => {
     resetTemplateForm();
     setTemplateDialogOpen(true);
   }, [resetTemplateForm]);
-
-  useEffect(() => {
-    if (!anaTitleAuto || !anaCandidateId || !candidates) return;
-    const c = candidates.find((x) => x._id === anaCandidateId);
-    if (!c) return;
-    setAnaTitle(`ROS — ${c.name} (${c.code})`);
-  }, [anaTitleAuto, anaCandidateId, candidates]);
 
   /** Én mal i arbeidsområdet → forhåndsvelg (mindre friksjon for store organisasjoner). */
   useEffect(() => {
@@ -370,6 +369,8 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
           return;
         }
       }
+      const rowDescsClean = tplRowDescs.length > 0 ? tplRowDescs : undefined;
+      const colDescsClean = tplColDescs.length > 0 ? tplColDescs : undefined;
       if (editingId) {
         await updateTemplate({
           templateId: editingId,
@@ -379,6 +380,9 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
           colAxisTitle: tplColAxis.trim(),
           rowLabels,
           colLabels,
+          rowDescriptions: rowDescsClean ?? null,
+          colDescriptions: colDescsClean ?? null,
+          defaultMatrixValues: tplMatrixValues ?? null,
         });
       } else {
         await createTemplate({
@@ -389,6 +393,9 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
           colAxisTitle: tplColAxis.trim(),
           rowLabels: useDefault ? undefined : rowLabels,
           colLabels: useDefault ? undefined : colLabels,
+          rowDescriptions: rowDescsClean,
+          colDescriptions: colDescsClean,
+          defaultMatrixValues: tplMatrixValues ?? undefined,
         });
       }
       resetTemplateForm();
@@ -400,18 +407,14 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
 
   async function submitAnalysis(e: React.FormEvent) {
     e.preventDefault();
-    if (!anaTemplateId || !anaCandidateId || !anaTitle.trim()) return;
+    if (!anaTemplateId || !anaTitle.trim()) return;
     setBusy(true);
     try {
       const id = await createAnalysis({
         workspaceId,
         templateId: anaTemplateId,
-        candidateId: anaCandidateId,
+        candidateId: anaCandidateId || undefined,
         title: anaTitle.trim(),
-        assessmentIds:
-          selectedAssessmentIds.length > 0
-            ? selectedAssessmentIds
-            : undefined,
       });
       window.location.href = `/w/${workspaceId}/ros/a/${id}`;
     } finally {
@@ -424,7 +427,10 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
     (templates === undefined || analyses === undefined)
   ) {
     return (
-      <p className="text-muted-foreground text-sm">Henter ROS-data …</p>
+      <div className="flex min-h-[20vh] flex-col items-center justify-center gap-3">
+        <div className="size-7 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+        <p className="text-muted-foreground text-sm">Henter ROS-data …</p>
+      </div>
     );
   }
 
@@ -432,31 +438,12 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
   const analysesList = analyses ?? [];
 
   return (
-    <div className="space-y-8">
-      <div className="flex flex-wrap gap-2 rounded-2xl border border-border/60 bg-muted/20 p-1">
-        {(
-          [
-            ["maler", "Maler", Grid3x3],
-            ["analyser", "ROS-analyser", ClipboardList],
-            ["oversikt", "Oversikt", BarChart3],
-          ] as const
-        ).map(([id, label, Icon]) => (
-          <button
-            key={id}
-            type="button"
-            onClick={() => setTab(id)}
-            className={cn(
-              "flex flex-1 items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium transition-all sm:flex-initial sm:justify-start",
-              tab === id
-                ? "bg-card text-foreground shadow-sm"
-                : "text-muted-foreground hover:text-foreground",
-            )}
-          >
-            <Icon className="size-4" aria-hidden />
-            {label}
-          </button>
-        ))}
-      </div>
+    <div className="space-y-6">
+      <RosFlowNav
+        tab={tab}
+        onTab={setTab}
+        counts={{ maler: templatesList.length, analyser: analysesList.length }}
+      />
 
       <RosWorkspaceHub
         workspaceId={workspaceId}
@@ -467,12 +454,6 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
         onOpenTemplateDialog={openNewTemplateDialog}
       />
 
-      <RosFlowStrip tab={tab} />
-
-      <RosComplianceNotice
-        standardsDetailHref={`/w/${workspaceId}/ros#ros-metode-standarder`}
-      />
-
       <details
         data-ros-methodology-panel
         className="border-border/60 bg-muted/10 group rounded-2xl border open:bg-muted/15"
@@ -480,7 +461,7 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
         <summary className="hover:bg-muted/30 flex cursor-pointer list-none items-center gap-2 rounded-2xl px-4 py-3 text-sm font-medium [&::-webkit-details-marker]:hidden">
           <HelpCircle className="text-primary size-4 shrink-0" aria-hidden />
           <span className="min-w-0 flex-1">
-            Metode og retningslinjer (ISO, personvern, kobling til PVV)
+            Metode og retningslinjer (ISO, personvern, kobling til vurderinger)
             <span className="text-muted-foreground ml-1.5 font-normal">
               — valgfritt, anbefales første gang
             </span>
@@ -503,102 +484,125 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
         <div className="space-y-6">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <h2 className="font-heading text-lg font-semibold">
-                Gjenbrukbare maler
+              <h2 className="font-heading text-lg font-semibold tracking-tight">
+                Maler
               </h2>
-              <p className="text-muted-foreground mt-1 max-w-2xl text-sm leading-relaxed">
-                Hver mal definerer rader og kolonner (typisk sannsynlighet ×
-                konsekvens). Analyser kopierer strukturen. Bruk veiledningen i
-                dialogen for hurtigstart og fargeforhåndsvisning.
+              <p className="text-muted-foreground mt-0.5 text-sm">
+                Definer rader og kolonner for risikovurderingen. Klikk på en mal for å redigere.
               </p>
             </div>
             <Button
               type="button"
               className="shrink-0 gap-2"
-              onClick={() => {
-                openNewTemplateDialog();
-              }}
+              onClick={() => openNewTemplateDialog()}
             >
-              <LayoutGrid className="size-4" aria-hidden />
+              <Plus className="size-4" aria-hidden />
               Ny mal
             </Button>
           </div>
 
           {templatesList.length === 0 ? (
-            <div className="rounded-2xl border border-dashed bg-muted/10 py-12 text-center">
-              <p className="text-muted-foreground text-sm">
-                Ingen maler ennå.
-              </p>
+            <div className="flex flex-col items-center gap-4 rounded-2xl border border-dashed bg-muted/5 py-16 text-center">
+              <div className="bg-primary/10 flex size-14 items-center justify-center rounded-full">
+                <Grid3x3 className="text-primary size-7" />
+              </div>
+              <div>
+                <p className="text-foreground text-sm font-medium">Ingen maler ennå</p>
+                <p className="text-muted-foreground mt-1 max-w-sm text-xs">
+                  En mal definerer rutenettet for risikovurderingen. Opprett din første mal for å komme i gang.
+                </p>
+              </div>
               <Button
                 type="button"
-                variant="secondary"
-                className="mt-4 gap-2"
-                onClick={() => {
-                  openNewTemplateDialog();
-                }}
+                className="gap-2"
+                onClick={() => openNewTemplateDialog()}
               >
-                <Sparkles className="size-4" aria-hidden />
-                Opprett første mal med veiledning
+                <Plus className="size-4" aria-hidden />
+                Opprett første mal
               </Button>
             </div>
           ) : (
-            <ul className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
               {templatesList.map((t) => (
-                <li key={t._id}>
-                  <Card className="flex h-full flex-col overflow-hidden border-border/70 shadow-sm transition-shadow hover:shadow-md">
-                    <CardHeader className="pb-2">
-                      <CardTitle className="text-base">{t.name}</CardTitle>
-                      <CardDescription className="line-clamp-2 text-xs">
-                        {t.description || "Ingen beskrivelse"}
-                      </CardDescription>
-                    </CardHeader>
-                    <CardContent className="flex flex-1 flex-col gap-3 text-xs">
-                      <RosTemplatePreviewMini
-                        rowLabels={t.rowLabels}
-                        colLabels={t.colLabels}
-                        className="shrink-0"
-                      />
-                      <p className="text-muted-foreground">
-                        {t.rowLabels.length} × {t.colLabels.length} ·{" "}
-                        {t.rowAxisTitle} / {t.colAxisTitle}
-                      </p>
-                    </CardContent>
-                    <CardFooter className="mt-auto flex flex-wrap gap-2 border-t pt-3">
-                      <Button
-                        type="button"
-                        variant="secondary"
-                        size="sm"
-                        onClick={() => {
-                          loadTemplateForEdit(t);
-                          setTemplateDialogOpen(true);
-                        }}
-                      >
-                        Rediger
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className="text-destructive"
-                        onClick={() => {
-                          if (
-                            typeof window !== "undefined" &&
-                            window.confirm(
-                              "Slette denne malen? Eksisterende analyser beholder sin kopi.",
-                            )
-                          ) {
-                            void removeTemplate({ templateId: t._id });
-                          }
-                        }}
-                      >
-                        <Trash2 className="size-3.5" />
-                        Slett
-                      </Button>
-                    </CardFooter>
-                  </Card>
-                </li>
+                <div
+                  key={t._id}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => {
+                    loadTemplateForEdit(t);
+                    setTemplateDialogOpen(true);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      loadTemplateForEdit(t);
+                      setTemplateDialogOpen(true);
+                    }
+                  }}
+                  className={cn(
+                    "group flex cursor-pointer flex-col overflow-hidden rounded-xl border border-border/60 bg-card text-left shadow-sm outline-none transition-all",
+                    "hover:border-primary/30 hover:shadow-lg",
+                    "focus-visible:ring-2 focus-visible:ring-primary/40",
+                    "active:scale-[0.99]",
+                  )}
+                >
+                  <div className="flex-1 p-4">
+                    <div className="mb-3 flex items-start gap-3">
+                      <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 transition-colors group-hover:bg-primary/15">
+                        <Grid3x3 className="size-4 text-primary" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-start justify-between gap-2">
+                          <h3 className="text-foreground truncate text-sm font-semibold">
+                            {t.name}
+                          </h3>
+                          <span className="shrink-0 rounded-md bg-muted px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-muted-foreground">
+                            {t.rowLabels.length}×{t.colLabels.length}
+                          </span>
+                        </div>
+                        {t.description ? (
+                          <p className="text-muted-foreground mt-0.5 line-clamp-1 text-xs">
+                            {t.description}
+                          </p>
+                        ) : null}
+                        <p className="text-muted-foreground/70 mt-1 text-[10px]">
+                          {t.rowAxisTitle} × {t.colAxisTitle}
+                        </p>
+                      </div>
+                    </div>
+                    <RosTemplatePreviewMini
+                      rowLabels={t.rowLabels}
+                      colLabels={t.colLabels}
+                    />
+                  </div>
+                  <div className="flex items-center justify-between border-t border-border/40 bg-muted/10 px-4 py-2">
+                    <span className="text-primary text-xs font-medium opacity-0 transition-opacity group-hover:opacity-100">
+                      Rediger
+                    </span>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="text-muted-foreground hover:text-destructive h-7 text-[11px]"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (
+                          typeof window !== "undefined" &&
+                          window.confirm(
+                            "Slette denne malen? Eksisterende analyser beholder sin kopi.",
+                          )
+                        ) {
+                          void removeTemplate({ templateId: t._id });
+                        }
+                      }}
+                    >
+                      <Trash2 className="mr-1 size-3" />
+                      Slett
+                    </Button>
+                  </div>
+                </div>
               ))}
-            </ul>
+            </div>
           )}
 
           <Dialog
@@ -635,31 +639,33 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
                   onSubmit={(e) => void submitTemplate(e)}
                   className="space-y-4"
                 >
-                  <div className="flex flex-wrap gap-2">
-                    <p className="text-muted-foreground w-full text-xs font-medium">
+                  <div className="space-y-2">
+                    <p className="text-muted-foreground text-xs font-medium">
                       Hurtigstart
                     </p>
-                    {ROS_TEMPLATE_PRESETS.map((p) => (
-                      <Button
-                        key={p.id}
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        className="h-auto min-h-9 flex-col items-start gap-0.5 py-2 text-left"
-                        onClick={() => {
-                          const s = presetToFormState(p);
-                          setTplRowAxis(s.tplRowAxis);
-                          setTplColAxis(s.tplColAxis);
-                          setTplRows(s.tplRows);
-                          setTplCols(s.tplCols);
-                        }}
-                      >
-                        <span className="font-medium">{p.name}</span>
-                        <span className="text-muted-foreground max-w-[14rem] text-[11px] font-normal leading-snug">
-                          {p.description}
-                        </span>
-                      </Button>
-                    ))}
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                      {ROS_TEMPLATE_PRESETS.map((p) => (
+                        <Button
+                          key={p.id}
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="h-auto min-h-9 w-full flex-col items-start gap-0.5 whitespace-normal py-2.5 text-left"
+                          onClick={() => {
+                            const s = presetToFormState(p);
+                            setTplRowAxis(s.tplRowAxis);
+                            setTplColAxis(s.tplColAxis);
+                            setTplRows(s.tplRows);
+                            setTplCols(s.tplCols);
+                          }}
+                        >
+                          <span className="font-medium">{p.name}</span>
+                          <span className="text-muted-foreground text-[11px] font-normal leading-snug">
+                            {p.description}
+                          </span>
+                        </Button>
+                      ))}
+                    </div>
                   </div>
 
                   <details className="border-border/60 bg-muted/15 rounded-xl border px-3 py-2">
@@ -727,6 +733,8 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
                         defaultLabels={DEFAULT_ROS_ROW_LABELS}
                         lowEndHint="lavest langs aksen"
                         highEndHint="høyest langs aksen"
+                        descriptions={tplRowDescs}
+                        onDescriptionsChange={setTplRowDescs}
                       />
                       <RosLabelLevelsEditor
                         id="tpl-cols"
@@ -737,15 +745,25 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
                         defaultLabels={DEFAULT_ROS_COL_LABELS}
                         lowEndHint="lavest langs aksen"
                         highEndHint="høyest langs aksen"
+                        descriptions={tplColDescs}
+                        onDescriptionsChange={setTplColDescs}
                       />
                     </div>
-                    <div className="space-y-2">
-                      <Label className="text-muted-foreground text-xs uppercase tracking-wide">
-                        Forhåndsvisning (farger)
-                      </Label>
-                      <RosTemplatePreviewMini
+                    <div className="space-y-4">
+                      <div className="space-y-2">
+                        <Label className="text-muted-foreground text-xs uppercase tracking-wide">
+                          Forhåndsvisning
+                        </Label>
+                        <RosTemplatePreviewMini
+                          rowLabels={previewRowLabels}
+                          colLabels={previewColLabels}
+                        />
+                      </div>
+                      <TemplateMatrixEditor
                         rowLabels={previewRowLabels}
                         colLabels={previewColLabels}
+                        values={tplMatrixValues}
+                        onChange={setTplMatrixValues}
                       />
                     </div>
                   </div>
@@ -780,14 +798,18 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
       ) : (
         <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,22rem)]">
           <div className="space-y-4">
-            <h2 className="font-heading text-lg font-semibold">
-              Dine ROS-analyser
-            </h2>
-            <p className="text-muted-foreground text-sm leading-relaxed">
-              Hver analyse er koblet til en <strong>kandidat</strong> (prosess).
-              Du kan koble <strong>én eller flere PVV-vurderinger</strong>{" "}
-              (matcher kandidatkode og/eller andre i arbeidsområdet).
-            </p>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+              <div>
+                <h2 className="font-heading text-lg font-semibold tracking-tight">
+                  Dine ROS-analyser
+                </h2>
+                <p className="text-muted-foreground mt-0.5 text-sm">
+                  {analysesList.length > 0
+                    ? `${analysesList.length} analyse${analysesList.length === 1 ? "" : "r"} i dette arbeidsområdet`
+                    : "Opprett din første analyse for å komme i gang"}
+                </p>
+              </div>
+            </div>
             {analysesList.length > 0 ? (
               <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-end">
                 <div className="relative min-w-[12rem] flex-1">
@@ -821,66 +843,105 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
               </div>
             ) : null}
             {analysesList.length === 0 ? (
-              <p className="text-muted-foreground rounded-xl border border-dashed py-8 text-center text-sm leading-relaxed">
-                Ingen analyser ennå. Du trenger minst én{" "}
-                <strong>mal</strong> og én <strong>kandidat</strong> (prosess)
-                — opprett kandidater under{" "}
-                <Link
-                  href={`/w/${workspaceId}/vurderinger?fane=prosesser`}
-                  className="text-primary font-medium underline-offset-4 hover:underline"
-                >
-                  Kandidater
-                </Link>
-                , deretter fyll ut skjemaet (på store skjermer til høyre, på
-                mobil under).
-              </p>
+              <div className="flex flex-col items-center gap-4 rounded-2xl border border-dashed bg-muted/5 py-14 text-center">
+                <div className="flex size-14 items-center justify-center rounded-full bg-primary/10">
+                  <ClipboardList className="size-7 text-primary" />
+                </div>
+                <div className="max-w-sm space-y-1">
+                  <p className="text-foreground text-sm font-medium">Ingen analyser ennå</p>
+                  <p className="text-muted-foreground text-xs leading-relaxed">
+                    Du trenger minst én <strong>mal</strong> og én <strong>kandidat</strong> (prosess).
+                    Opprett kandidater under{" "}
+                    <Link
+                      href={`/w/${workspaceId}/vurderinger?fane=prosesser`}
+                      className="text-primary font-medium underline-offset-4 hover:underline"
+                    >
+                      Kandidater
+                    </Link>
+                    , deretter fyll ut skjemaet til høyre.
+                  </p>
+                </div>
+              </div>
             ) : filteredSortedAnalyses.length === 0 ? (
-              <p className="text-muted-foreground rounded-xl border border-dashed py-8 text-center text-sm">
-                Ingen analyser matcher søket.{" "}
-                <button
-                  type="button"
-                  className="text-primary font-medium underline-offset-4 hover:underline"
-                  onClick={() => setAnalysisSearch("")}
-                >
-                  Nullstill filter
-                </button>
-              </p>
+              <div className="flex flex-col items-center gap-3 rounded-2xl border border-dashed bg-muted/5 py-10 text-center">
+                <Search className="size-8 text-muted-foreground/50" />
+                <p className="text-muted-foreground text-sm">
+                  Ingen analyser matcher søket.{" "}
+                  <button
+                    type="button"
+                    className="text-primary font-medium underline-offset-4 hover:underline"
+                    onClick={() => setAnalysisSearch("")}
+                  >
+                    Nullstill filter
+                  </button>
+                </p>
+              </div>
             ) : (
               <ul className="space-y-2">
                 {filteredSortedAnalyses.map((a) => (
-                  <li key={a._id}>
+                  <li key={a._id} className="group/card relative">
                     <Link
                       href={`/w/${workspaceId}/ros/a/${a._id}`}
-                      className="hover:border-primary/30 flex flex-col gap-1 rounded-xl border bg-card p-4 shadow-sm transition-all hover:shadow-md sm:flex-row sm:items-center sm:justify-between"
+                      className="flex items-center gap-4 rounded-xl border border-border/60 bg-card p-4 shadow-sm transition-all hover:border-primary/30 hover:shadow-md"
                     >
-                      <div>
-                        <p className="font-medium">{a.title}</p>
-                        <p className="text-muted-foreground text-xs">
-                          {a.candidateName}{" "}
-                          <span className="font-mono">({a.candidateCode})</span>
-                          {" · "}
-                          {a.rowLabels.length}×{a.colLabels.length}
-                        </p>
+                      <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 transition-colors group-hover/card:bg-primary/15">
+                        <Shield className="size-5 text-primary" />
                       </div>
-                      <span className="text-primary text-sm font-medium">
-                        Åpne →
-                      </span>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate font-medium">{a.title}</p>
+                        <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
+                          {a.candidateName ? (
+                            <span>
+                              {a.candidateName}{" "}
+                              <span className="font-mono">({a.candidateCode})</span>
+                            </span>
+                          ) : (
+                            <span className="italic">Ingen prosess koblet</span>
+                          )}
+                          <span className="inline-flex items-center gap-1">
+                            <Grid3x3 className="size-3" aria-hidden />
+                            {a.rowLabels.length}×{a.colLabels.length}
+                          </span>
+                          <span className="inline-flex items-center gap-1">
+                            <Clock className="size-3" aria-hidden />
+                            {formatRelative(a.updatedAt)}
+                          </span>
+                        </div>
+                      </div>
+                      <ArrowRight className="size-4 shrink-0 text-muted-foreground/40 transition-transform group-hover/card:translate-x-0.5 group-hover/card:text-primary" />
                     </Link>
+                    <button
+                      type="button"
+                      className="absolute right-2 top-2 rounded-md p-1.5 text-muted-foreground/50 opacity-0 transition-all hover:bg-destructive/10 hover:text-destructive group-hover/card:opacity-100"
+                      title="Slett analyse"
+                      onClick={() => {
+                        if (
+                          window.confirm(
+                            `Slette «${a.title}»? Matrisedata, oppgaver og koblinger fjernes permanent.`,
+                          )
+                        ) {
+                          void removeAnalysis({ analysisId: a._id });
+                        }
+                      }}
+                    >
+                      <Trash2 className="size-3.5" />
+                    </button>
                   </li>
                 ))}
               </ul>
             )}
           </div>
 
-          <Card className="h-fit border-emerald-500/20 bg-gradient-to-b from-emerald-500/[0.05] to-card shadow-md">
-            <CardHeader>
+          <Card className="h-fit border-primary/15 bg-gradient-to-b from-primary/[0.04] to-card shadow-md">
+            <CardHeader className="pb-3">
               <CardTitle className="flex items-center gap-2 text-base">
-                <Plus className="size-4" />
+                <div className="flex size-7 items-center justify-center rounded-lg bg-primary/10">
+                  <Plus className="size-4 text-primary" />
+                </div>
                 Ny ROS-analyse
               </CardTitle>
               <CardDescription className="text-xs">
-                Velg mal og kandidat. Kryss av PVV som matcher kandidaten, eller
-                legg til flere fra hele arbeidsområdet.
+                Opprett en analyse, koble prosess og PVV etterpå.
               </CardDescription>
             </CardHeader>
             <form onSubmit={(e) => void submitAnalysis(e)}>
@@ -888,38 +949,29 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
                 {templatesList.length === 0 ? (
                   <Alert className="border-amber-500/35 bg-amber-500/[0.06]">
                     <Info className="text-amber-700 dark:text-amber-400" />
-                    <AlertTitle>Ingen ROS-mal</AlertTitle>
+                    <AlertTitle>Ingen mal</AlertTitle>
                     <AlertDescription>
-                      Opprett først en mal under fanen{" "}
                       <button
                         type="button"
                         className="text-primary font-medium underline underline-offset-4"
                         onClick={() => setTab("maler")}
                       >
-                        Maler
-                      </button>
-                      .
+                        Opprett en mal
+                      </button>{" "}
+                      før du lager analyse.
                     </AlertDescription>
                   </Alert>
                 ) : null}
-                {candidates !== undefined && candidates.length === 0 ? (
-                  <Alert className="border-amber-500/35 bg-amber-500/[0.06]">
-                    <Info className="text-amber-700 dark:text-amber-400" />
-                    <AlertTitle>Ingen kandidat å koble til</AlertTitle>
-                    <AlertDescription>
-                      ROS-analyse må knyttes til en <strong>kandidat</strong>{" "}
-                      (PVV-prosess). Opprett minst én under{" "}
-                      <Link
-                        href={`/w/${workspaceId}/vurderinger?fane=prosesser`}
-                        className="text-primary font-medium"
-                      >
-                        Kandidater
-                      </Link>
-                      . Når den finnes, velger du den i listen under — deretter
-                      kan du eventuelt koble PVV-vurderinger.
-                    </AlertDescription>
-                  </Alert>
-                ) : null}
+                <div className="space-y-1.5">
+                  <Label htmlFor="ana-title">Tittel</Label>
+                  <Input
+                    id="ana-title"
+                    value={anaTitle}
+                    onChange={(e) => setAnaTitle(e.target.value)}
+                    placeholder="F.eks. ROS — Rekruttering"
+                    required
+                  />
+                </div>
                 <div className="space-y-1.5">
                   <Label htmlFor="ana-tpl">Mal</Label>
                   <select
@@ -942,227 +994,40 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
                       </option>
                     ))}
                   </select>
-                  {selectedTemplateForAnalysis ? (
-                    <div className="pt-1">
-                      <p className="text-muted-foreground mb-1 text-[11px] font-medium uppercase tracking-wide">
-                        Malens rutenett
-                      </p>
-                      <RosTemplatePreviewMini
-                        rowLabels={selectedTemplateForAnalysis.rowLabels}
-                        colLabels={selectedTemplateForAnalysis.colLabels}
-                      />
-                    </div>
-                  ) : null}
                 </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="ana-cand">Kandidat (PVV-prosess)</Label>
-                  <select
-                    id="ana-cand"
-                    className="border-input bg-background flex h-10 w-full rounded-lg border px-2 text-sm disabled:cursor-not-allowed disabled:opacity-60"
-                    value={anaCandidateId}
-                    disabled={
-                      candidates === undefined ||
-                      candidates.length === 0
-                    }
-                    onChange={(e) => {
-                      setAnaCandidateId(
-                        e.target.value === ""
-                          ? ""
-                          : (e.target.value as Id<"candidates">),
-                      );
-                      setSelectedAssessmentIds([]);
-                      setExtraAssessmentPickerKey((k) => k + 1);
-                      setAnaTitleAuto(true);
-                    }}
-                    required
-                  >
-                    <option value="">
-                      {candidates === undefined
-                        ? "— Henter kandidater … —"
-                        : candidates.length === 0
-                          ? "— Ingen kandidater i arbeidsområdet —"
-                          : "— Velg kandidat —"}
-                    </option>
-                    {(candidates ?? []).map((c) => (
-                      <option key={c._id} value={c._id}>
-                        {c.name} ({c.code})
-                      </option>
-                    ))}
-                  </select>
-                  {candidates !== undefined &&
-                  candidates.length > 0 &&
-                  anaCandidateId === "" ? (
-                    <p className="text-muted-foreground text-[11px] leading-snug">
-                      Velg hvilken prosess denne ROS-en gjelder. PVV-koblinger
-                      vises når du har valgt kandidat.
-                    </p>
-                  ) : null}
-                </div>
-                {anaCandidateId ? (
-                  <div className="space-y-3">
-                    <div className="space-y-2">
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <Label>PVV som matcher kandidaten (valgfritt)</Label>
-                        {(matchingAssessments ?? []).length > 0 ? (
-                          <Button
-                            type="button"
-                            variant="secondary"
-                            size="sm"
-                            className="h-7 text-xs"
-                            onClick={() =>
-                              setSelectedAssessmentIds((prev) => {
-                                const s = new Set(
-                                  (matchingAssessments ?? []).map((x) => x._id),
-                                );
-                                for (const id of prev) s.add(id);
-                                return [...s];
-                              })
-                            }
-                          >
-                            Koble alle som matcher
-                          </Button>
-                        ) : null}
-                      </div>
-                      {(matchingAssessments ?? []).length === 0 ? (
-                        <p className="text-muted-foreground text-xs">
-                          Ingen vurderinger med samme referansekode som denne
-                          kandidaten — bruk listen under for å koble PVV.
-                        </p>
-                      ) : (
-                        <ul className="max-h-40 space-y-2 overflow-y-auto rounded-lg border p-2">
-                          {(matchingAssessments ?? []).map((x) => (
-                            <li
-                              key={x._id}
-                              className="flex items-center gap-2 text-sm"
-                            >
-                              <input
-                                type="checkbox"
-                                id={`ana-asm-${x._id}`}
-                                checked={selectedAssessmentIds.includes(x._id)}
-                                onChange={() => toggleAssessment(x._id)}
-                                className="border-input size-4 rounded"
-                              />
-                              <label
-                                htmlFor={`ana-asm-${x._id}`}
-                                className="cursor-pointer leading-tight"
-                              >
-                                {x.title}
-                              </label>
-                            </li>
-                          ))}
-                        </ul>
-                      )}
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label htmlFor="ana-asm-extra">
-                        Legg til annen PVV fra arbeidsområdet
-                      </Label>
-                      <select
-                        key={extraAssessmentPickerKey}
-                        id="ana-asm-extra"
-                        className="border-input bg-background flex h-10 w-full rounded-lg border px-2 text-sm"
-                        defaultValue=""
-                        onChange={(e) => {
-                          const v = e.target.value;
-                          if (v)
-                            addAssessmentFromList(v as Id<"assessments">);
-                        }}
-                      >
-                        <option value="">
-                          {allWorkspaceAssessments === undefined
-                            ? "— Henter vurderinger … —"
-                            : "— Velg for å legge til —"}
-                        </option>
-                        {(allWorkspaceAssessments ?? [])
-                          .filter((a) => !selectedAssessmentIds.includes(a._id))
-                          .map((a) => (
-                            <option key={a._id} value={a._id}>
-                              {a.title}
-                            </option>
-                          ))}
-                      </select>
-                      {allWorkspaceAssessments !== undefined &&
-                      allWorkspaceAssessments.length === 0 ? (
-                        <p className="text-muted-foreground text-[11px] leading-snug">
-                          Ingen PVV-vurderinger i arbeidsområdet ennå. Opprett
-                          under{" "}
-                          <Link
-                            href={`/w/${workspaceId}/vurderinger`}
-                            className="text-primary font-medium underline-offset-4 hover:underline"
-                          >
-                            Vurderinger
-                          </Link>
-                          .
-                        </p>
-                      ) : null}
-                      {selectedAssessmentIds.length > 0 ? (
-                        <ul className="text-muted-foreground flex flex-wrap gap-1 text-xs">
-                          {selectedAssessmentIds.map((id) => {
-                            const title =
-                              (allWorkspaceAssessments ?? []).find(
-                                (a) => a._id === id,
-                              )?.title ??
-                              (matchingAssessments ?? []).find(
-                                (a) => a._id === id,
-                              )?.title ??
-                              id;
-                            return (
-                              <li
-                                key={id}
-                                className="bg-muted inline-flex items-center gap-1 rounded-full px-2 py-0.5"
-                              >
-                                <span className="max-w-[14rem] truncate">
-                                  {title}
-                                </span>
-                                <button
-                                  type="button"
-                                  className="text-destructive hover:underline"
-                                  onClick={() => toggleAssessment(id)}
-                                >
-                                  ×
-                                </button>
-                              </li>
-                            );
-                          })}
-                        </ul>
-                      ) : null}
-                    </div>
-                  </div>
-                ) : null}
-                <div className="space-y-1.5">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <Label htmlFor="ana-title">Tittel på analysen</Label>
-                    {anaCandidateId && candidates ? (
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className="text-muted-foreground h-7 text-xs"
-                        onClick={() => {
-                          const c = candidates.find(
-                            (x) => x._id === anaCandidateId,
-                          );
-                          if (c) {
+                <details className="text-xs">
+                  <summary className="cursor-pointer text-muted-foreground hover:text-foreground">
+                    Koble prosess nå (valgfritt)
+                  </summary>
+                  <div className="mt-2 space-y-1.5">
+                    <Label htmlFor="ana-cand" className="text-xs">Prosess</Label>
+                    <select
+                      id="ana-cand"
+                      className="border-input bg-background flex h-9 w-full rounded-lg border px-2 text-xs"
+                      value={anaCandidateId}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setAnaCandidateId(val === "" ? "" : (val as Id<"candidates">));
+                        if (val && candidates) {
+                          const c = candidates.find((x) => x._id === val);
+                          if (c && !anaTitle.trim()) {
                             setAnaTitle(`ROS — ${c.name} (${c.code})`);
-                            setAnaTitleAuto(true);
                           }
-                        }}
-                      >
-                        Fyll fra kandidat
-                      </Button>
-                    ) : null}
+                        }
+                      }}
+                    >
+                      <option value="">— Ingen (koble senere) —</option>
+                      {(candidates ?? []).map((c) => (
+                        <option key={c._id} value={c._id}>
+                          {c.name} ({c.code})
+                        </option>
+                      ))}
+                    </select>
+                    <p className="text-[10px] text-muted-foreground leading-snug">
+                      Du kan koble prosess og PVV inne i analysen etterpå.
+                    </p>
                   </div>
-                  <Input
-                    id="ana-title"
-                    value={anaTitle}
-                    onChange={(e) => {
-                      setAnaTitle(e.target.value);
-                      setAnaTitleAuto(false);
-                    }}
-                    placeholder="Fylles automatisk fra kandidat — eller skriv egen"
-                    required
-                  />
-                </div>
+                </details>
               </CardContent>
               <CardFooter className="border-t">
                 <Button
@@ -1171,34 +1036,154 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
                   disabled={
                     busy ||
                     !anaTemplateId ||
-                    !anaCandidateId ||
                     !anaTitle.trim() ||
-                    templatesList.length === 0 ||
-                    (candidates?.length ?? 0) === 0
+                    templatesList.length === 0
                   }
                 >
-                  Opprett og åpne matrise
+                  {busy ? "Oppretter …" : "Opprett analyse"}
                 </Button>
-                {(candidates?.length ?? 0) === 0 ||
-                templatesList.length === 0 ? (
-                  <p className="text-muted-foreground pt-1 text-center text-[11px]">
-                    {[
-                      (candidates?.length ?? 0) === 0
-                        ? "Opprett kandidat før knappen aktiveres."
-                        : null,
-                      templatesList.length === 0
-                        ? "Opprett mal under fanen Maler først."
-                        : null,
-                    ]
-                      .filter(Boolean)
-                      .join(" ")}
-                  </p>
-                ) : null}
               </CardFooter>
             </form>
           </Card>
         </div>
       )}
+    </div>
+  );
+}
+
+function TemplateMatrixEditor({
+  rowLabels,
+  colLabels,
+  values,
+  onChange,
+}: {
+  rowLabels: string[];
+  colLabels: string[];
+  values: number[][] | null;
+  onChange: (v: number[][] | null) => void;
+}) {
+  const rows = rowLabels.length;
+  const cols = colLabels.length;
+
+  const matrix = useMemo(() => {
+    if (!values) return null;
+    const m: number[][] = [];
+    for (let r = 0; r < rows; r++) {
+      const row: number[] = [];
+      for (let c = 0; c < cols; c++) {
+        row.push(values[r]?.[c] ?? 0);
+      }
+      m.push(row);
+    }
+    return m;
+  }, [values, rows, cols]);
+
+  const initMatrix = useCallback(() => {
+    const m: number[][] = [];
+    for (let r = 0; r < rows; r++) {
+      const row: number[] = [];
+      for (let c = 0; c < cols; c++) {
+        row.push(positionRiskLevel(r, c, rows, cols));
+      }
+      m.push(row);
+    }
+    onChange(m);
+  }, [rows, cols, onChange]);
+
+  const cycleCell = useCallback(
+    (r: number, c: number) => {
+      if (!matrix) return;
+      const next = matrix.map((row) => [...row]);
+      next[r]![c] = ((next[r]![c]! % 5) + 1);
+      onChange(next);
+    },
+    [matrix, onChange],
+  );
+
+  if (!matrix) {
+    return (
+      <div className="space-y-2">
+        <Label className="text-muted-foreground text-xs uppercase tracking-wide">
+          Egne risikoverdier per celle
+        </Label>
+        <p className="text-muted-foreground text-xs leading-relaxed">
+          Standard: poengene beregnes automatisk ut fra celleposisjon.
+          Klikk under for å definere egne verdier.
+        </p>
+        <Button type="button" variant="outline" size="sm" onClick={initMatrix}>
+          Definer egne verdier
+        </Button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between gap-2">
+        <Label className="text-muted-foreground text-xs uppercase tracking-wide">
+          Egne risikoverdier (klikk celle for å endre)
+        </Label>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="h-7 text-xs text-muted-foreground"
+          onClick={() => onChange(null)}
+        >
+          Fjern (bruk auto)
+        </Button>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="border-separate border-spacing-0.5 text-center text-xs">
+          <thead>
+            <tr>
+              <th />
+              {colLabels.map((l, c) => (
+                <th
+                  key={c}
+                  className="max-w-[4rem] truncate px-1 pb-0.5 font-medium text-muted-foreground"
+                  title={l}
+                >
+                  {c + 1}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {[...Array(rows)].map((_, displayIdx) => {
+              const r = rows - 1 - displayIdx;
+              return (
+                <tr key={r}>
+                  <td className="pr-1 text-right font-medium text-muted-foreground">
+                    {r + 1}
+                  </td>
+                  {[...Array(cols)].map((_, c) => {
+                    const val = matrix[r]?.[c] ?? 0;
+                    return (
+                      <td key={c}>
+                        <button
+                          type="button"
+                          className={cn(
+                            "flex size-8 items-center justify-center rounded-md border text-xs font-bold transition-all",
+                            cellRiskClass(val),
+                          )}
+                          onClick={() => cycleCell(r, c)}
+                          title={`Rad ${r + 1}, Kol ${c + 1}: Verdi ${val}. Klikk for å endre.`}
+                        >
+                          {val}
+                        </button>
+                      </td>
+                    );
+                  })}
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+      <p className="text-muted-foreground text-[10px]">
+        Verdier 1–5 (grønn → rød). Klikk for å bla gjennom.
+      </p>
     </div>
   );
 }

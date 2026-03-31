@@ -1,5 +1,6 @@
 "use client";
 
+import type { ComponentType } from "react";
 import { cn } from "@/lib/utils";
 import type { Id } from "@/convex/_generated/dataModel";
 import {
@@ -17,72 +18,98 @@ import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { Suspense } from "react";
 
-const items = (wid: string) =>
-  [
+type NavKind = "default" | "vurderinger" | "prosesser";
+
+type NavItem = {
+  href: string;
+  label: string;
+  icon: ComponentType<{ className?: string }>;
+  exact: boolean;
+  kind: NavKind;
+};
+
+function navSections(wid: string): { heading: string; items: NavItem[] }[] {
+  return [
     {
-      href: `/w/${wid}`,
-      label: "Oversikt",
-      icon: LayoutDashboard,
-      exact: true,
-      kind: "default" as const,
+      heading: "Arbeid",
+      items: [
+        {
+          href: `/w/${wid}`,
+          label: "Dashboard",
+          icon: LayoutDashboard,
+          exact: true,
+          kind: "default",
+        },
+        {
+          href: `/w/${wid}/vurderinger`,
+          label: "Vurderinger",
+          icon: ClipboardList,
+          exact: false,
+          kind: "vurderinger",
+        },
+        {
+          href: `/w/${wid}/leveranse`,
+          label: "Leveranse",
+          icon: LayoutGrid,
+          exact: false,
+          kind: "default",
+        },
+        {
+          href: `/w/${wid}/ros`,
+          label: "ROS og risiko",
+          icon: Shield,
+          exact: false,
+          kind: "default",
+        },
+      ],
     },
     {
-      href: `/w/${wid}/vurderinger`,
-      label: "Vurderinger",
-      icon: ClipboardList,
-      exact: false,
-      kind: "vurderinger" as const,
+      heading: "Register",
+      items: [
+        {
+          href: `/w/${wid}/vurderinger?fane=prosesser`,
+          label: "Prosessregister",
+          icon: Users,
+          exact: false,
+          kind: "prosesser",
+        },
+        {
+          href: `/w/${wid}/organisasjon`,
+          label: "Organisasjon",
+          icon: Building2,
+          exact: false,
+          kind: "default",
+        },
+      ],
     },
     {
-      href: `/w/${wid}/leveranse`,
-      label: "Leveranse",
-      icon: LayoutGrid,
-      exact: false,
-      kind: "default" as const,
+      heading: "Arbeidsområde",
+      items: [
+        {
+          href: `/w/${wid}/delinger`,
+          label: "Team og tilgang",
+          icon: Share2,
+          exact: false,
+          kind: "default",
+        },
+        {
+          href: `/w/${wid}/varslinger`,
+          label: "Varsler",
+          icon: Bell,
+          exact: false,
+          kind: "default",
+        },
+        {
+          href: `/w/${wid}/innstillinger`,
+          label: "Innstillinger",
+          icon: Settings2,
+          exact: false,
+          kind: "default",
+        },
+      ],
     },
-    {
-      href: `/w/${wid}/organisasjon`,
-      label: "Organisasjon",
-      icon: Building2,
-      exact: false,
-      kind: "default" as const,
-    },
-    {
-      href: `/w/${wid}/vurderinger?fane=prosesser`,
-      label: "Prosesser",
-      icon: Users,
-      exact: false,
-      kind: "prosesser" as const,
-    },
-    {
-      href: `/w/${wid}/ros`,
-      label: "ROS",
-      icon: Shield,
-      exact: false,
-      kind: "default" as const,
-    },
-    {
-      href: `/w/${wid}/delinger`,
-      label: "Delinger",
-      icon: Share2,
-      exact: false,
-      kind: "default" as const,
-    },
-    {
-      href: `/w/${wid}/varslinger`,
-      label: "Varslinger",
-      icon: Bell,
-      exact: false,
-      kind: "default" as const,
-    },
-    {
-      href: `/w/${wid}/innstillinger`,
-      label: "Innstillinger",
-      icon: Settings2,
-      exact: false,
-      kind: "default" as const,
-    },
-  ] as const;
+  ];
+}
 
 function isActive(
   pathname: string | null,
@@ -90,14 +117,12 @@ function isActive(
   exact: boolean,
   wid: string,
   fane: string | null,
-  kind: "default" | "vurderinger" | "prosesser",
+  kind: NavKind,
 ) {
   if (!pathname) return false;
 
   if (kind === "prosesser") {
-    return (
-      pathname === `/w/${wid}/vurderinger` && fane === "prosesser"
-    );
+    return pathname === `/w/${wid}/vurderinger` && fane === "prosesser";
   }
 
   if (kind === "vurderinger") {
@@ -133,7 +158,7 @@ function WorkspaceNavInner({
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const wid = String(workspaceId);
-  const nav = items(wid);
+  const sections = navSections(wid);
   const fane = searchParams.get("fane");
 
   return (
@@ -152,27 +177,45 @@ function WorkspaceNavInner({
           {workspaceName ?? "…"}
         </p>
       </div>
-      <ul className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto overflow-x-hidden py-1 [scrollbar-gutter:stable] [scrollbar-width:thin]">
-        {nav.map(({ href, label, icon: Icon, exact, kind }) => {
-          const active = isActive(pathname, href, exact, wid, fane, kind);
-          return (
-            <li key={href} className="shrink-0">
-              <Link
-                href={href}
-                onClick={() => onNavigate?.()}
-                className={cn(
-                  "flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-200",
-                  active
-                    ? "bg-foreground text-background shadow-md ring-1 ring-foreground/10"
-                    : "text-muted-foreground hover:bg-background/80 hover:text-foreground hover:shadow-sm",
-                )}
-              >
-                <Icon className="size-4 shrink-0 opacity-90" aria-hidden />
-                {label}
-              </Link>
-            </li>
-          );
-        })}
+      <ul className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto overflow-x-hidden py-2 [scrollbar-gutter:stable] [scrollbar-width:thin]">
+        {sections.map((section) => (
+          <li key={section.heading}>
+            <div role="group" aria-label={section.heading}>
+              <p className="text-muted-foreground px-3 pb-1.5 text-[0.6rem] font-semibold uppercase tracking-[0.14em]">
+                {section.heading}
+              </p>
+              <ul className="flex flex-col gap-0.5">
+                {section.items.map(({ href, label, icon: Icon, exact, kind }) => {
+                  const active = isActive(
+                    pathname,
+                    href,
+                    exact,
+                    wid,
+                    fane,
+                    kind,
+                  );
+                  return (
+                    <li key={href} className="shrink-0">
+                      <Link
+                        href={href}
+                        onClick={() => onNavigate?.()}
+                        className={cn(
+                          "flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-200",
+                          active
+                            ? "bg-foreground text-background shadow-md ring-1 ring-foreground/10"
+                            : "text-muted-foreground hover:bg-background/80 hover:text-foreground hover:shadow-sm",
+                        )}
+                      >
+                        <Icon className="size-4 shrink-0 opacity-90" aria-hidden />
+                        <span className="min-w-0 leading-snug">{label}</span>
+                      </Link>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          </li>
+        ))}
       </ul>
     </nav>
   );

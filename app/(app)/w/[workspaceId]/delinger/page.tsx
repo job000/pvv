@@ -20,12 +20,12 @@ export default function WorkspaceSharingPage() {
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="font-heading text-2xl font-semibold">Delinger</h1>
+        <h1 className="font-heading text-2xl font-semibold">Team og tilgang</h1>
         <p className="mt-1 text-muted-foreground text-sm leading-relaxed">
-          Her administrerer du <strong className="text-foreground">hele teamet</strong>{" "}
-          (invitere, roller, fjerne medlemmer, trekke ventende invitasjoner).
-          PVV-vurderinger har i tillegg eget team per sak under{" "}
-          <strong className="text-foreground">Samarbeid</strong>.
+          Her styrer du <strong className="text-foreground">hvem som er med</strong>{" "}
+          i arbeidsområdet: invitasjoner, roller og fjerning av medlemmer. Hver{" "}
+          <strong className="text-foreground">vurdering</strong> kan i tillegg ha
+          eget team under fanen <strong className="text-foreground">Samarbeid</strong>.
         </p>
       </div>
 
@@ -33,25 +33,25 @@ export default function WorkspaceSharingPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>PVV-vurderinger og arbeidsområde</CardTitle>
+          <CardTitle>Vurderinger og arbeidsområde</CardTitle>
           <CardDescription>
-            To nivåer: først team i arbeidsområdet (over), deretter valgfritt team
-            per vurdering med egne roller.
+            To nivåer: team i arbeidsområdet (over), og valgfritt eget team per
+            vurdering med egne roller.
           </CardDescription>
         </CardHeader>
         <CardContent className="text-muted-foreground space-y-4 text-sm leading-relaxed">
           <ul className="list-inside list-disc space-y-2">
             <li>
-              <strong className="text-foreground">Arbeidsområde:</strong> alle
-              som er invitert hit deler kandidater, ROS og organisasjonsdata.
-              Administratorer styrer hvem som er med og med hvilken rolle.
+              <strong className="text-foreground">Arbeidsområde:</strong> alle som
+              er invitert deler prosessregister, ROS og organisasjonsdata.
+              Administratorer bestemmer hvem som er med og med hvilken rolle.
             </li>
             <li>
-              <strong className="text-foreground">Én PVV-vurdering:</strong> åpne
-              saken og bruk fanen <strong>Samarbeid</strong> for e-postinvitasjon,
-              roller, fjerne noen fra saken, trekke ventende invitasjoner og{" "}
-              <strong>delt med arbeidsområdet</strong> (synlig for alle med
-              medlemsrolle eller høyere når det er på).
+              <strong className="text-foreground">Én vurdering:</strong> åpne
+              saken og bruk <strong>Samarbeid</strong> for invitasjon per
+              e-post, roller på saken, fjerne noen, trekke ventende invitasjoner
+              og <strong>delt med arbeidsområdet</strong> (synlig for medlemmer
+              og høyere når det er slått på).
             </li>
           </ul>
           <div className="flex flex-wrap gap-x-4 gap-y-2">

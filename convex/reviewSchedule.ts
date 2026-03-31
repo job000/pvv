@@ -60,7 +60,7 @@ export const listWorkspaceReviewItems = query({
 
     for (const r of rosRows) {
       if (r.nextReviewAt == null) continue;
-      const cand = candById.get(r.candidateId);
+      const cand = r.candidateId ? candById.get(r.candidateId) : undefined;
       ros.push({
         kind: "ros",
         analysisId: r._id,

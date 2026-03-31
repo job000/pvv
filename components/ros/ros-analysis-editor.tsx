@@ -1238,13 +1238,17 @@ export function RosAnalysisEditor({
             {data.title}
           </h1>
           <p className="text-muted-foreground mt-1 flex flex-wrap items-center gap-2 text-sm">
-            <span>
-              Kandidat:{" "}
-              <span className="text-foreground font-medium">
-                {data.candidateName}
-              </span>{" "}
-              <span className="font-mono">({data.candidateCode})</span>
-            </span>
+            {data.candidateName ? (
+              <span>
+                Prosess:{" "}
+                <span className="text-foreground font-medium">
+                  {data.candidateName}
+                </span>{" "}
+                <span className="font-mono">({data.candidateCode})</span>
+              </span>
+            ) : (
+              <span className="italic">Ingen prosess koblet</span>
+            )}
             {data.linkedAssessments.length > 0 ? (
               <span className="flex flex-wrap items-center gap-1.5">
                 <Link2 className="text-muted-foreground size-3.5" aria-hidden />

@@ -101,7 +101,7 @@ function PipelineCard({
         if (isLeveranseCardInteractiveTarget(e.target)) return;
         onOpenPreview(row);
       }}
-      title="Klikk for forhåndsvisning (unntatt lenker og felt)"
+      title="Klikk for forhåndsvisning (ikke lenker og redigerbare felt)"
     >
       <div className="flex items-start justify-between gap-2">
         <Link
@@ -116,7 +116,7 @@ function PipelineCard({
             "shrink-0 rounded-md border px-1.5 py-0.5 text-[0.65rem] font-bold tabular-nums",
             prio.className,
           )}
-          title="Porteføljeprioritet (P1 = høyest)"
+          title="Leveranseprioritet (P1 = høyest)"
         >
           {prio.label}
         </span>
@@ -136,7 +136,7 @@ function PipelineCard({
         <Badge
           variant="outline"
           className="max-w-full gap-0.5 truncate border-dashed text-[0.65rem] font-normal"
-          title="ROS / personvern"
+          title="ROS-status (risiko og personvern)"
         >
           <Shield className="size-3 shrink-0 opacity-70" aria-hidden />
           {COMPLIANCE_STATUS_LABELS[ros]}
@@ -163,7 +163,7 @@ function PipelineCard({
         ) : (
           <span
             className="text-muted-foreground text-[0.65rem]"
-            title="Utkast lagres automatisk i skjemaet; milepæler må opprettes i vurderingen"
+            title="Skjemaet lagrer utkast automatisk. Milepæler settes i vurderingen."
           >
             Ingen milepæl
           </span>
@@ -229,7 +229,7 @@ function PipelineCard({
           href={`${hrefBase}#versjoner`}
           className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 text-xs font-medium"
           data-leveranse-card-interactive
-          title="Navngitte milepæler i skjemaet — utkast lagres automatisk uansett"
+          title="Milepæler fra skjemaet (utkast lagres fortløpende)"
         >
           <History className="size-3.5" aria-hidden />
           Milepæler
@@ -447,7 +447,7 @@ function LeveransePreviewDialog({
           <Link
             href={`${href}#versjoner`}
             className={buttonVariants({ variant: "outline" })}
-            title="Åpner vurderingen på milepæl-seksjonen (utkast lagres fortløpende)"
+            title="Åpner vurderingen på milepæler (utkast lagres fortløpende)"
           >
             Milepæler i skjema
           </Link>
@@ -875,7 +875,7 @@ export function LeveranseBoard({
                 "cursor-pointer rounded-xl border bg-card shadow-sm transition-colors hover:border-foreground/15",
                 compact ? "p-3" : "p-4",
               )}
-              title="Klikk for forhåndsvisning (unntatt lenker og felt)"
+              title="Klikk for forhåndsvisning (ikke lenker og redigerbare felt)"
               onClick={(e) => {
                 if (isLeveranseCardInteractiveTarget(e.target)) return;
                 setPreviewRow(row);
@@ -1012,7 +1012,7 @@ export function LeveranseBoard({
                   href={`/w/${workspaceId}/a/${row.assessment._id}#versjoner`}
                   className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5 text-xs font-medium"
                   data-leveranse-card-interactive
-                  title="Navngitte milepæler — utkast lagres automatisk i skjemaet"
+                  title="Milepæler fra skjemaet (utkast lagres fortløpende)"
                 >
                   <History className="size-3.5" aria-hidden />
                   Milepæler og gjenoppretting

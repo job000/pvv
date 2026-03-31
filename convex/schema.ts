@@ -406,6 +406,7 @@ export default defineSchema({
 
   /**
    * Gjenbrukbar ROS-mal: sannsynlighet × konsekvens (etiketter per rad/kolonne).
+   * Valgfrie beskrivelser per nivå og egendefinerte risikoverdier per celle.
    */
   rosTemplates: defineTable({
     workspaceId: v.id("workspaces"),
@@ -415,6 +416,10 @@ export default defineSchema({
     colAxisTitle: v.string(),
     rowLabels: v.array(v.string()),
     colLabels: v.array(v.string()),
+    rowDescriptions: v.optional(v.array(v.string())),
+    colDescriptions: v.optional(v.array(v.string())),
+    /** Egendefinerte risikoverdier per celle (0–5). Erstatter auto-formel. */
+    defaultMatrixValues: v.optional(v.array(v.array(v.number()))),
     createdByUserId: v.id("users"),
     createdAt: v.number(),
     updatedAt: v.number(),
@@ -484,7 +489,7 @@ export default defineSchema({
     colAxisTitleAfter: v.optional(v.string()),
     rowLabelsAfter: v.optional(v.array(v.string())),
     colLabelsAfter: v.optional(v.array(v.string())),
-    candidateId: v.id("candidates"),
+    candidateId: v.optional(v.id("candidates")),
     assessmentId: v.optional(v.id("assessments")),
     notes: v.optional(v.string()),
     createdByUserId: v.id("users"),
@@ -554,7 +559,8 @@ export default defineSchema({
   })
     .index("by_ros_analysis", ["rosAnalysisId"])
     .index("by_assessment", ["assessmentId"])
-    .index("by_ros_and_assessment", ["rosAnalysisId", "assessmentId"]),
+    .index("by_ros_and_assessment", ["rosAnalysisId", "assessmentId"])
+    .index("by_workspace", ["workspaceId"]),
 
   /** Versjonspunkter for ROS-analyse (snapshot av matrise og notat) */
   rosAnalysisVersions: defineTable({

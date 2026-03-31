@@ -1,5 +1,10 @@
 import { v } from "convex/values";
-import { mutation, query, type MutationCtx } from "./_generated/server";
+import {
+  mutation,
+  query,
+  type MutationCtx,
+  type QueryCtx,
+} from "./_generated/server";
 import { getAuthUserId } from "@convex-dev/auth/server";
 import {
   assessmentPayloadValidator,
@@ -142,6 +147,172 @@ export const listByWorkspace = query({
       }
     }
     return out;
+  },
+});
+
+function effectivePriorityFromAssessment(a: Doc<"assessments">): number {
+  if (
+    a.manualPriorityOverride !== undefined &&
+    a.manualPriorityOverride !== null
+  ) {
+    return a.manualPriorityOverride;
+  }
+  return a.cachedPriorityScore ?? 0;
+}
+
+const DASH_CAP_WITHOUT_ROS = 25;
+const DASH_CAP_READY = 25;
+const DASH_CAP_BLOCKED = 25;
+const DASH_CAP_RECENT = 6;
+const DASH_CAP_PRIORITY_TOP = 5;
+
+/** Felles rad for workspace-dashboard (teller, lister, leveranse-kort). */
+export type WorkspaceDashboardAssessmentRow = {
+  assessmentId: Id<"assessments">;
+  title: string;
+  updatedAt: number;
+  pipelineStatus: PipelineStatus;
+  effectivePriority: number;
+  /** Minst én rad i rosAnalysisAssessments for denne vurderingen */
+  rosLinked: boolean;
+  /** @deprecated Bruk rosLinked */
+  hasRosLink: boolean;
+  ownerName: string | null;
+  nextStepHint: string;
+  sprintId?: Id<"sprints">;
+  rosStatus: "not_started" | "in_progress" | "completed" | "not_applicable";
+  pddStatus: "not_started" | "in_progress" | "completed" | "not_applicable";
+  cachedAp?: number;
+  cachedCriticality?: number;
+  manualPriorityOverride?: number;
+};
+
+function buildDashboardRow(
+  a: Doc<"assessments">,
+  status: PipelineStatus,
+  rosLinked: boolean,
+  ownerName: string | null,
+): WorkspaceDashboardAssessmentRow {
+  return {
+    assessmentId: a._id,
+    title: a.title,
+    updatedAt: a.updatedAt,
+    pipelineStatus: status,
+    effectivePriority: effectivePriorityFromAssessment(a),
+    rosLinked,
+    hasRosLink: rosLinked,
+    ownerName,
+    nextStepHint: nextStepHint(status),
+    sprintId: a.sprintId,
+    rosStatus: a.rosStatus ?? "not_started",
+    pddStatus: a.pddStatus ?? "not_started",
+    cachedAp: a.cachedAp,
+    cachedCriticality: a.cachedCriticality,
+    manualPriorityOverride: a.manualPriorityOverride,
+  };
+}
+
+async function ownerDisplayName(
+  ctx: QueryCtx,
+  userId: Id<"users">,
+  cache: Map<Id<"users">, Doc<"users"> | null>,
+): Promise<string | null> {
+  if (!cache.has(userId)) {
+    cache.set(userId, await ctx.db.get(userId));
+  }
+  const u = cache.get(userId);
+  return u?.name ?? u?.email ?? null;
+}
+
+/**
+ * Operativ oversikt for workspace-dashboard: tall, ROS-dekning, køer og utvalgte saker.
+ *
+ * Datakilder: `assessments` (index `by_workspace_updated`), `rosAnalysisAssessments` (index `by_workspace`).
+ * Ingen schema-endring. Én lesing per synlig vurdering for eier (cache per bruker-ID).
+ */
+export const workspaceDashboard = query({
+  args: { workspaceId: v.id("workspaces") },
+  handler: async (ctx, args) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) {
+      return null;
+    }
+    await requireWorkspaceMember(ctx, args.workspaceId, userId, "viewer");
+
+    const rosLinks = await ctx.db
+      .query("rosAnalysisAssessments")
+      .withIndex("by_workspace", (q) =>
+        q.eq("workspaceId", args.workspaceId),
+      )
+      .collect();
+    const assessmentIdsWithRos = new Set(
+      rosLinks.map((l) => l.assessmentId),
+    );
+
+    const rows = await ctx.db
+      .query("assessments")
+      .withIndex("by_workspace_updated", (q) =>
+        q.eq("workspaceId", args.workspaceId),
+      )
+      .order("desc")
+      .collect();
+
+    const userCache = new Map<Id<"users">, Doc<"users"> | null>();
+    const visible: WorkspaceDashboardAssessmentRow[] = [];
+    let withoutRosLink = 0;
+    let onHold = 0;
+    let readyForPrioritizationCount = 0;
+
+    for (const a of rows) {
+      if (!(await canReadAssessment(ctx, a, userId))) {
+        continue;
+      }
+      const status = normalizePipelineStatus(a.pipelineStatus);
+      const rosLinked = assessmentIdsWithRos.has(a._id);
+      if (!rosLinked) {
+        withoutRosLink += 1;
+      }
+      if (status === "on_hold") {
+        onHold += 1;
+      }
+      if (status === "assessed") {
+        readyForPrioritizationCount += 1;
+      }
+      const ownerName = await ownerDisplayName(ctx, a.createdByUserId, userCache);
+      visible.push(buildDashboardRow(a, status, rosLinked, ownerName));
+    }
+
+    const byPriority = [...visible].sort(
+      (x, y) => y.effectivePriority - x.effectivePriority,
+    );
+    const byRecent = [...visible].sort((x, y) => y.updatedAt - x.updatedAt);
+
+    const withoutRosSorted = visible
+      .filter((r) => !r.rosLinked)
+      .sort((x, y) => y.effectivePriority - x.effectivePriority);
+    const readySorted = visible
+      .filter((r) => r.pipelineStatus === "assessed")
+      .sort((x, y) => y.effectivePriority - x.effectivePriority);
+    const blockedSorted = visible
+      .filter((r) => r.pipelineStatus === "on_hold")
+      .sort((x, y) => y.updatedAt - x.updatedAt);
+
+    const recentlyUpdated = byRecent.slice(0, DASH_CAP_RECENT);
+
+    return {
+      assessmentCount: visible.length,
+      withoutRosLinkCount: withoutRosLink,
+      onHoldCount: onHold,
+      blockedCount: onHold,
+      readyForPrioritizationCount,
+      assessmentsWithoutRos: withoutRosSorted.slice(0, DASH_CAP_WITHOUT_ROS),
+      readyForPrioritization: readySorted.slice(0, DASH_CAP_READY),
+      blockedItems: blockedSorted.slice(0, DASH_CAP_BLOCKED),
+      recentlyUpdated,
+      priorityTop: byPriority.slice(0, DASH_CAP_PRIORITY_TOP),
+      /** @deprecated Bruk recentlyUpdated */
+      recentUpdated: recentlyUpdated,
+    };
   },
 });
 
@@ -954,6 +1125,79 @@ export const deleteAssessmentVersion = mutation({
       throw new Error("Fant ikke versjonen.");
     }
     await ctx.db.delete(row._id);
+    return null;
+  },
+});
+
+export const deleteAssessment = mutation({
+  args: { assessmentId: v.id("assessments") },
+  handler: async (ctx, args) => {
+    await requireAssessmentEdit(ctx, args.assessmentId);
+    const drafts = await ctx.db
+      .query("assessmentDrafts")
+      .withIndex("by_assessment", (q) =>
+        q.eq("assessmentId", args.assessmentId),
+      )
+      .collect();
+    for (const d of drafts) await ctx.db.delete(d._id);
+
+    const versions = await ctx.db
+      .query("assessmentVersions")
+      .withIndex("by_assessment", (q) =>
+        q.eq("assessmentId", args.assessmentId),
+      )
+      .collect();
+    for (const v of versions) await ctx.db.delete(v._id);
+
+    const collabs = await ctx.db
+      .query("assessmentCollaborators")
+      .withIndex("by_assessment", (q) =>
+        q.eq("assessmentId", args.assessmentId),
+      )
+      .collect();
+    for (const c of collabs) await ctx.db.delete(c._id);
+
+    const tasks = await ctx.db
+      .query("assessmentTasks")
+      .withIndex("by_assessment", (q) =>
+        q.eq("assessmentId", args.assessmentId),
+      )
+      .collect();
+    for (const t of tasks) await ctx.db.delete(t._id);
+
+    const notes = await ctx.db
+      .query("assessmentNotes")
+      .withIndex("by_assessment", (q) =>
+        q.eq("assessmentId", args.assessmentId),
+      )
+      .collect();
+    for (const n of notes) await ctx.db.delete(n._id);
+
+    const shareLinks = await ctx.db
+      .query("assessmentShareLinks")
+      .withIndex("by_assessment", (q) =>
+        q.eq("assessmentId", args.assessmentId),
+      )
+      .collect();
+    for (const s of shareLinks) await ctx.db.delete(s._id);
+
+    const invites = await ctx.db
+      .query("assessmentInvites")
+      .withIndex("by_assessment", (q) =>
+        q.eq("assessmentId", args.assessmentId),
+      )
+      .collect();
+    for (const inv of invites) await ctx.db.delete(inv._id);
+
+    const rosLinks = await ctx.db
+      .query("rosAnalysisAssessments")
+      .withIndex("by_assessment", (q) =>
+        q.eq("assessmentId", args.assessmentId),
+      )
+      .collect();
+    for (const rl of rosLinks) await ctx.db.delete(rl._id);
+
+    await ctx.db.delete(args.assessmentId);
     return null;
   },
 });

@@ -17,8 +17,8 @@ export type RosPdfJournalLine = {
 export type RosPdfInput = {
   title: string;
   workspaceName: string | null;
-  candidateName: string;
-  candidateCode: string;
+  candidateName: string | null;
+  candidateCode: string | null;
   rowAxisTitle: string;
   colAxisTitle: string;
   rowLabels: string[];
@@ -127,7 +127,9 @@ export function downloadRosAnalysisPdf(data: RosPdfInput): void {
   if (data.workspaceName) {
     addRow("Arbeidsområde", data.workspaceName);
   }
-  addRow("Kandidat (prosess)", `${data.candidateName} (${data.candidateCode})`);
+  if (data.candidateName) {
+    addRow("Prosess", `${data.candidateName} (${data.candidateCode ?? ""})`);
+  }
   addRow("Akser", `${data.rowAxisTitle} × ${data.colAxisTitle}`);
 
   if (data.linkedPvvTitles.length > 0) {

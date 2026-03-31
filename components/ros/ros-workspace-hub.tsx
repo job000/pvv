@@ -11,7 +11,6 @@ import { useQuery } from "convex/react";
 import {
   AlertCircle,
   ArrowRight,
-  BarChart3,
   CalendarClock,
   ClipboardList,
   Grid3x3,
@@ -64,23 +63,38 @@ function StatTile({
   label: string;
   value: number | string;
   icon: ComponentType<{ className?: string; "aria-hidden"?: boolean }>;
-  tone?: "default" | "warn" | "muted";
+  tone?: "default" | "warn" | "muted" | "success";
 }) {
   return (
     <div
       className={cn(
-        "border-border/60 bg-card flex min-w-0 flex-col gap-1 rounded-xl border px-4 py-3 shadow-sm",
+        "relative flex min-w-0 items-center gap-3 overflow-hidden rounded-xl border px-4 py-3 shadow-sm",
+        tone === "default" && "border-border/60 bg-card",
         tone === "warn" && "border-amber-500/35 bg-amber-500/[0.06]",
-        tone === "muted" && "bg-muted/25",
+        tone === "muted" && "border-border/40 bg-muted/20",
+        tone === "success" && "border-emerald-500/30 bg-emerald-500/[0.05]",
       )}
     >
-      <div className="text-muted-foreground flex items-center gap-2 text-[11px] font-medium uppercase tracking-wide">
-        <Icon className="size-3.5 shrink-0 opacity-80" aria-hidden />
-        {label}
+      <div
+        className={cn(
+          "flex size-10 shrink-0 items-center justify-center rounded-lg",
+          tone === "warn"
+            ? "bg-amber-500/15 text-amber-700 dark:text-amber-300"
+            : tone === "success"
+              ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300"
+              : "bg-primary/10 text-primary",
+        )}
+      >
+        <Icon className="size-5" aria-hidden />
       </div>
-      <p className="font-heading text-2xl font-semibold tabular-nums tracking-tight">
-        {value}
-      </p>
+      <div className="min-w-0">
+        <p className="font-heading text-2xl font-bold tabular-nums tracking-tight leading-none">
+          {value}
+        </p>
+        <p className="text-muted-foreground mt-0.5 text-[11px] font-medium uppercase tracking-wide">
+          {label}
+        </p>
+      </div>
     </div>
   );
 }
@@ -142,64 +156,28 @@ export function RosWorkspaceHub({
           </AlertDescription>
         </Alert>
       ) : null}
-      <div className="border-border/60 from-muted/25 via-card to-card rounded-2xl border bg-gradient-to-br p-5 shadow-sm">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-          <div className="min-w-0 space-y-1">
-            <h2 className="font-heading text-lg font-semibold tracking-tight">
-              ROS-kontroll for arbeidsområdet
+      <div className="space-y-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="min-w-0">
+            <h2 className="font-heading text-base font-semibold tracking-tight">
+              Kontrollpanel
             </h2>
-            <p className="text-muted-foreground max-w-2xl text-sm leading-relaxed">
-              {hasOrgScale ? (
-                <>
-                  Samlet bilde av maler, analyser og prosesser som mangler ROS —
-                  slik at ledergruppe og fag kan prioritere uten å lete i lister.
-                </>
-              ) : (
-                <>
-                  Én flyt: mal → analyse i matrisen → oversikt. Bruk hurtigknapper
-                  under for å hoppe rett dit dere trenger.
-                </>
-              )}
+            <p className="text-muted-foreground text-xs">
+              {hasOrgScale
+                ? "Samlet oversikt over risikoarbeidet i arbeidsområdet"
+                : "Hurtigknapper og nøkkeltall for ROS-arbeidet"}
             </p>
           </div>
-          <div className="flex flex-wrap gap-2 lg:shrink-0 lg:pt-0.5">
-            <button
-              type="button"
-              onClick={() => onTab("analyser")}
-              className={cn(
-                buttonVariants({
-                  variant: activeTab === "analyser" ? "default" : "secondary",
-                  size: "sm",
-                  className: "gap-1.5",
-                }),
-              )}
-            >
-              <ClipboardList className="size-3.5" aria-hidden />
-              Ny / liste analyser
-            </button>
-            <button
-              type="button"
-              onClick={() => onTab("oversikt")}
-              className={cn(
-                buttonVariants({
-                  variant: activeTab === "oversikt" ? "default" : "outline",
-                  size: "sm",
-                  className: "gap-1.5",
-                }),
-              )}
-            >
-              <BarChart3 className="size-3.5" aria-hidden />
-              Oversikt
-            </button>
+          <div className="flex flex-wrap gap-1.5 sm:shrink-0">
             <Link
               href={`/w/${workspaceId}/ros/akser`}
               className={buttonVariants({
                 variant: "outline",
                 size: "sm",
-                className: "gap-1.5",
+                className: "gap-1.5 h-8 text-xs",
               })}
             >
-              <Layers className="size-3.5" aria-hidden />
+              <Layers className="size-3" aria-hidden />
               ROS-akser
             </Link>
             <button
@@ -211,16 +189,16 @@ export function RosWorkspaceHub({
               className={buttonVariants({
                 variant: "outline",
                 size: "sm",
-                className: "gap-1.5",
+                className: "gap-1.5 h-8 text-xs",
               })}
             >
-              <Sparkles className="size-3.5" aria-hidden />
+              <Sparkles className="size-3" aria-hidden />
               Ny mal
             </button>
           </div>
         </div>
 
-        <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="grid gap-3 grid-cols-2 xl:grid-cols-4">
           <StatTile
             label="ROS-analyser"
             value={hub.analysisCount}
@@ -232,78 +210,48 @@ export function RosWorkspaceHub({
             icon={Grid3x3}
           />
           <StatTile
-            label="Prosesser uten ROS"
+            label="Uten ROS"
             value={gap}
             icon={AlertCircle}
-            tone={gap > 0 ? "warn" : "default"}
+            tone={gap > 0 ? "warn" : "success"}
           />
           <StatTile
-            label="Åpne oppgaver (i analyser)"
+            label="Åpne oppgaver"
             value={hub.openRosTasksCount}
             icon={ListTodo}
             tone={hub.openRosTasksCount > 0 ? "warn" : "muted"}
           />
         </div>
-
-        {hub.axisListCount > 0 ? (
-          <p className="text-muted-foreground mt-3 text-xs">
-            {hub.axisListCount} gjenbrukbar{hub.axisListCount === 1 ? "" : "e"}{" "}
-            akse-liste
-            {hub.axisListCount === 1 ? "" : "r"} under{" "}
-            <Link
-              href={`/w/${workspaceId}/ros/akser`}
-              className="text-primary font-medium underline-offset-4 hover:underline"
-            >
-              ROS-akser
-            </Link>
-            .
-          </p>
-        ) : (
-          <p className="text-muted-foreground mt-3 text-xs">
-            Tips: vedlikehold{" "}
-            <Link
-              href={`/w/${workspaceId}/ros/akser`}
-              className="text-primary font-medium underline-offset-4 hover:underline"
-            >
-              ROS-akser
-            </Link>{" "}
-            for felles etiketter og beskrivelser på tvers av team.
-          </p>
-        )}
       </div>
 
       {gap > 0 ? (
         <div
-          className="border-amber-500/30 bg-amber-500/[0.07] rounded-2xl border px-4 py-3"
+          className="rounded-xl border border-amber-500/30 bg-amber-500/[0.05] px-4 py-3"
           role="status"
         >
-          <div className="flex flex-wrap items-start justify-between gap-2">
-            <div>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <AlertCircle className="size-4 shrink-0 text-amber-600 dark:text-amber-400" />
               <p className="text-foreground text-sm font-medium">
-                {gap} prosess
-                {gap === 1 ? "" : "er"} uten ROS-analyse
-              </p>
-              <p className="text-muted-foreground mt-0.5 text-xs leading-relaxed">
-                Klikk en rad for å åpne skjemaet «Ny analyse» med prosessen
-                forhåndsvalgt og (ved én mal) mal satt automatisk.
+                {gap} prosess{gap === 1 ? "" : "er"} mangler ROS
               </p>
             </div>
             <button
               type="button"
               onClick={() => onTab("analyser")}
-              className={buttonVariants({ variant: "secondary", size: "sm" })}
+              className={buttonVariants({ variant: "secondary", size: "sm", className: "h-7 text-xs gap-1" })}
             >
-              Gå til analyser
-              <ArrowRight className="size-3.5" aria-hidden />
+              Opprett analyse
+              <ArrowRight className="size-3" aria-hidden />
             </button>
           </div>
-          <ul className="mt-3 flex max-h-40 flex-wrap gap-2 overflow-y-auto">
+          <ul className="mt-2.5 flex max-h-32 flex-wrap gap-1.5 overflow-y-auto [scrollbar-width:thin]">
             {hub.candidatesWithoutRos.map((c) => (
               <li key={c._id}>
                 <button
                   type="button"
                   onClick={() => onStartAnalysisForCandidate(c._id)}
-                  className="border-border/60 bg-card hover:border-primary/40 hover:bg-muted/40 rounded-lg border px-2.5 py-1.5 text-left text-xs transition-colors"
+                  className="border-border/60 bg-card hover:border-primary/40 hover:bg-primary/5 rounded-md border px-2 py-1 text-left text-xs transition-colors"
                 >
                   <span className="font-medium">{c.name}</span>{" "}
                   <span className="text-muted-foreground font-mono">({c.code})</span>
@@ -312,45 +260,47 @@ export function RosWorkspaceHub({
             ))}
           </ul>
           {hub.candidatesWithoutRosCount > hub.candidatesWithoutRos.length ? (
-            <p className="text-muted-foreground mt-2 text-[11px]">
-              Viser {hub.candidatesWithoutRos.length} av {hub.candidatesWithoutRosCount}{" "}
-              — resten finner du i listen når du oppretter analyse.
+            <p className="text-muted-foreground mt-2 text-[10px]">
+              +{hub.candidatesWithoutRosCount - hub.candidatesWithoutRos.length} til i full liste
             </p>
           ) : null}
         </div>
       ) : hub.candidateCount > 0 ? (
-        <p className="text-muted-foreground flex items-center gap-2 text-xs">
-          <span className="text-emerald-600 dark:text-emerald-400 font-medium">
-            Alle registrerte prosesser har minst én ROS-analyse.
-          </span>
-        </p>
+        <div className="flex items-center gap-2 rounded-xl border border-emerald-500/25 bg-emerald-500/[0.04] px-4 py-2.5">
+          <div className="flex size-6 items-center justify-center rounded-full bg-emerald-500/15">
+            <span className="text-xs text-emerald-700 dark:text-emerald-300">✓</span>
+          </div>
+          <p className="text-sm font-medium text-emerald-700 dark:text-emerald-300">
+            Alle prosesser har ROS-analyse
+          </p>
+        </div>
       ) : null}
 
       {hub.recentAnalyses.length > 0 ? (
-        <div className="border-border/60 bg-muted/10 rounded-xl border px-4 py-3">
-          <p className="text-muted-foreground mb-2 text-[11px] font-medium uppercase tracking-wide">
-            Sist oppdatert
+        <div className="space-y-2">
+          <p className="text-muted-foreground text-[11px] font-medium uppercase tracking-wide">
+            Nylig oppdatert
           </p>
-          <ul className="flex flex-col gap-1.5 sm:flex-row sm:flex-wrap">
+          <div className="flex flex-col gap-1.5 sm:flex-row sm:flex-wrap">
             {hub.recentAnalyses.map((r) => (
-              <li key={r.analysisId}>
-                <Link
-                  href={`/w/${workspaceId}/ros/a/${r.analysisId}`}
-                  className="border-border/50 bg-card hover:border-primary/35 inline-flex max-w-full items-center gap-2 rounded-lg border px-3 py-1.5 text-sm shadow-sm transition-colors"
-                >
-                  <span className="min-w-0 truncate font-medium">{r.title}</span>
-                  {r.candidateCode ? (
-                    <span className="text-muted-foreground shrink-0 font-mono text-xs">
-                      {r.candidateCode}
-                    </span>
-                  ) : null}
-                  <span className="text-muted-foreground hidden text-xs sm:inline">
-                    · {formatShort(r.updatedAt)}
+              <Link
+                key={r.analysisId}
+                href={`/w/${workspaceId}/ros/a/${r.analysisId}`}
+                className="group inline-flex max-w-full items-center gap-2 rounded-lg border border-border/50 bg-card px-3 py-2 text-sm shadow-sm transition-all hover:border-primary/30 hover:shadow-md"
+              >
+                <span className="min-w-0 truncate font-medium">{r.title}</span>
+                {r.candidateCode ? (
+                  <span className="text-muted-foreground shrink-0 font-mono text-xs">
+                    {r.candidateCode}
                   </span>
-                </Link>
-              </li>
+                ) : null}
+                <span className="text-muted-foreground hidden text-xs sm:inline">
+                  · {formatShort(r.updatedAt)}
+                </span>
+                <ArrowRight className="ml-auto size-3 shrink-0 text-muted-foreground/30 transition-transform group-hover:translate-x-0.5 group-hover:text-primary" />
+              </Link>
             ))}
-          </ul>
+          </div>
         </div>
       ) : null}
     </div>

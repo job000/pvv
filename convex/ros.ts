@@ -294,11 +294,11 @@ export const listAnalyses = query({
       .collect();
     const out = [];
     for (const r of rows) {
-      const cand = await ctx.db.get(r.candidateId);
+      const cand = r.candidateId ? await ctx.db.get(r.candidateId) : null;
       out.push({
         ...r,
-        candidateName: cand?.name ?? "—",
-        candidateCode: cand?.code ?? "",
+        candidateName: cand?.name ?? null,
+        candidateCode: cand?.code ?? null,
       });
     }
     return out;
@@ -340,7 +340,7 @@ export const workspaceHub = query({
 
     const covered = new Set<Id<"candidates">>();
     for (const a of analysisRows) {
-      covered.add(a.candidateId);
+      if (a.candidateId) covered.add(a.candidateId);
     }
 
     const withoutRos = candidateRows
@@ -362,7 +362,7 @@ export const workspaceHub = query({
       .sort((a, b) => b.updatedAt - a.updatedAt)
       .slice(0, 8)
       .map((r) => {
-        const cand = candById.get(r.candidateId);
+        const cand = r.candidateId ? candById.get(r.candidateId) : undefined;
         return {
           analysisId: r._id,
           title: r.title,
@@ -499,7 +499,7 @@ export const workspaceDashboard = query({
     }
 
     for (const r of rows) {
-      const cand = await ctx.db.get(r.candidateId);
+      const cand = r.candidateId ? await ctx.db.get(r.candidateId) : null;
       const links = await ctx.db
         .query("rosAnalysisAssessments")
         .withIndex("by_ros_analysis", (q) =>
@@ -660,7 +660,7 @@ export const getAnalysis = query({
       return null;
     }
     await requireWorkspaceMember(ctx, row.workspaceId, userId, "viewer");
-    const cand = await ctx.db.get(row.candidateId);
+    const cand = row.candidateId ? await ctx.db.get(row.candidateId) : null;
     const links = await ctx.db
       .query("rosAnalysisAssessments")
       .withIndex("by_ros_analysis", (q) =>
@@ -731,8 +731,8 @@ export const getAnalysis = query({
       cellItemsAfter,
       rosSummary,
       afterAxis,
-      candidateName: cand?.name ?? "—",
-      candidateCode: cand?.code ?? "",
+      candidateName: cand?.name ?? null,
+      candidateCode: cand?.code ?? null,
       linkedAssessments,
       legacyAssessmentId: row.assessmentId ?? null,
       legacyAssessmentTitle,
@@ -849,6 +849,9 @@ export const createTemplate = mutation({
     colAxisTitle: v.optional(v.string()),
     rowLabels: v.optional(v.array(v.string())),
     colLabels: v.optional(v.array(v.string())),
+    rowDescriptions: v.optional(v.array(v.string())),
+    colDescriptions: v.optional(v.array(v.string())),
+    defaultMatrixValues: v.optional(v.array(v.array(v.number()))),
   },
   handler: async (ctx, args) => {
     const userId = await requireUserId(ctx);
@@ -864,6 +867,9 @@ export const createTemplate = mutation({
       args.colLabels ?? [...DEFAULT_ROS_COL_LABELS],
     );
     validateLabelArrays(rowLabels, colLabels);
+    if (args.defaultMatrixValues) {
+      assertMatrixShape(args.defaultMatrixValues, rowLabels.length, colLabels.length);
+    }
     const now = Date.now();
     return await ctx.db.insert("rosTemplates", {
       workspaceId: args.workspaceId,
@@ -873,6 +879,9 @@ export const createTemplate = mutation({
       colAxisTitle: (args.colAxisTitle ?? DEFAULT_ROS_COL_AXIS).trim(),
       rowLabels,
       colLabels,
+      rowDescriptions: args.rowDescriptions?.map((d) => d.trim()),
+      colDescriptions: args.colDescriptions?.map((d) => d.trim()),
+      defaultMatrixValues: args.defaultMatrixValues,
       createdByUserId: userId,
       createdAt: now,
       updatedAt: now,
@@ -889,6 +898,9 @@ export const updateTemplate = mutation({
     colAxisTitle: v.optional(v.string()),
     rowLabels: v.optional(v.array(v.string())),
     colLabels: v.optional(v.array(v.string())),
+    rowDescriptions: v.optional(v.union(v.array(v.string()), v.null())),
+    colDescriptions: v.optional(v.union(v.array(v.string()), v.null())),
+    defaultMatrixValues: v.optional(v.union(v.array(v.array(v.number())), v.null())),
   },
   handler: async (ctx, args) => {
     const userId = await requireUserId(ctx);
@@ -922,6 +934,24 @@ export const updateTemplate = mutation({
       patch.rowLabels = rl;
       patch.colLabels = cl;
     }
+    if (args.rowDescriptions !== undefined) {
+      patch.rowDescriptions =
+        args.rowDescriptions === null ? undefined : args.rowDescriptions.map((d) => d.trim());
+    }
+    if (args.colDescriptions !== undefined) {
+      patch.colDescriptions =
+        args.colDescriptions === null ? undefined : args.colDescriptions.map((d) => d.trim());
+    }
+    if (args.defaultMatrixValues !== undefined) {
+      if (args.defaultMatrixValues === null) {
+        patch.defaultMatrixValues = undefined;
+      } else {
+        const rl = (patch.rowLabels as string[] | undefined) ?? row.rowLabels;
+        const cl = (patch.colLabels as string[] | undefined) ?? row.colLabels;
+        assertMatrixShape(args.defaultMatrixValues, rl.length, cl.length);
+        patch.defaultMatrixValues = args.defaultMatrixValues;
+      }
+    }
     await ctx.db.patch(args.templateId, patch);
     return null;
   },
@@ -945,7 +975,7 @@ export const createAnalysis = mutation({
   args: {
     workspaceId: v.id("workspaces"),
     templateId: v.id("rosTemplates"),
-    candidateId: v.id("candidates"),
+    candidateId: v.optional(v.id("candidates")),
     title: v.string(),
     /** Én eldre enkeltkobling (valgfritt); bruk assessmentIds for flere PVV */
     assessmentId: v.optional(v.id("assessments")),
@@ -955,9 +985,11 @@ export const createAnalysis = mutation({
   handler: async (ctx, args) => {
     const userId = await requireUserId(ctx);
     await requireWorkspaceMember(ctx, args.workspaceId, userId, "member");
-    const cand = await ctx.db.get(args.candidateId);
-    if (!cand || cand.workspaceId !== args.workspaceId) {
-      throw new Error("Ugyldig kandidat.");
+    if (args.candidateId) {
+      const cand = await ctx.db.get(args.candidateId);
+      if (!cand || cand.workspaceId !== args.workspaceId) {
+        throw new Error("Ugyldig kandidat.");
+      }
     }
     const tpl = await ctx.db.get(args.templateId);
     if (!tpl || tpl.workspaceId !== args.workspaceId) {
@@ -984,10 +1016,9 @@ export const createAnalysis = mutation({
         throw new Error("Ingen tilgang til vurderingen.");
       }
     }
-    const matrixValues = emptyMatrix(
-      tpl.rowLabels.length,
-      tpl.colLabels.length,
-    );
+    const matrixValues = tpl.defaultMatrixValues
+      ? tpl.defaultMatrixValues.map((r) => [...r])
+      : emptyMatrix(tpl.rowLabels.length, tpl.colLabels.length);
     const cellNotes = emptyStringMatrix(
       tpl.rowLabels.length,
       tpl.colLabels.length,
@@ -1013,7 +1044,7 @@ export const createAnalysis = mutation({
       cellNotes,
       matrixValuesAfter,
       cellNotesAfter,
-      candidateId: args.candidateId,
+      candidateId: args.candidateId ?? undefined,
       assessmentId: undefined,
       notes: args.notes?.trim() || undefined,
       createdByUserId: userId,
@@ -1066,6 +1097,7 @@ export const updateAnalysis = mutation({
     rowLabelsAfter: v.optional(v.array(v.string())),
     colLabelsAfter: v.optional(v.array(v.string())),
     title: v.optional(v.string()),
+    candidateId: v.optional(v.union(v.id("candidates"), v.null())),
     notes: v.optional(v.union(v.string(), v.null())),
     nextReviewAt: v.optional(v.union(v.number(), v.null())),
     reviewRoutineNotes: v.optional(v.union(v.string(), v.null())),
@@ -1278,6 +1310,17 @@ export const updateAnalysis = mutation({
       const t = args.title.trim();
       if (!t) throw new Error("Tittel kan ikke være tom.");
       patch.title = t;
+    }
+    if (args.candidateId !== undefined) {
+      if (args.candidateId === null) {
+        patch.candidateId = undefined;
+      } else {
+        const cand = await ctx.db.get(args.candidateId);
+        if (!cand || cand.workspaceId !== row.workspaceId) {
+          throw new Error("Ugyldig kandidat.");
+        }
+        patch.candidateId = args.candidateId;
+      }
     }
     if (args.notes !== undefined) {
       patch.notes =

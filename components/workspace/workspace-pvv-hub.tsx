@@ -43,30 +43,31 @@ export function WorkspacePvvHub({ workspaceId, activeTab }: Props) {
             <div className="flex flex-wrap items-center gap-2">
               <span className="text-muted-foreground inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide">
                 <Sparkles className="text-primary size-3.5" aria-hidden />
-                PVV-hub
+                Arbeidsflate
               </span>
             </div>
             <h1 className="font-heading text-xl font-semibold tracking-tight sm:text-2xl">
-              Prosesser og vurderinger
+              Vurderinger og prosessregister
             </h1>
             <p className="text-muted-foreground text-sm leading-snug">
-              <strong className="text-foreground">Prosesser</strong> er
-              registeret.{" "}
-              <strong className="text-foreground">Vurderinger</strong> er saker
-              med skjema og status — koble dem i veiviseren.
+              <strong className="text-foreground">Prosessregisteret</strong> er
+              listen over prosesser med ID.{" "}
+              <strong className="text-foreground">En vurdering</strong> er én
+              RPA-sak med skjema, prioritet og leveranse — uavhengig av ROS.
             </p>
             <details className="group text-sm">
               <summary className="text-primary cursor-pointer list-none font-medium marker:hidden [&::-webkit-details-marker]:hidden">
-                Mer om rekkefølge
+                Anbefalt rekkefølge
               </summary>
               <div className="text-muted-foreground mt-2 max-w-prose space-y-1.5 text-xs leading-relaxed">
                 <p>
-                  Registrer prosesser først hvis dere vil velge fra
-                  prosessregisteret. Én prosess kan ha flere vurderinger over tid.
+                  Legg inn prosesser i registeret først hvis dere vil hente
+                  prosess-ID i veiviseren. Samme prosess kan brukes i flere
+                  vurderinger over tid.
                 </p>
                 <p className="flex flex-wrap items-center gap-1">
                   <GitBranch className="size-3.5 shrink-0 opacity-70" aria-hidden />
-                  Anbefalt: prosess → vurdering → koble referanse i steg 1.
+                  Vanlig flyt: prosess → ny vurdering → velg prosess i steg 1.
                   <ArrowRight className="size-3 opacity-40" aria-hidden />
                 </p>
               </div>
@@ -75,7 +76,7 @@ export function WorkspacePvvHub({ workspaceId, activeTab }: Props) {
           <div
             className="bg-muted/60 flex w-full shrink-0 rounded-xl p-1 ring-1 ring-border/50 lg:w-auto lg:min-w-[min(100%,20rem)]"
             role="tablist"
-            aria-label="Vis vurderinger eller prosesser"
+            aria-label="Vis vurderinger eller prosessregister"
           >
             <button
               id="tab-vurderinger"
@@ -107,7 +108,7 @@ export function WorkspacePvvHub({ workspaceId, activeTab }: Props) {
               )}
             >
               <Users className="size-4 opacity-80" aria-hidden />
-              Prosesser
+              Prosessregister
             </button>
           </div>
         </div>
