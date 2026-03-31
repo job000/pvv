@@ -50,9 +50,9 @@ export default function Home() {
             size="lg"
             variant="outline"
             nativeButton={false}
-            render={<Link href="/sign-in" />}
+            render={<Link href="/sign-up" />}
           >
-            Har du ikke konto?
+            Opprett konto
           </Button>
         </CardFooter>
       </Card>
