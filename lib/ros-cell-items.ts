@@ -10,6 +10,12 @@ export type RosCellItem = {
   text: string;
   /** f.eks. watch, requires_action */
   flags?: string[];
+  /** Rad i etter-tiltak matrisen dette punktet er plassert (kun relevant på før-tiltak items) */
+  afterRow?: number;
+  /** Kolonne i etter-tiltak matrisen */
+  afterCol?: number;
+  /** ID-referanse til opprinnnelig før-tiltak item (kun på etter-tiltak items) */
+  sourceItemId?: string;
 };
 
 /** Rad × kolonne × punkter i cellen (eksplisitt — ikke forveksle med RosCellItem[][]) */
@@ -75,6 +81,9 @@ export function normalizeCellItems(
             id: it.id || newRosCellItemId(),
             text: it.text ?? "",
             flags: it.flags?.length ? [...it.flags] : undefined,
+            afterRow: it.afterRow,
+            afterCol: it.afterCol,
+            sourceItemId: it.sourceItemId,
           })),
         );
       } else {

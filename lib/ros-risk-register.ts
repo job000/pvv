@@ -1,5 +1,6 @@
 /**
  * Flater ut matrise + cellepunkter til en liste (som risikoregister i ROS-dokumenter).
+ * Støtter også paret før/etter-visning for å vise risikoreduksjon per celle.
  */
 
 import type { RosCellItem, RosCellItemMatrix } from "./ros-cell-items";
@@ -15,6 +16,23 @@ export type RiskRegisterRow = {
   level: number;
   /** Tekst fra punkter i cellen */
   itemTexts: string[];
+};
+
+/** Paret rad som viser én celleposisjon med før- og etter-nivå side om side. */
+export type PairedRiskRegisterRow = {
+  row: number;
+  col: number;
+  rowLabel: string;
+  colLabel: string;
+  beforeLevel: number;
+  afterLevel: number;
+  /** Negativ = redusert (bra), positiv = økt, 0 = uendret */
+  delta: number;
+  deltaKind: "improved" | "worse" | "unchanged" | "new" | "removed";
+  beforeTexts: string[];
+  afterTexts: string[];
+  beforeItems: RosCellItem[];
+  afterItems: RosCellItem[];
 };
 
 function cellItemTexts(cell: RosCellItem[] | undefined): string[] {
@@ -61,6 +79,130 @@ export function buildRiskRegisterRows(input: {
     return a.col - b.col;
   });
   return out;
+}
+
+/**
+ * Bygger paret register: matcher celler (rad,kol) fra før/etter og beregner delta.
+ * Kun tilgjengelig når matrisene har samme layout (sameLayout = true).
+ */
+export function buildPairedRiskRegisterRows(input: {
+  rowLabels: string[];
+  colLabels: string[];
+  matrixBefore: number[][];
+  matrixAfter: number[][];
+  cellItemsBefore: RosCellItemMatrix;
+  cellItemsAfter: RosCellItemMatrix;
+}): PairedRiskRegisterRow[] {
+  const {
+    rowLabels,
+    colLabels,
+    matrixBefore,
+    matrixAfter,
+    cellItemsBefore,
+    cellItemsAfter,
+  } = input;
+  const out: PairedRiskRegisterRow[] = [];
+  const rows = matrixBefore.length;
+
+  for (let i = 0; i < rows; i++) {
+    const cols = matrixBefore[i]?.length ?? 0;
+    for (let j = 0; j < cols; j++) {
+      const bLevel = matrixBefore[i]?.[j] ?? 0;
+      const aLevel = matrixAfter[i]?.[j] ?? 0;
+      const bItems = cellItemsBefore[i]?.[j] ?? [];
+      const aItems = cellItemsAfter[i]?.[j] ?? [];
+      const bTexts = cellItemTexts(bItems);
+      const aTexts = cellItemTexts(aItems);
+
+      if (bLevel <= 0 && aLevel <= 0 && bTexts.length === 0 && aTexts.length === 0) {
+        continue;
+      }
+
+      const delta = aLevel - bLevel;
+      let deltaKind: PairedRiskRegisterRow["deltaKind"];
+      if (bLevel > 0 && aLevel > 0) {
+        deltaKind = delta < 0 ? "improved" : delta > 0 ? "worse" : "unchanged";
+      } else if (bLevel <= 0 && aLevel > 0) {
+        deltaKind = "new";
+      } else if (bLevel > 0 && aLevel <= 0) {
+        deltaKind = "removed";
+      } else {
+        deltaKind = "unchanged";
+      }
+
+      out.push({
+        row: i,
+        col: j,
+        rowLabel: rowLabels[i] ?? `Rad ${i + 1}`,
+        colLabel: colLabels[j] ?? `Kol ${j + 1}`,
+        beforeLevel: bLevel,
+        afterLevel: aLevel,
+        delta,
+        deltaKind,
+        beforeTexts: bTexts,
+        afterTexts: aTexts,
+        beforeItems: bItems,
+        afterItems: aItems,
+      });
+    }
+  }
+
+  out.sort((a, b) => {
+    const kindOrder = { worse: 0, unchanged: 1, new: 2, improved: 3, removed: 4 };
+    const ka = kindOrder[a.deltaKind];
+    const kb = kindOrder[b.deltaKind];
+    if (ka !== kb) return ka - kb;
+    if (b.beforeLevel !== a.beforeLevel) return b.beforeLevel - a.beforeLevel;
+    if (a.row !== b.row) return a.row - b.row;
+    return a.col - b.col;
+  });
+
+  return out;
+}
+
+/** Oppsummering av paret register for visning. */
+export type PairedSummaryStats = {
+  total: number;
+  improved: number;
+  worse: number;
+  unchanged: number;
+  newRisks: number;
+  removed: number;
+  highBefore: number;
+  highAfter: number;
+};
+
+export function pairedSummaryStats(
+  rows: PairedRiskRegisterRow[],
+): PairedSummaryStats {
+  let improved = 0;
+  let worse = 0;
+  let unchanged = 0;
+  let newRisks = 0;
+  let removed = 0;
+  let highBefore = 0;
+  let highAfter = 0;
+  for (const r of rows) {
+    switch (r.deltaKind) {
+      case "improved": improved++; break;
+      case "worse": worse++; break;
+      case "unchanged": unchanged++; break;
+      case "new": newRisks++; break;
+      case "removed": removed++; break;
+    }
+    if (r.beforeLevel >= 4) highBefore++;
+    if (r.afterLevel >= 4) highAfter++;
+  }
+  return {
+    total: rows.length,
+    improved,
+    worse,
+    unchanged,
+    newRisks,
+    removed,
+    highBefore,
+    highAfter,
+  };
 }
 
 export function phaseLabelNb(phase: RiskRegisterPhase): string {

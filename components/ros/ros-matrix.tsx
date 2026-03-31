@@ -8,10 +8,9 @@ import {
   DialogHeader,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { legendItems, cnCell } from "@/lib/ros-risk-colors";
+import { legendItems, cnCell, cellRiskGhostClass } from "@/lib/ros-risk-colors";
 import {
   ROS_CELL_FLAG_REQUIRES_ACTION,
   ROS_CELL_FLAG_WATCH,
@@ -19,15 +18,14 @@ import {
   type RosCellItem,
   type RosCellItemMatrix,
 } from "@/lib/ros-cell-items";
-import { RISK_LEVEL_HINTS } from "@/lib/ros-defaults";
+import { RISK_LEVEL_HINTS, positionRiskLevel } from "@/lib/ros-defaults";
 import { cn } from "@/lib/utils";
 import {
   AlertTriangle,
+  ArrowRightLeft,
+  Copy,
   Eye,
-  Grid3x3,
-  Info,
-  MousePointerClick,
-  Palette,
+  Lightbulb,
   Plus,
   Trash2,
 } from "lucide-react";
@@ -46,9 +44,51 @@ type Props = {
   readOnly?: boolean;
   jumpRequest?: { row: number; col: number; nonce: number } | null;
   onJumpHandled?: () => void;
+  /** Den andre fasens matrisenivåer for kryssreferanse-badge (valgfri) */
+  otherPhaseValues?: number[][];
+  /** Den andre fasens cellepunkter for referanse i popup */
+  otherPhaseCellItems?: RosCellItemMatrix;
+  /** "before" | "after" — hvilken fase denne matrisen representerer */
+  currentPhase?: "before" | "after";
+  /** Callback for å bytte til den andre fasen og åpne en celle der */
+  onSwitchPhase?: (row: number, col: number) => void;
+  /** After-matrisens rad/kolonne-etiketter (for destinasjonsvelger) */
+  afterRowLabels?: string[];
+  afterColLabels?: string[];
+  /** Plasserer et før-tiltak punkt i etter-tiltak matrisen */
+  onPlaceInAfter?: (
+    itemId: string,
+    itemText: string,
+    itemFlags: string[] | undefined,
+    afterRow: number,
+    afterCol: number,
+  ) => void;
+  /** Fjerner etter-tiltak plassering fra et før-tiltak punkt */
+  onRemoveAfterPlacement?: (itemId: string) => void;
+  /** Før-fasens rad/kol-labels (for å vise kilde i after-popup) */
+  beforeRowLabels?: string[];
+  beforeColLabels?: string[];
+  /** Tilordner et umappet før-tiltak punkt til denne etter-cellen */
+  onAssignBeforeItem?: (
+    itemId: string,
+    sourceRow: number,
+    sourceCol: number,
+    afterRow: number,
+    afterCol: number,
+  ) => void;
 };
 
 type PickerTarget = { row: number; col: number };
+
+const PLACEHOLDER_EXAMPLES = [
+  "F.eks: Datatap ved systemfeil uten backup",
+  "F.eks: Uautorisert tilgang til personopplysninger",
+  "F.eks: Nedetid på kritisk system i produksjonstid",
+  "F.eks: Feil i automatisert prosess uten varsel",
+  "F.eks: Leverandør mister tilgang eller går konkurs",
+  "F.eks: Manglende opplæring fører til feilbruk",
+  "F.eks: Brudd på GDPR ved deling av data",
+];
 
 function toggleFlag(
   flags: string[] | undefined,
@@ -74,9 +114,21 @@ export function RosMatrix({
   readOnly = false,
   jumpRequest,
   onJumpHandled,
+  otherPhaseValues,
+  otherPhaseCellItems,
+  currentPhase = "before",
+  onSwitchPhase,
+  afterRowLabels,
+  afterColLabels,
+  onPlaceInAfter,
+  onRemoveAfterPlacement,
+  beforeRowLabels,
+  beforeColLabels,
+  onAssignBeforeItem,
 }: Props) {
   const interactive = Boolean(onCellChange) && !readOnly;
   const [picker, setPicker] = useState<PickerTarget | null>(null);
+  const [destPickerItemId, setDestPickerItemId] = useState<string | null>(null);
   const lastJumpNonce = useRef<number | null>(null);
   const riskLegend = useMemo(() => legendItems(), []);
 
@@ -85,6 +137,111 @@ export function RosMatrix({
       ? []
       : (cellItems[picker.row]?.[picker.col] ?? []);
 
+  const totalRows = rowLabels.length;
+  const totalCols = colLabels.length;
+
+  const matrixStats = useMemo(() => {
+    let highRisk = 0;
+    let critical = 0;
+    let needsAction = 0;
+    let filledCells = 0;
+    for (let i = 0; i < totalRows; i++) {
+      for (let j = 0; j < totalCols; j++) {
+        const stored = matrixValues[i]?.[j] ?? 0;
+        const auto = positionRiskLevel(i, j, totalRows, totalCols);
+        const items = cellItems[i]?.[j] ?? [];
+        const hasItems = items.some(
+          (it) =>
+            it.text.trim() ||
+            it.flags?.includes(ROS_CELL_FLAG_WATCH) ||
+            it.flags?.includes(ROS_CELL_FLAG_REQUIRES_ACTION),
+        );
+        if (!hasItems) continue;
+        filledCells++;
+        const level = stored > 0 ? stored : auto;
+        if (level >= 4) highRisk++;
+        if (level >= 5) critical++;
+        const hasFlag = items.some((it) =>
+          it.flags?.includes(ROS_CELL_FLAG_REQUIRES_ACTION),
+        );
+        if (level >= 4 && !hasFlag) needsAction++;
+      }
+    }
+    return { highRisk, critical, needsAction, filledCells };
+  }, [matrixValues, cellItems, totalRows, totalCols]);
+
+  type BeforeItemRef = {
+    id: string;
+    text: string;
+    flags?: string[];
+    sourceRow: number;
+    sourceCol: number;
+    rowLabel: string;
+    colLabel: string;
+    afterRow?: number;
+    afterCol?: number;
+  };
+
+  const { unmappedBeforeItems, mappedElsewhereItems } = useMemo(() => {
+    if (currentPhase !== "after" || !otherPhaseCellItems) {
+      return { unmappedBeforeItems: [] as BeforeItemRef[], mappedElsewhereItems: [] as BeforeItemRef[] };
+    }
+    const unmapped: BeforeItemRef[] = [];
+    const elsewhere: BeforeItemRef[] = [];
+    for (let i = 0; i < otherPhaseCellItems.length; i++) {
+      const row = otherPhaseCellItems[i];
+      if (!row) continue;
+      for (let j = 0; j < row.length; j++) {
+        const cell = row[j];
+        if (!cell) continue;
+        for (const it of cell) {
+          if (!it.text.trim()) continue;
+          const ref: BeforeItemRef = {
+            id: it.id,
+            text: it.text,
+            flags: it.flags,
+            sourceRow: i,
+            sourceCol: j,
+            rowLabel: beforeRowLabels?.[i] ?? `Rad ${i + 1}`,
+            colLabel: beforeColLabels?.[j] ?? `Kol ${j + 1}`,
+            afterRow: it.afterRow,
+            afterCol: it.afterCol,
+          };
+          if (it.afterRow == null || it.afterCol == null) {
+            unmapped.push(ref);
+          } else if (picker && (it.afterRow !== picker.row || it.afterCol !== picker.col)) {
+            elsewhere.push(ref);
+          }
+        }
+      }
+    }
+    return { unmappedBeforeItems: unmapped, mappedElsewhereItems: elsewhere };
+  }, [currentPhase, otherPhaseCellItems, beforeRowLabels, beforeColLabels, picker]);
+
+  const pickerAutoLevel =
+    picker !== null
+      ? positionRiskLevel(picker.row, picker.col, totalRows, totalCols)
+      : 0;
+  const pickerCurrentLevel =
+    picker !== null
+      ? (matrixValues[picker.row]?.[picker.col] ?? 0)
+      : 0;
+  const pickerIsOverridden =
+    pickerCurrentLevel > 0 && pickerCurrentLevel !== pickerAutoLevel;
+
+  const otherPhaseLevel =
+    picker !== null ? (otherPhaseValues?.[picker.row]?.[picker.col] ?? 0) : 0;
+  const otherPhaseItems =
+    picker !== null
+      ? (otherPhaseCellItems?.[picker.row]?.[picker.col] ?? [])
+      : [];
+  const otherPhaseFilledItems = otherPhaseItems.filter(
+    (it) =>
+      it.text.trim() ||
+      it.flags?.includes(ROS_CELL_FLAG_WATCH) ||
+      it.flags?.includes(ROS_CELL_FLAG_REQUIRES_ACTION),
+  );
+  const hasOtherPhaseData = otherPhaseLevel > 0 || otherPhaseFilledItems.length > 0;
 
   useEffect(() => {
     if (!jumpRequest) {
@@ -126,6 +283,24 @@ export function RosMatrix({
     return () => document.removeEventListener("keydown", onKey);
   }, [picker, closePicker]);
 
+  useEffect(() => {
+    if (!picker || !interactive || !onCellItemsChange) return;
+    const items = cellItems[picker.row]?.[picker.col] ?? [];
+    if (items.length > 0) return;
+    const newId = newRosCellItemId();
+    onCellItemsChange(picker.row, picker.col, [{ id: newId, text: "" }]);
+    if (onCellChange && (matrixValues[picker.row]?.[picker.col] ?? 0) === 0) {
+      onCellChange(picker.row, picker.col, positionRiskLevel(picker.row, picker.col, totalRows, totalCols));
+    }
+    requestAnimationFrame(() => {
+      const el = document.querySelector<HTMLTextAreaElement>(
+        `[data-ros-item-id="${newId}"]`,
+      );
+      el?.focus();
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [picker?.row, picker?.col]);
+
   function selectLevel(level: number) {
     if (!picker || !onCellChange) return;
     onCellChange(picker.row, picker.col, level);
@@ -137,6 +312,12 @@ export function RosMatrix({
     next: RosCellItem[],
   ) {
     onCellItemsChange?.(row, col, next);
+    const currentLevel = matrixValues[row]?.[col] ?? 0;
+    const hadItems = (cellItems[row]?.[col] ?? []).length > 0;
+    const hasItemsNow = next.length > 0;
+    if (hasItemsNow && !hadItems && currentLevel === 0 && onCellChange) {
+      onCellChange(row, col, positionRiskLevel(row, col, totalRows, totalCols));
+    }
   }
 
   function patchItem(
@@ -158,74 +339,64 @@ export function RosMatrix({
   const pickerColLabel =
     picker !== null ? colLabels[picker.col] ?? `Kolonne ${picker.col + 1}` : "";
 
+  const isEmpty = matrixStats.filledCells === 0;
+
   return (
-    <div className="space-y-5">
-      <div className="rounded-2xl border border-border/60 bg-gradient-to-br from-muted/30 via-card to-card p-4 shadow-sm">
-        <p className="text-muted-foreground mb-2 flex items-center gap-2 text-xs font-medium tracking-wide uppercase">
-          <Grid3x3 className="size-3.5 shrink-0" aria-hidden />
-          Slik bruker du matrisen
-        </p>
-        <div className="space-y-2 text-sm leading-relaxed">
-          <p>
-            <strong>Klikk en celle</strong> for å legge inn risikopunkter og
-            sette nivå (0–5). Hvert kryss i matrisen representerer en kombinasjon
-            av{" "}
-            <span className="font-medium">{rowAxisTitle.toLowerCase()}</span> og{" "}
-            <span className="font-medium">{colAxisTitle.toLowerCase()}</span>.
-          </p>
-          <ul className="text-muted-foreground grid gap-1.5 text-xs sm:grid-cols-2">
-            <li className="flex items-start gap-2">
-              <span className="mt-0.5 inline-flex size-5 shrink-0 items-center justify-center rounded-md bg-muted text-[10px] font-bold">
-                2
-              </span>
-              <span>
-                <strong className="text-foreground">Nivå</strong> = samlet
-                risikovurdering for alt i cellen (velg høyeste relevante)
-              </span>
-            </li>
-            <li className="flex items-start gap-2">
-              <AlertTriangle className="mt-0.5 size-3.5 shrink-0 text-red-500" aria-hidden />
-              <span>
-                <strong className="text-foreground">Krever handling</strong> —
-                flagg for oppfølging i oversikten
-              </span>
-            </li>
-            <li className="flex items-start gap-2">
-              <Eye className="mt-0.5 size-3.5 shrink-0 text-amber-500" aria-hidden />
-              <span>
-                <strong className="text-foreground">Varsel</strong> — flagg for
-                overvåking uten umiddelbar handling
-              </span>
-            </li>
-            <li className="flex items-start gap-2">
-              <span className="mt-1.5 size-2 shrink-0 rounded-full bg-muted-foreground/40" />
-              <span>
-                <strong className="text-foreground">Punkt</strong> — risiko,
-                trussel eller begrunnelse (flere per celle)
-              </span>
-            </li>
-          </ul>
+    <div className="space-y-4">
+      {isEmpty && interactive ? (
+        <div className="space-y-3 rounded-2xl border border-primary/20 bg-primary/[0.03] p-5">
+          <div className="flex items-start gap-3">
+            <Lightbulb className="text-primary mt-0.5 size-5 shrink-0" aria-hidden />
+            <div className="space-y-2">
+              <p className="text-foreground text-sm font-semibold">
+                Kom i gang med risikovurderingen
+              </p>
+              <p className="text-muted-foreground text-sm leading-relaxed">
+                Tenk på hva som kan gå galt og hvor sannsynlig det er.
+                Klikk i matrisen der risikoen hører hjemme — f.eks. en trussel
+                med <strong>middels sannsynlighet</strong> og{" "}
+                <strong>betydelig konsekvens</strong> klikker du i den cellen.
+              </p>
+              <div className="text-muted-foreground mt-1 grid gap-1.5 text-xs sm:grid-cols-2">
+                <p>
+                  <strong className="text-foreground">↑ Radene</strong> = hvor
+                  sannsynlig er det? (nederst = sjelden, øverst = svært ofte)
+                </p>
+                <p>
+                  <strong className="text-foreground">→ Kolonnene</strong> = hvor
+                  alvorlig er konsekvensen? (venstre = ubetydelig, høyre = kritisk)
+                </p>
+              </div>
+              <p className="text-muted-foreground mt-2 text-xs">
+                <strong className="text-foreground">Tips:</strong> Start med det
+                du er mest bekymret for. Du kan alltid legge til flere risikoer
+                etterpå.
+              </p>
+            </div>
+          </div>
         </div>
-      </div>
+      ) : null}
 
       <div className="relative overflow-x-auto rounded-2xl border border-border/70 bg-card/50 shadow-sm">
-        <table className="w-full min-w-[min(100%,48rem)] border-collapse text-left text-sm">
+        <table className="w-full min-w-[min(100%,48rem)] table-fixed border-collapse text-left text-sm">
           <thead>
             <tr className="border-b border-border/60 bg-muted/40">
               <th
                 scope="col"
-                className="bg-muted/90 sticky top-0 left-0 z-20 min-w-[7.5rem] border-r border-border/50 px-2 py-3 text-xs font-semibold uppercase tracking-wide"
+                className="bg-muted/90 sticky top-0 left-0 z-20 w-[8rem] border-r border-border/50 px-2 py-2 text-xs"
               >
-                <span className="text-muted-foreground block font-normal normal-case">
-                  {rowAxisTitle}
+                <span className="text-muted-foreground flex items-center gap-1 text-[10px] font-normal normal-case">
+                  ↑ {rowAxisTitle}
                 </span>
-                <span className="text-foreground">× {colAxisTitle}</span>
+                <span className="text-muted-foreground flex items-center gap-1 text-[10px] font-normal normal-case">
+                  → {colAxisTitle}
+                </span>
               </th>
               {colLabels.map((label, j) => (
                 <th
                   key={j}
                   scope="col"
-                  className="bg-muted/90 sticky top-0 z-10 max-w-[8rem] min-w-[5rem] border-b border-border/50 px-2 py-2 text-center text-xs font-medium leading-snug"
+                  className="bg-muted/90 sticky top-0 z-10 border-b border-border/50 px-2 py-2 text-center text-xs font-medium leading-snug"
                 >
                   {label}
                 </th>
@@ -233,16 +404,20 @@ export function RosMatrix({
             </tr>
           </thead>
           <tbody>
-            {rowLabels.map((rowLabel, i) => (
+            {[...rowLabels].map((_, _ri, _arr) => {
+              const i = rowLabels.length - 1 - _ri;
+              const rowLabel = rowLabels[i] ?? `Rad ${i + 1}`;
+              return (
               <tr key={i} className="border-b border-border/40 last:border-0">
                 <th
                   scope="row"
-                  className="bg-card/95 sticky left-0 z-10 max-w-[10rem] border-r border-border/50 px-2 py-2 text-left text-xs font-medium leading-snug"
+                  className="bg-card/95 sticky left-0 z-10 w-[8rem] overflow-hidden border-r border-border/50 px-2 py-2 text-left text-xs font-medium leading-snug"
                 >
-                  {rowLabel}
+                  <span className="line-clamp-2">{rowLabel}</span>
                 </th>
                 {colLabels.map((_, j) => {
-                  const v = matrixValues[i]?.[j] ?? 0;
+                  const storedLevel = matrixValues[i]?.[j] ?? 0;
+                  const autoLevel = positionRiskLevel(i, j, totalRows, totalCols);
                   const items = cellItems[i]?.[j] ?? [];
                   const filledItems = items.filter(
                     (it) =>
@@ -251,51 +426,90 @@ export function RosMatrix({
                       it.flags?.includes(ROS_CELL_FLAG_REQUIRES_ACTION),
                   );
                   const hasContent = filledItems.length > 0;
+                  const displayLevel = hasContent
+                    ? (storedLevel > 0 ? storedLevel : autoLevel)
+                    : storedLevel;
                   const isPicked =
                     picker?.row === i && picker?.col === j && interactive;
+                  const isHighRisk = displayLevel >= 4 && hasContent;
+                  const hasActionFlag = filledItems.some(
+                    (it) => it.flags?.includes(ROS_CELL_FLAG_REQUIRES_ACTION),
+                  );
+                  const otherLevel = otherPhaseValues?.[i]?.[j] ?? 0;
+                  const showCrossRef = hasContent && otherLevel > 0 && otherLevel !== displayLevel;
                   return (
-                    <td key={j} className="p-1 align-top">
+                    <td key={j} className="overflow-hidden p-1 align-top">
                       <button
                         id={`ros-mx-cell-${i}-${j}`}
                         type="button"
                         disabled={!interactive}
                         aria-pressed={isPicked}
-                        aria-label={`Celle ${rowLabel}, ${colLabels[j] ?? `kolonne ${j + 1}`}. Nivå ${v} ${RISK_LEVEL_HINTS[v] ?? ""}. ${filledItems.length} punkt${filledItems.length !== 1 ? "er" : ""}. ${interactive ? "Klikk for å redigere." : ""}`}
+                        aria-label={`Celle ${rowLabel}, ${colLabels[j] ?? `kolonne ${j + 1}`}. Nivå ${displayLevel} ${RISK_LEVEL_HINTS[displayLevel] ?? ""}. ${filledItems.length} punkt${filledItems.length !== 1 ? "er" : ""}. ${isHighRisk ? "Høy risiko. " : ""}${interactive ? "Klikk for å redigere." : ""}`}
                         onClick={() => {
                           if (!interactive) return;
                           setPicker({ row: i, col: j });
                         }}
                         className={cn(
-                          cnCell(v, interactive),
-                          "relative flex w-full flex-col rounded-xl shadow-sm transition-[transform,box-shadow] duration-150",
                           hasContent
-                            ? "min-h-[4.5rem] items-stretch gap-0 p-0"
+                            ? cnCell(displayLevel, interactive)
+                            : cn(
+                                "min-h-[3rem] min-w-[3.5rem] border px-1 py-1.5 text-center text-sm font-semibold tabular-nums transition-colors",
+                                cellRiskGhostClass(autoLevel),
+                                interactive && "cursor-pointer focus-visible:ring-ring focus-visible:ring-2 focus-visible:outline-none",
+                              ),
+                          "group/cell relative flex w-full flex-col overflow-hidden rounded-xl transition-[transform,box-shadow] duration-150",
+                          hasContent
+                            ? "min-h-[4.5rem] items-stretch gap-0 p-0 shadow-sm"
                             : "min-h-[3.5rem] items-center justify-center gap-0.5",
                           interactive &&
                             "hover:scale-[1.01] hover:shadow-md active:scale-[0.99]",
                           !interactive && "cursor-default",
                           isPicked &&
                             "ring-primary ring-offset-background ring-2 ring-offset-2",
+                          isHighRisk && !isPicked && "ring-2 ring-red-500/40 ring-offset-1",
                         )}
                       >
                         {hasContent ? (
                           <>
-                            <span className="flex items-center gap-1 px-1.5 pt-1 pb-0.5">
+                            <span className="flex min-w-0 items-center gap-1 overflow-hidden px-1.5 pt-1 pb-0.5">
+                              {isHighRisk && !hasActionFlag ? (
+                                <AlertTriangle
+                                  className="size-3.5 shrink-0 text-red-600 dark:text-red-400"
+                                  aria-label="Høy risiko uten behandling"
+                                />
+                              ) : null}
                               <span className="inline-flex size-5 items-center justify-center rounded-md bg-black/10 text-[10px] font-bold tabular-nums leading-none dark:bg-white/15">
-                                {v}
+                                {displayLevel}
                               </span>
+                              {showCrossRef ? (
+                                <span
+                                  className={cn(
+                                    "inline-flex items-center gap-0.5 rounded px-1 py-px text-[9px] font-semibold tabular-nums leading-none",
+                                    otherLevel < displayLevel
+                                      ? "bg-emerald-500/20 text-emerald-700 dark:text-emerald-300"
+                                      : otherLevel > displayLevel
+                                        ? "bg-red-500/15 text-red-700 dark:text-red-300"
+                                        : "bg-muted text-muted-foreground",
+                                  )}
+                                  title={currentPhase === "before"
+                                    ? `Etter tiltak: nivå ${otherLevel}`
+                                    : `Før tiltak: nivå ${otherLevel}`}
+                                >
+                                  {otherLevel < displayLevel ? "→↓" : "→↑"}{otherLevel}
+                                </span>
+                              ) : null}
                               <span className="truncate text-[10px] font-semibold leading-none opacity-80">
-                                {riskLegend.find((x) => x.level === v)?.label ?? "—"}
+                                {riskLegend.find((x) => x.level === displayLevel)?.label ?? "—"}
                               </span>
                             </span>
-                            <span className="flex flex-1 flex-col gap-0.5 px-1.5 pb-1.5">
+                            <span className="flex min-w-0 flex-1 flex-col gap-0.5 overflow-hidden px-1.5 pb-1.5">
                               {filledItems.slice(0, 3).map((it, idx) => {
                                 const hasWatch = it.flags?.includes(ROS_CELL_FLAG_WATCH);
                                 const hasAction = it.flags?.includes(ROS_CELL_FLAG_REQUIRES_ACTION);
                                 return (
                                   <span
                                     key={it.id}
-                                    className="flex items-start gap-0.5 text-left"
+                                    className="flex min-w-0 items-start gap-0.5 text-left"
                                   >
                                     {hasAction ? (
                                       <AlertTriangle
@@ -310,7 +524,7 @@ export function RosMatrix({
                                     ) : (
                                       <span className="mt-[3px] size-1.5 shrink-0 rounded-full bg-current opacity-40" />
                                     )}
-                                    <span className="line-clamp-2 text-[10px] leading-tight">
+                                    <span className="min-w-0 truncate text-[10px] leading-tight">
                                       {it.text.trim() || `Punkt ${idx + 1}`}
                                     </span>
                                   </span>
@@ -325,19 +539,16 @@ export function RosMatrix({
                           </>
                         ) : (
                           <>
-                            <span className="text-lg font-bold tabular-nums leading-none tracking-tight">
-                              {v}
+                            <span className="text-muted-foreground/40 text-xs tabular-nums font-bold leading-none">
+                              {autoLevel}
                             </span>
-                            <span
-                              className={cn(
-                                "max-w-full truncate px-0.5 text-[10px] font-medium leading-none",
-                                v === 0
-                                  ? "text-muted-foreground/80"
-                                  : "opacity-90",
-                              )}
-                            >
-                              {riskLegend.find((x) => x.level === v)?.label ?? "—"}
-                            </span>
+                            {interactive ? (
+                              <Plus className="text-muted-foreground/0 group-hover/cell:text-muted-foreground/50 size-3.5 transition-colors" aria-hidden />
+                            ) : (
+                              <span className="text-muted-foreground/30 max-w-full truncate px-0.5 text-[9px] font-medium leading-none">
+                                {riskLegend.find((x) => x.level === autoLevel)?.label ?? "—"}
+                              </span>
+                            )}
                           </>
                         )}
                       </button>
@@ -345,10 +556,43 @@ export function RosMatrix({
                   );
                 })}
               </tr>
-            ))}
+              );
+            })}
           </tbody>
         </table>
       </div>
+
+      {matrixStats.filledCells > 0 ? (
+        <div className={cn(
+          "flex flex-wrap items-center gap-x-4 gap-y-1 rounded-xl border px-3 py-2 text-xs",
+          matrixStats.highRisk > 0
+            ? "border-red-500/25 bg-red-500/[0.05]"
+            : "border-border/50 bg-muted/10",
+        )}>
+          <span className="text-muted-foreground font-medium">
+            {matrixStats.filledCells} celle{matrixStats.filledCells !== 1 ? "r" : ""} med risiko
+          </span>
+          {matrixStats.highRisk > 0 ? (
+            <span className="flex items-center gap-1 font-semibold text-red-700 dark:text-red-400">
+              <AlertTriangle className="size-3.5" aria-hidden />
+              {matrixStats.highRisk} høy/kritisk
+            </span>
+          ) : (
+            <span className="text-emerald-700 font-medium dark:text-emerald-400">
+              Ingen høy risiko
+            </span>
+          )}
+          {matrixStats.needsAction > 0 ? (
+            <span className="text-amber-700 dark:text-amber-400">
+              {matrixStats.needsAction} uten «krever handling»-flagg
+            </span>
+          ) : matrixStats.highRisk > 0 ? (
+            <span className="text-emerald-700 dark:text-emerald-400">
+              Alle høyrisiko-celler er flagget
+            </span>
+          ) : null}
+        </div>
+      ) : null}
 
       <Dialog
         open={Boolean(picker && interactive)}
@@ -365,218 +609,514 @@ export function RosMatrix({
           <DialogHeader>
             <p
               id="ros-cell-picker-title"
-              className="font-heading flex items-center gap-2 text-lg font-semibold"
+              className="font-heading flex items-center gap-2 text-base font-semibold"
             >
-              <Palette className="text-primary size-5 shrink-0" aria-hidden />
-              {pickerRowLabel} × {pickerColLabel}
-              {picker !== null ? (
-                <span
-                  className={cn(
-                    cnCell(matrixValues[picker.row]?.[picker.col] ?? 0, false),
-                    "ml-auto inline-flex items-center rounded-lg px-2 py-1 text-xs font-bold tabular-nums shadow-sm",
-                  )}
-                >
-                  Nivå {matrixValues[picker.row]?.[picker.col] ?? 0}
+              <span
+                className={cn(
+                  cnCell(pickerCurrentLevel > 0 ? pickerCurrentLevel : pickerAutoLevel, false),
+                  "inline-flex size-8 items-center justify-center rounded-lg text-sm font-bold tabular-nums shadow-sm",
+                )}
+              >
+                {pickerCurrentLevel > 0 ? pickerCurrentLevel : pickerAutoLevel}
+              </span>
+              <span className="min-w-0">
+                <span className="block">{pickerRowLabel} × {pickerColLabel}</span>
+                <span className="text-muted-foreground block text-xs font-normal">
+                  {riskLegend.find(
+                    (x) => x.level === (pickerCurrentLevel > 0 ? pickerCurrentLevel : pickerAutoLevel),
+                  )?.label ?? ""}{" "}
+                  risiko — hva kan gå galt her?
                 </span>
-              ) : null}
+              </span>
             </p>
-            <p
-              id="ros-cell-picker-desc"
-              className="text-muted-foreground text-sm leading-relaxed"
-            >
-              Velg samlet risikonivå for dette krysset. Nivået gjelder{" "}
-              <strong className="text-foreground">hele cellen</strong> — alle
-              punkter vurdert under ett.
+            <p id="ros-cell-picker-desc" className="sr-only">
+              Legg inn risikopunkter for denne cellen.
             </p>
           </DialogHeader>
           <DialogBody>
+            {(() => {
+              const effLevel = pickerCurrentLevel > 0 ? pickerCurrentLevel : pickerAutoLevel;
+              const hasAnyActionFlag = pickerItems.some(
+                (it) => it.flags?.includes(ROS_CELL_FLAG_REQUIRES_ACTION),
+              );
+              if (effLevel >= 4 && !hasAnyActionFlag && pickerItems.length > 0) {
+                return (
+                  <div className="mb-4 flex items-start gap-2 rounded-lg border border-red-500/30 bg-red-500/[0.06] px-3 py-2.5">
+                    <AlertTriangle className="mt-0.5 size-4 shrink-0 text-red-600 dark:text-red-400" aria-hidden />
+                    <div className="space-y-1 text-xs">
+                      <p className="text-foreground font-semibold">
+                        Nivå {effLevel} — høy risiko
+                      </p>
+                      <p className="text-muted-foreground leading-relaxed">
+                        Denne cellen har høyt risikonivå. Vurder å sette{" "}
+                        <strong className="text-foreground">«Krever handling»</strong>-flagget
+                        på minst ett punkt, slik at det fanges opp i oppfølgingsoversikten.
+                      </p>
+                    </div>
+                  </div>
+                );
+              }
+              return null;
+            })()}
+            {currentPhase === "after" && hasOtherPhaseData && picker ? (
+              <div className="mb-4 space-y-2 rounded-xl border border-border/60 bg-muted/20 p-3">
+                <span className="text-xs font-semibold text-foreground">
+                  Før tiltak (denne cellen)
+                  {otherPhaseLevel > 0 ? (
+                    <span
+                      className={cn(
+                        "ml-1.5 inline-flex min-w-[1.25rem] items-center justify-center rounded px-1 py-px text-[10px] font-bold tabular-nums",
+                        otherPhaseLevel >= 4
+                          ? "bg-red-500/20 text-red-700 dark:text-red-300"
+                          : otherPhaseLevel >= 3
+                            ? "bg-amber-400/20 text-amber-700 dark:text-amber-300"
+                            : "bg-emerald-500/20 text-emerald-700 dark:text-emerald-300",
+                      )}
+                    >
+                      Nivå {otherPhaseLevel}
+                    </span>
+                  ) : null}
+                </span>
+                {otherPhaseFilledItems.length > 0 ? (
+                  <ul className="space-y-1">
+                    {otherPhaseFilledItems.map((it, idx) => (
+                      <li
+                        key={it.id || idx}
+                        className="flex items-start gap-1 text-xs text-muted-foreground"
+                      >
+                        {it.flags?.includes(ROS_CELL_FLAG_REQUIRES_ACTION) ? (
+                          <AlertTriangle className="mt-px size-3 shrink-0 text-red-500/70" />
+                        ) : it.flags?.includes(ROS_CELL_FLAG_WATCH) ? (
+                          <Eye className="mt-px size-3 shrink-0 text-amber-500/70" />
+                        ) : (
+                          <span className="mt-1 size-1.5 shrink-0 rounded-full bg-muted-foreground/40" />
+                        )}
+                        <span className="leading-relaxed">{it.text.trim() || `Punkt ${idx + 1}`}</span>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="text-muted-foreground/70 text-xs italic">
+                    Kun nivå — ingen tekstpunkter
+                  </p>
+                )}
+              </div>
+            ) : null}
+            {currentPhase === "after" && picker && onAssignBeforeItem && (unmappedBeforeItems.length > 0 || mappedElsewhereItems.length > 0) ? (
+              <div className="mb-4 space-y-3 rounded-xl border border-blue-500/25 bg-blue-500/[0.04] p-3">
+                <p className="text-xs font-semibold text-blue-700 dark:text-blue-300">
+                  Koble risiko fra «Før tiltak»
+                </p>
+                {unmappedBeforeItems.length > 0 ? (
+                  <div className="space-y-1.5">
+                    <p className="text-muted-foreground text-[10px] font-medium">
+                      Ikke plassert ennå:
+                    </p>
+                    <ul className="space-y-1.5">
+                      {unmappedBeforeItems.map((item) => (
+                        <li
+                          key={item.id}
+                          className="flex items-start gap-2 rounded-lg border border-border/50 bg-card px-2.5 py-2"
+                        >
+                          <div className="min-w-0 flex-1">
+                            <p className="text-foreground truncate text-xs font-medium">
+                              {item.text}
+                            </p>
+                            <p className="text-muted-foreground text-[10px]">
+                              Fra: {item.rowLabel} × {item.colLabel}
+                            </p>
+                          </div>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            className="h-7 shrink-0 text-[10px] font-semibold"
+                            onClick={() => {
+                              onAssignBeforeItem(
+                                item.id,
+                                item.sourceRow,
+                                item.sourceCol,
+                                picker.row,
+                                picker.col,
+                              );
+                            }}
+                          >
+                            Plasser her
+                          </Button>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
+                {mappedElsewhereItems.length > 0 ? (
+                  <div className="space-y-1.5">
+                    <p className="text-muted-foreground text-[10px] font-medium">
+                      Allerede plassert i annen celle (flytt hit?):
+                    </p>
+                    <ul className="space-y-1.5">
+                      {mappedElsewhereItems.map((item) => {
+                        const curAfterLabel = item.afterRow != null && item.afterCol != null
+                          ? `${rowLabels[item.afterRow] ?? `R${item.afterRow + 1}`} × ${colLabels[item.afterCol] ?? `K${item.afterCol + 1}`}`
+                          : "";
+                        return (
+                          <li
+                            key={item.id}
+                            className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/[0.04] px-2.5 py-2"
+                          >
+                            <div className="min-w-0 flex-1">
+                              <p className="text-foreground truncate text-xs font-medium">
+                                {item.text}
+                              </p>
+                              <p className="text-muted-foreground text-[10px]">
+                                Fra: {item.rowLabel} × {item.colLabel}
+                                {curAfterLabel ? <> — nå i: <strong className="text-foreground">{curAfterLabel}</strong></> : null}
+                              </p>
+                            </div>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              className="h-7 shrink-0 border-amber-500/30 text-[10px] font-semibold"
+                              onClick={() => {
+                                onAssignBeforeItem(
+                                  item.id,
+                                  item.sourceRow,
+                                  item.sourceCol,
+                                  picker.row,
+                                  picker.col,
+                                );
+                              }}
+                            >
+                              Flytt hit
+                            </Button>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
             {onCellItemsChange && picker ? (
               <div className="mb-5 space-y-3">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <Label className="text-foreground text-sm font-semibold">
-                    Risikopunkter i denne cellen
+                    Risikopunkter
+                    {pickerItems.length > 1 ? (
+                      <span className="text-muted-foreground ml-1 text-xs font-normal">
+                        ({pickerItems.length})
+                      </span>
+                    ) : null}
                   </Label>
                   <Button
                     type="button"
                     size="sm"
                     variant="secondary"
                     onClick={() => {
+                      const newId = newRosCellItemId();
                       updateItemAt(picker.row, picker.col, [
                         ...pickerItems,
-                        { id: newRosCellItemId(), text: "" },
+                        { id: newId, text: "" },
                       ]);
+                      requestAnimationFrame(() => {
+                        document
+                          .querySelector<HTMLTextAreaElement>(
+                            `[data-ros-item-id="${newId}"]`,
+                          )
+                          ?.focus();
+                      });
                     }}
                   >
                     <Plus className="mr-1.5 size-4" />
                     Legg til punkt
                   </Button>
                 </div>
-                <p className="text-muted-foreground text-xs leading-relaxed">
-                  Beskriv hvert risikoforhold, trussel eller scenario som gjelder
-                  dette krysset. Du kan legge inn flere punkter — alle vises
-                  direkte i matrisen.
-                </p>
-                {pickerItems.length === 0 ? (
-                  <div className="flex items-center gap-2 rounded-lg border border-dashed border-border/80 bg-muted/20 px-3 py-4">
-                    <Info className="text-muted-foreground size-4 shrink-0" aria-hidden />
-                    <p className="text-muted-foreground text-sm">
-                      Ingen punkter ennå — trykk «Legg til punkt» for å starte.
-                    </p>
-                  </div>
-                ) : null}
                 <ul className="space-y-3">
-                  {pickerItems.map((it, idx) => (
+                  {pickerItems.map((it, idx) => {
+                    const canPlaceAfter = currentPhase === "before" && onPlaceInAfter && afterRowLabels && afterColLabels;
+                    const hasPlacement = it.afterRow != null && it.afterCol != null;
+                    const showDestGrid = destPickerItemId === it.id;
+                    const afterAutoLvl = hasPlacement
+                      ? positionRiskLevel(it.afterRow!, it.afterCol!, afterRowLabels?.length ?? 0, afterColLabels?.length ?? 0)
+                      : 0;
+
+                    return (
                     <li
                       key={it.id}
-                      className="bg-muted/25 space-y-2 rounded-xl border p-3"
+                      className="space-y-0 overflow-hidden rounded-xl border"
                     >
-                      <div className="flex items-start justify-between gap-2">
-                        <span className="text-muted-foreground text-xs font-medium">
-                          Punkt {idx + 1}
-                        </span>
-                        <Button
-                          type="button"
-                          size="icon"
-                          variant="ghost"
-                          className="text-destructive size-8 shrink-0"
-                          aria-label="Fjern punkt"
-                          onClick={() => {
-                            updateItemAt(
-                              picker.row,
-                              picker.col,
-                              pickerItems.filter((x) => x.id !== it.id),
-                            );
-                          }}
-                        >
-                          <Trash2 className="size-4" />
-                        </Button>
-                      </div>
-                      <Textarea
-                        value={it.text}
-                        onChange={(e) =>
-                          patchItem(picker.row, picker.col, it.id, {
-                            text: e.target.value,
-                          })
-                        }
-                        placeholder="Beskriv risiko, scenario, referanse …"
-                        rows={2}
-                        className="min-h-[3rem] resize-y text-sm"
-                      />
-                      <div className="flex flex-wrap gap-4">
-                        <div className="flex items-center gap-2">
-                          <Checkbox
-                            id={`ros-watch-${it.id}`}
-                            checked={it.flags?.includes(ROS_CELL_FLAG_WATCH) ?? false}
-                            onCheckedChange={(c) =>
-                              patchItem(picker.row, picker.col, it.id, {
-                                flags: toggleFlag(
-                                  it.flags,
-                                  ROS_CELL_FLAG_WATCH,
-                                  Boolean(c),
-                                ),
-                              })
-                            }
-                          />
-                          <Label
-                            htmlFor={`ros-watch-${it.id}`}
-                            className="cursor-pointer text-sm font-normal"
+                      <div className="bg-muted/25 space-y-2 p-3">
+                        <div className="flex items-center justify-between gap-2">
+                          {pickerItems.length > 1 ? (
+                            <span className="text-muted-foreground text-[10px] font-medium">
+                              {idx + 1} av {pickerItems.length}
+                            </span>
+                          ) : <span />}
+                          <Button
+                            type="button"
+                            size="icon"
+                            variant="ghost"
+                            className="text-muted-foreground hover:text-destructive size-7 shrink-0"
+                            aria-label="Fjern punkt"
+                            onClick={() => {
+                              if (hasPlacement) onRemoveAfterPlacement?.(it.id);
+                              updateItemAt(
+                                picker.row,
+                                picker.col,
+                                pickerItems.filter((x) => x.id !== it.id),
+                              );
+                            }}
                           >
-                            <Eye className="mr-1 inline size-3.5 text-amber-500" aria-hidden />
-                            Varsel
-                          </Label>
+                            <Trash2 className="size-3.5" />
+                          </Button>
                         </div>
-                        <div className="flex items-center gap-2">
-                          <Checkbox
-                            id={`ros-act-${it.id}`}
-                            checked={
-                              it.flags?.includes(ROS_CELL_FLAG_REQUIRES_ACTION) ??
-                              false
-                            }
-                            onCheckedChange={(c) =>
+                        <Textarea
+                          data-ros-item-id={it.id}
+                          value={it.text}
+                          onChange={(e) =>
+                            patchItem(picker.row, picker.col, it.id, {
+                              text: e.target.value,
+                            })
+                          }
+                          placeholder={PLACEHOLDER_EXAMPLES[idx % PLACEHOLDER_EXAMPLES.length]}
+                          rows={2}
+                          className="min-h-[3rem] resize-y text-sm"
+                        />
+                        <div className="flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            onClick={() =>
                               patchItem(picker.row, picker.col, it.id, {
                                 flags: toggleFlag(
                                   it.flags,
                                   ROS_CELL_FLAG_REQUIRES_ACTION,
-                                  Boolean(c),
+                                  !(it.flags?.includes(ROS_CELL_FLAG_REQUIRES_ACTION) ?? false),
                                 ),
                               })
                             }
-                          />
-                          <Label
-                            htmlFor={`ros-act-${it.id}`}
-                            className="cursor-pointer text-sm font-normal"
+                            className={cn(
+                              "inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-medium transition-colors",
+                              it.flags?.includes(ROS_CELL_FLAG_REQUIRES_ACTION)
+                                ? "border-red-500/40 bg-red-500/10 text-red-700 dark:text-red-400"
+                                : "border-border/60 text-muted-foreground hover:border-red-500/30 hover:text-red-600",
+                            )}
                           >
-                            <AlertTriangle className="mr-1 inline size-3.5 text-red-500" aria-hidden />
-                            Krever handling
-                          </Label>
+                            <AlertTriangle className="size-3.5" aria-hidden />
+                            Må håndteres
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              patchItem(picker.row, picker.col, it.id, {
+                                flags: toggleFlag(
+                                  it.flags,
+                                  ROS_CELL_FLAG_WATCH,
+                                  !(it.flags?.includes(ROS_CELL_FLAG_WATCH) ?? false),
+                                ),
+                              })
+                            }
+                            className={cn(
+                              "inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-medium transition-colors",
+                              it.flags?.includes(ROS_CELL_FLAG_WATCH)
+                                ? "border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-400"
+                                : "border-border/60 text-muted-foreground hover:border-amber-500/30 hover:text-amber-600",
+                            )}
+                          >
+                            <Eye className="size-3.5" aria-hidden />
+                            Følg med
+                          </button>
                         </div>
                       </div>
+
+                      {canPlaceAfter ? (
+                        <div className={cn(
+                          "border-t px-3 py-2.5",
+                          hasPlacement
+                            ? "border-emerald-500/25 bg-emerald-500/[0.06]"
+                            : "border-blue-500/20 bg-blue-500/[0.04]",
+                        )}>
+                          {hasPlacement ? (
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="text-xs font-semibold text-emerald-700 dark:text-emerald-400">
+                                Etter tiltak:
+                              </span>
+                              <span
+                                className={cn(
+                                  "inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-xs font-bold tabular-nums",
+                                  afterAutoLvl >= 4
+                                    ? "bg-red-500/15 text-red-700 dark:text-red-300"
+                                    : afterAutoLvl >= 3
+                                      ? "bg-amber-400/20 text-amber-700 dark:text-amber-300"
+                                      : "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300",
+                                )}
+                              >
+                                {afterRowLabels![it.afterRow!]} × {afterColLabels![it.afterCol!]}
+                                <span className="opacity-70">(nivå {afterAutoLvl})</span>
+                              </span>
+                              <div className="ml-auto flex gap-1">
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="ghost"
+                                  className="h-6 px-2 text-[10px]"
+                                  onClick={() => setDestPickerItemId(showDestGrid ? null : it.id)}
+                                >
+                                  Endre
+                                </Button>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="ghost"
+                                  className="text-muted-foreground hover:text-destructive h-6 px-2 text-[10px]"
+                                  onClick={() => {
+                                    onRemoveAfterPlacement?.(it.id);
+                                    patchItem(picker.row, picker.col, it.id, {
+                                      afterRow: undefined,
+                                      afterCol: undefined,
+                                    });
+                                  }}
+                                >
+                                  Fjern
+                                </Button>
+                              </div>
+                            </div>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => setDestPickerItemId(showDestGrid ? null : it.id)}
+                              className="flex w-full items-center gap-2 text-left"
+                            >
+                              <ArrowRightLeft className="size-4 shrink-0 text-blue-600 dark:text-blue-400" />
+                              <span className="text-xs font-semibold text-blue-700 dark:text-blue-300">
+                                Hvor havner risikoen etter tiltak?
+                              </span>
+                              <span className="text-muted-foreground ml-auto text-[10px]">
+                                Velg celle →
+                              </span>
+                            </button>
+                          )}
+
+                          {showDestGrid ? (
+                            <div className="mt-2 space-y-1.5 rounded-lg border bg-card p-2">
+                              <p className="text-muted-foreground text-[10px] font-medium">
+                                Klikk cellen der risikoen havner etter tiltak:
+                              </p>
+                              <div className="overflow-x-auto">
+                                <table className="border-collapse text-[10px]">
+                                  <thead>
+                                    <tr>
+                                      <th className="px-1 py-0.5" />
+                                      {afterColLabels!.map((cl, cj) => (
+                                        <th
+                                          key={cj}
+                                          className="text-muted-foreground truncate px-1 py-0.5 text-center font-medium"
+                                          style={{ maxWidth: "5rem" }}
+                                        >
+                                          {cl}
+                                        </th>
+                                      ))}
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {[...afterRowLabels!].map((_, _ri) => {
+                                      const ri = afterRowLabels!.length - 1 - _ri;
+                                      const rl = afterRowLabels![ri] ?? `Rad ${ri + 1}`;
+                                      return (
+                                        <tr key={ri}>
+                                          <th className="text-muted-foreground truncate px-1 py-0.5 text-left font-medium" style={{ maxWidth: "5rem" }}>
+                                            {rl}
+                                          </th>
+                                          {afterColLabels!.map((_, cj) => {
+                                            const isSelected = it.afterRow === ri && it.afterCol === cj;
+                                            const autoLvl = positionRiskLevel(ri, cj, afterRowLabels!.length, afterColLabels!.length);
+                                            return (
+                                              <td key={cj} className="p-0.5">
+                                                <button
+                                                  type="button"
+                                                  onClick={() => {
+                                                    onPlaceInAfter!(it.id, it.text, it.flags, ri, cj);
+                                                    patchItem(picker.row, picker.col, it.id, {
+                                                      afterRow: ri,
+                                                      afterCol: cj,
+                                                    });
+                                                    setDestPickerItemId(null);
+                                                  }}
+                                                  className={cn(
+                                                    "flex size-8 items-center justify-center rounded-md border text-[10px] font-bold tabular-nums transition-colors",
+                                                    isSelected
+                                                      ? "ring-primary bg-primary text-primary-foreground ring-2"
+                                                      : cellRiskGhostClass(autoLvl),
+                                                    "hover:ring-primary/50 hover:ring-2",
+                                                  )}
+                                                >
+                                                  {autoLvl}
+                                                </button>
+                                              </td>
+                                            );
+                                          })}
+                                        </tr>
+                                      );
+                                    })}
+                                  </tbody>
+                                </table>
+                              </div>
+                            </div>
+                          ) : null}
+                        </div>
+                      ) : null}
+
+                      {currentPhase === "after" && it.sourceItemId ? (
+                        <div className="border-t border-blue-500/20 bg-blue-500/[0.04] px-3 py-1.5">
+                          <p className="text-[10px] font-medium text-blue-700 dark:text-blue-300">
+                            Plassert hit fra før tiltak
+                          </p>
+                        </div>
+                      ) : null}
                     </li>
-                  ))}
+                    );
+                  })}
                 </ul>
               </div>
             ) : null}
 
-            <div className="mb-2 space-y-2">
-              <Label className="text-foreground text-sm font-semibold">
-                Samlet risikonivå for denne cellen
-              </Label>
-              {pickerItems.length > 1 ? (
-                <div className="flex items-start gap-2 rounded-lg border border-blue-500/25 bg-blue-500/[0.06] px-3 py-2">
-                  <Info className="text-blue-500 mt-0.5 size-4 shrink-0" aria-hidden />
-                  <p className="text-muted-foreground text-xs leading-relaxed">
-                    <strong className="text-foreground">
-                      {pickerItems.length} punkter i denne cellen.
-                    </strong>{" "}
-                    Velg nivået for den{" "}
-                    <strong className="text-foreground">
-                      høyeste relevante risikoen
-                    </strong>{" "}
-                    (worst case). Nivået gjelder samlet for alle punkter.
-                  </p>
-                </div>
-              ) : (
-                <p className="text-muted-foreground text-xs leading-relaxed">
-                  Velg det risikonivået som best beskriver denne cellen. 0 = ikke
-                  vurdert, 5 = kritisk.
-                </p>
-              )}
-            </div>
-            <div className="flex flex-wrap gap-2 sm:gap-2.5">
-              {([0, 1, 2, 3, 4, 5] as const).map((level) => {
-                const current =
-                  picker !== null
-                    ? (matrixValues[picker.row]?.[picker.col] ?? 0)
-                    : 0;
-                const isActive = current === level;
-                return (
-                  <button
-                    key={level}
+            {pickerIsOverridden ? (
+              <div className="space-y-2 rounded-xl border border-amber-500/25 bg-amber-500/[0.04] p-3">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-xs font-medium text-amber-700 dark:text-amber-400">
+                    Nivå overstyrt til {pickerCurrentLevel} (auto var {pickerAutoLevel})
+                  </span>
+                  <Button
                     type="button"
-                    onClick={() => selectLevel(level)}
-                    className={cn(
-                      cnCell(level, true),
-                      "flex min-h-[3.25rem] min-w-[5rem] flex-1 flex-col items-center justify-center gap-1 rounded-xl border px-2 py-2.5 text-center shadow-md transition-transform hover:scale-[1.02] active:scale-[0.98] sm:min-w-[5.5rem]",
-                      isActive &&
-                        "ring-primary ring-offset-background ring-2 ring-offset-2",
-                    )}
+                    size="sm"
+                    variant="ghost"
+                    className="h-7 text-xs"
+                    onClick={() => selectLevel(pickerAutoLevel)}
                   >
-                    <span className="text-lg font-bold tabular-nums leading-none">
-                      {level}
-                    </span>
-                    <span className="max-w-[6rem] truncate text-[10px] font-semibold leading-tight">
-                      {riskLegend.find((x) => x.level === level)?.label}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-            <p className="text-muted-foreground mt-4 text-[11px] leading-relaxed">
-              Cellefargen oppdateres med en gang lokalt. «Lagre endringer» sender
-              matrise og punkter til server og loggfører nivåendringer.
-            </p>
+                    Tilbakestill
+                  </Button>
+                </div>
+              </div>
+            ) : null}
           </DialogBody>
-          <DialogFooter>
+          <DialogFooter className="flex-row items-center justify-between gap-2 sm:justify-between">
+            {onSwitchPhase && picker ? (
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                className="font-semibold"
+                onClick={() => {
+                  const { row, col } = picker;
+                  closePicker();
+                  onSwitchPhase(row, col);
+                }}
+              >
+                <ArrowRightLeft className="mr-1.5 size-4" />
+                {currentPhase === "before"
+                  ? "Gå til etter tiltak"
+                  : "Gå til før tiltak"}
+              </Button>
+            ) : <span />}
             <Button type="button" variant="outline" onClick={closePicker}>
               Lukk
             </Button>
@@ -584,42 +1124,23 @@ export function RosMatrix({
         </DialogContent>
       </Dialog>
 
-      <div className="space-y-2">
-        <p className="text-muted-foreground text-xs font-medium">
-          Risikonivå (skala)
-        </p>
-        <div
-          className="flex flex-wrap gap-1.5 rounded-xl border border-border/60 bg-muted/20 p-2"
-          role="list"
-        >
-          {riskLegend.map(({ level, label }) => (
-            <span
-              key={level}
-              role="listitem"
-              className={cn(
-                cnCell(level, false),
-                "inline-flex min-h-0 items-center rounded-lg px-2.5 py-1.5 text-[11px] font-medium shadow-sm",
-              )}
-            >
-              <span className="tabular-nums font-bold">{level}</span>
-              <span className="text-muted-foreground mx-1">·</span>
-              {label}
-            </span>
-          ))}
-        </div>
-      </div>
-
-      <p className="text-muted-foreground flex items-start gap-2 text-xs leading-relaxed">
-        <MousePointerClick
-          className="mt-0.5 size-3.5 shrink-0 text-muted-foreground/70"
-          aria-hidden
-        />
-        <span>
-          {interactive
-            ? "Verdiene er veiledende for prioritering og må dokumenteres i tråd med deres metode."
-            : "Matrise i visningsmodus."}
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1" role="list">
+        <span className="text-muted-foreground text-[10px] font-medium uppercase tracking-wider">
+          Nivå
         </span>
-      </p>
+        {riskLegend.slice(1).map(({ level, label }) => (
+          <span
+            key={level}
+            role="listitem"
+            className={cn(
+              cnCell(level, false),
+              "inline-flex min-h-0 items-center rounded-md px-1.5 py-0.5 text-[10px] font-medium",
+            )}
+          >
+            {level} {label}
+          </span>
+        ))}
+      </div>
     </div>
   );
 }

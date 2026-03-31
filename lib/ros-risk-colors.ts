@@ -74,6 +74,24 @@ export function pdfRiskLevelStyle(level: number): {
   }
 }
 
+/** Very subtle tint for empty cells — shows the heatmap gradient without implying content */
+export function cellRiskGhostClass(level: number): string {
+  switch (level) {
+    case 1:
+      return "bg-emerald-500/[0.07] border-emerald-600/15 dark:bg-emerald-400/[0.06]";
+    case 2:
+      return "bg-lime-500/[0.07] border-lime-600/15 dark:bg-lime-400/[0.06]";
+    case 3:
+      return "bg-amber-400/[0.08] border-amber-500/15 dark:bg-amber-400/[0.06]";
+    case 4:
+      return "bg-orange-500/[0.08] border-orange-500/15 dark:bg-orange-400/[0.06]";
+    case 5:
+      return "bg-red-500/[0.09] border-red-500/15 dark:bg-red-400/[0.07]";
+    default:
+      return "bg-muted/20 border-border/40";
+  }
+}
+
 export function legendItems(): Array<{ level: number; label: string }> {
   return [
     { level: 0, label: "Ikke vurdert" },

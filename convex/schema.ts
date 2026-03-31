@@ -2,6 +2,15 @@ import { authTables } from "@convex-dev/auth/server";
 import { defineSchema, defineTable } from "convex/server";
 import { type Infer, v } from "convex/values";
 
+const rosCellItemValidator = v.object({
+  id: v.string(),
+  text: v.string(),
+  flags: v.optional(v.array(v.string())),
+  afterRow: v.optional(v.number()),
+  afterCol: v.optional(v.number()),
+  sourceItemId: v.optional(v.string()),
+});
+
 /** Felles input for én vurdering (Likert 1–5 som tall) */
 export const assessmentPayloadFields = {
   processName: v.string(),
@@ -458,34 +467,14 @@ export default defineSchema({
      * cellNotes er sammenslått tekst for PDF/eldre visning.
      */
     cellItems: v.optional(
-      v.array(
-        v.array(
-          v.array(
-            v.object({
-              id: v.string(),
-              text: v.string(),
-              flags: v.optional(v.array(v.string())),
-            }),
-          ),
-        ),
-      ),
+      v.array(v.array(v.array(rosCellItemValidator))),
     ),
     /** Restrisiko etter planlagte/gjennomførte tiltak */
     matrixValuesAfter: v.optional(v.array(v.array(v.number()))),
     cellNotesAfter: v.optional(v.array(v.array(v.string()))),
     /** Flere punkter per celle (etter tiltak) — cellNotesAfter avledet ved lagring */
     cellItemsAfter: v.optional(
-      v.array(
-        v.array(
-          v.array(
-            v.object({
-              id: v.string(),
-              text: v.string(),
-              flags: v.optional(v.array(v.string())),
-            }),
-          ),
-        ),
-      ),
+      v.array(v.array(v.array(rosCellItemValidator))),
     ),
     /**
      * Valgfritt eget rutenett for «etter tiltak» (ulike akser/etiketter enn før).
@@ -580,32 +569,12 @@ export default defineSchema({
     matrixValues: v.array(v.array(v.number())),
     cellNotes: v.optional(v.array(v.array(v.string()))),
     cellItems: v.optional(
-      v.array(
-        v.array(
-          v.array(
-            v.object({
-              id: v.string(),
-              text: v.string(),
-              flags: v.optional(v.array(v.string())),
-            }),
-          ),
-        ),
-      ),
+      v.array(v.array(v.array(rosCellItemValidator))),
     ),
     matrixValuesAfter: v.optional(v.array(v.array(v.number()))),
     cellNotesAfter: v.optional(v.array(v.array(v.string()))),
     cellItemsAfter: v.optional(
-      v.array(
-        v.array(
-          v.array(
-            v.object({
-              id: v.string(),
-              text: v.string(),
-              flags: v.optional(v.array(v.string())),
-            }),
-          ),
-        ),
-      ),
+      v.array(v.array(v.array(rosCellItemValidator))),
     ),
     rowAxisTitleAfter: v.optional(v.string()),
     colAxisTitleAfter: v.optional(v.string()),

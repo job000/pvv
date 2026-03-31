@@ -1,13 +1,11 @@
 "use client";
 
-import { RosAxisOverview } from "@/components/ros/ros-axis-overview";
-import { RosComplianceNotice } from "@/components/ros/ros-compliance-notice";
 import { RosJournalPanel } from "@/components/ros/ros-journal-panel";
 import { RosLifecycleCompliancePanel } from "@/components/ros/ros-lifecycle-compliance-panel";
 import { RosMatrix } from "@/components/ros/ros-matrix";
 import { RosLabelLevelsEditor } from "@/components/ros/ros-label-levels-editor";
-import { RosMethodologyGuide } from "@/components/ros/ros-methodology-guide";
 import { RosRiskRegisterTable } from "@/components/ros/ros-risk-register-table";
+import { RosRiskList, type FlatRisk } from "@/components/ros/ros-risk-list";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -28,6 +26,7 @@ import type { Id } from "@/convex/_generated/dataModel";
 import { useMutation, useQuery } from "convex/react";
 import {
   flattenCellItemsMatrixToLegacyNotes,
+  newRosCellItemId,
   resizeCellItemsMatrix,
   type RosCellItem,
   type RosCellItemMatrix,
@@ -35,6 +34,7 @@ import {
 import {
   DEFAULT_ROS_COL_LABELS,
   DEFAULT_ROS_ROW_LABELS,
+  positionRiskLevel,
 } from "@/lib/ros-defaults";
 import {
   parseLabelLines,
@@ -51,10 +51,8 @@ import { downloadRosAnalysisPdf } from "@/lib/ros-pdf";
 import {
   ChevronLeft,
   ChevronRight,
-  CircleHelp,
   FileDown,
   History,
-  Layers,
   Link2,
   ListTodo,
   Plus,
@@ -73,64 +71,14 @@ function tsToDatetimeLocal(ms: number): string {
 }
 
 const ROS_EDITOR_SECTIONS = [
-  { id: "detaljer", label: "Detaljer", hint: "Tittel, notat, revisjon" },
-  {
-    id: "livssyklus",
-    label: "Livssyklus og krav",
-    hint: "ISO 31000, rammer, EU/EØS",
-  },
-  { id: "oppsummering", label: "Oppsummering", hint: "Auto fra matriser" },
+  { id: "risikoer", label: "Risikovurdering", hint: "Identifiser og vurder" },
+  { id: "oppsummering", label: "Oppsummering", hint: "Før/etter oversikt" },
+  { id: "oppgaver", label: "Oppgaver", hint: "Tiltak og oppfølging" },
   { id: "pvv", label: "PVV-koblinger", hint: "Koble vurderinger" },
-  { id: "versjoner", label: "Versjoner", hint: "Snapshot" },
-  { id: "oppgaver", label: "Oppgaver", hint: "Oppfølging" },
-  { id: "etter-akser", label: "Etter tiltak", hint: "Egne akser" },
-  { id: "matrise", label: "Matrise", hint: "Hovedarbeid" },
-  { id: "journal", label: "Journal", hint: "Logg" },
+  { id: "innstillinger", label: "Innstillinger", hint: "Detaljer, akser, versjon" },
 ] as const;
 
-/** Standard: land på matrisen — der risiko settes (minst klikk for vanlig bruk). */
-const ROS_MATRISE_SECTION_INDEX = ROS_EDITOR_SECTIONS.findIndex(
-  (s) => s.id === "matrise",
-);
-
-/** Hovedvalg (enkel flyt — som «fyll ut → rapport» i KS-løsninger, her for IKT/ROS). */
-const ROS_PRIMARY_NAV: readonly {
-  id: string;
-  sectionIndex: number;
-  label: string;
-  short: string;
-}[] = [
-  {
-    id: "matrise",
-    sectionIndex: 7,
-    label: "Risikomatrise",
-    short: "Sett nivå i cellene",
-  },
-  {
-    id: "oppsummering",
-    sectionIndex: 2,
-    label: "Liste & tall",
-    short: "Oppsummering og register",
-  },
-  {
-    id: "pvv",
-    sectionIndex: 3,
-    label: "PVV-koblinger",
-    short: "Koble personvern",
-  },
-] as const;
-
-const ROS_MORE_NAV: readonly {
-  sectionIndex: number;
-  label: string;
-}[] = [
-  { sectionIndex: 0, label: "Kontekst" },
-  { sectionIndex: 1, label: "Livssyklus" },
-  { sectionIndex: 6, label: "Etter tiltak" },
-  { sectionIndex: 4, label: "Versjoner" },
-  { sectionIndex: 5, label: "Oppgaver" },
-  { sectionIndex: 8, label: "Journal" },
-] as const;
+const ROS_MATRISE_SECTION_INDEX = 0;
 
 function RosPvvLinkFields({
   linkId,
@@ -316,6 +264,7 @@ export function RosAnalysisEditor({
     col: number;
     nonce: number;
   } | null>(null);
+  const [highlightCell, setHighlightCell] = useState<[number, number] | null>(null);
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
 
@@ -585,12 +534,291 @@ export function RosAnalysisEditor({
     [matrixView],
   );
 
+  /** Removes any existing after-copy of a before-item from ALL cells and clears the before-item's afterRow/afterCol */
+  const removeAfterCopyEverywhere = useCallback(
+    (itemId: string) => {
+      setCellItemsAfterMatrix((prev) =>
+        prev.map((r) =>
+          r.map((c) => c.filter((it) => it.sourceItemId !== itemId)),
+        ),
+      );
+      setCellItemsMatrix((prev) =>
+        prev.map((r) =>
+          r.map((c) =>
+            c.map((it) =>
+              it.id === itemId
+                ? { ...it, afterRow: undefined, afterCol: undefined }
+                : it,
+            ),
+          ),
+        ),
+      );
+    },
+    [],
+  );
+
+  const onPlaceInAfter = useCallback(
+    (
+      itemId: string,
+      itemText: string,
+      itemFlags: string[] | undefined,
+      afterRow: number,
+      afterCol: number,
+    ) => {
+      removeAfterCopyEverywhere(itemId);
+
+      setCellItemsAfterMatrix((prev) => {
+        const copy = prev.map((r) => r.map((c) => [...c]));
+        if (!copy[afterRow]) return prev;
+        copy[afterRow][afterCol] = [
+          ...(copy[afterRow][afterCol] ?? []),
+          {
+            id: newRosCellItemId(),
+            text: itemText,
+            flags: itemFlags,
+            sourceItemId: itemId,
+          },
+        ];
+        return copy;
+      });
+      setMatrixAfter((prev) => {
+        const copy = prev.map((r) => [...r]);
+        if (!copy[afterRow]) return prev;
+        const cur = copy[afterRow][afterCol] ?? 0;
+        if (cur <= 0) {
+          copy[afterRow][afterCol] = positionRiskLevel(
+            afterRow,
+            afterCol,
+            effectiveAfterRowLabels.length,
+            effectiveAfterColLabels.length,
+          );
+        }
+        return copy;
+      });
+      setDirty(true);
+    },
+    [removeAfterCopyEverywhere, effectiveAfterRowLabels.length, effectiveAfterColLabels.length],
+  );
+
+  const onRemoveAfterPlacement = useCallback(
+    (itemId: string) => {
+      removeAfterCopyEverywhere(itemId);
+      setDirty(true);
+    },
+    [removeAfterCopyEverywhere],
+  );
+
+  const onAssignBeforeItem = useCallback(
+    (
+      itemId: string,
+      sourceRow: number,
+      sourceCol: number,
+      afterRow: number,
+      afterCol: number,
+    ) => {
+      const beforeItem = cellItemsMatrix[sourceRow]?.[sourceCol]?.find(
+        (it) => it.id === itemId,
+      );
+      if (!beforeItem) return;
+
+      removeAfterCopyEverywhere(itemId);
+
+      setCellItemsMatrix((prev) => {
+        const copy = prev.map((r) => r.map((c) => c.map((it) => ({ ...it }))));
+        const cell = copy[sourceRow]?.[sourceCol];
+        if (!cell) return prev;
+        const idx = cell.findIndex((it) => it.id === itemId);
+        if (idx >= 0) {
+          cell[idx] = { ...cell[idx], afterRow, afterCol };
+        }
+        return copy;
+      });
+
+      setCellItemsAfterMatrix((prev) => {
+        const copy = prev.map((r) => r.map((c) => [...c]));
+        if (!copy[afterRow]) return prev;
+        copy[afterRow][afterCol] = [
+          ...(copy[afterRow][afterCol] ?? []),
+          {
+            id: newRosCellItemId(),
+            text: beforeItem.text,
+            flags: beforeItem.flags ? [...beforeItem.flags] : undefined,
+            sourceItemId: itemId,
+          },
+        ];
+        return copy;
+      });
+
+      setMatrixAfter((prev) => {
+        const copy = prev.map((r) => [...r]);
+        if (!copy[afterRow]) return prev;
+        const cur = copy[afterRow][afterCol] ?? 0;
+        if (cur <= 0) {
+          copy[afterRow][afterCol] = positionRiskLevel(
+            afterRow,
+            afterCol,
+            effectiveAfterRowLabels.length,
+            effectiveAfterColLabels.length,
+          );
+        }
+        return copy;
+      });
+
+      setDirty(true);
+    },
+    [cellItemsMatrix, removeAfterCopyEverywhere, effectiveAfterRowLabels.length, effectiveAfterColLabels.length],
+  );
+
   const handleJumpToCell = useCallback(
     (row: number, col: number, phase?: "before" | "after") => {
       setMatrixView(phase ?? "before");
       setJumpRequest({ row, col, nonce: Date.now() });
     },
     [],
+  );
+
+  const onAddRisk = useCallback(
+    (risk: FlatRisk) => {
+      setCellItemsMatrix((prev) => {
+        const copy = prev.map((r) => r.map((c) => [...c]));
+        if (!copy[risk.beforeRow]) return prev;
+        if (!copy[risk.beforeRow][risk.beforeCol])
+          copy[risk.beforeRow][risk.beforeCol] = [];
+        copy[risk.beforeRow][risk.beforeCol].push({
+          id: risk.id,
+          text: risk.text,
+          flags: risk.flags,
+          afterRow: risk.afterRow,
+          afterCol: risk.afterCol,
+        });
+        return copy;
+      });
+      setMatrix((prev) => {
+        const copy = prev.map((r) => [...r]);
+        if (!copy[risk.beforeRow]) return prev;
+        const cur = copy[risk.beforeRow][risk.beforeCol] ?? 0;
+        if (cur <= 0 && data) {
+          copy[risk.beforeRow][risk.beforeCol] = positionRiskLevel(
+            risk.beforeRow,
+            risk.beforeCol,
+            data.rowLabels.length,
+            data.colLabels.length,
+          );
+        }
+        return copy;
+      });
+      setDirty(true);
+    },
+    [data],
+  );
+
+  const onUpdateRisk = useCallback(
+    (risk: FlatRisk) => {
+      setCellItemsMatrix((prev) => {
+        const copy = prev.map((r) => r.map((c) => [...c]));
+        let found = false;
+        for (let r = 0; r < copy.length; r++) {
+          for (let c = 0; c < (copy[r]?.length ?? 0); c++) {
+            const idx = copy[r][c].findIndex((it) => it.id === risk.id);
+            if (idx >= 0) {
+              found = true;
+              if (r === risk.beforeRow && c === risk.beforeCol) {
+                copy[r][c][idx] = {
+                  ...copy[r][c][idx],
+                  text: risk.text,
+                  flags: risk.flags,
+                  afterRow: risk.afterRow,
+                  afterCol: risk.afterCol,
+                };
+              } else {
+                const [item] = copy[r][c].splice(idx, 1);
+                if (!copy[risk.beforeRow]) return prev;
+                if (!copy[risk.beforeRow][risk.beforeCol])
+                  copy[risk.beforeRow][risk.beforeCol] = [];
+                copy[risk.beforeRow][risk.beforeCol].push({
+                  ...item,
+                  text: risk.text,
+                  flags: risk.flags,
+                  afterRow: risk.afterRow,
+                  afterCol: risk.afterCol,
+                });
+              }
+              break;
+            }
+          }
+          if (found) break;
+        }
+        return copy;
+      });
+
+      if (data) {
+        setMatrix((prev) => {
+          const copy = prev.map((r) => [...r]);
+          if (!copy[risk.beforeRow]) return prev;
+          const cur = copy[risk.beforeRow][risk.beforeCol] ?? 0;
+          if (cur <= 0) {
+            copy[risk.beforeRow][risk.beforeCol] = positionRiskLevel(
+              risk.beforeRow,
+              risk.beforeCol,
+              data.rowLabels.length,
+              data.colLabels.length,
+            );
+          }
+          return copy;
+        });
+      }
+
+      removeAfterCopyEverywhere(risk.id);
+      if (risk.afterRow !== risk.beforeRow || risk.afterCol !== risk.beforeCol) {
+        setCellItemsAfterMatrix((prev) => {
+          const copy = prev.map((r) => r.map((c) => [...c]));
+          if (!copy[risk.afterRow]) return prev;
+          if (!copy[risk.afterRow][risk.afterCol])
+            copy[risk.afterRow][risk.afterCol] = [];
+          copy[risk.afterRow][risk.afterCol].push({
+            id: newRosCellItemId(),
+            text: risk.text,
+            flags: risk.flags,
+            sourceItemId: risk.id,
+          });
+          return copy;
+        });
+        setMatrixAfter((prev) => {
+          const copy = prev.map((r) => [...r]);
+          if (!copy[risk.afterRow]) return prev;
+          const cur = copy[risk.afterRow][risk.afterCol] ?? 0;
+          if (cur <= 0) {
+            copy[risk.afterRow][risk.afterCol] = positionRiskLevel(
+              risk.afterRow,
+              risk.afterCol,
+              effectiveAfterRowLabels.length,
+              effectiveAfterColLabels.length,
+            );
+          }
+          return copy;
+        });
+      }
+
+      setDirty(true);
+    },
+    [data, removeAfterCopyEverywhere, effectiveAfterRowLabels.length, effectiveAfterColLabels.length],
+  );
+
+  const onDeleteRisk = useCallback(
+    (riskId: string, beforeRow: number, beforeCol: number) => {
+      setCellItemsMatrix((prev) => {
+        const copy = prev.map((r) => r.map((c) => [...c]));
+        if (copy[beforeRow]?.[beforeCol]) {
+          copy[beforeRow][beforeCol] = copy[beforeRow][beforeCol].filter(
+            (it) => it.id !== riskId,
+          );
+        }
+        return copy;
+      });
+      removeAfterCopyEverywhere(riskId);
+      setDirty(true);
+    },
+    [removeAfterCopyEverywhere],
   );
 
   const copyBeforeToAfter = useCallback(() => {
@@ -1082,313 +1310,350 @@ export function RosAnalysisEditor({
         Neste nederst.
       </p>
 
-      <div className="border-border/60 bg-card space-y-4 rounded-2xl border p-4 shadow-sm">
-        <div className="space-y-1">
-          <p className="text-foreground text-sm font-medium leading-snug">
-            ROS for IKT-løsning
-          </p>
-          <p className="text-muted-foreground max-w-3xl text-xs leading-relaxed">
-            Tre steg som i en enkel avviks-/KS-flyt:{" "}
-            <strong className="text-foreground">vurder risiko</strong> i matrisen,{" "}
-            <strong className="text-foreground">se liste og tall</strong>,{" "}
-            <strong className="text-foreground">koble PVV</strong> der det trengs.
-            Alt annet ligger under «Mer» — versjon, journal, kontekst.
-          </p>
-        </div>
-
-        <details className="border-border/60 group rounded-xl border bg-muted/15">
-          <summary className="hover:bg-muted/40 flex cursor-pointer list-none items-center gap-2 px-3 py-2.5 text-xs font-medium [&::-webkit-details-marker]:hidden">
-            <span className="text-muted-foreground shrink-0 group-open:hidden">
-              Vis
-            </span>
-            <span className="text-muted-foreground hidden shrink-0 group-open:inline">
-              Skjul
-            </span>
-            <span>
-              Krav, ISO og personvern{" "}
-              <span className="text-muted-foreground font-normal">
-                (anbefales ved revisjon)
-              </span>
-            </span>
-          </summary>
-          <div className="border-border/50 border-t px-2 pb-3 pt-2">
-            <RosComplianceNotice
-              standardsDetailHref={`/w/${workspaceId}/ros#ros-metode-standarder`}
-            />
-          </div>
-        </details>
-
-        <nav
-          className="flex flex-col gap-3"
-          aria-label="Hoveddel av ROS-analysen"
-        >
-          <div className="grid gap-2 sm:grid-cols-3">
-            {ROS_PRIMARY_NAV.map((item) => {
-              const active = rosSection === item.sectionIndex;
-              return (
-                <button
-                  key={item.id}
-                  type="button"
-                  onClick={() => setRosSection(item.sectionIndex)}
-                  className={cn(
-                    "flex flex-col items-start gap-0.5 rounded-xl border px-4 py-3 text-left transition-all",
-                    active
-                      ? "border-primary bg-primary text-primary-foreground shadow-md"
-                      : "border-border/70 bg-background hover:border-primary/35 hover:bg-muted/30",
-                  )}
-                >
-                  <span className="text-sm font-semibold">{item.label}</span>
-                  <span
-                    className={cn(
-                      "text-xs leading-snug",
-                      active ? "text-primary-foreground/90" : "text-muted-foreground",
-                    )}
-                  >
-                    {item.short}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-          <div className="flex flex-wrap items-center gap-x-1 gap-y-1 border-t border-border/40 pt-3 text-xs">
-            <span className="text-muted-foreground mr-1 font-medium">Mer</span>
-            {ROS_MORE_NAV.map((item, i) => (
-              <span key={item.label} className="inline-flex items-center">
-                {i > 0 ? (
-                  <span className="text-muted-foreground/50 mx-1" aria-hidden>
-                    ·
-                  </span>
-                ) : null}
-                <button
-                  type="button"
-                  onClick={() => setRosSection(item.sectionIndex)}
-                  className={cn(
-                    "rounded-md px-1.5 py-0.5 font-medium underline-offset-4 hover:underline",
-                    rosSection === item.sectionIndex
-                      ? "bg-primary/10 text-primary"
-                      : "text-muted-foreground hover:text-foreground",
-                  )}
-                >
-                  {item.label}
-                </button>
-              </span>
-            ))}
-          </div>
-        </nav>
-
-        <label htmlFor="ros-section-jump" className="sr-only">
-          Alle deler (komplett liste)
-        </label>
-        <select
-          id="ros-section-jump"
-          className="border-input bg-muted/20 h-9 w-full max-w-md rounded-lg border px-2 text-xs shadow-xs"
-          value={rosSection}
-          onChange={(e) => setRosSection(Number(e.target.value))}
-        >
-          {ROS_EDITOR_SECTIONS.map((sec, i) => (
-            <option key={sec.id} value={i}>
+      <nav
+        className="bg-card flex flex-wrap items-center gap-1 rounded-xl border p-1 shadow-sm"
+        aria-label="ROS-seksjoner"
+      >
+        {ROS_EDITOR_SECTIONS.map((sec, i) => {
+          const active = rosSection === i;
+          return (
+            <button
+              key={sec.id}
+              type="button"
+              onClick={() => setRosSection(i)}
+              className={cn(
+                "rounded-lg px-3 py-2 text-sm font-medium transition-all",
+                active
+                  ? "bg-primary text-primary-foreground shadow-sm"
+                  : "text-muted-foreground hover:bg-muted/50 hover:text-foreground",
+              )}
+            >
               {sec.label}
-              {sec.hint ? ` — ${sec.hint}` : ""}
-            </option>
-          ))}
-        </select>
-      </div>
+            </button>
+          );
+        })}
+      </nav>
 
+      {/* === Section 0: Risikovurdering (primary) === */}
       {rosSection === 0 && (
-        <>
-      <details className="border-border/60 bg-muted/10 group mb-4 rounded-xl border open:bg-muted/15">
-        <summary className="hover:bg-muted/30 flex cursor-pointer list-none items-center gap-2 rounded-xl px-4 py-3 text-sm font-medium [&::-webkit-details-marker]:hidden">
-          <CircleHelp className="text-primary size-4 shrink-0" aria-hidden />
-          <span className="min-w-0 flex-1">
-            Metode og retningslinjer (ISO, personvern, PVV)
-            <span className="text-muted-foreground ml-1.5 block text-xs font-normal sm:inline sm:ml-1">
-              Valgfritt — samme innhold som under ROS i arbeidsområdet
-            </span>
-          </span>
-          <span className="text-muted-foreground shrink-0 text-xs group-open:hidden">
-            Vis
-          </span>
-          <span className="text-muted-foreground hidden shrink-0 text-xs group-open:inline">
-            Skjul
-          </span>
-        </summary>
-        <div className="border-border/50 border-t px-2 pb-3 pt-1">
-          <RosMethodologyGuide variant="compact" workspaceId={workspaceId} />
+        <div className="space-y-6">
+          {/* Matrix visualization */}
+          {matrix.length > 0 ? (
+            <Card className="overflow-hidden">
+              <CardHeader className="border-b border-border/50 bg-muted/20 pb-3">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <CardTitle className="text-base">Risikomatrise</CardTitle>
+                    <CardDescription>
+                      {data.rowAxisTitle} × {data.colAxisTitle} — klikk en celle for å se tilhørende risikoer.
+                    </CardDescription>
+                  </div>
+                  <div className="flex flex-wrap gap-2 text-xs">
+                    <Badge variant="outline" className="font-normal">
+                      Før: max <span className="text-foreground font-semibold tabular-nums">{beforeStats.max}</span>
+                    </Badge>
+                    <Badge variant="outline" className="font-normal">
+                      Etter: max <span className="text-foreground font-semibold tabular-nums">{afterStats.max}</span>
+                    </Badge>
+                    {beforeStats.highOrCritical > 0 && (
+                      <Badge variant="outline" className="border-orange-500/40 bg-orange-500/10 font-normal">
+                        {beforeStats.highOrCritical} celle{beforeStats.highOrCritical !== 1 ? "r" : ""} nivå 4–5
+                      </Badge>
+                    )}
+                  </div>
+                </div>
+                <div className="bg-muted/60 mt-2 inline-flex rounded-lg border p-1 shadow-sm" role="tablist">
+                  <Button
+                    type="button"
+                    role="tab"
+                    aria-selected={matrixView === "before"}
+                    variant={matrixView === "before" ? "default" : "ghost"}
+                    size="sm"
+                    className={cn(
+                      "rounded-md font-semibold",
+                      matrixView !== "before" && "text-muted-foreground hover:text-foreground",
+                    )}
+                    onClick={() => setMatrixView("before")}
+                  >
+                    Før tiltak
+                  </Button>
+                  <Button
+                    type="button"
+                    role="tab"
+                    aria-selected={matrixView === "after"}
+                    variant={matrixView === "after" ? "default" : "ghost"}
+                    size="sm"
+                    className={cn(
+                      "rounded-md font-semibold",
+                      matrixView !== "after" && "text-muted-foreground hover:text-foreground",
+                    )}
+                    onClick={() => setMatrixView("after")}
+                  >
+                    Etter tiltak
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent className="pt-4">
+                {afterMatrixInvalid ? (
+                  <Alert>
+                    <AlertTitle>Ugyldig etter-matrise</AlertTitle>
+                    <AlertDescription>
+                      Angi minst to rader og to kolonner i innstillinger,
+                      eller bruk samme rutenett som før tiltak.
+                    </AlertDescription>
+                  </Alert>
+                ) : (
+                  <RosMatrix
+                    key={`${matrixView}-${useSeparateAfterAxes}`}
+                    rowAxisTitle={matrixRowAxisTitle}
+                    colAxisTitle={matrixColAxisTitle}
+                    rowLabels={matrixRowLabels}
+                    colLabels={matrixColLabels}
+                    matrixValues={matrixView === "after" ? matrixAfter : matrix}
+                    cellItems={matrixView === "after" ? cellItemsAfterMatrix : cellItemsMatrix}
+                    onCellItemsChange={onCellItemsChange}
+                    onCellChange={onCellChange}
+                    jumpRequest={jumpRequest}
+                    onJumpHandled={() => setJumpRequest(null)}
+                    currentPhase={matrixView}
+                    otherPhaseValues={matrixView === "after" ? matrix : matrixAfter}
+                    otherPhaseCellItems={matrixView === "after" ? cellItemsMatrix : cellItemsAfterMatrix}
+                    onSwitchPhase={(row, col) => {
+                      const nextPhase = matrixView === "before" ? "after" : "before";
+                      setMatrixView(nextPhase as "before" | "after");
+                      setJumpRequest({ row, col, nonce: Date.now() });
+                    }}
+                    afterRowLabels={effectiveAfterRowLabels}
+                    afterColLabels={effectiveAfterColLabels}
+                    onPlaceInAfter={matrixView === "before" ? onPlaceInAfter : undefined}
+                    onRemoveAfterPlacement={matrixView === "before" ? onRemoveAfterPlacement : undefined}
+                    beforeRowLabels={data?.rowLabels}
+                    beforeColLabels={data?.colLabels}
+                    onAssignBeforeItem={matrixView === "after" ? onAssignBeforeItem : undefined}
+                  />
+                )}
+              </CardContent>
+            </Card>
+          ) : null}
+
+          {/* Risk list — primary input */}
+          <Card>
+            <CardContent className="pt-6">
+              <RosRiskList
+                rowLabels={data.rowLabels}
+                colLabels={data.colLabels}
+                rowAxisTitle={data.rowAxisTitle}
+                colAxisTitle={data.colAxisTitle}
+                cellItemsMatrix={cellItemsMatrix}
+                matrixValues={matrix}
+                matrixAfter={matrixAfter}
+                cellItemsAfterMatrix={cellItemsAfterMatrix}
+                afterRowLabels={effectiveAfterRowLabels}
+                afterColLabels={effectiveAfterColLabels}
+                onAddRisk={onAddRisk}
+                onUpdateRisk={onUpdateRisk}
+                onDeleteRisk={onDeleteRisk}
+                highlightCell={highlightCell}
+              />
+            </CardContent>
+          </Card>
         </div>
-      </details>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Detaljer</CardTitle>
-          <CardDescription>
-            Tittel og notat (metode, forutsetninger). PVV kobles under eget
-            avsnitt. Lagring og journal bruker{" "}
-            <strong className="text-foreground">revisjon</strong> (som PVV) slik
-            at samtidige endringer ikke overskriver hverandre uten varsel.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="grid gap-4 sm:grid-cols-2">
-          <div className="space-y-2 sm:col-span-2">
-            <Label htmlFor="ros-title">Tittel</Label>
-            <Input
-              id="ros-title"
-              value={title}
-              onChange={(e) => {
-                setTitle(e.target.value);
-                setDirty(true);
-              }}
-            />
-          </div>
-          <div className="space-y-2 sm:col-span-2">
-            <Label htmlFor="ros-notes">
-              Notat (metode, forutsetninger, referanser)
-            </Label>
-            <Textarea
-              id="ros-notes"
-              value={notes}
-              onChange={(e) => {
-                setNotes(e.target.value);
-                setDirty(true);
-              }}
-              rows={4}
-              className="min-h-[6rem]"
-            />
-          </div>
-          <div className="space-y-2 border-t pt-4 sm:col-span-2">
-            <Label htmlFor="ros-next-review">Neste revisjon / gjennomgang</Label>
-            <p className="text-muted-foreground text-xs leading-relaxed">
-              Plan når analysen skal gjennomgås på nytt. Du får e-post når
-              tidspunktet er passert (maks. én gang per uke per analyse).
-            </p>
-            <Input
-              id="ros-next-review"
-              type="datetime-local"
-              value={nextReviewLocal}
-              onChange={(e) => {
-                setNextReviewLocal(e.target.value);
-                setDirty(true);
-              }}
-              onBlur={() => void flushReviewSchedule()}
-            />
-          </div>
-          <div className="space-y-2 sm:col-span-2">
-            <Label htmlFor="ros-review-routine">Rutine / hva som skal sjekkes</Label>
-            <Textarea
-              id="ros-review-routine"
-              value={reviewRoutineNotes}
-              onChange={(e) => {
-                setReviewRoutineNotes(e.target.value);
-                setDirty(true);
-              }}
-              onBlur={() => void flushReviewSchedule()}
-              rows={2}
-              className="min-h-[4rem]"
-              placeholder="F.eks. årlig gjennomgang, ny vurdering ved systemendring …"
-            />
-          </div>
-        </CardContent>
-      </Card>
-        </>
       )}
 
+      {/* === Section 1: Oppsummering === */}
       {rosSection === 1 && (
-        <RosLifecycleCompliancePanel
-          methodologyStatement={methodologyStatement}
-          contextSummary={contextSummary}
-          scopeAndCriteria={scopeAndCriteria}
-          riskCriteriaVersion={riskCriteriaVersion}
-          axisScaleNotes={axisScaleNotes}
-          complianceScopeTags={complianceScopeTags}
-          requirementRefs={requirementRefs}
-          onChange={(patch) => {
-            if (patch.methodologyStatement !== undefined) {
-              setMethodologyStatement(patch.methodologyStatement);
-            }
-            if (patch.contextSummary !== undefined) {
-              setContextSummary(patch.contextSummary);
-            }
-            if (patch.scopeAndCriteria !== undefined) {
-              setScopeAndCriteria(patch.scopeAndCriteria);
-            }
-            if (patch.riskCriteriaVersion !== undefined) {
-              setRiskCriteriaVersion(patch.riskCriteriaVersion);
-            }
-            if (patch.axisScaleNotes !== undefined) {
-              setAxisScaleNotes(patch.axisScaleNotes);
-            }
-            if (patch.complianceScopeTags !== undefined) {
-              setComplianceScopeTags(patch.complianceScopeTags);
-            }
-            if (patch.requirementRefs !== undefined) {
-              setRequirementRefs(patch.requirementRefs);
-            }
-            setDirty(true);
-          }}
-        />
-      )}
-
-      {rosSection === 2 && (
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Oppsummering og risikoliste</CardTitle>
+          <CardTitle className="text-base">Oppsummering og risikoreduksjon</CardTitle>
           <CardDescription>
-            Tall fra matrisene (automatisk) og tabell over alle celler med innhold
-            — tilsvarende «risikoanalyse»-tabell og risikobilde i klassiske ROS-dokumenter.
-            Bruk flagg under PVV-koblinger for å synliggjøre hva som er viktig i PVV.
+            Sammenligning av risiko før og etter tiltak — se hva som er redusert,
+            hva som gjenstår, og hva som trenger oppfølging.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-5">
-          <Alert>
-            <AlertTitle className="text-sm">To måter å jobbe på</AlertTitle>
-            <AlertDescription className="text-muted-foreground text-sm leading-relaxed">
-              <strong className="text-foreground">Matrise først:</strong> klikk celler
-              og sett nivå 0–5, eventuelt punkter i celle.{" "}
-              <strong className="text-foreground">Tekst først:</strong> åpne en celle og
-              skriv trusler/kommentar som i kolonnen «Trussel» i ROS-rapport — sett nivå
-              når dere er enige. Begge gir samme resultat under; listen under samler
-              alle celler med nivå eller tekst.
-            </AlertDescription>
-          </Alert>
-          <div>
-            <h3 className="text-foreground mb-2 text-sm font-semibold">
-              Tall fra matrisene
-            </h3>
-            <ul className="list-inside list-disc space-y-1 text-sm leading-relaxed">
-              {data.rosSummary.summaryLines.map((line, i) => (
-                <li key={i}>{line}</li>
-              ))}
-            </ul>
-          </div>
-          {!data.rosSummary.sameLayout ? (
-            <p className="text-muted-foreground text-sm leading-relaxed">
-              Før- og etter-matrisen har ulike akser eller dimensjoner — detaljert
-              celle-for-celle-sammenligning er begrenset; oppsummeringen viser blant
-              annet høyeste nivå og høy risiko per matrise.
-            </p>
-          ) : null}
-          {data.rosSummary.suggestedLinkFlags.length > 0 ? (
-            <p className="text-muted-foreground text-xs leading-relaxed">
-              <span className="text-foreground font-medium">Forslag til flagg</span>{" "}
-              på koblingene under:{" "}
-              {data.rosSummary.suggestedLinkFlags.join(", ")} — legg inn under hver
-              PVV-kobling ved behov.
-            </p>
-          ) : null}
-          <div id="ros-risk-register" className="space-y-2 scroll-mt-24">
-            <h3 className="text-foreground text-sm font-semibold">
-              Risikoregister (alle celler med nivå eller punkter)
-            </h3>
+          <div id="ros-risk-register" className="space-y-3 scroll-mt-24">
             {riskRegisterSnapshot ? (
               <RosRiskRegisterTable
+                sameLayout={data.rosSummary.sameLayout}
                 before={riskRegisterSnapshot.before}
                 after={riskRegisterSnapshot.after}
               />
             ) : null}
           </div>
+          {data.rosSummary.suggestedLinkFlags.length > 0 ? (
+            <p className="text-muted-foreground text-xs leading-relaxed">
+              <span className="text-foreground font-medium">PVV-flagg:</span>{" "}
+              {data.rosSummary.suggestedLinkFlags.join(", ")}
+            </p>
+          ) : null}
         </CardContent>
       </Card>
       )}
 
+      {/* === Section 2: Oppgaver === */}
+      {rosSection === 2 && (
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <ListTodo className="size-4" />
+            Oppgaver
+          </CardTitle>
+          <CardDescription>
+            Oppfølgingspunkter for denne ROS-analysen — tildeling og status.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          <form
+            onSubmit={(e) => void onCreateTask(e)}
+            className="space-y-3 rounded-xl border border-dashed p-4"
+          >
+            <p className="text-sm font-medium">Ny oppgave</p>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="space-y-1.5 sm:col-span-2">
+                <Label htmlFor="rt-title">Tittel</Label>
+                <Input
+                  id="rt-title"
+                  value={taskTitle}
+                  onChange={(e) => setTaskTitle(e.target.value)}
+                  required
+                />
+              </div>
+              <div className="space-y-1.5 sm:col-span-2">
+                <Label htmlFor="rt-desc">Beskrivelse (valgfritt)</Label>
+                <Textarea
+                  id="rt-desc"
+                  value={taskDesc}
+                  onChange={(e) => setTaskDesc(e.target.value)}
+                  rows={2}
+                  className="min-h-0"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="rt-assign">Tildelt</Label>
+                <select
+                  id="rt-assign"
+                  className="border-input bg-background flex h-10 w-full rounded-lg border px-2 text-sm"
+                  value={taskAssignee}
+                  onChange={(e) =>
+                    setTaskAssignee(
+                      e.target.value === ""
+                        ? ""
+                        : (e.target.value as Id<"users">),
+                    )
+                  }
+                >
+                  <option value="">— Ikke tildelt —</option>
+                  {(members ?? []).map((m) => (
+                    <option key={m.userId} value={m.userId}>
+                      {m.name ?? m.email ?? m.userId}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="rt-prio">Prioritet (1–5)</Label>
+                <Input
+                  id="rt-prio"
+                  type="number"
+                  min={1}
+                  max={5}
+                  value={taskPriority}
+                  onChange={(e) =>
+                    setTaskPriority(
+                      Math.min(
+                        5,
+                        Math.max(1, Number(e.target.value) || 3),
+                      ),
+                    )
+                  }
+                />
+              </div>
+            </div>
+            <Button type="submit" disabled={taskBusy || !taskTitle.trim()}>
+              {taskBusy ? "Oppretter …" : "Opprett oppgave"}
+            </Button>
+          </form>
+
+          <Separator />
+
+          {tasks === undefined ? (
+            <p className="text-muted-foreground text-sm">Henter oppgaver …</p>
+          ) : tasks.length === 0 ? (
+            <p className="text-muted-foreground text-sm">Ingen oppgaver ennå.</p>
+          ) : (
+            <ul className="space-y-4">
+              {tasks.map((t) => (
+                <li key={t._id} className="rounded-xl border p-4 shadow-sm">
+                  {editingTaskId === t._id ? (
+                    <TaskEditForm
+                      task={t}
+                      members={members ?? []}
+                      onCancel={() => setEditingTaskId(null)}
+                      onSave={async (patch) => {
+                        await updateRosTask({ taskId: t._id, ...patch });
+                        setEditingTaskId(null);
+                      }}
+                    />
+                  ) : (
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                      <div className="min-w-0 space-y-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="font-medium">{t.title}</p>
+                          <Badge variant={t.status === "done" ? "secondary" : "default"}>
+                            {t.status === "done" ? "Fullført" : "Åpen"}
+                          </Badge>
+                          <span className="text-muted-foreground text-xs">P{t.priority}</span>
+                        </div>
+                        {t.description ? (
+                          <p className="text-muted-foreground text-sm whitespace-pre-wrap">{t.description}</p>
+                        ) : null}
+                        <p className="text-muted-foreground text-xs">
+                          {t.assigneeName ? `Tildelt: ${t.assigneeName}` : "Ikke tildelt"}
+                          {t.dueAt ? ` · Frist ${formatTs(t.dueAt)}` : ""}
+                        </p>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={() =>
+                            void setRosTaskStatus({
+                              taskId: t._id,
+                              status: t.status === "done" ? "open" : "done",
+                            })
+                          }
+                        >
+                          {t.status === "done" ? "Gjenåpne" : "Fullfør"}
+                        </Button>
+                        <Button type="button" size="sm" variant="secondary" onClick={() => setEditingTaskId(t._id)}>
+                          Rediger
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="ghost"
+                          className="text-destructive"
+                          onClick={() => {
+                            if (window.confirm("Slette denne oppgaven?")) {
+                              void removeRosTask({ taskId: t._id });
+                            }
+                          }}
+                        >
+                          Slett
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+        </CardContent>
+      </Card>
+      )}
+
+      {/* === Section 3: PVV === */}
       {rosSection === 3 && (
       <Card>
         <CardHeader>
@@ -1551,12 +1816,138 @@ export function RosAnalysisEditor({
       </Card>
       )}
 
+      {/* === Section 4: Innstillinger (consolidated) === */}
       {rosSection === 4 && (
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-base">
-            <History className="size-4" />
-            Versjonskontroll
+      <div className="space-y-4">
+        {/* Detaljer */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Detaljer</CardTitle>
+          </CardHeader>
+          <CardContent className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-2 sm:col-span-2">
+              <Label htmlFor="ros-title">Tittel</Label>
+              <Input
+                id="ros-title"
+                value={title}
+                onChange={(e) => { setTitle(e.target.value); setDirty(true); }}
+              />
+            </div>
+            <div className="space-y-2 sm:col-span-2">
+              <Label htmlFor="ros-notes">Notat</Label>
+              <Textarea
+                id="ros-notes"
+                value={notes}
+                onChange={(e) => { setNotes(e.target.value); setDirty(true); }}
+                rows={3}
+                className="min-h-[4rem]"
+              />
+            </div>
+            <div className="space-y-2 sm:col-span-2">
+              <Label htmlFor="ros-next-review">Neste revisjon</Label>
+              <Input
+                id="ros-next-review"
+                type="datetime-local"
+                value={nextReviewLocal}
+                onChange={(e) => { setNextReviewLocal(e.target.value); setDirty(true); }}
+                onBlur={() => void flushReviewSchedule()}
+              />
+            </div>
+            <div className="space-y-2 sm:col-span-2">
+              <Label htmlFor="ros-review-routine">Rutine</Label>
+              <Textarea
+                id="ros-review-routine"
+                value={reviewRoutineNotes}
+                onChange={(e) => { setReviewRoutineNotes(e.target.value); setDirty(true); }}
+                onBlur={() => void flushReviewSchedule()}
+                rows={2}
+                className="min-h-[3rem]"
+                placeholder="F.eks. årlig gjennomgang …"
+              />
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Livssyklus og krav */}
+        <RosLifecycleCompliancePanel
+          methodologyStatement={methodologyStatement}
+          contextSummary={contextSummary}
+          scopeAndCriteria={scopeAndCriteria}
+          riskCriteriaVersion={riskCriteriaVersion}
+          axisScaleNotes={axisScaleNotes}
+          complianceScopeTags={complianceScopeTags}
+          requirementRefs={requirementRefs}
+          onChange={(patch) => {
+            if (patch.methodologyStatement !== undefined) setMethodologyStatement(patch.methodologyStatement);
+            if (patch.contextSummary !== undefined) setContextSummary(patch.contextSummary);
+            if (patch.scopeAndCriteria !== undefined) setScopeAndCriteria(patch.scopeAndCriteria);
+            if (patch.riskCriteriaVersion !== undefined) setRiskCriteriaVersion(patch.riskCriteriaVersion);
+            if (patch.axisScaleNotes !== undefined) setAxisScaleNotes(patch.axisScaleNotes);
+            if (patch.complianceScopeTags !== undefined) setComplianceScopeTags(patch.complianceScopeTags);
+            if (patch.requirementRefs !== undefined) setRequirementRefs(patch.requirementRefs);
+            setDirty(true);
+          }}
+        />
+
+        {/* Etter tiltak — egne akser */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Etter tiltak — egne akser</CardTitle>
+            <CardDescription>
+              Valgfritt eget rutenett for restrisiko.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex items-start gap-3">
+              <Checkbox
+                id="ros-separate-after"
+                checked={useSeparateAfterAxes}
+                onCheckedChange={(c) => {
+                  const checked = Boolean(c);
+                  if (checked && data) {
+                    setRowLabelsAfterText(data.rowLabels.join("\n"));
+                    setColLabelsAfterText(data.colLabels.join("\n"));
+                    setRowAxisTitleAfter(data.rowAxisTitle);
+                    setColAxisTitleAfter(data.colAxisTitle);
+                    setMatrixAfter(matrix.map((r) => [...r]));
+                    setCellItemsAfterMatrix(cellItemsMatrix.map((r) => r.map((c2) => c2.map((it) => ({ ...it })))));
+                  }
+                  setUseSeparateAfterAxes(checked);
+                  setDirty(true);
+                }}
+              />
+              <Label htmlFor="ros-separate-after" className="cursor-pointer text-sm">
+                Bruk eget rutenett for etter tiltak
+              </Label>
+            </div>
+            {useSeparateAfterAxes ? (
+              <div className="space-y-6">
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="ros-after-row-axis">Radakse</Label>
+                    <Input id="ros-after-row-axis" value={rowAxisTitleAfter} onChange={(e) => { setRowAxisTitleAfter(e.target.value); setDirty(true); }} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="ros-after-col-axis">Kolonneakse</Label>
+                    <Input id="ros-after-col-axis" value={colAxisTitleAfter} onChange={(e) => { setColAxisTitleAfter(e.target.value); setDirty(true); }} />
+                  </div>
+                </div>
+                <Button type="button" variant="secondary" size="sm" onClick={() => copyBeforeAxesToAfter()}>
+                  Kopier fra før-matrise
+                </Button>
+                <RosLabelLevelsEditor variant="matrixAxes" id="ros-after-rows" title="Rader" intro="Hvert nummer er ett nivå." value={rowLabelsAfterText} onChange={onRowLabelsAfterChange} defaultLabels={DEFAULT_ROS_ROW_LABELS} lowEndHint="lav" highEndHint="høy" />
+                <RosLabelLevelsEditor variant="matrixAxes" id="ros-after-cols" title="Kolonner" intro="Hvert nummer er ett nivå." value={colLabelsAfterText} onChange={onColLabelsAfterChange} defaultLabels={DEFAULT_ROS_COL_LABELS} lowEndHint="lav" highEndHint="høy" />
+              </div>
+            ) : null}
+          </CardContent>
+        </Card>
+
+        {/* Versjoner */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <History className="size-4" />
+              Versjonskontroll
           </CardTitle>
           <CardDescription>
             Bruk versjoner til å dokumentere <strong className="text-foreground">før og
@@ -1621,545 +2012,26 @@ export function RosAnalysisEditor({
             </ul>
           )}
         </CardContent>
-      </Card>
+        </Card>
+
+        {/* Journal */}
+        <RosJournalPanel
+          analysisId={analysisId}
+          expectedRevision={data.revision ?? 0}
+          rowLabels={data.rowLabels}
+          colLabels={data.colLabels}
+          afterRowLabels={effectiveAfterRowLabels}
+          afterColLabels={effectiveAfterColLabels}
+          afterSeparate={useSeparateAfterAxes}
+          onJumpToCell={handleJumpToCell}
+          onJournalConflict={() =>
+            window.alert("Journalen kunne ikke lagres: analysen har nyere revisjon på serveren. Oppdater siden og prøv igjen.")
+          }
+        />
+      </div>
       )}
 
-      {rosSection === 5 && (
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-base">
-            <ListTodo className="size-4" />
-            Oppgaver
-          </CardTitle>
-          <CardDescription>
-            Oppfølgingspunkter for denne ROS-analysen — tildeling og status.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          <form
-            onSubmit={(e) => void onCreateTask(e)}
-            className="space-y-3 rounded-xl border border-dashed p-4"
-          >
-            <p className="text-sm font-medium">Ny oppgave</p>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div className="space-y-1.5 sm:col-span-2">
-                <Label htmlFor="rt-title">Tittel</Label>
-                <Input
-                  id="rt-title"
-                  value={taskTitle}
-                  onChange={(e) => setTaskTitle(e.target.value)}
-                  required
-                />
-              </div>
-              <div className="space-y-1.5 sm:col-span-2">
-                <Label htmlFor="rt-desc">Beskrivelse (valgfritt)</Label>
-                <Textarea
-                  id="rt-desc"
-                  value={taskDesc}
-                  onChange={(e) => setTaskDesc(e.target.value)}
-                  rows={2}
-                  className="min-h-0"
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="rt-assign">Tildelt</Label>
-                <select
-                  id="rt-assign"
-                  className="border-input bg-background flex h-10 w-full rounded-lg border px-2 text-sm"
-                  value={taskAssignee}
-                  onChange={(e) =>
-                    setTaskAssignee(
-                      e.target.value === ""
-                        ? ""
-                        : (e.target.value as Id<"users">),
-                    )
-                  }
-                >
-                  <option value="">— Ikke tildelt —</option>
-                  {(members ?? []).map((m) => (
-                    <option key={m.userId} value={m.userId}>
-                      {m.name ?? m.email ?? m.userId}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="rt-prio">Prioritet (1–5)</Label>
-                <Input
-                  id="rt-prio"
-                  type="number"
-                  min={1}
-                  max={5}
-                  value={taskPriority}
-                  onChange={(e) =>
-                    setTaskPriority(
-                      Math.min(
-                        5,
-                        Math.max(1, Number(e.target.value) || 3),
-                      ),
-                    )
-                  }
-                />
-              </div>
-            </div>
-            <Button type="submit" disabled={taskBusy || !taskTitle.trim()}>
-              {taskBusy ? "Oppretter …" : "Opprett oppgave"}
-            </Button>
-          </form>
-
-          <Separator />
-
-          {tasks === undefined ? (
-            <p className="text-muted-foreground text-sm">Henter oppgaver …</p>
-          ) : tasks.length === 0 ? (
-            <p className="text-muted-foreground text-sm">Ingen oppgaver ennå.</p>
-          ) : (
-            <ul className="space-y-4">
-              {tasks.map((t) => (
-                <li
-                  key={t._id}
-                  className="rounded-xl border p-4 shadow-sm"
-                >
-                  {editingTaskId === t._id ? (
-                    <TaskEditForm
-                      task={t}
-                      members={members ?? []}
-                      onCancel={() => setEditingTaskId(null)}
-                      onSave={async (patch) => {
-                        await updateRosTask({ taskId: t._id, ...patch });
-                        setEditingTaskId(null);
-                      }}
-                    />
-                  ) : (
-                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                      <div className="min-w-0 space-y-1">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <p className="font-medium">{t.title}</p>
-                          <Badge
-                            variant={
-                              t.status === "done" ? "secondary" : "default"
-                            }
-                          >
-                            {t.status === "done" ? "Fullført" : "Åpen"}
-                          </Badge>
-                          <span className="text-muted-foreground text-xs">
-                            P{t.priority}
-                          </span>
-                        </div>
-                        {t.description ? (
-                          <p className="text-muted-foreground text-sm whitespace-pre-wrap">
-                            {t.description}
-                          </p>
-                        ) : null}
-                        <p className="text-muted-foreground text-xs">
-                          {t.assigneeName
-                            ? `Tildelt: ${t.assigneeName}`
-                            : "Ikke tildelt"}
-                          {t.dueAt
-                            ? ` · Frist ${formatTs(t.dueAt)}`
-                            : ""}
-                        </p>
-                        {t.matrixRow != null &&
-                        t.matrixCol != null &&
-                        t.matrixPhase ? (
-                          <p className="text-muted-foreground text-xs">
-                            Matrise: rad {t.matrixRow + 1}, kol {t.matrixCol + 1}{" "}
-                            ({t.matrixPhase === "before" ? "før tiltak" : "etter tiltak"})
-                          </p>
-                        ) : null}
-                        {t.riskTreatmentKind ? (
-                          <p className="text-muted-foreground text-xs">
-                            Behandling:{" "}
-                            {t.riskTreatmentKind === "mitigate"
-                              ? "Redusere"
-                              : t.riskTreatmentKind === "accept"
-                                ? "Akseptere rest"
-                                : t.riskTreatmentKind === "transfer"
-                                  ? "Overføre"
-                                  : "Unngå"}
-                          </p>
-                        ) : null}
-                      </div>
-                      <div className="flex flex-wrap gap-2">
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          onClick={() =>
-                            void setRosTaskStatus({
-                              taskId: t._id,
-                              status: t.status === "done" ? "open" : "done",
-                            })
-                          }
-                        >
-                          {t.status === "done" ? "Gjenåpne" : "Fullfør"}
-                        </Button>
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="secondary"
-                          onClick={() => setEditingTaskId(t._id)}
-                        >
-                          Rediger
-                        </Button>
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="ghost"
-                          className="text-destructive"
-                          onClick={() => {
-                            if (
-                              window.confirm("Slette denne oppgaven?")
-                            ) {
-                              void removeRosTask({ taskId: t._id });
-                            }
-                          }}
-                        >
-                          Slett
-                        </Button>
-                      </div>
-                    </div>
-                  )}
-                </li>
-              ))}
-            </ul>
-          )}
-        </CardContent>
-      </Card>
-      )}
-
-      {rosSection === 6 && (
-      <Card className="overflow-hidden border-border/70 shadow-md">
-        <CardHeader className="border-border/50 space-y-3 border-b bg-gradient-to-br from-violet-500/[0.07] via-background to-cyan-500/[0.06] pb-5">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
-            <div className="bg-primary/12 flex size-11 shrink-0 items-center justify-center rounded-2xl shadow-sm">
-              <Layers className="text-primary size-5" aria-hidden />
-            </div>
-            <div className="min-w-0 space-y-1.5">
-              <CardTitle className="text-lg tracking-tight">
-                Etter tiltak — egne akser
-              </CardTitle>
-              <CardDescription className="text-sm leading-relaxed">
-                Valgfritt eget rutenett for <strong className="text-foreground">restrisiko</strong>{" "}
-                når etiketter for «etter» skal skille seg fra før-matrisen. Rediger ett
-                nivå per rad — samme mønster som ved opprettelse av mal. Gjenbrukbare
-                akser finner du under{" "}
-                <Link
-                  href={`/w/${workspaceId}/ros/akser`}
-                  className="text-primary font-medium underline-offset-4 hover:underline"
-                >
-                  ROS-akser
-                </Link>
-                .
-              </CardDescription>
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-6 pt-6">
-          <div className="border-border/60 bg-muted/15 flex min-w-0 flex-col gap-3 rounded-2xl border p-4 sm:flex-row sm:items-start sm:gap-4">
-            <Checkbox
-              id="ros-separate-after"
-              checked={useSeparateAfterAxes}
-              onCheckedChange={(c) => {
-                const checked = Boolean(c);
-                if (checked && data) {
-                  setRowLabelsAfterText(data.rowLabels.join("\n"));
-                  setColLabelsAfterText(data.colLabels.join("\n"));
-                  setRowAxisTitleAfter(data.rowAxisTitle);
-                  setColAxisTitleAfter(data.colAxisTitle);
-                  setMatrixAfter(matrix.map((r) => [...r]));
-                  setCellItemsAfterMatrix(
-                    cellItemsMatrix.map((r) =>
-                      r.map((c) => c.map((it) => ({ ...it }))),
-                    ),
-                  );
-                }
-                setUseSeparateAfterAxes(checked);
-                setDirty(true);
-              }}
-              className="mt-0.5"
-            />
-            <div className="min-w-0 space-y-1">
-              <Label
-                htmlFor="ros-separate-after"
-                className="text-foreground cursor-pointer text-sm font-medium"
-              >
-                Bruk eget rutenett for etter tiltak
-              </Label>
-              <p className="text-muted-foreground text-xs leading-relaxed">
-                Slå på for å definere egne akser og nivåer. Når av er, bruker
-                etter-matrisen samme rutenett som før tiltak.
-              </p>
-            </div>
-          </div>
-          {useSeparateAfterAxes ? (
-            <div className="space-y-8">
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div className="space-y-2">
-                  <Label htmlFor="ros-after-row-axis">Navn på radakse</Label>
-                  <Input
-                    id="ros-after-row-axis"
-                    value={rowAxisTitleAfter}
-                    onChange={(e) => {
-                      setRowAxisTitleAfter(e.target.value);
-                      setDirty(true);
-                    }}
-                    className="h-11 rounded-xl border-border/60 bg-background shadow-sm"
-                    placeholder="f.eks. Sannsynlighet"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="ros-after-col-axis">Navn på kolonneakse</Label>
-                  <Input
-                    id="ros-after-col-axis"
-                    value={colAxisTitleAfter}
-                    onChange={(e) => {
-                      setColAxisTitleAfter(e.target.value);
-                      setDirty(true);
-                    }}
-                    className="h-11 rounded-xl border-border/60 bg-background shadow-sm"
-                    placeholder="f.eks. Konsekvens"
-                  />
-                </div>
-              </div>
-              <div className="flex flex-wrap items-center gap-2">
-                <Button
-                  type="button"
-                  variant="secondary"
-                  size="sm"
-                  className="rounded-lg"
-                  onClick={() => copyBeforeAxesToAfter()}
-                >
-                  Kopier etiketter fra før-matrise
-                </Button>
-                <span className="text-muted-foreground text-xs">
-                  Overstyrer rader/kolonner nedenfor med nåværende før-matrise.
-                </span>
-              </div>
-              <RosLabelLevelsEditor
-                variant="matrixAxes"
-                id="ros-after-rows"
-                title="Rader (sannsynlighet langs denne aksen)"
-                intro="Hvert nummer er ett nivå i matrisen — fra lav til høy risiko."
-                value={rowLabelsAfterText}
-                onChange={onRowLabelsAfterChange}
-                defaultLabels={DEFAULT_ROS_ROW_LABELS}
-                lowEndHint="lav"
-                highEndHint="høy"
-              />
-              <RosLabelLevelsEditor
-                variant="matrixAxes"
-                id="ros-after-cols"
-                title="Kolonner (konsekvens langs denne aksen)"
-                intro="Hvert nummer er ett nivå — samme logikk som i malen."
-                value={colLabelsAfterText}
-                onChange={onColLabelsAfterChange}
-                defaultLabels={DEFAULT_ROS_COL_LABELS}
-                lowEndHint="lav konsekvens"
-                highEndHint="høy konsekvens"
-              />
-            </div>
-          ) : (
-            <p className="text-muted-foreground text-sm leading-relaxed">
-              Skru på «Bruk eget rutenett» over for å sette opp etter-tiltak-akser med
-              tydelige nivåfelt i stedet for fri tekstblokk.
-            </p>
-          )}
-        </CardContent>
-      </Card>
-      )}
-
-      {rosSection === 7 && (
-      <Card className="overflow-hidden border-primary/15">
-        <CardHeader className="border-b border-border/50 bg-muted/20">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-            <div>
-              <CardTitle className="text-base">Risikomatrise</CardTitle>
-              <CardDescription>
-                {matrixView === "after" && useSeparateAfterAxes ? (
-                  <>
-                    <span className="text-foreground font-medium">
-                      {matrixRowAxisTitle}
-                    </span>{" "}
-                    (rader) ×{" "}
-                    <span className="text-foreground font-medium">
-                      {matrixColAxisTitle}
-                    </span>{" "}
-                    (kolonner) — <strong className="text-foreground">etter tiltak</strong>{" "}
-                    med eget rutenett.
-                  </>
-                ) : (
-                  <>
-                    {data.rowAxisTitle} (rader) × {data.colAxisTitle} (kolonner).
-                  </>
-                )}{" "}
-                <strong className="text-foreground">Klikk en celle</strong> for nivå{" "}
-                <span className="tabular-nums">0–5</span> og punktnotat. Bytt fane{" "}
-                <strong className="text-foreground">før / etter tiltak</strong> under.
-                Lagre øverst — nivåendringer loggføres i journal.
-              </CardDescription>
-            </div>
-            {matrix.length > 0 ? (
-              <div className="flex flex-col items-end gap-2 text-xs">
-                <div className="flex flex-wrap justify-end gap-2">
-                  <Badge variant="outline" className="font-normal">
-                    Før: max{" "}
-                    <span className="text-foreground font-semibold tabular-nums">
-                      {beforeStats.max}
-                    </span>
-                  </Badge>
-                  <Badge variant="outline" className="font-normal">
-                    Etter: max{" "}
-                    <span className="text-foreground font-semibold tabular-nums">
-                      {afterStats.max}
-                    </span>
-                  </Badge>
-                </div>
-                <div className="flex flex-wrap justify-end gap-2">
-                  <Badge variant="secondary" className="font-normal">
-                    Aktiv fane — høyeste:{" "}
-                    <span className="text-foreground font-semibold tabular-nums">
-                      {matrixStats.max}
-                    </span>
-                  </Badge>
-                  {matrixStats.highOrCritical > 0 ? (
-                    <Badge
-                      variant="outline"
-                      className="border-orange-500/40 bg-orange-500/10 font-normal"
-                    >
-                      {matrixStats.highOrCritical} celle
-                      {matrixStats.highOrCritical === 1 ? "" : "r"} med nivå 4–5
-                    </Badge>
-                  ) : (
-                    <Badge variant="outline" className="font-normal">
-                      Ingen celler på nivå 4–5 (aktiv fane)
-                    </Badge>
-                  )}
-                </div>
-              </div>
-            ) : null}
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-4 pt-6">
-          <div className="space-y-3">
-            <RosAxisOverview
-              rowAxisTitle={data.rowAxisTitle}
-              colAxisTitle={data.colAxisTitle}
-              rowLabels={data.rowLabels}
-              colLabels={data.colLabels}
-            />
-            <Alert>
-              <AlertTitle className="text-sm">Spørsmål og akser</AlertTitle>
-              <AlertDescription className="text-muted-foreground text-sm leading-relaxed">
-                Radene og kolonnene kommer fra malen — de tilsvarer akseptkriterier
-                (sannsynlighet × konsekvens) som i ROS-dokumenter. Du kan{" "}
-                <strong className="text-foreground">fylle celler direkte</strong> eller{" "}
-                <strong className="text-foreground">skrive punkter i cellen først</strong>{" "}
-                og sette nivå etterpå; full liste finnes under{" "}
-                <button
-                  type="button"
-                  className="text-primary font-medium underline-offset-4 hover:underline"
-                  onClick={() => setRosSection(1)}
-                >
-                  Oppsummering
-                </button>
-                .
-              </AlertDescription>
-            </Alert>
-          </div>
-          {matrix.length > 0 ? (
-            <>
-              <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
-                <div
-                  className="bg-muted/40 inline-flex rounded-lg border p-1"
-                  role="tablist"
-                  aria-label="Velg matrise: før eller etter tiltak"
-                >
-                  <Button
-                    type="button"
-                    role="tab"
-                    aria-selected={matrixView === "before"}
-                    variant={matrixView === "before" ? "secondary" : "ghost"}
-                    size="sm"
-                    className="rounded-md"
-                    onClick={() => setMatrixView("before")}
-                  >
-                    Før tiltak
-                  </Button>
-                  <Button
-                    type="button"
-                    role="tab"
-                    aria-selected={matrixView === "after"}
-                    variant={matrixView === "after" ? "secondary" : "ghost"}
-                    size="sm"
-                    className="rounded-md"
-                    onClick={() => setMatrixView("after")}
-                  >
-                    Etter tiltak (rest)
-                  </Button>
-                </div>
-                {matrixView === "after" ? (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={copyBeforeToAfter}
-                  >
-                    Kopier nivåer og notater fra «før tiltak»
-                  </Button>
-                ) : null}
-              </div>
-              {afterMatrixInvalid ? (
-                <Alert>
-                  <AlertTitle>Ugyldig etter-matrise</AlertTitle>
-                  <AlertDescription>
-                    Angi minst to rader og to kolonner (én etikett per linje) i
-                    «Etter tiltak — egne akser», eller fjern avkryssingen for å bruke
-                    samme rutenett som før tiltak.
-                  </AlertDescription>
-                </Alert>
-              ) : (
-                <RosMatrix
-                  key={`${matrixView}-${useSeparateAfterAxes}`}
-                  rowAxisTitle={matrixRowAxisTitle}
-                  colAxisTitle={matrixColAxisTitle}
-                  rowLabels={matrixRowLabels}
-                  colLabels={matrixColLabels}
-                  matrixValues={matrixView === "after" ? matrixAfter : matrix}
-                  cellItems={
-                    matrixView === "after"
-                      ? cellItemsAfterMatrix
-                      : cellItemsMatrix
-                  }
-                  onCellItemsChange={onCellItemsChange}
-                  onCellChange={onCellChange}
-                  jumpRequest={jumpRequest}
-                  onJumpHandled={() => setJumpRequest(null)}
-                />
-              )}
-            </>
-          ) : null}
-        </CardContent>
-      </Card>
-      )}
-
-      {rosSection === 8 && (
-      <RosJournalPanel
-        analysisId={analysisId}
-        expectedRevision={data.revision ?? 0}
-        rowLabels={data.rowLabels}
-        colLabels={data.colLabels}
-        afterRowLabels={effectiveAfterRowLabels}
-        afterColLabels={effectiveAfterColLabels}
-        afterSeparate={useSeparateAfterAxes}
-        onJumpToCell={handleJumpToCell}
-        onJournalConflict={() =>
-          window.alert(
-            "Journalen kunne ikke lagres: analysen har nyere revisjon på serveren. Oppdater siden og prøv igjen.",
-          )
-        }
-      />
-      )}
+      {/* Dead old sections removed — bottom nav follows */}
 
       <div className="fixed bottom-0 left-0 right-0 z-30 border-t bg-background/95 p-3 backdrop-blur supports-[backdrop-filter]:bg-background/80">
         <div className="mx-auto grid max-w-6xl grid-cols-[1fr_minmax(0,auto)_1fr] items-center gap-3 px-4">
@@ -2179,9 +2051,6 @@ export function RosAnalysisEditor({
           <div className="flex min-w-0 flex-col items-center justify-center gap-0.5 px-2 text-center">
             <span className="text-foreground max-w-[min(100%,12rem)] truncate text-xs font-medium sm:max-w-none">
               {ROS_EDITOR_SECTIONS[rosSection]?.label ?? ""}
-            </span>
-            <span className="text-muted-foreground text-[11px]">
-              ROS for IKT · bruk knappene over for å hoppe
             </span>
           </div>
           <div className="flex justify-end">
@@ -2209,7 +2078,7 @@ export function RosAnalysisEditor({
                 }
               >
                 Neste
-                <ChevronRight className="size-4" />
+                <ChevronRight className="size-4" aria-hidden />
               </Button>
             )}
           </div>
