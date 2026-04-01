@@ -152,6 +152,8 @@ export function AssessmentWizard({ assessmentId }: Props) {
     updatedByName: string | null;
   } | null>(null);
   const [leaveWizardOpen, setLeaveWizardOpen] = useState(false);
+  /** Eksplisitt lagring før navigasjon (Ferdig / forlat veiviser). */
+  const [leavingBusy, setLeavingBusy] = useState(false);
   const router = useRouter();
 
   const goneFromServer =
@@ -258,8 +260,8 @@ export function AssessmentWizard({ assessmentId }: Props) {
     draftConflict === null;
 
   const persist = useCallback(
-    (p: AssessmentPayload) => {
-      if (!canEdit) return;
+    (p: AssessmentPayload): Promise<void> => {
+      if (!canEdit) return Promise.resolve();
       saveQueueTailRef.current = saveQueueTailRef.current
         .catch(() => undefined)
         .then(async () => {
@@ -307,6 +309,7 @@ export function AssessmentWizard({ assessmentId }: Props) {
             );
           }
         });
+      return saveQueueTailRef.current;
     },
     [access?.userId, assessmentId, canEdit, saveDraft],
   );
@@ -390,6 +393,19 @@ export function AssessmentWizard({ assessmentId }: Props) {
     updateAssessmentTitle,
   ]);
 
+  /** Tittel lagres med debounce — tving lagring før vi forlater siden. */
+  const flushTitleBeforeLeave = useCallback(async () => {
+    if (!canEdit || !data?.assessment) return;
+    const server = data.assessment.title;
+    const trimmed = titleDraft.trim();
+    if (trimmed === "" || trimmed === server) return;
+    try {
+      await updateAssessmentTitle({ assessmentId, title: trimmed });
+    } catch {
+      // Ikke-blokkerende: brukeren kan rette tittel senere
+    }
+  }, [assessmentId, canEdit, data?.assessment, titleDraft, updateAssessmentTitle]);
+
   useEffect(() => {
     if (!canEditRef.current || !payloadRef.current) return;
     const t = setTimeout(() => {
@@ -450,12 +466,72 @@ export function AssessmentWizard({ assessmentId }: Props) {
 
   const milestoneCount = versions?.length ?? 0;
 
-  const goToVurderingerList = useCallback(() => {
-    setLeaveWizardOpen(false);
-    const wid = data?.assessment.workspaceId;
-    if (!wid) return;
-    router.push(`/w/${wid}/vurderinger`);
-  }, [router, data?.assessment.workspaceId]);
+  const goToVurderingerList = useCallback(async () => {
+    setLeavingBusy(true);
+    try {
+      if (canEdit && payloadRef.current) {
+        await persist(payloadRef.current);
+      }
+      await flushTitleBeforeLeave();
+      setLeaveWizardOpen(false);
+      const wid = data?.assessment.workspaceId;
+      if (!wid) return;
+      router.push(`/w/${wid}/vurderinger`);
+    } finally {
+      setLeavingBusy(false);
+    }
+  }, [
+    canEdit,
+    data?.assessment.workspaceId,
+    flushTitleBeforeLeave,
+    persist,
+    router,
+  ]);
+
+  const saveDraftAndMaybeOpenLeaveDialog = useCallback(async () => {
+    setLeavingBusy(true);
+    try {
+      if (canEdit && payloadRef.current) {
+        await persist(payloadRef.current);
+      }
+      await flushTitleBeforeLeave();
+      if (canEdit && milestoneCount === 0) {
+        setLeaveWizardOpen(true);
+      } else {
+        setLeaveWizardOpen(false);
+        const wid = data?.assessment.workspaceId;
+        if (wid) router.push(`/w/${wid}/vurderinger`);
+      }
+    } finally {
+      setLeavingBusy(false);
+    }
+  }, [
+    canEdit,
+    data?.assessment.workspaceId,
+    flushTitleBeforeLeave,
+    milestoneCount,
+    persist,
+    router,
+  ]);
+
+  const saveDraftAndGoToMilestones = useCallback(async () => {
+    setLeavingBusy(true);
+    try {
+      if (canEdit && payloadRef.current) {
+        await persist(payloadRef.current);
+      }
+      await flushTitleBeforeLeave();
+      setLeaveWizardOpen(false);
+      openTeamAndVersions();
+    } finally {
+      setLeavingBusy(false);
+    }
+  }, [
+    canEdit,
+    flushTitleBeforeLeave,
+    openTeamAndVersions,
+    persist,
+  ]);
 
   useEffect(() => {
     if (!emblaApi) return;
@@ -1449,26 +1525,28 @@ export function AssessmentWizard({ assessmentId }: Props) {
           </DialogHeader>
           <DialogBody>
             <p className="text-muted-foreground text-sm leading-relaxed">
+              Siste endringer er nettopp lagret til serveren før du går videre.
               Du har ikke opprettet navngitte milepæler ennå (0 i loggen). Det er
-              helt normalt: skjemaet lagres fortløpende som{" "}
-              <strong className="text-foreground">utkast</strong>. Milepæler er
-              valgfrie «frys» av hele vurderingen — bruk dem når du trenger spor
-              i revisjon eller dokumentasjon.
+              helt normalt: utkastet lagres også fortløpende mens du jobber.
+              Milepæler er valgfrie «frys» av hele vurderingen — bruk dem når du
+              trenger spor i revisjon eller dokumentasjon.
             </p>
           </DialogBody>
           <DialogFooter className="flex-wrap sm:justify-between">
             <Button
               type="button"
               variant="outline"
-              onClick={() => {
-                setLeaveWizardOpen(false);
-                openTeamAndVersions();
-              }}
+              disabled={leavingBusy}
+              onClick={() => void saveDraftAndGoToMilestones()}
             >
               Gå til milepæler først
             </Button>
-            <Button type="button" onClick={() => void goToVurderingerList()}>
-              Gå til vurderingsoversikt
+            <Button
+              type="button"
+              disabled={leavingBusy}
+              onClick={() => void goToVurderingerList()}
+            >
+              {leavingBusy ? "Lagrer …" : "Gå til vurderingsoversikt"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1506,15 +1584,10 @@ export function AssessmentWizard({ assessmentId }: Props) {
                 variant="default"
                 size="sm"
                 className="gap-1"
-                onClick={() => {
-                  if (canEdit && milestoneCount === 0) {
-                    setLeaveWizardOpen(true);
-                  } else {
-                    void goToVurderingerList();
-                  }
-                }}
+                disabled={leavingBusy}
+                onClick={() => void saveDraftAndMaybeOpenLeaveDialog()}
               >
-                Ferdig
+                {leavingBusy ? "Lagrer …" : "Ferdig"}
                 <ChevronRight className="size-4" aria-hidden />
               </Button>
             ) : (
