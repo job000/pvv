@@ -25,7 +25,7 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 type VersionRow = {
   _id: Id<"assessmentVersions">;
@@ -39,6 +39,9 @@ type Props = {
   assessmentId: Id<"assessments">;
   versions: VersionRow[] | undefined;
   canEdit: boolean;
+  /** Ekstern forespørsel (f.eks. metarad): åpne forhåndsvisning av denne versjonen. */
+  previewRequestVersion?: number | null;
+  onPreviewRequestConsumed?: () => void;
   onDraftRestored?: (
     payload: AssessmentPayload,
     meta?: { revision: number },
@@ -49,6 +52,8 @@ export function AssessmentVersionsBlock({
   assessmentId,
   versions,
   canEdit,
+  previewRequestVersion,
+  onPreviewRequestConsumed,
   onDraftRestored,
 }: Props) {
   const createVersion = useMutation(api.assessments.createVersion);
@@ -100,6 +105,23 @@ export function AssessmentVersionsBlock({
     }
     setCompareOpen(true);
   }, [versionOptions]);
+
+  useEffect(() => {
+    if (
+      previewRequestVersion == null ||
+      previewRequestVersion <= 0 ||
+      !Number.isFinite(previewRequestVersion)
+    ) {
+      return;
+    }
+    const v = previewRequestVersion;
+    const t = window.setTimeout(() => {
+      setActionError(null);
+      setPreviewVersion(v);
+      onPreviewRequestConsumed?.();
+    }, 0);
+    return () => clearTimeout(t);
+  }, [previewRequestVersion, onPreviewRequestConsumed]);
 
   return (
     <div id="versjoner" className="scroll-mt-28 space-y-4">

@@ -55,6 +55,9 @@ type Props = {
   assessmentId: Id<"assessments">;
   workspaceId: Id<"workspaces">;
   canEdit: boolean;
+  /** Fra metaraden: åpne forhåndsvisning av denne milepælen én gang. */
+  versionPreviewRequest?: number | null;
+  onVersionPreviewRequestConsumed?: () => void;
   /** Kalles etter gjenoppretting fra versjon slik at veiviseren ikke stoler på gammel server-subscription. */
   onDraftRestored?: (
     payload: AssessmentPayload,
@@ -66,6 +69,8 @@ export function AssessmentCollaborationPanel({
   assessmentId,
   workspaceId,
   canEdit,
+  versionPreviewRequest,
+  onVersionPreviewRequestConsumed,
   onDraftRestored,
 }: Props) {
   const access = useQuery(api.assessments.getMyAccess, { assessmentId });
@@ -255,6 +260,8 @@ export function AssessmentCollaborationPanel({
         assessmentId={assessmentId}
         versions={versions}
         canEdit={canEdit}
+        previewRequestVersion={versionPreviewRequest ?? null}
+        onPreviewRequestConsumed={onVersionPreviewRequestConsumed}
         onDraftRestored={onDraftRestored}
       />
 

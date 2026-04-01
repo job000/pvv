@@ -183,6 +183,10 @@ export function AssessmentWizard({ assessmentId }: Props) {
     dragThreshold: 22,
   });
   const [slide, setSlide] = useState(0);
+  /** Forespørsel fra metaraden: åpne forhåndsvisning av en lagret milepæl. */
+  const [versionPreviewRequest, setVersionPreviewRequest] = useState<
+    number | null
+  >(null);
 
   useEffect(() => {
     setPayload(null);
@@ -429,6 +433,18 @@ export function AssessmentWizard({ assessmentId }: Props) {
       });
     });
   }, [emblaApi]);
+
+  const onPickVersionPreview = useCallback(
+    (v: number) => {
+      setVersionPreviewRequest(v);
+      openTeamAndVersions();
+    },
+    [openTeamAndVersions],
+  );
+
+  const onVersionPreviewRequestConsumed = useCallback(() => {
+    setVersionPreviewRequest(null);
+  }, []);
 
   const milestoneCount = versions?.length ?? 0;
 
@@ -697,6 +713,7 @@ export function AssessmentWizard({ assessmentId }: Props) {
         versions={versions}
         draftUpdatedAt={data?.draft?.updatedAt}
         onOpenTeamAndVersions={openTeamAndVersions}
+        onPickVersionPreview={onPickVersionPreview}
       />
 
       <AssessmentExportPanel
@@ -1123,6 +1140,10 @@ export function AssessmentWizard({ assessmentId }: Props) {
                   assessmentId={assessmentId}
                   workspaceId={assessment.workspaceId}
                   canEdit={canEdit}
+                  versionPreviewRequest={versionPreviewRequest}
+                  onVersionPreviewRequestConsumed={
+                    onVersionPreviewRequestConsumed
+                  }
                   onDraftRestored={(p, meta) => {
                     setPayload(normalizeDraftPayload(p));
                     if (meta?.revision !== undefined) {

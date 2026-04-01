@@ -1,9 +1,11 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
 import { UserAvatar } from "@/components/user-avatar";
 import type { Doc } from "@/convex/_generated/dataModel";
 import { History, Users } from "lucide-react";
+import { useMemo, useState } from "react";
 
 type Collab = {
   _id: Doc<"assessmentCollaborators">["_id"];
@@ -26,6 +28,8 @@ type Props = {
   /** Når utkastet sist ble lagret (auto) — skilles fra navngitte milepæler */
   draftUpdatedAt?: number | null;
   onOpenTeamAndVersions: () => void;
+  /** Åpner forhåndsvisning av en lagret milepæl (fører til Samarbeid og dialog). */
+  onPickVersionPreview: (version: number) => void;
 };
 
 export function AssessmentWizardMeta({
@@ -33,13 +37,19 @@ export function AssessmentWizardMeta({
   versions,
   draftUpdatedAt,
   onOpenTeamAndVersions,
+  onPickVersionPreview,
 }: Props) {
   const list = collaborators ?? [];
   const maxShow = 5;
   const shown = list.slice(0, maxShow);
   const rest = Math.max(0, list.length - shown.length);
   const versionCount = versions?.length ?? 0;
-  const latest = versions?.[0];
+  const versionOptions = useMemo(() => {
+    const rows = versions ?? [];
+    return [...rows].sort((a, b) => b.version - a.version);
+  }, [versions]);
+  const latestMilestone = versionOptions[0];
+  const [versionPickValue, setVersionPickValue] = useState("");
   const draftLabel =
     draftUpdatedAt != null
       ? new Date(draftUpdatedAt).toLocaleString("nb-NO", {
@@ -80,7 +90,7 @@ export function AssessmentWizardMeta({
         )}
       </div>
 
-      <div className="flex min-w-0 flex-1 flex-col gap-2 border-border/50 border-t pt-2 sm:flex-row sm:items-end sm:justify-between sm:border-t-0 sm:pt-0">
+      <div className="flex min-w-0 flex-1 flex-col gap-3 border-border/50 border-t pt-2 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between sm:gap-x-4 sm:gap-y-2 sm:border-t-0 sm:pt-0">
         <div className="min-w-0 space-y-1">
           <div className="text-muted-foreground flex flex-wrap items-center gap-1.5 text-xs sm:text-sm">
             <History className="size-3.5 shrink-0 opacity-80" aria-hidden />
@@ -91,16 +101,21 @@ export function AssessmentWizardMeta({
               {versionCount === 1
                 ? "navngitt milepæl"
                 : "navngitte milepæler"}
-              {latest ? (
+              {latestMilestone ? (
                 <>
                   {" "}
                   · siste milepæl{" "}
-                  <time dateTime={new Date(latest.createdAt).toISOString()}>
-                    {new Date(latest.createdAt).toLocaleDateString("nb-NO", {
+                  <time
+                    dateTime={new Date(latestMilestone.createdAt).toISOString()}
+                  >
+                    {new Date(latestMilestone.createdAt).toLocaleDateString(
+                      "nb-NO",
+                      {
                       day: "numeric",
                       month: "short",
                       year: "numeric",
-                    })}
+                      },
+                    )}
                   </time>
                 </>
               ) : null}
@@ -120,6 +135,50 @@ export function AssessmentWizardMeta({
               valgfrie og opprettes under Samarbeid.
             </p>
           )}
+        </div>
+        <div className="flex w-full min-w-0 flex-col gap-2 sm:w-auto sm:max-w-[min(100%,20rem)]">
+          <Label
+            htmlFor="meta-milepick"
+            className="text-muted-foreground text-[10px] font-semibold uppercase tracking-wide"
+          >
+            Velg milepæl
+          </Label>
+          <select
+            id="meta-milepick"
+            className="border-input bg-background h-9 w-full rounded-lg border px-2 text-sm shadow-xs disabled:cursor-not-allowed disabled:opacity-60"
+            value={versionPickValue}
+            disabled={versionOptions.length === 0}
+            aria-label="Velg lagret milepæl for forhåndsvisning"
+            onChange={(e) => {
+              const raw = e.target.value;
+              if (!raw) return;
+              const num = Number(raw);
+              if (Number.isFinite(num) && num > 0) {
+                onPickVersionPreview(num);
+              }
+              setVersionPickValue("");
+            }}
+          >
+            <option value="">
+              {versionOptions.length === 0
+                ? "Ingen milepæler ennå — lagre under Samarbeid"
+                : "Forhåndsvis en lagret versjon …"}
+            </option>
+            {versionOptions.map((v) => (
+              <option key={v._id} value={String(v.version)}>
+                v{v.version}
+                {v.note
+                  ? ` — ${v.note.length > 42 ? `${v.note.slice(0, 40)}…` : v.note}`
+                  : ""}{" "}
+                (
+                {new Date(v.createdAt).toLocaleDateString("nb-NO", {
+                  day: "numeric",
+                  month: "short",
+                })}
+                )
+              </option>
+            ))}
+          </select>
         </div>
         <Button
           type="button"
