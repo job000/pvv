@@ -559,6 +559,9 @@ export const workspaceDashboard = query({
       avgAssessed: number;
       highRiskCells: number;
       counts: [number, number, number, number, number, number];
+      nextReviewAt: number | undefined;
+      reviewRoutineNotes: string | null;
+      openTasksCount: number;
     }> = [];
 
     const attentionItems: Array<{
@@ -722,6 +725,15 @@ export const workspaceDashboard = query({
       }
       if (maxLevel > maxAcrossAll) maxAcrossAll = maxLevel;
 
+      const rosTasksForA = await ctx.db
+        .query("rosTasks")
+        .withIndex("by_ros_analysis", (q) =>
+          q.eq("rosAnalysisId", r._id),
+        )
+        .collect();
+      const openTasksCount = rosTasksForA.filter((t) => t.status === "open")
+        .length;
+
       analyses.push({
         analysisId: r._id,
         title: r.title,
@@ -736,6 +748,9 @@ export const workspaceDashboard = query({
           assessedCells > 0 ? Math.round((sumAssessed / assessedCells) * 10) / 10 : 0,
         highRiskCells,
         counts,
+        nextReviewAt: r.nextReviewAt,
+        reviewRoutineNotes: r.reviewRoutineNotes?.trim() || null,
+        openTasksCount,
       });
     }
 
@@ -757,6 +772,85 @@ export const workspaceDashboard = query({
       attentionItems,
       minAlertLevel,
       includeTaggedRiskItems: includeTagged,
+    };
+  },
+});
+
+/** Antall celler per risikonivå 0–5 (for diagrammer). */
+function countMatrixLevelHistogram(m: number[][]): [
+  number,
+  number,
+  number,
+  number,
+  number,
+  number,
+] {
+  const c: [number, number, number, number, number, number] = [0, 0, 0, 0, 0, 0];
+  for (const row of m) {
+    for (const v of row) {
+      const n = Math.min(5, Math.max(0, Math.round(v)));
+      c[n]++;
+    }
+  }
+  return c;
+}
+
+/**
+ * Sammenlign risiko-oppsummering (før/etter tiltak) mellom to ROS-analyser i samme arbeidsområde.
+ */
+export const compareRosAnalyses = query({
+  args: {
+    workspaceId: v.id("workspaces"),
+    analysisIdA: v.id("rosAnalyses"),
+    analysisIdB: v.id("rosAnalyses"),
+  },
+  handler: async (ctx, args) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) {
+      return null;
+    }
+    await requireWorkspaceMember(ctx, args.workspaceId, userId, "viewer");
+    const rowA = await ctx.db.get(args.analysisIdA);
+    const rowB = await ctx.db.get(args.analysisIdB);
+    if (
+      !rowA ||
+      !rowB ||
+      rowA.workspaceId !== args.workspaceId ||
+      rowB.workspaceId !== args.workspaceId
+    ) {
+      return null;
+    }
+    const candA = rowA.candidateId ? await ctx.db.get(rowA.candidateId) : null;
+    const candB = rowB.candidateId ? await ctx.db.get(rowB.candidateId) : null;
+    const afterA = normalizedAfterMatrices(rowA);
+    const afterB = normalizedAfterMatrices(rowB);
+    const summaryA = computeRosSummary({
+      matrixBefore: rowA.matrixValues,
+      matrixAfter: afterA.matrixValuesAfter,
+    });
+    const summaryB = computeRosSummary({
+      matrixBefore: rowB.matrixValues,
+      matrixAfter: afterB.matrixValuesAfter,
+    });
+    return {
+      a: {
+        analysisId: rowA._id,
+        title: rowA.title,
+        candidateName: candA?.name ?? "—",
+        candidateCode: candA?.code ?? "",
+        summary: summaryA,
+        levelCountsBefore: countMatrixLevelHistogram(rowA.matrixValues),
+        levelCountsAfter: countMatrixLevelHistogram(afterA.matrixValuesAfter),
+      },
+      b: {
+        analysisId: rowB._id,
+        title: rowB.title,
+        candidateName: candB?.name ?? "—",
+        candidateCode: candB?.code ?? "",
+        summary: summaryB,
+        levelCountsBefore: countMatrixLevelHistogram(rowB.matrixValues),
+        levelCountsAfter: countMatrixLevelHistogram(afterB.matrixValuesAfter),
+      },
     };
   },
 });
