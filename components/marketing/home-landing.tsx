@@ -179,7 +179,7 @@ export function HomeLanding() {
                 Veiledede skjemaer, roller og historikk slik at dere leverer
                 konsistent kvalitet på tvers av prosesser.
               </FeatureCard>
-              <FeatureCard icon={Shield} title="ROS og risiko">
+              <FeatureCard icon={Shield} title="Risikoanalyse">
                 Fargekodede matriser, journal og kobling til prosesskandidater —
                 én rød tråd fra vurdering til risiko.
               </FeatureCard>

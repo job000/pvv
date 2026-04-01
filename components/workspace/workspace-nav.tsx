@@ -34,7 +34,7 @@ function navSections(wid: string): { heading: string; items: NavItem[] }[] {
       items: [
         {
           href: `/w/${wid}/vurderinger?fane=prosesser`,
-          label: "Prosessregister",
+          label: "Prosesser",
           icon: Users,
           exact: false,
           kind: "prosesser",
@@ -67,7 +67,7 @@ function navSections(wid: string): { heading: string; items: NavItem[] }[] {
         },
         {
           href: `/w/${wid}/ros`,
-          label: "ROS og risiko",
+          label: "Risikoanalyse",
           icon: Shield,
           exact: false,
           kind: "default",
@@ -75,18 +75,18 @@ function navSections(wid: string): { heading: string; items: NavItem[] }[] {
       ],
     },
     {
-      heading: "Arbeidsområde",
+      heading: "Innstillinger",
       items: [
         {
           href: `/w/${wid}/delinger`,
-          label: "Team og tilgang",
+          label: "Teammedlemmer",
           icon: Share2,
           exact: false,
           kind: "default",
         },
         {
           href: `/w/${wid}/varslinger`,
-          label: "Varsler",
+          label: "Varslinger",
           icon: Bell,
           exact: false,
           kind: "default",

@@ -46,14 +46,14 @@ export function buildWorkspaceOverviewShortcuts(
     {
       id: "prosessregister",
       href: `/w/${w}/vurderinger?fane=prosesser`,
-      title: "Prosessregister",
+      title: "Prosesser",
       desc: "Prosesser med ID før ny vurdering",
       icon: Users,
     },
     {
       id: "ros",
       href: `/w/${w}/ros`,
-      title: "ROS og risiko",
+      title: "Risikoanalyse",
       desc: "Analyse og kobling til vurderinger",
       icon: Shield,
     },
@@ -67,14 +67,14 @@ export function buildWorkspaceOverviewShortcuts(
     {
       id: "delinger",
       href: `/w/${w}/delinger`,
-      title: "Team og tilgang",
+      title: "Teammedlemmer",
       desc: "Medlemmer og roller",
       icon: Share2,
     },
     {
       id: "varslinger",
       href: `/w/${w}/varslinger`,
-      title: "Varsler",
+      title: "Varslinger",
       desc: "E-post og påminnelser",
       icon: Bell,
     },

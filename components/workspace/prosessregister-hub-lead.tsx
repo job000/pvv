@@ -124,7 +124,7 @@ export function ProsessregisterHubLead({ canEdit, onRegisterClick }: Props) {
           <DialogBody className="space-y-4 text-sm leading-relaxed">
             <p className="text-muted-foreground">
               <strong className="text-foreground">ROS</strong> kan opprettes uten
-              prosess (meny «ROS og risiko»), også frittstående.{" "}
+              prosess (meny «Risikoanalyse»), også frittstående.{" "}
               <strong className="text-foreground">Prosessregisteret</strong> bruker du
               når PVV-vurdering skal knyttes til en{" "}
               <strong className="text-foreground">prosess-ID</strong>, eller når dere

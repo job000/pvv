@@ -302,7 +302,7 @@ export const PROSESSREGISTER_TUTORIAL_STEPS: TutorialStep[] = [
     targetSelectors: ['[data-tutorial-anchor="prosess-oversikt-header"]'],
     title: "Prosessregister-kortet",
     targetHint: "Overskrift og beskrivelse",
-    body: "Her står arbeidsområdets prosessregister forklart: hver rad er en forretningsprosess med en unik prosess-ID. ROS kan også startes uten prosess (meny «ROS og risiko»). Registeret brukes når dere vil knytte PVV eller ROS til en prosess-ID.",
+    body: "Her står arbeidsområdets prosessregister forklart: hver rad er en forretningsprosess med en unik prosess-ID. ROS kan også startes uten prosess (meny «Risikoanalyse»). Registeret brukes når dere vil knytte PVV eller ROS til en prosess-ID.",
   },
   {
     targetSelectors: ['[data-tutorial-anchor="hub-registrering"]'],

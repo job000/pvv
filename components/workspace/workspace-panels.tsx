@@ -381,214 +381,182 @@ export function WorkspaceTeamPanel({
 
   if (isAdmin) {
     return (
-      <div className="space-y-4">
-        <Card>
-          <CardHeader>
-            <CardTitle>Team og tilgang</CardTitle>
-            <CardDescription>
-              Inviter via e-post — brukere som allerede finnes i systemet legges
-              inn med en gang. Ventende invitasjoner kan trekkes tilbake når som
-              helst.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
-              <div className="min-w-0 flex-1 space-y-2">
-                <Label htmlFor="invite-email">E-post</Label>
-                <Input
-                  id="invite-email"
-                  type="email"
-                  value={inviteEmail}
-                  onChange={(e) => setInviteEmail(e.target.value)}
-                  placeholder="kollega@firma.no"
-                />
-              </div>
-              <div className="w-full space-y-2 sm:w-44">
-                <Label htmlFor="invite-role">Rolle</Label>
-                <select
-                  id="invite-role"
-                  className="border-input bg-background h-9 w-full rounded-lg border px-3 text-sm shadow-xs outline-none"
-                  value={inviteRole}
-                  onChange={(e) =>
-                    setInviteRole(
-                      e.target.value as "admin" | "member" | "viewer",
-                    )
-                  }
-                >
-                  <option value="admin">Administrator</option>
-                  <option value="member">Medlem</option>
-                  <option value="viewer">Kun visning</option>
-                </select>
-              </div>
-              <Button type="button" onClick={() => void sendInvite()}>
-                Inviter
-              </Button>
+      <div className="space-y-5">
+        {/* Invite form */}
+        <div className="rounded-2xl bg-card p-5 shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.06] sm:p-6">
+          <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Inviter ny bruker</p>
+          <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-end">
+            <div className="min-w-0 flex-1 space-y-1.5">
+              <Label htmlFor="invite-email" className="text-xs">E-post</Label>
+              <Input
+                id="invite-email"
+                type="email"
+                value={inviteEmail}
+                onChange={(e) => setInviteEmail(e.target.value)}
+                placeholder="kollega@firma.no"
+                className="rounded-xl"
+              />
             </div>
-            <Separator />
-            <div>
-              <p className="text-foreground mb-2 text-sm font-medium">
-                Ventende invitasjoner
-              </p>
-              {pendingInvites === undefined ? (
-                <p className="text-muted-foreground text-sm">Laster …</p>
-              ) : pendingInvites.length === 0 ? (
-                <p className="text-muted-foreground text-sm">
-                  Ingen ventende invitasjoner.
+            <div className="w-full space-y-1.5 sm:w-40">
+              <Label htmlFor="invite-role" className="text-xs">Rolle</Label>
+              <select
+                id="invite-role"
+                className="border-input bg-background h-9 w-full rounded-xl border px-3 text-sm shadow-xs outline-none"
+                value={inviteRole}
+                onChange={(e) =>
+                  setInviteRole(e.target.value as "admin" | "member" | "viewer")
+                }
+              >
+                <option value="admin">Administrator</option>
+                <option value="member">Medlem</option>
+                <option value="viewer">Kun visning</option>
+              </select>
+            </div>
+            <Button type="button" className="rounded-xl" onClick={() => void sendInvite()}>
+              Inviter
+            </Button>
+          </div>
+        </div>
+
+        {/* Pending invitations */}
+        {pendingInvites !== undefined && pendingInvites.length > 0 && (
+          <div className="space-y-2">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Ventende invitasjoner</p>
+            {pendingInvites.map((inv) => (
+              <div
+                key={inv._id}
+                className="group/inv flex items-center gap-3 rounded-2xl bg-card px-4 py-3 shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.06]"
+              >
+                <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-amber-500/10">
+                  <span className="text-xs font-bold text-amber-600 dark:text-amber-400">
+                    {inv.email.charAt(0).toUpperCase()}
+                  </span>
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-medium">{inv.email}</p>
+                  <p className="text-muted-foreground text-[10px]">
+                    {WORKSPACE_ROLE_LABEL_NB[inv.role] ?? inv.role} · Invitert{" "}
+                    {new Date(inv.createdAt).toLocaleDateString("nb-NO", { dateStyle: "medium" })}
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="rounded-xl text-xs opacity-0 transition-opacity group-hover/inv:opacity-100"
+                  onClick={() => void cancelWorkspaceInvite({ inviteId: inv._id })}
+                >
+                  Trekk tilbake
+                </Button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Members */}
+        <div className="space-y-2">
+          <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+            Medlemmer ({members.length})
+          </p>
+          {members.map((m) => (
+            <div
+              key={m._id}
+              className="group/member flex items-center gap-3 rounded-2xl bg-card px-4 py-3 shadow-sm ring-1 ring-black/[0.04] transition-all duration-200 hover:shadow-md dark:ring-white/[0.06]"
+            >
+              <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10">
+                <span className="text-sm font-bold text-primary">
+                  {(m.name ?? m.email ?? "?").charAt(0).toUpperCase()}
+                </span>
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-medium">
+                  {m.name ?? m.email ?? m.userId}
                 </p>
-              ) : (
-                <ul className="space-y-2">
-                  {pendingInvites.map((inv) => (
-                    <li
-                      key={inv._id}
-                      className="flex flex-col gap-2 rounded-lg border border-dashed bg-muted/15 px-3 py-2 sm:flex-row sm:items-center sm:justify-between"
-                    >
-                      <div>
-                        <p className="text-sm font-medium">{inv.email}</p>
-                        <p className="text-muted-foreground text-xs">
-                          {WORKSPACE_ROLE_LABEL_NB[inv.role] ?? inv.role} ·{" "}
-                          {new Date(inv.createdAt).toLocaleString("nb-NO", {
-                            dateStyle: "medium",
-                            timeStyle: "short",
-                          })}
-                        </p>
-                      </div>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() =>
-                          void cancelWorkspaceInvite({ inviteId: inv._id })
-                        }
-                      >
-                        Trekk invitasjon
-                      </Button>
-                    </li>
-                  ))}
-                </ul>
+                <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
+                  <span className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-semibold ${
+                    m.role === "owner" ? "bg-amber-500/10 text-amber-700 dark:text-amber-300"
+                    : m.role === "admin" ? "bg-blue-500/10 text-blue-700 dark:text-blue-300"
+                    : "bg-muted text-muted-foreground"
+                  }`}>
+                    {WORKSPACE_ROLE_LABEL_NB[m.role] ?? m.role}
+                  </span>
+                  {m.email && (
+                    <span className="text-muted-foreground text-[10px]">{m.email}</span>
+                  )}
+                </div>
+              </div>
+              {m.role !== "owner" && (
+                <div className="flex shrink-0 items-center gap-2 opacity-0 transition-opacity group-hover/member:opacity-100">
+                  <select
+                    className="border-input h-8 rounded-xl border bg-background px-2 text-xs"
+                    value={m.role}
+                    onChange={(e) => {
+                      const next = e.target.value as "admin" | "member" | "viewer";
+                      void updateMemberRole({
+                        workspaceId,
+                        targetUserId: m.userId,
+                        role: next,
+                      });
+                    }}
+                  >
+                    <option value="admin">Administrator</option>
+                    <option value="member">Medlem</option>
+                    <option value="viewer">Kun visning</option>
+                  </select>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="rounded-xl text-xs text-muted-foreground hover:text-destructive"
+                    onClick={() =>
+                      void removeMember({
+                        workspaceId,
+                        targetUserId: m.userId,
+                      })
+                    }
+                  >
+                    Fjern
+                  </Button>
+                </div>
               )}
             </div>
-            <Separator />
-            <div>
-              <p className="text-foreground mb-2 text-sm font-medium">
-                Medlemmer
-              </p>
-              <ul className="space-y-3">
-                {members.map((m) => (
-                  <li
-                    key={m._id}
-                    className="flex flex-col gap-2 rounded-lg border bg-muted/20 px-3 py-2 sm:flex-row sm:items-center sm:justify-between"
-                  >
-                    <div>
-                      <p className="font-medium text-sm">
-                        {m.name ?? m.email ?? m.userId}
-                      </p>
-                      <p className="text-muted-foreground text-xs">
-                        {m.email ?? "—"} ·{" "}
-                        <span className="text-foreground/90">
-                          {WORKSPACE_ROLE_LABEL_NB[m.role] ?? m.role}
-                        </span>
-                      </p>
-                      <p className="text-muted-foreground mt-1 max-w-prose text-[11px] leading-snug">
-                        {WORKSPACE_ROLE_DESC_NB[m.role] ?? ""}
-                      </p>
-                    </div>
-                    {m.role !== "owner" ? (
-                      <div className="flex flex-wrap gap-2">
-                        <select
-                          className="border-input h-8 rounded-md border bg-background px-2 text-xs"
-                          value={m.role}
-                          onChange={(e) => {
-                            const next = e.target.value as
-                              | "admin"
-                              | "member"
-                              | "viewer";
-                            void updateMemberRole({
-                              workspaceId,
-                              targetUserId: m.userId,
-                              role: next,
-                            });
-                          }}
-                        >
-                          <option value="admin">Administrator</option>
-                          <option value="member">Medlem</option>
-                          <option value="viewer">Kun visning</option>
-                        </select>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={() =>
-                            void removeMember({
-                              workspaceId,
-                              targetUserId: m.userId,
-                            })
-                          }
-                        >
-                          Fjern fra område
-                        </Button>
-                      </div>
-                    ) : (
-                      <span className="text-muted-foreground text-xs">
-                        {WORKSPACE_ROLE_DESC_NB.owner}
-                      </span>
-                    )}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="border-border/70 bg-muted/10">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base">Roller i arbeidsområdet</CardTitle>
-            <CardDescription>
-              Kort forklaring — samme roller brukes i hele arbeidsområdet.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="text-muted-foreground space-y-2 text-sm leading-relaxed">
-            {(Object.keys(WORKSPACE_ROLE_DESC_NB) as Array<keyof typeof WORKSPACE_ROLE_DESC_NB>)
-              .filter((k) => k !== "owner")
-              .map((k) => (
-                <p key={k}>
-                  <strong className="text-foreground">
-                    {WORKSPACE_ROLE_LABEL_NB[k]}:
-                  </strong>{" "}
-                  {WORKSPACE_ROLE_DESC_NB[k]}
-                </p>
-              ))}
-            <p>
-              <strong className="text-foreground">Eier:</strong>{" "}
-              {WORKSPACE_ROLE_DESC_NB.owner}
-            </p>
-          </CardContent>
-        </Card>
+          ))}
+        </div>
       </div>
     );
   }
 
-    return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Team og tilgang</CardTitle>
-        <CardDescription>
-          Hvem som er med i arbeidsområdet. Ta kontakt med en administrator hvis
-          du trenger annen rolle.
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        <ul className="space-y-2">
-          {members.map((m) => (
-            <li key={m._id} className="text-muted-foreground text-sm">
-              <span className="text-foreground font-medium">
-                {m.name ?? m.email ?? m.userId}
-              </span>{" "}
-              · {WORKSPACE_ROLE_LABEL_NB[m.role] ?? m.role}
-            </li>
-          ))}
-        </ul>
-      </CardContent>
-    </Card>
+  return (
+    <div className="space-y-2">
+      <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+        Medlemmer ({members.length})
+      </p>
+      {members.map((m) => (
+        <div
+          key={m._id}
+          className="flex items-center gap-3 rounded-2xl bg-card px-4 py-3 shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.06]"
+        >
+          <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10">
+            <span className="text-sm font-bold text-primary">
+              {(m.name ?? m.email ?? "?").charAt(0).toUpperCase()}
+            </span>
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-medium">{m.name ?? m.email ?? m.userId}</p>
+            <span className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-semibold ${
+              m.role === "owner" ? "bg-amber-500/10 text-amber-700 dark:text-amber-300"
+              : m.role === "admin" ? "bg-blue-500/10 text-blue-700 dark:text-blue-300"
+              : "bg-muted text-muted-foreground"
+            }`}>
+              {WORKSPACE_ROLE_LABEL_NB[m.role] ?? m.role}
+            </span>
+          </div>
+        </div>
+      ))}
+      <p className="text-muted-foreground pt-2 text-xs">
+        Kontakt en administrator for å endre roller.
+      </p>
+    </div>
   );
 }
 
