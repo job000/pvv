@@ -1,6 +1,9 @@
 "use client";
 
-import { AssessmentObjectHeader } from "@/components/assessment/assessment-object-header";
+import {
+  AssessmentObjectHeader,
+  type AssessmentEvaluationContext,
+} from "@/components/assessment/assessment-object-header";
 import { AssessmentCollaborationPanel } from "@/components/assessment-wizard/assessment-collaboration-panel";
 import { AssessmentContextCard } from "@/components/assessment-wizard/assessment-context-card";
 import { AssessmentExportPanel } from "@/components/assessment-wizard/assessment-export-panel";
@@ -214,6 +217,28 @@ export function AssessmentWizard({ assessmentId }: Props) {
       payloadToSnapshot(payload as unknown as Record<string, unknown>),
     );
   }, [payload]);
+
+  const evaluationContext = useMemo((): AssessmentEvaluationContext | undefined => {
+    if (!payload) return undefined;
+    const cid = payload.candidateId?.trim();
+    if (cid) {
+      if (candidates === undefined) return { kind: "loading" };
+      const c = candidates.find((x) => String(x._id) === cid);
+      if (c) {
+        return {
+          kind: "candidate",
+          code: c.code,
+          name: c.name,
+          githubRepoFullName: c.githubRepoFullName ?? null,
+          githubIssueNumber: c.githubIssueNumber ?? null,
+          hasGithubProject: Boolean(c.githubProjectItemNodeId?.trim()),
+        };
+      }
+    }
+    const pn = payload.processName?.trim();
+    if (pn) return { kind: "draft_only", processName: pn };
+    return { kind: "unset" };
+  }, [payload, candidates]);
 
   const canEdit = access?.canEdit ?? false;
   canEditRef.current = canEdit;
@@ -577,6 +602,7 @@ export function AssessmentWizard({ assessmentId }: Props) {
           nextStepLabel={nextStepHint(pipelineStatusNorm)}
           firstRosAnalysisId={firstRosAnalysisId}
           canEditPipeline={canEdit}
+          evaluationContext={evaluationContext}
         />
       ) : (
         <div className="bg-muted/30 h-24 animate-pulse rounded-xl border border-border/50" />

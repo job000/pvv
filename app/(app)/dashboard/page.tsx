@@ -1,5 +1,6 @@
 "use client";
 
+import { DashboardEntryRedirect } from "@/components/dashboard/dashboard-entry-redirect";
 import { DashboardLayout } from "@/components/dashboard/dashboard-layout";
 import { TasksBoard } from "@/components/dashboard/tasks-board";
 import { WorkspaceDashboardGrid } from "@/components/dashboard/workspace-dashboard";
@@ -17,7 +18,6 @@ import { cn } from "@/lib/utils";
 import { useMutation, useQuery } from "convex/react";
 import {
   ArrowRight,
-  ChevronRight,
   ClipboardList,
   LayoutDashboard,
   Sparkles,
@@ -27,7 +27,7 @@ import {
   Zap,
 } from "lucide-react";
 import Link from "next/link";
-import { useEffect } from "react";
+import { Suspense, useEffect } from "react";
 
 const SHARED_ROLE_LABELS: Record<string, string> = {
   owner: "Eier",
@@ -87,6 +87,9 @@ export default function DashboardPage() {
       workspaces={workspaces}
       defaultWorkspaceId={defaultId}
     >
+      <Suspense fallback={null}>
+        <DashboardEntryRedirect />
+      </Suspense>
       <div className="relative">
         <div
           className="pointer-events-none absolute inset-0 -z-10 overflow-hidden"
@@ -96,113 +99,96 @@ export default function DashboardPage() {
         </div>
 
         <div className="w-full space-y-8 px-4 pb-16 pt-6 sm:px-6 sm:pt-8 lg:space-y-10 lg:px-8 lg:pt-10">
-          {/* Mobil: rask tilgang til arbeidsområder */}
-          <div className="flex gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] lg:hidden [&::-webkit-scrollbar]:hidden">
-            {workspaces.map(({ workspace }) => (
-              <Link
-                key={workspace._id}
-                href={`/w/${workspace._id}`}
-                className={cn(
-                  "border-border/80 bg-card/95 text-foreground inline-flex h-11 min-h-[44px] shrink-0 items-center gap-2 rounded-full border px-4 py-2 text-sm font-semibold shadow-sm backdrop-blur-sm transition hover:border-primary/30 hover:bg-card",
-                  defaultId === workspace._id && "border-primary/35 ring-1 ring-primary/15",
-                )}
-              >
-                <span className="max-w-[140px] truncate">{workspace.name}</span>
-                <ChevronRight className="text-muted-foreground size-4 shrink-0" />
-              </Link>
-            ))}
-            <Link
-              href="#arbeidsområder"
-              className="text-muted-foreground hover:text-foreground inline-flex h-11 min-h-[44px] shrink-0 items-center gap-1 rounded-full px-3 text-xs font-semibold"
-            >
-              Alle
-            </Link>
-          </div>
-
-          <header className="space-y-6">
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-              <div className="min-w-0 space-y-3">
+          <header className="border-border/60 space-y-4 border-b pb-6">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div className="min-w-0 space-y-1">
                 <div className="inline-flex items-center gap-2 rounded-full border border-border/70 bg-muted/40 px-3 py-1 text-xs font-medium text-muted-foreground">
                   <Sparkles className="text-primary size-3.5" aria-hidden />
                   Oversikt
                 </div>
-                <div className="space-y-2">
-                  <h1 className="font-heading text-foreground text-3xl font-bold tracking-tight sm:text-4xl">
-                    Arbeidsområder
-                  </h1>
-                  <p className="text-muted-foreground max-w-2xl text-sm leading-relaxed sm:text-base">
-                    Administrer team og prosjekter, sett standard for hurtigtilgang
-                    og følg saker på tvers av det du har tilgang til.
-                  </p>
-                </div>
+                <h1 className="font-heading text-foreground text-2xl font-bold tracking-tight sm:text-3xl">
+                  Arbeidsområder
+                </h1>
+                <p className="text-muted-foreground max-w-xl text-sm">
+                  Velg kort under for å gå inn. Tall og oppgaver finner du lenger ned.
+                </p>
               </div>
               {defaultWorkspace ? (
                 <Link
                   href={`/w/${defaultWorkspace._id}`}
-                  className="group bg-foreground text-background hover:bg-foreground/90 inline-flex h-11 shrink-0 items-center justify-center gap-2 self-start rounded-xl px-5 text-sm font-semibold shadow-md transition sm:h-12 sm:px-6"
+                  className="group bg-foreground text-background hover:bg-foreground/90 inline-flex h-10 shrink-0 items-center justify-center gap-2 self-start rounded-lg px-4 text-sm font-semibold shadow-md transition"
                 >
-                  Gå til {defaultWorkspace.name}
+                  Standard: {defaultWorkspace.name}
                   <ArrowRight className="size-4 transition-transform group-hover:translate-x-0.5" />
                 </Link>
               ) : null}
             </div>
+          </header>
 
-            {/* Nøkkeltall */}
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              <div className="flex items-center gap-3 rounded-2xl border border-border/45 bg-card p-4 shadow-[0_1px_3px_rgba(0,0,0,0.04)] ring-1 ring-black/[0.03] dark:ring-white/[0.05]">
-                <div className="bg-primary/12 text-primary flex size-11 items-center justify-center rounded-2xl ring-1 ring-primary/12">
-                  <LayoutDashboard className="size-5" aria-hidden />
+          <WorkspaceDashboardGrid
+            workspaces={workspaces}
+            defaultWorkspaceId={defaultId}
+          />
+
+          <section aria-label="Nøkkeltall" className="space-y-3">
+            <h2 className="text-muted-foreground text-[11px] font-semibold uppercase tracking-[0.12em]">
+              Tall
+            </h2>
+            <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+              <div className="flex items-center gap-3 rounded-xl border border-border/45 bg-card p-3 shadow-sm ring-1 ring-black/[0.03] dark:ring-white/[0.05]">
+                <div className="bg-primary/12 text-primary flex size-9 items-center justify-center rounded-xl ring-1 ring-primary/12">
+                  <LayoutDashboard className="size-4" aria-hidden />
                 </div>
-                <div>
+                <div className="min-w-0">
                   <p className="text-muted-foreground text-[10px] font-semibold uppercase tracking-[0.12em]">
-                    Aktive områder
+                    Områder
                   </p>
-                  <p className="font-heading text-foreground text-2xl font-semibold tabular-nums tracking-tight">
+                  <p className="font-heading text-foreground text-xl font-semibold tabular-nums tracking-tight">
                     {workspaces.length}
                   </p>
                 </div>
               </div>
-              <div className="flex items-center gap-3 rounded-2xl border border-border/45 bg-card p-4 shadow-[0_1px_3px_rgba(0,0,0,0.04)] ring-1 ring-black/[0.03] dark:ring-white/[0.05]">
-                <div className="bg-primary/12 text-primary flex size-11 items-center justify-center rounded-2xl ring-1 ring-primary/12">
-                  <Users className="size-5" aria-hidden />
+              <div className="flex items-center gap-3 rounded-xl border border-border/45 bg-card p-3 shadow-sm ring-1 ring-black/[0.03] dark:ring-white/[0.05]">
+                <div className="bg-primary/12 text-primary flex size-9 items-center justify-center rounded-xl ring-1 ring-primary/12">
+                  <Users className="size-4" aria-hidden />
                 </div>
-                <div>
+                <div className="min-w-0">
                   <p className="text-muted-foreground text-[10px] font-semibold uppercase tracking-[0.12em]">
-                    Delte vurderinger
+                    Vurderinger
                   </p>
-                  <p className="font-heading text-foreground text-2xl font-semibold tabular-nums tracking-tight">
+                  <p className="font-heading text-foreground text-xl font-semibold tabular-nums tracking-tight">
                     {mineAssessments?.length ?? 0}
                   </p>
                 </div>
               </div>
-              <div className="flex items-center gap-3 rounded-2xl border border-border/45 bg-card p-4 shadow-[0_1px_3px_rgba(0,0,0,0.04)] ring-1 ring-black/[0.03] dark:ring-white/[0.05]">
-                <div className="bg-primary/12 text-primary flex size-11 items-center justify-center rounded-2xl ring-1 ring-primary/12">
-                  <Zap className="size-5" aria-hidden />
+              <div className="flex items-center gap-3 rounded-xl border border-border/45 bg-card p-3 shadow-sm ring-1 ring-black/[0.03] dark:ring-white/[0.05]">
+                <div className="bg-primary/12 text-primary flex size-9 items-center justify-center rounded-xl ring-1 ring-primary/12">
+                  <Zap className="size-4" aria-hidden />
                 </div>
-                <div>
+                <div className="min-w-0">
                   <p className="text-muted-foreground text-[10px] font-semibold uppercase tracking-[0.12em]">
-                    Prioritert nå
+                    Prioritert
                   </p>
-                  <p className="font-heading text-foreground text-2xl font-semibold tabular-nums tracking-tight">
+                  <p className="font-heading text-foreground text-xl font-semibold tabular-nums tracking-tight">
                     {priorityCount}
                   </p>
                 </div>
               </div>
-              <div className="flex items-center gap-3 rounded-2xl border border-border/45 bg-card p-4 shadow-[0_1px_3px_rgba(0,0,0,0.04)] ring-1 ring-black/[0.03] dark:ring-white/[0.05]">
-                <div className="bg-primary/12 text-primary flex size-11 items-center justify-center rounded-2xl ring-1 ring-primary/12">
-                  <Star className="size-5" aria-hidden />
+              <div className="flex items-center gap-3 rounded-xl border border-border/45 bg-card p-3 shadow-sm ring-1 ring-black/[0.03] dark:ring-white/[0.05]">
+                <div className="bg-primary/12 text-primary flex size-9 items-center justify-center rounded-xl ring-1 ring-primary/12">
+                  <Star className="size-4" aria-hidden />
                 </div>
-                <div>
+                <div className="min-w-0">
                   <p className="text-muted-foreground text-[10px] font-semibold uppercase tracking-[0.12em]">
-                    Standard satt
+                    Standard
                   </p>
-                  <p className="font-heading truncate text-base font-semibold tracking-tight text-foreground">
+                  <p className="font-heading truncate text-sm font-semibold tracking-tight text-foreground">
                     {defaultWorkspace ? defaultWorkspace.name : "—"}
                   </p>
                 </div>
               </div>
             </div>
-          </header>
+          </section>
 
           {defaultWorkspace ? (
             <Card className="overflow-hidden rounded-2xl border-border/40 bg-muted/15 shadow-[0_1px_3px_rgba(0,0,0,0.04)] ring-1 ring-black/[0.03] dark:ring-white/[0.05]">
@@ -246,11 +232,6 @@ export default function DashboardPage() {
               </CardFooter>
             </Card>
           ) : null}
-
-          <WorkspaceDashboardGrid
-            workspaces={workspaces}
-            defaultWorkspaceId={defaultId}
-          />
 
           <TasksBoard />
 

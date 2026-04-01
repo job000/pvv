@@ -56,7 +56,7 @@ export function WorkspaceShell({
           </div>
           <div className="shrink-0 border-t border-border/60 bg-background/40 p-2 backdrop-blur-sm">
             <Link
-              href="/dashboard"
+              href="/dashboard?oversikt=1"
               className="text-muted-foreground hover:text-foreground block rounded-lg px-3 py-2 text-xs transition-colors"
             >
               ← Alle arbeidsområder
@@ -77,7 +77,7 @@ export function WorkspaceShell({
             </div>
             <div className="shrink-0 border-t border-border/60 bg-muted/20 p-3">
               <Link
-                href="/dashboard"
+                href="/dashboard?oversikt=1"
                 onClick={() => setMobileOpen(false)}
                 className="text-muted-foreground hover:text-foreground text-sm transition-colors"
               >

@@ -21,6 +21,7 @@ import {
   ArrowRight,
   FolderOpen,
   Plus,
+  Search,
   Settings,
   Sparkles,
   Star,
@@ -28,7 +29,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 
 type WorkspaceRow = {
   workspace: Doc<"workspaces">;
@@ -60,6 +61,15 @@ export function WorkspaceDashboardGrid({
   const [deleteTarget, setDeleteTarget] = useState<Doc<"workspaces"> | null>(
     null,
   );
+  const [searchQuery, setSearchQuery] = useState("");
+
+  const filteredWorkspaces = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return workspaces;
+    return workspaces.filter(({ workspace }) =>
+      workspace.name.toLowerCase().includes(q),
+    );
+  }, [workspaces, searchQuery]);
 
   async function handleCreate() {
     setCreateError(null);
@@ -89,8 +99,8 @@ export function WorkspaceDashboardGrid({
         className="scroll-mt-24 space-y-6"
         aria-labelledby="dash-workspaces-heading"
       >
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-          <div>
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+          <div className="min-w-0">
             <p className="text-muted-foreground text-[11px] font-semibold uppercase tracking-[0.12em]">
               Arbeidsområder
             </p>
@@ -100,15 +110,42 @@ export function WorkspaceDashboardGrid({
             >
               Dine arbeidsområder
             </h2>
-            <p className="text-muted-foreground mt-2 max-w-2xl text-[13px] leading-relaxed sm:text-sm">
-              Alt arbeid skjer på tvers av områder — åpne et eksisterende eller
-              opprett et nytt for team eller prosjekt.
+            <p className="text-muted-foreground mt-1 max-w-2xl text-sm">
+              Trykk på et kort for å åpne. Søk etter navn under.
             </p>
+          </div>
+          <div className="relative w-full sm:max-w-xs">
+            <Search
+              className="text-muted-foreground pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2"
+              aria-hidden
+            />
+            <Input
+              type="search"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Søk i arbeidsområder …"
+              className="h-11 pl-9 sm:h-10"
+              aria-label="Filtrer arbeidsområder etter navn"
+              autoComplete="off"
+            />
           </div>
         </div>
 
+        {filteredWorkspaces.length === 0 && workspaces.length > 0 ? (
+          <p className="text-muted-foreground text-sm" role="status">
+            Ingen treff for «{searchQuery.trim()}».{" "}
+            <button
+              type="button"
+              className="text-primary font-medium underline-offset-4 hover:underline"
+              onClick={() => setSearchQuery("")}
+            >
+              Nullstill søk
+            </button>
+          </p>
+        ) : null}
+
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {workspaces.map(({ workspace, role }) => {
+          {filteredWorkspaces.map(({ workspace, role }) => {
             const isOwner = role === "owner";
             const canManage = role === "owner" || role === "admin";
             const isDefault = defaultWorkspaceId === workspace._id;
@@ -123,12 +160,12 @@ export function WorkspaceDashboardGrid({
               >
                 <div
                   className={cn(
-                    "h-1 w-full bg-gradient-to-r from-primary/80 via-teal-500/70 to-sky-500/40 opacity-90 transition-opacity group-hover:opacity-100",
+                    "pointer-events-none relative z-10 h-1 w-full bg-gradient-to-r from-primary/80 via-teal-500/70 to-sky-500/40 opacity-90 transition-opacity group-hover:opacity-100",
                     isDefault && "from-primary to-teal-600",
                   )}
                   aria-hidden
                 />
-                <CardHeader className="space-y-3 pb-2">
+                <CardHeader className="relative z-10 space-y-3 pb-2 pointer-events-none">
                   <div className="flex items-start justify-between gap-3">
                     <div className="bg-primary/12 text-primary flex size-11 shrink-0 items-center justify-center rounded-2xl ring-1 ring-primary/15">
                       <FolderOpen className="size-5" aria-hidden />
@@ -145,34 +182,30 @@ export function WorkspaceDashboardGrid({
                       </span>
                     </div>
                   </div>
-                  <CardTitle className="font-heading text-lg leading-tight">
+                  <CardTitle className="font-heading pr-6 text-lg leading-tight">
                     {workspace.name}
+                    <ArrowRight
+                      className="text-muted-foreground/60 ml-1 inline size-4 align-[-0.125em] opacity-0 transition-opacity group-hover:opacity-100"
+                      aria-hidden
+                    />
                   </CardTitle>
-                  <CardDescription className="text-base leading-snug">
+                  <CardDescription className="text-sm leading-snug">
                     {canManage
-                      ? "Administrer innstillinger, innstill standard og inviter team."
-                      : "Du har tilgang til vurderinger og innhold i dette området."}
+                      ? "Innstillinger, standard og team"
+                      : "Tilgang til vurderinger og innhold"}
                   </CardDescription>
                 </CardHeader>
-                <CardFooter className="mt-auto flex flex-col gap-2 border-t border-border/45 bg-muted/15 pt-4">
+                <Link
+                  href={`/w/${workspace._id}`}
+                  className="absolute inset-0 z-[5] rounded-2xl focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                  aria-label={`Åpne arbeidsområde ${workspace.name}`}
+                />
+                <CardFooter className="relative z-20 mt-auto flex flex-col gap-2 border-t border-border/45 bg-muted/15 pt-4 pointer-events-auto">
                   <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-                    <Link
-                      href={`/w/${workspace._id}`}
-                      className={cn(
-                        buttonVariants({ size: "default" }),
-                        "group/btn flex h-11 min-h-[44px] flex-1 items-center justify-center gap-2 text-[13px] font-semibold shadow-sm sm:h-10 sm:min-h-0",
-                      )}
-                    >
-                      Åpne
-                      <ArrowRight
-                        className="size-4 transition-transform group-hover/btn:translate-x-0.5"
-                        aria-hidden
-                      />
-                    </Link>
                     <Button
                       type="button"
                       variant="outline"
-                      className="h-11 min-h-[44px] whitespace-nowrap text-[13px] font-medium sm:h-10 sm:min-h-0"
+                      className="h-11 min-h-[44px] w-full whitespace-nowrap text-[13px] font-medium sm:h-10 sm:min-h-0"
                       onClick={() =>
                         void setDefaultWorkspace({
                           workspaceId:

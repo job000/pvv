@@ -18,6 +18,39 @@ import {
   hasPvvSyncMarkersInBody,
 } from "./lib/githubCandidateSync";
 import { normalizeGithubRepoFullName } from "./lib/github";
+import { payloadToSnapshot } from "./lib/payloadSnapshot";
+import { computeAllResults } from "./lib/rpaScoring";
+
+function normalizeProcessCode(raw: string): string {
+  return raw.trim().toUpperCase();
+}
+
+/** Utkast kan lagre enten prosesskode (P-XXX) eller Convex kandidat-ID. */
+function draftPayloadMatchesCandidate(
+  payload: { candidateId?: string } | undefined,
+  candidate: Doc<"candidates">,
+): boolean {
+  const raw = (payload?.candidateId ?? "").trim();
+  if (!raw) return false;
+  if (raw === String(candidate._id)) return true;
+  return normalizeProcessCode(raw) === normalizeProcessCode(candidate.code);
+}
+
+export type PvvAssessmentResultSummary = {
+  /** Fra siste utkast — samme modell som i PVV */
+  ap: number;
+  criticality: number;
+  priorityScore: number;
+  feasible: boolean;
+  ease: number;
+  easeLabel: string;
+  hoursY: number;
+  fte: number;
+  costY: number;
+  benH: number;
+  benC: number;
+  benFte: number;
+};
 
 export const getCandidateForGithub = internalQuery({
   args: { candidateId: v.id("candidates") },
@@ -68,10 +101,18 @@ export const getCandidateGithubSyncContext = internalQuery({
     const linkedAssessments: Array<{
       assessmentId: Id<"assessments">;
       title: string;
+      processNameDraft: string | undefined;
       pipelineStatus: string | undefined;
       rosStatus: string | undefined;
       rosNotes: string | undefined;
       rosUrl: string | undefined;
+      pddStatus: string | undefined;
+      manualPriorityOverride: number | undefined;
+      cachedPriorityScore: number | undefined;
+      cachedAp: number | undefined;
+      cachedCriticality: number | undefined;
+      draftUpdatedAt: number | undefined;
+      pvvResult: PvvAssessmentResultSummary | null;
       processDescriptionShort: string | undefined;
       notes: Array<{ body: string; createdAt: number; authorLabel: string }>;
     }> = [];
@@ -80,10 +121,34 @@ export const getCandidateGithubSyncContext = internalQuery({
         .query("assessmentDrafts")
         .withIndex("by_assessment", (q) => q.eq("assessmentId", a._id))
         .first();
-      if (draft?.payload?.candidateId !== candidate.code) {
+      const payload = draft?.payload as { candidateId?: string } | undefined;
+      if (!draft?.payload || !draftPayloadMatchesCandidate(payload, candidate)) {
         continue;
       }
       const pd = draft.payload.processDescription?.trim();
+      const pName = draft.payload.processName?.trim();
+      let pvvResult: PvvAssessmentResultSummary | null = null;
+      try {
+        const snap = computeAllResults(
+          payloadToSnapshot(draft.payload as Record<string, unknown>),
+        );
+        pvvResult = {
+          ap: snap.ap,
+          criticality: snap.criticality,
+          priorityScore: snap.priorityScore,
+          feasible: snap.feasible,
+          ease: snap.ease,
+          easeLabel: snap.easeLabel,
+          hoursY: snap.hoursY,
+          fte: snap.fte,
+          costY: snap.costY,
+          benH: snap.benH,
+          benC: snap.benC,
+          benFte: snap.benFte,
+        };
+      } catch {
+        pvvResult = null;
+      }
       const noteRows = await ctx.db
         .query("assessmentNotes")
         .withIndex("by_assessment", (q) => q.eq("assessmentId", a._id))
@@ -105,10 +170,19 @@ export const getCandidateGithubSyncContext = internalQuery({
       linkedAssessments.push({
         assessmentId: a._id,
         title: a.title,
+        processNameDraft:
+          pName && pName.length > 0 ? pName.slice(0, 500) : undefined,
         pipelineStatus: a.pipelineStatus,
         rosStatus: a.rosStatus,
         rosNotes: a.rosNotes,
         rosUrl: a.rosUrl,
+        pddStatus: a.pddStatus,
+        manualPriorityOverride: a.manualPriorityOverride,
+        cachedPriorityScore: a.cachedPriorityScore,
+        cachedAp: a.cachedAp,
+        cachedCriticality: a.cachedCriticality,
+        draftUpdatedAt: draft.updatedAt,
+        pvvResult,
         processDescriptionShort:
           pd && pd.length > 0 ? pd.slice(0, 2000) : undefined,
         notes,
@@ -422,10 +496,6 @@ export const listByWorkspace = query({
       .collect();
   },
 });
-
-function normalizeProcessCode(raw: string): string {
-  return raw.trim().toUpperCase();
-}
 
 /**
  * Per prosess: koblede PVV-vurderinger (via utkastets prosess-ID) og ROS-analyser,

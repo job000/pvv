@@ -19,7 +19,7 @@ export function toastDeleteWithUndo(options: {
   const delayMs = options.delayMs ?? DEFAULT_DELAY_MS;
   let cancelled = false;
 
-  const timeoutHolder: { id?: ReturnType<typeof setTimeout> } = {};
+  const timeoutHolder: { id?: number } = {};
 
   const toastId = toast.message(options.title, {
     description: `«${options.itemLabel}» slettes om noen sekunder. Trykk Angre for å beholde den.`,
@@ -59,5 +59,5 @@ export function toastDeleteWithUndo(options: {
         options.onFailed?.(e);
       }
     })();
-  }, delayMs);
+  }, delayMs) as number;
 }

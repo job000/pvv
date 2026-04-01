@@ -56,6 +56,9 @@ export const patchMyUserSettings = mutation({
       v.union(v.literal("comfortable"), v.literal("compact")),
     ),
     prosessregisterTutorialEnabled: v.optional(v.boolean()),
+    appEntryPreference: v.optional(
+      v.union(v.literal("dashboard"), v.literal("workspace")),
+    ),
   },
   handler: async (ctx, args) => {
     const userId = await requireUserId(ctx);
@@ -91,6 +94,9 @@ export const patchMyUserSettings = mutation({
       if (args.prosessregisterTutorialEnabled) {
         patch.prosessregisterTutorialDismissed = false;
       }
+    }
+    if (args.appEntryPreference !== undefined) {
+      patch.appEntryPreference = args.appEntryPreference;
     }
 
     const clean = omitUndefined(patch);

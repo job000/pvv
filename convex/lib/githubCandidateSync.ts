@@ -102,3 +102,49 @@ export function extractPvvSyncedFieldsFromGithubIssueBody(body: string): {
   }
   return out;
 }
+
+/** Omslutter innhold PVV genererer til GitHub; tekst utenfor bevares ved synk. */
+export const PVV_MANAGED_START = "<!-- pvv:managed:start -->";
+export const PVV_MANAGED_END = "<!-- pvv:managed:end -->";
+
+/**
+ * Slår sammen eksisterende issue-body med ny PVV-Markdown.
+ * - Innhold **over** `PVV_MANAGED_START` og **under** `PVV_MANAGED_END` endres ikke av PVV.
+ * - Første gang (ingen markører): legges PVV-blokken til under eksisterende tekst (f.eks. notater over).
+ * - Hvis hele body ser ut som gammel PVV uten brukertillegg, erstattes den med én managed-blokk (unngår duplikat ved oppgradering).
+ */
+export function mergePvvManagedGithubBody(
+  existingBody: string | null | undefined,
+  newManagedMarkdown: string,
+): string {
+  const inner = newManagedMarkdown.trim();
+  const managed = `${PVV_MANAGED_START}\n${inner}\n<!-- pvv:hint: Fritekst utenfor start-/end-markørene bevares ved synk fra PVV. -->\n${PVV_MANAGED_END}`;
+  const existing = existingBody ?? "";
+  const startIdx = existing.indexOf(PVV_MANAGED_START);
+  const endIdx = existing.indexOf(PVV_MANAGED_END);
+  if (startIdx !== -1 && endIdx !== -1 && endIdx > startIdx) {
+    const prefix = existing.slice(0, startIdx).replace(/\s+$/, "");
+    const suffix = existing
+      .slice(endIdx + PVV_MANAGED_END.length)
+      .replace(/^\s+/, "");
+    const parts = [prefix, managed, suffix].filter((p) => p.length > 0);
+    return parts.join("\n\n");
+  }
+  const trimmed = existing.trim();
+  if (!trimmed) {
+    return managed;
+  }
+  if (looksLikeLegacyPvvBodyOnly(trimmed)) {
+    return managed;
+  }
+  return `${trimmed}\n\n${managed}`;
+}
+
+/** Heuristikk: tidligere full synk uten managed-markører (unngår dobbel PVV-blokk ved første synk etter oppgradering). */
+function looksLikeLegacyPvvBodyOnly(s: string): boolean {
+  if (s.includes(PVV_MANAGED_START)) return false;
+  if (!/_Synkronisert fra PVV/i.test(s)) return false;
+  if (!/##\s+Prosessregister/i.test(s)) return false;
+  const before = s.split(/^#\s+/m)[0]?.trim() ?? "";
+  return before.length === 0;
+}

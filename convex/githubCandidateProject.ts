@@ -13,8 +13,12 @@ import {
   type GithubSubIssuesSummary,
 } from "./lib/githubSubIssues";
 import { normalizeGithubRepoFullName } from "./lib/github";
-import { formatPvvSyncBlock } from "./lib/githubCandidateSync";
+import {
+  formatPvvSyncBlock,
+  mergePvvManagedGithubBody,
+} from "./lib/githubCandidateSync";
 import { resolveGithubToken } from "./githubTasks";
+import type { PvvAssessmentResultSummary } from "./candidates";
 import {
   PIPELINE_STATUS_LABELS,
   type PipelineStatus,
@@ -52,6 +56,68 @@ const GITHUB_REST_HEADERS = {
   Accept: "application/vnd.github+json",
   "X-GitHub-Api-Version": "2022-11-28",
 } as const;
+
+async function restGetGithubIssueBody(
+  token: string,
+  repoFullName: string,
+  issueNumber: number,
+): Promise<string> {
+  const parts = repoFullName.split("/").filter(Boolean);
+  if (parts.length < 2) {
+    throw new Error("Ugyldig repo-navn for GitHub-issue.");
+  }
+  const owner = parts[0]!;
+  const repo = parts.slice(1).join("/");
+  const url = `https://api.github.com/repos/${owner}/${repo}/issues/${issueNumber}`;
+  const res = await fetch(url, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+      ...GITHUB_REST_HEADERS,
+    },
+  });
+  const text = await res.text();
+  if (!res.ok) {
+    throw new Error(
+      `GitHub kunne ikke lese issue før synk (HTTP ${res.status}). ${text.slice(0, 200)}`,
+    );
+  }
+  let json: { body?: string | null };
+  try {
+    json = JSON.parse(text) as { body?: string | null };
+  } catch {
+    throw new Error(
+      `GitHub: ugyldig JSON ved lesing av issue. ${text.slice(0, 160)}`,
+    );
+  }
+  return typeof json.body === "string" ? json.body : "";
+}
+
+async function graphqlFetchDraftIssueBody(
+  token: string,
+  draftIssueId: string,
+): Promise<string> {
+  const q = `query($id: ID!) {
+    node(id: $id) {
+      ... on DraftIssue {
+        body
+      }
+    }
+  }`;
+  const json = await githubGraphql(token, q, { id: draftIssueId });
+  const body = (json.data as { node?: { body?: string | null } | null })?.node
+    ?.body;
+  return typeof body === "string" ? body : "";
+}
+
+function truncateGithubBodyIfNeeded(body: string): string {
+  if (body.length <= GITHUB_DRAFT_BODY_MAX) {
+    return body;
+  }
+  return (
+    body.slice(0, GITHUB_DRAFT_BODY_MAX - 80) +
+    "\n\n… _(truncated — body too large for GitHub)_"
+  );
+}
 
 async function restPatchGithubIssue(
   token: string,
@@ -109,10 +175,18 @@ export type CandidateGithubSyncContext = {
   linkedAssessments: Array<{
     assessmentId: Id<"assessments">;
     title: string;
+    processNameDraft: string | undefined;
     pipelineStatus: string | undefined;
     rosStatus: string | undefined;
     rosNotes: string | undefined;
     rosUrl: string | undefined;
+    pddStatus: string | undefined;
+    manualPriorityOverride: number | undefined;
+    cachedPriorityScore: number | undefined;
+    cachedAp: number | undefined;
+    cachedCriticality: number | undefined;
+    draftUpdatedAt: number | undefined;
+    pvvResult: PvvAssessmentResultSummary | null;
     processDescriptionShort: string | undefined;
     notes: Array<{ body: string; createdAt: number; authorLabel: string }>;
   }>;
@@ -130,6 +204,91 @@ export type CandidateGithubSyncContext = {
 function resolvePvvUrl(path: string): string {
   const base = process.env.PVV_PUBLIC_BASE_URL?.trim().replace(/\/$/, "");
   return base ? `${base}${path}` : path;
+}
+
+function fmtNb1(n: number): string {
+  return new Intl.NumberFormat("nb-NO", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 1,
+  }).format(n);
+}
+
+function fmtNbInt(n: number): string {
+  return new Intl.NumberFormat("nb-NO", {
+    maximumFractionDigits: 0,
+  }).format(Math.round(n));
+}
+
+function fmtNok(n: number): string {
+  return new Intl.NumberFormat("nb-NO", {
+    style: "currency",
+    currency: "NOK",
+    maximumFractionDigits: 0,
+  }).format(n);
+}
+
+/** Utdrag av PVV-tall til GitHub-issue — speiler modellen i vurderingen. */
+function formatAssessmentPvvResultLines(
+  a: CandidateGithubSyncContext["linkedAssessments"][number],
+): string[] {
+  const out: string[] = [];
+  if (a.draftUpdatedAt != null) {
+    out.push(
+      `- **Siste utkast i PVV:** ${new Date(a.draftUpdatedAt).toLocaleString("nb-NO")}`,
+    );
+  }
+  if (a.processNameDraft?.trim()) {
+    out.push(`- **Prosessnavn (skjema):** ${a.processNameDraft.trim()}`);
+  }
+  const r = a.pvvResult;
+  if (r) {
+    out.push(
+      "",
+      "**Resultat (PVV-modell):** Tallene er fra siste utkast og oppdateres i GitHub når du synkroniserer fra PVV.",
+      `- **Automatiseringspotensial:** ${fmtNb1(r.ap)} %`,
+      `- **Viktighet (kritikalitet):** ${fmtNb1(r.criticality)} %`,
+      `- **Porteføljeprioritet (0–100):** ${fmtNb1(r.priorityScore)}`,
+    );
+  } else if (
+    a.cachedAp != null ||
+    a.cachedCriticality != null ||
+    a.cachedPriorityScore != null
+  ) {
+    out.push(
+      "",
+      "**Resultat (cache i PVV):**",
+    );
+    if (a.cachedAp != null) {
+      out.push(`- **Automatiseringspotensial (cache):** ${fmtNb1(a.cachedAp)} %`);
+    }
+    if (a.cachedCriticality != null) {
+      out.push(`- **Viktighet (cache):** ${fmtNb1(a.cachedCriticality)} %`);
+    }
+    if (a.cachedPriorityScore != null) {
+      out.push(`- **Prioritet (cache):** ${fmtNb1(a.cachedPriorityScore)}`);
+    }
+  }
+  if (
+    a.manualPriorityOverride != null &&
+    Number.isFinite(a.manualPriorityOverride)
+  ) {
+    out.push(
+      `- **Manuell prioritet (overstyring 0–100):** ${fmtNb1(a.manualPriorityOverride)}`,
+    );
+  }
+  if (r) {
+    out.push(
+      `- **Gjennomførbarhet (stabilitet):** ${r.feasible ? "Ja, trolig" : "Nei / usikkert"}`,
+      `- **Implementeringskompleksitet:** ${r.easeLabel} (${fmtNb1(r.ease)} %)`,
+      `- **Årlige manuelle timer (modell):** ${fmtNbInt(r.hoursY)} t`,
+      `- **Behov for årsverk (FTE):** ${fmtNb1(r.fte)}`,
+      `- **Kostnad dagens løsning (modell):** ${fmtNok(r.costY)}`,
+      `- **Estimert gevinst timer/år:** ${fmtNbInt(r.benH)} t`,
+      `- **Estimert gevinst kr/år:** ${fmtNok(r.benC)}`,
+      `- **Estimert gevinst i FTE-årsverk/år:** ${fmtNb1(r.benFte)}`,
+    );
+  }
+  return out;
 }
 
 export function formatCandidateGithubMarkdown(
@@ -192,9 +351,15 @@ export function formatCandidateGithubMarkdown(
         `- **Lenke:** ${link}`,
         `- **Pipeline:** ${pipelineNb(a.pipelineStatus)}`,
       );
+      lines.push(...formatAssessmentPvvResultLines(a));
       if (a.rosStatus) {
         lines.push(
           `- **ROS (status på saken):** ${COMPLIANCE_NB[a.rosStatus] ?? a.rosStatus}`,
+        );
+      }
+      if (a.pddStatus) {
+        lines.push(
+          `- **PDD (personvern):** ${COMPLIANCE_NB[a.pddStatus] ?? a.pddStatus}`,
         );
       }
       if (a.rosNotes?.trim()) {
@@ -527,11 +692,16 @@ async function pushCandidateMarkdownToGithub(
   );
 
   if (shape.kind === "draft" && shape.draftIssueId) {
+    const existingBody = await graphqlFetchDraftIssueBody(
+      token,
+      shape.draftIssueId,
+    );
+    const mergedBody = mergePvvManagedGithubBody(existingBody, mdBody);
     await updateDraftIssueBodyAndTitle(
       token,
       shape.draftIssueId,
       title,
-      mdBody,
+      truncateGithubBodyIfNeeded(mergedBody),
     );
     await ctx.runMutation(internal.candidates.clearGithubIssueLink, {
       candidateId,
@@ -545,12 +715,18 @@ async function pushCandidateMarkdownToGithub(
     shape.issue.repoFullName &&
     shape.issue.number > 0
   ) {
+    const existingBody = await restGetGithubIssueBody(
+      token,
+      shape.issue.repoFullName,
+      shape.issue.number,
+    );
+    const mergedBody = mergePvvManagedGithubBody(existingBody, mdBody);
     await restPatchGithubIssue(
       token,
       shape.issue.repoFullName,
       shape.issue.number,
       title,
-      mdBody,
+      truncateGithubBodyIfNeeded(mergedBody),
     );
     await ctx.runMutation(internal.candidates.setGithubIssueLinkFromGithub, {
       candidateId,
@@ -1121,6 +1297,133 @@ export const importPvvFieldsFromGithubProjectItem = action({
   },
 });
 
+async function createGithubRepoIssueForCandidateCore(
+  ctx: ActionCtx,
+  args: {
+    candidateId: Id<"candidates">;
+    statusOptionId: string;
+    repoFullName?: string;
+  },
+  userId: Id<"users">,
+): Promise<{ ok: true; itemNodeId: string }> {
+  const { candidate, workspace } = await assertMemberForCandidate(
+    ctx,
+    args.candidateId,
+    userId,
+  );
+  if (candidate.githubProjectItemNodeId) {
+    throw new Error(
+      "Prosessen er allerede koblet til GitHub-prosjektet. Bruk «Send til GitHub» eller fjern koblingen først.",
+    );
+  }
+  const projectNodeId = workspace.githubProjectNodeId?.trim();
+  if (!projectNodeId) {
+    throw new Error(
+      "Arbeidsområdet har ikke GitHub-prosjekt konfigurert. Lagre det i innstillinger først.",
+    );
+  }
+  const defaultRepos = collectWorkspaceDefaultRepos(workspace);
+  let repo: string | undefined;
+  if (args.repoFullName?.trim()) {
+    try {
+      repo = normalizeGithubRepoFullName(args.repoFullName);
+    } catch {
+      throw new Error("Ugyldig repo-navn.");
+    }
+  } else if (defaultRepos.length > 0) {
+    repo = defaultRepos[0];
+  } else {
+    throw new Error(
+      "Sett minst ett standard GitHub-repo under Innstillinger → GitHub før du oppretter issue i repo.",
+    );
+  }
+  const token = await resolveGithubToken(ctx, candidate.workspaceId);
+  const meta = await getProjectStatusFieldMetaWithCache(ctx, {
+    workspaceId: candidate.workspaceId,
+    workspace,
+    projectNodeId,
+    token,
+  });
+  if (!meta.options.some((o) => o.id === args.statusOptionId)) {
+    throw new Error("Ugyldig status — hent statuslisten på nytt.");
+  }
+  const syncCtx = await ctx.runQuery(
+    internal.candidates.getCandidateGithubSyncContext,
+    { candidateId: args.candidateId },
+  );
+  if (!syncCtx) {
+    throw new Error("Kunne ikke hente prosessdata for GitHub.");
+  }
+  const title = `[${syncCtx.candidate.code}] ${syncCtx.candidate.name}`.slice(
+    0,
+    256,
+  );
+  const [owner, repoName] = repo.split("/");
+  const res = await fetch(
+    `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repoName)}/issues`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        ...GITHUB_REST_HEADERS,
+      },
+      body: JSON.stringify({ title, body: "" }),
+    },
+  );
+  if (!res.ok) {
+    const errText = await res.text();
+    throw new Error(
+      `GitHub kunne ikke opprette issue (${res.status}). ${errText.slice(0, 280)}`,
+    );
+  }
+  const issue = (await res.json()) as {
+    number: number;
+    node_id: string;
+  };
+  const addM = `mutation($projectId: ID!, $contentId: ID!) {
+      addProjectV2ItemById(input: {projectId: $projectId, contentId: $contentId}) {
+        item { id }
+      }
+    }`;
+  const addJson = await githubGraphql(token, addM, {
+    projectId: projectNodeId,
+    contentId: issue.node_id,
+  });
+  const itemId = (
+    addJson.data as {
+      addProjectV2ItemById?: { item?: { id?: string } | null } | null;
+    }
+  )?.addProjectV2ItemById?.item?.id;
+  if (!itemId) {
+    throw new Error(
+      "Issue ble opprettet i GitHub, men kunne ikke legges i prosjekt-tavlen. Sjekk PAT (Projects), prosjekt-node-ID og at repoet kan brukes i prosjektet.",
+    );
+  }
+  const updM = `mutation($input: UpdateProjectV2ItemFieldValueInput!) {
+      updateProjectV2ItemFieldValue(input: $input) {
+        projectV2Item { id }
+      }
+    }`;
+  await githubGraphql(token, updM, {
+    input: {
+      projectId: projectNodeId,
+      itemId,
+      fieldId: meta.fieldId,
+      value: { singleSelectOptionId: args.statusOptionId },
+    },
+  });
+  await ctx.runMutation(internal.candidates.setGithubProjectItemWithIssueLink, {
+    candidateId: args.candidateId,
+    itemNodeId: itemId,
+    statusOptionId: args.statusOptionId,
+    githubRepoFullName: repo,
+    githubIssueNumber: issue.number,
+    githubIssueNodeId: issue.node_id,
+  });
+  await pushCandidateMarkdownToGithub(ctx, args.candidateId, userId, "throw");
+  return { ok: true as const, itemNodeId: itemId };
+}
+
 export const registerCandidateToGithubProject = action({
   args: {
     candidateId: v.id("candidates"),
@@ -1156,6 +1459,11 @@ export const registerCandidateToGithubProject = action({
     });
     if (!meta.options.some((o) => o.id === args.statusOptionId)) {
       throw new Error("Ugyldig status — hent statuslisten på nytt.");
+    }
+    /** Med standard-repo opprettes ekte issue (får GitHub #N); uten repo kun utkast på tavle. */
+    const defaultRepos = collectWorkspaceDefaultRepos(workspace);
+    if (defaultRepos.length > 0) {
+      return await createGithubRepoIssueForCandidateCore(ctx, args, userId);
     }
     const syncCtx = await ctx.runQuery(
       internal.candidates.getCandidateGithubSyncContext,
@@ -1230,122 +1538,7 @@ export const createGithubRepoIssueForCandidate = action({
     if (!userId) {
       throw new Error("Du må være innlogget.");
     }
-    const { candidate, workspace } = await assertMemberForCandidate(
-      ctx,
-      args.candidateId,
-      userId,
-    );
-    if (candidate.githubProjectItemNodeId) {
-      throw new Error(
-        "Prosessen er allerede koblet til GitHub-prosjektet. Bruk «Send til GitHub» eller fjern koblingen først.",
-      );
-    }
-    const projectNodeId = workspace.githubProjectNodeId?.trim();
-    if (!projectNodeId) {
-      throw new Error(
-        "Arbeidsområdet har ikke GitHub-prosjekt konfigurert. Lagre det i innstillinger først.",
-      );
-    }
-    const defaultRepos = collectWorkspaceDefaultRepos(workspace);
-    let repo: string | undefined;
-    if (args.repoFullName?.trim()) {
-      try {
-        repo = normalizeGithubRepoFullName(args.repoFullName);
-      } catch {
-        throw new Error("Ugyldig repo-navn.");
-      }
-    } else if (defaultRepos.length > 0) {
-      repo = defaultRepos[0];
-    } else {
-      throw new Error(
-        "Sett minst ett standard GitHub-repo under Innstillinger → GitHub før du oppretter issue i repo.",
-      );
-    }
-    const token = await resolveGithubToken(ctx, candidate.workspaceId);
-    const meta = await getProjectStatusFieldMetaWithCache(ctx, {
-      workspaceId: candidate.workspaceId,
-      workspace,
-      projectNodeId,
-      token,
-    });
-    if (!meta.options.some((o) => o.id === args.statusOptionId)) {
-      throw new Error("Ugyldig status — hent statuslisten på nytt.");
-    }
-    const syncCtx = await ctx.runQuery(
-      internal.candidates.getCandidateGithubSyncContext,
-      { candidateId: args.candidateId },
-    );
-    if (!syncCtx) {
-      throw new Error("Kunne ikke hente prosessdata for GitHub.");
-    }
-    const title = `[${syncCtx.candidate.code}] ${syncCtx.candidate.name}`.slice(
-      0,
-      256,
-    );
-    const [owner, repoName] = repo.split("/");
-    const res = await fetch(
-      `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repoName)}/issues`,
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          ...GITHUB_REST_HEADERS,
-        },
-        body: JSON.stringify({ title, body: "" }),
-      },
-    );
-    if (!res.ok) {
-      const errText = await res.text();
-      throw new Error(
-        `GitHub kunne ikke opprette issue (${res.status}). ${errText.slice(0, 280)}`,
-      );
-    }
-    const issue = (await res.json()) as {
-      number: number;
-      node_id: string;
-    };
-    const addM = `mutation($projectId: ID!, $contentId: ID!) {
-      addProjectV2ItemById(input: {projectId: $projectId, contentId: $contentId}) {
-        item { id }
-      }
-    }`;
-    const addJson = await githubGraphql(token, addM, {
-      projectId: projectNodeId,
-      contentId: issue.node_id,
-    });
-    const itemId = (
-      addJson.data as {
-        addProjectV2ItemById?: { item?: { id?: string } | null } | null;
-      }
-    )?.addProjectV2ItemById?.item?.id;
-    if (!itemId) {
-      throw new Error(
-        "Issue ble opprettet i GitHub, men kunne ikke legges i prosjekt-tavlen. Sjekk PAT (Projects), prosjekt-node-ID og at repoet kan brukes i prosjektet.",
-      );
-    }
-    const updM = `mutation($input: UpdateProjectV2ItemFieldValueInput!) {
-      updateProjectV2ItemFieldValue(input: $input) {
-        projectV2Item { id }
-      }
-    }`;
-    await githubGraphql(token, updM, {
-      input: {
-        projectId: projectNodeId,
-        itemId,
-        fieldId: meta.fieldId,
-        value: { singleSelectOptionId: args.statusOptionId },
-      },
-    });
-    await ctx.runMutation(internal.candidates.setGithubProjectItemWithIssueLink, {
-      candidateId: args.candidateId,
-      itemNodeId: itemId,
-      statusOptionId: args.statusOptionId,
-      githubRepoFullName: repo,
-      githubIssueNumber: issue.number,
-      githubIssueNodeId: issue.node_id,
-    });
-    await pushCandidateMarkdownToGithub(ctx, args.candidateId, userId, "throw");
-    return { ok: true as const, itemNodeId: itemId };
+    return createGithubRepoIssueForCandidateCore(ctx, args, userId);
   },
 });
 

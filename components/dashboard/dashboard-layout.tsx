@@ -43,7 +43,7 @@ export function DashboardLayout({
             Navigasjon
           </p>
           <Link
-            href="/dashboard"
+            href="/dashboard?oversikt=1"
             className={cn(
               navItem,
               pathname === "/dashboard"

@@ -9,8 +9,30 @@ import {
   type PipelineStatus,
 } from "@/lib/assessment-pipeline";
 import { cn } from "@/lib/utils";
-import { AlertCircle, Link2, Shield, User } from "lucide-react";
+import {
+  AlertCircle,
+  ClipboardList,
+  ExternalLink,
+  FolderKanban,
+  GitBranch,
+  Link2,
+  Shield,
+  User,
+} from "lucide-react";
 import Link from "next/link";
+
+export type AssessmentEvaluationContext =
+  | { kind: "loading" }
+  | {
+      kind: "candidate";
+      code: string;
+      name: string;
+      githubRepoFullName: string | null;
+      githubIssueNumber: number | null;
+      hasGithubProject: boolean;
+    }
+  | { kind: "draft_only"; processName: string }
+  | { kind: "unset" };
 
 export function AssessmentObjectHeader({
   workspaceId,
@@ -21,6 +43,7 @@ export function AssessmentObjectHeader({
   nextStepLabel,
   firstRosAnalysisId,
   canEditPipeline = false,
+  evaluationContext,
   className,
 }: {
   workspaceId: Id<"workspaces">;
@@ -32,12 +55,22 @@ export function AssessmentObjectHeader({
   firstRosAnalysisId: Id<"rosAnalyses"> | null;
   /** Når true og assessmentId er satt: nedtrekk for pipeline-status */
   canEditPipeline?: boolean;
+  /** Hvilken prosess/sak vurderingen gjelder — alltid synlig kontekst */
+  evaluationContext?: AssessmentEvaluationContext;
   className?: string;
 }) {
   const wid = String(workspaceId);
   const rosHref = firstRosAnalysisId
     ? `/w/${wid}/ros/a/${firstRosAnalysisId}`
     : `/w/${wid}/ros`;
+  const processRegisterHref = `/w/${wid}/vurderinger?fane=prosesser`;
+
+  const githubIssueHref =
+    evaluationContext?.kind === "candidate" &&
+    evaluationContext.githubIssueNumber != null &&
+    evaluationContext.githubRepoFullName?.trim()
+      ? `https://github.com/${evaluationContext.githubRepoFullName.trim()}/issues/${evaluationContext.githubIssueNumber}`
+      : null;
 
   return (
     <div
@@ -80,6 +113,110 @@ export function AssessmentObjectHeader({
               </Badge>
             )}
           </div>
+          {evaluationContext?.kind === "loading" ? (
+            <div className="border-border/50 mt-3 border-t pt-3">
+              <p className="text-muted-foreground text-[0.65rem] font-semibold uppercase tracking-[0.12em]">
+                Sak / prosess
+              </p>
+              <div className="bg-muted/40 mt-2 h-9 max-w-md animate-pulse rounded-lg" />
+            </div>
+          ) : evaluationContext?.kind === "candidate" ? (
+            <div className="border-border/50 mt-3 space-y-2 border-t pt-3">
+              <p className="text-muted-foreground text-[0.65rem] font-semibold uppercase tracking-[0.12em]">
+                Du vurderer nå
+              </p>
+              <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+                <div className="min-w-0 space-y-1">
+                  <p className="text-foreground font-heading text-lg font-semibold leading-snug tracking-tight sm:text-xl">
+                    <span className="text-muted-foreground font-mono text-base font-semibold sm:text-lg">
+                      {evaluationContext.code}
+                    </span>{" "}
+                    <span className="break-words">{evaluationContext.name}</span>
+                  </p>
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    {githubIssueHref ? (
+                      <a
+                        href={githubIssueHref}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex"
+                      >
+                        <Badge
+                          variant="secondary"
+                          className="gap-1 bg-slate-500/10 text-[11px] font-medium text-slate-800 hover:bg-slate-500/15 dark:text-slate-200"
+                        >
+                          <GitBranch className="size-3" aria-hidden />
+                          GitHub #{evaluationContext.githubIssueNumber}
+                          <ExternalLink className="size-3 opacity-70" aria-hidden />
+                        </Badge>
+                      </a>
+                    ) : null}
+                    {evaluationContext.hasGithubProject ? (
+                      <Badge
+                        variant="secondary"
+                        className="gap-1 bg-violet-500/10 text-[11px] font-medium text-violet-900 dark:text-violet-100"
+                      >
+                        <FolderKanban className="size-3" aria-hidden />
+                        Tavle
+                      </Badge>
+                    ) : null}
+                    {!githubIssueHref && !evaluationContext.hasGithubProject ? (
+                      <Badge variant="outline" className="text-[11px] font-normal">
+                        Opprettet i PVV
+                      </Badge>
+                    ) : null}
+                  </div>
+                </div>
+                <Link
+                  href={processRegisterHref}
+                  className={buttonVariants({
+                    variant: "ghost",
+                    size: "sm",
+                    className:
+                      "shrink-0 gap-1.5 self-start text-muted-foreground hover:text-foreground",
+                  })}
+                >
+                  <ClipboardList className="size-3.5" aria-hidden />
+                  Prosessregister
+                </Link>
+              </div>
+            </div>
+          ) : evaluationContext?.kind === "draft_only" ? (
+            <div className="border-border/50 mt-3 space-y-1 border-t pt-3">
+              <p className="text-muted-foreground text-[0.65rem] font-semibold uppercase tracking-[0.12em]">
+                Du vurderer nå (utkast)
+              </p>
+              <p className="text-foreground font-heading text-base font-semibold leading-snug sm:text-lg">
+                {evaluationContext.processName}
+              </p>
+              <p className="text-muted-foreground max-w-prose text-xs leading-relaxed">
+                Ingen prosess fra registeret er koblet ennå. Velg prosess i
+                steget «Prosess» for sporbarhet mot GitHub og tavle.
+              </p>
+            </div>
+          ) : evaluationContext?.kind === "unset" ? (
+            <div className="border-border/50 mt-3 border-t border-dashed pt-3">
+              <p className="text-muted-foreground text-[0.65rem] font-semibold uppercase tracking-[0.12em]">
+                Sak / prosess
+              </p>
+              <p className="text-amber-950/90 dark:text-amber-100 mt-1 max-w-prose text-sm leading-relaxed">
+                Ingen prosess valgt ennå. Gå til steget «Prosess» og koble til en
+                rad i prosessregisteret — da ser du tydelig hvilken sak denne
+                vurderingen gjelder (inkl. GitHub-referanse når den finnes).
+              </p>
+              <Link
+                href={processRegisterHref}
+                className={buttonVariants({
+                  variant: "outline",
+                  size: "sm",
+                  className: "mt-2 inline-flex gap-1.5",
+                })}
+              >
+                <ClipboardList className="size-3.5" aria-hidden />
+                Åpne prosessregister
+              </Link>
+            </div>
+          ) : null}
           <p className="text-muted-foreground max-w-prose text-sm leading-relaxed">
             <span className="text-foreground font-medium">Neste steg: </span>
             {nextStepLabel}

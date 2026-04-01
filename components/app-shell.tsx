@@ -103,13 +103,13 @@ export function AppShell({
                 aria-label="Hovednavigasjon"
               >
                 <Link
-                  href="/dashboard"
+                  href="/dashboard?oversikt=1"
                   className="font-heading bg-primary/10 text-primary hover:bg-primary/[0.14] focus-visible:ring-ring shrink-0 rounded-xl px-2.5 py-1.5 text-sm font-semibold tracking-tight shadow-sm ring-1 ring-primary/15 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
                 >
                   FRO
                 </Link>
                 <Link
-                  href="/dashboard"
+                  href="/dashboard?oversikt=1"
                   className={cn(
                     "rounded-full px-3 py-1.5 text-sm font-medium transition-all",
                     workspacesNavActive

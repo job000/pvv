@@ -2,6 +2,7 @@
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button-variants";
 import {
   Card,
   CardContent,
@@ -1096,11 +1097,18 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
                             </td>
                             <td className="px-4 py-3 align-middle">
                               <div className="flex flex-wrap items-center gap-1.5">
-                                <Button variant="outline" size="sm" className="h-8" asChild>
-                                  <Link href={`/w/${workspaceId}/ros/a/${a._id}`}>
-                                    Åpne
-                                  </Link>
-                                </Button>
+                                <Link
+                                  href={`/w/${workspaceId}/ros/a/${a._id}`}
+                                  className={cn(
+                                    buttonVariants({
+                                      variant: "outline",
+                                      size: "sm",
+                                    }),
+                                    "h-8",
+                                  )}
+                                >
+                                  Åpne
+                                </Link>
                                 <Button
                                   type="button"
                                   variant="ghost"

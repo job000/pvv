@@ -217,6 +217,13 @@ export default defineSchema({
     prosessregisterTutorialEnabled: v.optional(v.boolean()),
     /** true = bruker valgte «ikke vis mer»; kan nullstilles ved å slå på veiledning i dashboard. */
     prosessregisterTutorialDismissed: v.optional(v.boolean()),
+    /**
+     * Etter innlogging / når du åpner app uten ?oversikt=1: gå til oversikt eller til
+     * standard arbeidsområde (defaultWorkspaceId må være satt).
+     */
+    appEntryPreference: v.optional(
+      v.union(v.literal("dashboard"), v.literal("workspace")),
+    ),
   }).index("by_user", ["userId"]),
 
   /**

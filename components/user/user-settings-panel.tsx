@@ -21,9 +21,11 @@ import { cn } from "@/lib/utils";
 import { useMutation, useQuery } from "convex/react";
 import {
   BookOpen,
+  Building2,
   Camera,
   Check,
   ExternalLink,
+  LayoutDashboard,
   LayoutGrid,
   LayoutList,
   Loader2,
@@ -151,6 +153,19 @@ export function UserSettingsPanel() {
     [patch],
   );
 
+  const onAppEntryPreference = useCallback(
+    async (value: "dashboard" | "workspace") => {
+      try {
+        await patch({ appEntryPreference: value });
+      } catch (e) {
+        toast.error(
+          e instanceof Error ? e.message : "Kunne ikke lagre startsted.",
+        );
+      }
+    },
+    [patch],
+  );
+
   const onPickProfileImage = useCallback(() => {
     fileInputRef.current?.click();
   }, []);
@@ -237,6 +252,14 @@ export function UserSettingsPanel() {
   const tutorialOn = settings?.prosessregisterTutorialEnabled !== false;
   const density = settings?.uiDensity ?? "comfortable";
   const themePref = settings?.themePreference ?? "system";
+  const appEntryPref =
+    settings?.appEntryPreference === "workspace" ? "workspace" : "dashboard";
+  const defaultWorkspaceId = settings?.defaultWorkspaceId;
+  const defaultWorkspace =
+    defaultWorkspaceId != null && myWorkspaces
+      ? myWorkspaces.find((w) => w.workspace._id === defaultWorkspaceId)
+          ?.workspace
+      : undefined;
   const profileImageUrl = profile.profileImageUrl;
   const avatarInitials = userProfileInitials(
     settings?.firstName,
@@ -585,6 +608,104 @@ export function UserSettingsPanel() {
               );
             })}
           </div>
+        </CardContent>
+      </Card>
+
+      {/* Startsted */}
+      <Card className={cardShell} id="startsted">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-lg font-semibold tracking-tight">
+            Startsted
+          </CardTitle>
+          <CardDescription className="text-[15px] leading-relaxed">
+            Når du logger inn eller åpner appen uten annen destinasjon, kan du
+            gå rett til oversikten over arbeidsområder eller til{" "}
+            <strong className="text-foreground font-medium">
+              standard arbeidsområde
+            </strong>
+            . Standard arbeidsområde er det samme som du velger med stjerne på
+            oversikten.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div
+            className="grid gap-3 sm:grid-cols-2"
+            role="radiogroup"
+            aria-label="Startsted"
+          >
+            {(
+              [
+                {
+                  value: "dashboard" as const,
+                  label: "Oversikt",
+                  desc: "Vis alle arbeidsområder (FRO-oversikt)",
+                  Icon: LayoutDashboard,
+                },
+                {
+                  value: "workspace" as const,
+                  label: "Standard arbeidsområde",
+                  desc: "Gå direkte til arbeidsområdet du har merket som standard",
+                  Icon: Building2,
+                },
+              ] as const
+            ).map(({ value, label, desc, Icon }) => {
+              const selected = appEntryPref === value;
+              return (
+                <button
+                  key={value}
+                  type="button"
+                  role="radio"
+                  aria-checked={selected}
+                  onClick={() => void onAppEntryPreference(value)}
+                  className={cn(
+                    "relative flex flex-col items-start gap-3 rounded-xl border p-4 text-left transition-all outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+                    selected
+                      ? "border-primary bg-primary/5 ring-primary/25 shadow-sm ring-2"
+                      : "border-border/70 bg-card hover:border-muted-foreground/20 hover:bg-muted/25",
+                  )}
+                >
+                  <div className="flex w-full items-start justify-between gap-2">
+                    <div className="bg-muted/60 text-foreground flex size-10 items-center justify-center rounded-lg">
+                      <Icon className="size-5" aria-hidden />
+                    </div>
+                    {selected ? (
+                      <span className="bg-primary text-primary-foreground flex size-6 items-center justify-center rounded-full shadow-sm">
+                        <Check className="size-3.5" aria-hidden />
+                      </span>
+                    ) : (
+                      <span className="size-6 shrink-0" aria-hidden />
+                    )}
+                  </div>
+                  <div>
+                    <div className="text-foreground font-medium">{label}</div>
+                    <div className="text-muted-foreground mt-1 text-xs leading-relaxed">
+                      {desc}
+                    </div>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+          {appEntryPref === "workspace" && !defaultWorkspaceId ? (
+            <p className="text-muted-foreground border-border/60 bg-muted/20 rounded-xl border px-3 py-2.5 text-sm leading-relaxed">
+              Du har ikke valgt standard arbeidsområde ennå.{" "}
+              <Link
+                href="/dashboard?oversikt=1"
+                className="text-primary font-medium underline-offset-4 hover:underline"
+              >
+                Åpne oversikten
+              </Link>{" "}
+              og trykk på stjernen ved arbeidsområdet du vil bruke som startsted.
+            </p>
+          ) : appEntryPref === "workspace" && defaultWorkspace ? (
+            <p className="text-muted-foreground text-sm leading-relaxed">
+              Nå:{" "}
+              <span className="text-foreground font-medium">
+                {defaultWorkspace.name}
+              </span>
+              .
+            </p>
+          ) : null}
         </CardContent>
       </Card>
 

@@ -399,7 +399,7 @@ export function RosLibraryPanel({ workspaceId }: { workspaceId: Id<"workspaces">
       </Card>
 
       <Dialog open={seedReplaceDialogOpen} onOpenChange={setSeedReplaceDialogOpen}>
-        <DialogContent size="default" titleId="seed-replace-title" descriptionId="seed-replace-desc">
+        <DialogContent size="md" titleId="seed-replace-title" descriptionId="seed-replace-desc">
           <DialogHeader>
             <p id="seed-replace-title" className="font-heading text-lg font-semibold">
               Erstatt RPA-eksempler?
