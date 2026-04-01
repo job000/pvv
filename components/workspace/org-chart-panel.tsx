@@ -16,7 +16,7 @@ import type { Doc, Id } from "@/convex/_generated/dataModel";
 import { ORG_UNIT_KIND_LABELS } from "@/lib/helsesector-labels";
 import { cn } from "@/lib/utils";
 import { useMutation, useQuery } from "convex/react";
-import { ChevronRight, Trash2 } from "lucide-react";
+import { Building2, ChevronRight, Layers, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
 
 function MerkantilContactRow({
@@ -342,10 +342,20 @@ function OrgBranch({
   const kids = childrenByParent.get(unit._id) ?? [];
   const [open, setOpen] = useState(depth === 0);
 
+  const depthAccent =
+    depth === 0
+      ? "border-l-primary/55"
+      : depth === 1
+        ? "border-l-sky-500/45"
+        : "border-l-emerald-500/40";
+
   return (
     <li className="list-none">
       <div
-        className="rounded-xl border bg-card shadow-sm"
+        className={cn(
+          "rounded-xl border border-l-4 bg-card shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.05]",
+          depthAccent,
+        )}
         style={{ marginLeft: depth === 0 ? 0 : Math.min(depth * 12, 48) }}
       >
         <button
@@ -503,7 +513,7 @@ function AddChildForm({
     <form
       id={id}
       onSubmit={(e) => void submit(e)}
-      className="border-muted mt-3 ml-4 space-y-3 rounded-xl border border-dashed p-4"
+      className="border-border/60 from-muted/15 to-card/40 mt-3 ml-4 space-y-3 rounded-xl border border-dashed bg-gradient-to-br p-4 shadow-inner"
     >
       <p className="font-medium text-sm">
         Ny {ORG_UNIT_KIND_LABELS[kindForChild]} under {parent.name}
@@ -576,66 +586,107 @@ function AddRootOrganizationForm({
   }
 
   return (
-    <Card id="ny-hovedenhet" className="border-primary/15">
-      <CardHeader>
-        <CardTitle className="text-base">Ny hovedenhet (øverste nivå)</CardTitle>
-        <CardDescription>
-          Dette er rot-nivået i kartet — typisk selskap, konsern eller én juridisk
-          enhet. Under den legger du avdelinger eller forretningsenheter, og
-          deretter team eller grupper. Kontaktpersoner registreres på hvert nivå
-          etter at enheten er opprettet.
-        </CardDescription>
+    <Card
+      id="ny-hovedenhet"
+      className="border-border/60 from-card via-card to-muted/30 overflow-hidden bg-gradient-to-b shadow-md ring-1 ring-black/[0.06] dark:ring-white/[0.06]"
+    >
+      <CardHeader className="border-border/40 from-primary/[0.03] via-transparent to-transparent space-y-3 border-b bg-gradient-to-br pb-6">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:gap-4">
+            <div className="bg-primary/10 text-primary ring-border/40 flex size-11 shrink-0 items-center justify-center rounded-2xl ring-1 shadow-sm">
+              <Building2 className="size-5" aria-hidden />
+            </div>
+            <div className="min-w-0 space-y-1">
+              <CardTitle className="text-lg font-semibold tracking-tight sm:text-xl">
+                Ny hovedenhet
+              </CardTitle>
+              <CardDescription className="text-[15px] leading-relaxed">
+                Rot-nivå i kartet — typisk selskap, konsern eller én juridisk enhet.
+                Under legger du avdelinger eller forretningsenheter, deretter team
+                eller grupper. Kontaktpersoner legges til på hvert nivå etter
+                opprettelse.
+              </CardDescription>
+            </div>
+          </div>
+        </div>
       </CardHeader>
-      <CardContent>
+      <CardContent className="pt-6">
         <form onSubmit={(e) => void submit(e)} className="space-y-4">
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2 sm:col-span-2">
-              <Label htmlFor="hf-name">Navn</Label>
+              <Label htmlFor="hf-name" className="text-xs font-semibold uppercase tracking-wider">
+                Navn
+              </Label>
               <Input
                 id="hf-name"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 required
                 placeholder="F.eks. Acme AS, Kommune X, eller Helseforetak Y"
+                className="h-11 rounded-xl border-border/80 bg-background/80 text-base"
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="hf-short">Kortnavn (valgfritt)</Label>
+              <Label htmlFor="hf-short" className="text-muted-foreground text-sm">
+                Kortnavn (valgfritt)
+              </Label>
               <Input
                 id="hf-short"
                 value={shortName}
                 onChange={(e) => setShortName(e.target.value)}
                 placeholder="F.eks. Acme"
+                className="rounded-xl border-border/80"
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="hf-code">Intern kode (valgfritt)</Label>
+              <Label htmlFor="hf-code" className="text-muted-foreground text-sm">
+                Intern kode (valgfritt)
+              </Label>
               <Input
                 id="hf-code"
                 value={localCode}
                 onChange={(e) => setLocalCode(e.target.value)}
                 placeholder="F.eks. regnskapskode eller avdelings-ID"
+                className="rounded-xl border-border/80"
               />
             </div>
           </div>
           <div className="space-y-2">
-            <Label htmlFor="hf-extra">Tilleggsinformasjon (valgfritt)</Label>
+            <Label htmlFor="hf-extra" className="text-muted-foreground text-sm">
+              Tilleggsinformasjon (valgfritt)
+            </Label>
             <Textarea
               id="hf-extra"
               value={extra}
               onChange={(e) => setExtra(e.target.value)}
               rows={3}
               placeholder="F.eks. organisasjonsnummer i notat, hovedkontor, felles tjenester …"
+              className="min-h-[5.5rem] rounded-xl border-border/80"
             />
           </div>
           {msg ? (
-            <p className="text-muted-foreground text-sm" role="status">
+            <p
+              className={cn(
+                "text-sm",
+                msg.includes("opprettet")
+                  ? "text-emerald-700 dark:text-emerald-400"
+                  : "text-muted-foreground",
+              )}
+              role="status"
+            >
               {msg}
             </p>
           ) : null}
-          <Button type="submit" disabled={!name.trim()}>
-            Opprett hovedenhet
-          </Button>
+          <div className="pt-1">
+            <Button
+              type="submit"
+              size="lg"
+              className="rounded-xl px-6 font-semibold shadow-sm"
+              disabled={!name.trim()}
+            >
+              Opprett hovedenhet
+            </Button>
+          </div>
         </form>
       </CardContent>
     </Card>
@@ -714,29 +765,39 @@ export function OrgChartPanel({
     membership === undefined ||
     allContacts === undefined
   ) {
-    return <p className="text-muted-foreground text-sm">Laster …</p>;
+    return (
+      <div className="space-y-4" aria-busy>
+        <div className="bg-muted/40 h-36 animate-pulse rounded-2xl ring-1 ring-border/40" />
+        <div className="bg-muted/30 h-24 animate-pulse rounded-xl ring-1 ring-border/30" />
+      </div>
+    );
   }
 
   return (
-    <div className="space-y-8">
-      <details className="group border-border/60 bg-muted/20 rounded-2xl border px-4 py-3">
-        <summary className="cursor-pointer list-none font-medium leading-snug [&::-webkit-details-marker]:hidden">
-          <span className="inline-flex items-center gap-2">
-            <ChevronRight className="text-muted-foreground size-4 shrink-0 transition-transform group-open:rotate-90" />
-            Slik fungerer organisasjonskartet
+    <div className="mx-auto max-w-4xl space-y-8">
+      <details className="group border-border/50 bg-muted/25 open:bg-muted/35 rounded-2xl border px-4 py-3 shadow-sm ring-1 ring-black/[0.04] transition-colors dark:ring-white/[0.05]">
+        <summary className="cursor-pointer list-none leading-snug [&::-webkit-details-marker]:hidden">
+          <span className="inline-flex items-center gap-2.5">
+            <span className="bg-background/80 text-muted-foreground flex size-8 shrink-0 items-center justify-center rounded-lg border border-border/60 shadow-sm">
+              <Layers className="size-4" aria-hidden />
+            </span>
+            <span className="text-foreground font-medium">
+              Slik fungerer organisasjonskartet
+            </span>
+            <ChevronRight className="text-muted-foreground ml-auto size-4 shrink-0 transition-transform duration-200 group-open:rotate-90" />
           </span>
         </summary>
-        <div className="text-muted-foreground mt-3 space-y-2 border-t border-border/50 pt-3 text-sm leading-relaxed">
+        <div className="text-muted-foreground mt-4 space-y-3 border-t border-border/50 pt-4 text-sm leading-relaxed">
           <p>
-            Kartet har <strong className="text-foreground">tre nivåer</strong>:
-            øverst selskap eller konsern, deretter avdeling eller
-            forretningsenhet, og innerst team eller gruppe. Dette passer
-            ulike bransjer — dere bruker navn som matcher deres egen modell.
+            Kartet har <strong className="text-foreground font-medium">tre nivåer</strong>:
+            øverst selskap eller konsern, deretter avdeling eller forretningsenhet,
+            og innerst team eller gruppe. Navn tilpasses deres modell.
           </p>
           <p>
-            Hvert nivå kan ha <strong className="text-foreground">kontaktpersoner</strong>{" "}
-            (fold ut enheten for å se eller redigere). Trykk på pilen ved en
-            enhet for å skjule eller vise detaljer.
+            Hvert nivå kan ha{" "}
+            <strong className="text-foreground font-medium">kontaktpersoner</strong>{" "}
+            (fold ut enheten). Pilen ved enheten styrer om detaljer vises eller
+            skjules.
           </p>
         </div>
       </details>
@@ -744,25 +805,37 @@ export function OrgChartPanel({
       {canEdit ? <AddRootOrganizationForm workspaceId={workspaceId} /> : null}
 
       {roots.length === 0 ? (
-        <p className="text-muted-foreground text-sm leading-relaxed">
-          Ingen enheter ennå.{" "}
-          {canEdit ? "Opprett en hovedenhet (øverste nivå) over." : ""}
-        </p>
+        <div className="border-border/50 from-muted/20 to-card/80 rounded-2xl border border-dashed bg-gradient-to-b px-6 py-12 text-center shadow-inner">
+          <div className="bg-muted/60 mx-auto mb-4 flex size-14 items-center justify-center rounded-2xl">
+            <Building2 className="text-muted-foreground size-7" aria-hidden />
+          </div>
+          <p className="text-foreground font-medium">Ingen enheter ennå</p>
+          <p className="text-muted-foreground mx-auto mt-2 max-w-md text-sm leading-relaxed">
+            {canEdit
+              ? "Start med å opprette en hovedenhet over — deretter kan du legge til avdelinger og team under."
+              : "En administrator må opprette organisasjonsstrukturen."}
+          </p>
+        </div>
       ) : (
-        <ul className="space-y-4">
-          {roots.map((u) => (
-            <OrgBranch
-              key={u._id}
-              unit={u}
-              childrenByParent={childrenByParent}
-              contactsByUnit={contactsByUnit}
-              depth={0}
-              canEdit={!!canEdit}
-              isAdmin={!!isAdmin}
-              onRemove={(id) => void removeUnit({ orgUnitId: id })}
-            />
-          ))}
-        </ul>
+        <div className="space-y-2">
+          <p className="text-muted-foreground text-[0.65rem] font-semibold uppercase tracking-[0.12em]">
+            Organisasjonskart
+          </p>
+          <ul className="space-y-4">
+            {roots.map((u) => (
+              <OrgBranch
+                key={u._id}
+                unit={u}
+                childrenByParent={childrenByParent}
+                contactsByUnit={contactsByUnit}
+                depth={0}
+                canEdit={!!canEdit}
+                isAdmin={!!isAdmin}
+                onRemove={(id) => void removeUnit({ orgUnitId: id })}
+              />
+            ))}
+          </ul>
+        </div>
       )}
     </div>
   );
