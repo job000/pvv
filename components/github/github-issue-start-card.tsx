@@ -14,8 +14,15 @@ import { api } from "@/convex/_generated/api";
 import type { Doc, Id } from "@/convex/_generated/dataModel";
 import { parseSuggestedCodeAndNameFromGithubTitle } from "@/lib/github-process-title";
 import { toast } from "@/lib/app-toast";
+import { cn } from "@/lib/utils";
 import { useAction, useMutation, useQuery } from "convex/react";
-import { ArrowRight, ExternalLink, GitBranch, Loader2 } from "lucide-react";
+import {
+  ArrowRight,
+  ExternalLink,
+  FileStack,
+  GitBranch,
+  Loader2,
+} from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 
@@ -63,7 +70,10 @@ export function GithubIssueStartCard({
 
   const [issueUrl, setIssueUrl] = useState("");
   const [selectedCandidateId, setSelectedCandidateId] = useState<string>("");
-  const [busyMode, setBusyMode] = useState<"register" | "url" | null>(null);
+  const [standaloneRosTitle, setStandaloneRosTitle] = useState("");
+  const [busyMode, setBusyMode] = useState<
+    "register" | "url" | "standalone" | null
+  >(null);
 
   const sortedCandidates = useMemo(() => {
     if (!candidates?.length) return [];
@@ -77,6 +87,45 @@ export function GithubIssueStartCard({
     (membership.role === "owner" ||
       membership.role === "admin" ||
       membership.role === "member");
+
+  async function handleStartStandaloneRos() {
+    const title = standaloneRosTitle.trim();
+    if (!title) {
+      toast.error("Skriv inn en tittel for ROS-analysen.");
+      return;
+    }
+    if (!canEdit) {
+      toast.error("Du trenger medlem-tilgang for å opprette ROS.");
+      return;
+    }
+    setBusyMode("standalone");
+    try {
+      const tplList = templates ?? [];
+      const tplId =
+        defaultTemplateId ??
+        (tplList.length === 1 ? tplList[0]!._id : tplList[0]?._id);
+      if (!tplId) {
+        toast.error(
+          "Opprett minst én ROS-mal under fanen «Maler» før du starter.",
+        );
+        return;
+      }
+      const analysisId = await createAnalysis({
+        workspaceId,
+        templateId: tplId,
+        title: title.slice(0, 240),
+      });
+      setStandaloneRosTitle("");
+      toast.success("Frittstående ROS-analyse opprettet.");
+      router.push(`/w/${workspaceId}/ros/a/${analysisId}`);
+    } catch (e) {
+      toast.error(
+        e instanceof Error ? e.message : "Kunne ikke opprette ROS-analyse.",
+      );
+    } finally {
+      setBusyMode(null);
+    }
+  }
 
   async function handleStartFromRegister() {
     if (!selectedCandidateId) {
@@ -230,7 +279,7 @@ export function GithubIssueStartCard({
       <Card className="border-border/60 border-dashed bg-muted/10 shadow-none">
         <CardHeader className="pb-2">
           <CardTitle className="text-base">
-            Start fra prosessregisteret eller GitHub
+            Start fra prosessregisteret, GitHub eller frittstående
           </CardTitle>
           <CardDescription>
             Kun medlemmer og administratorer kan opprette vurdering eller ROS her.
@@ -256,23 +305,92 @@ export function GithubIssueStartCard({
             <CardTitle className="text-lg tracking-tight">
               {variant === "assessment"
                 ? "Start vurdering fra prosess eller GitHub"
-                : "Start ROS fra prosess eller GitHub"}
+                : "Start ROS"}
             </CardTitle>
             <CardDescription className="text-sm leading-snug">
-              <strong className="text-foreground font-medium">
-                Vanligst:
-              </strong>{" "}
-              velg prosessen du allerede har registrert (med eller uten
-              GitHub-kobling) — da trenger du ikke lime inn lenke på nytt.{" "}
-              <strong className="text-foreground font-medium">Alternativ:</strong>{" "}
-              lim inn issue-URL når saken ikke finnes i registeret ennå; da henter PVV
-              fra GitHub (krever token under Innstillinger).
+              {variant === "ros" ? (
+                "Frittstående, fra prosessregister eller GitHub-issue (issue krever token under arbeidsområde)."
+              ) : (
+                <>
+                  <strong className="text-foreground font-medium">
+                    Vanligst:
+                  </strong>{" "}
+                  velg prosessen du allerede har registrert (med eller uten
+                  GitHub-kobling) — da trenger du ikke lime inn lenke på nytt.{" "}
+                  <strong className="text-foreground font-medium">Alternativ:</strong>{" "}
+                  lim inn issue-URL når saken ikke finnes i registeret ennå; da henter PVV
+                  fra GitHub (krever token under Innstillinger).
+                </>
+              )}
             </CardDescription>
           </div>
         </div>
       </CardHeader>
       <CardFooter className="flex flex-col gap-5 border-t border-border/50 bg-muted/15 px-4 py-4 sm:px-6">
-        <div className="w-full space-y-2">
+        {variant === "ros" ? (
+          <div className="w-full space-y-2">
+            <div className="flex items-center gap-2">
+              <div className="bg-muted text-muted-foreground flex size-8 shrink-0 items-center justify-center rounded-lg">
+                <FileStack className="size-4" aria-hidden />
+              </div>
+              <p className="text-foreground text-xs font-semibold tracking-tight">
+                Frittstående (uten prosess eller GitHub)
+              </p>
+            </div>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+              <div className="min-w-0 flex-1 space-y-1.5">
+                <Label
+                  htmlFor={`ros-standalone-title-${workspaceId}`}
+                  className="text-muted-foreground text-xs font-medium"
+                >
+                  Tittel på analysen
+                </Label>
+                <Input
+                  id={`ros-standalone-title-${workspaceId}`}
+                  value={standaloneRosTitle}
+                  onChange={(e) => setStandaloneRosTitle(e.target.value)}
+                  placeholder="f.eks. Risikovurdering — ny leverandør"
+                  className="h-10 bg-background text-sm"
+                  maxLength={240}
+                  disabled={busy || rosNeedsTemplate}
+                  autoComplete="off"
+                />
+              </div>
+              <Button
+                type="button"
+                variant="default"
+                className="h-10 w-full shrink-0 gap-2 sm:w-auto"
+                disabled={
+                  busy ||
+                  !standaloneRosTitle.trim() ||
+                  rosNeedsTemplate ||
+                  templates === undefined
+                }
+                onClick={() => void handleStartStandaloneRos()}
+              >
+                {busyMode === "standalone" ? (
+                  <Loader2 className="size-4 shrink-0 animate-spin" aria-hidden />
+                ) : (
+                  <ArrowRight className="size-4 shrink-0" aria-hidden />
+                )}
+                Start frittstående ROS
+              </Button>
+            </div>
+          </div>
+        ) : null}
+
+        <div
+          className={cn(
+            "w-full",
+            variant === "ros" && "border-border/60 relative border-t pt-1",
+          )}
+        >
+          {variant === "ros" ? (
+            <span className="bg-muted/30 text-muted-foreground absolute -top-2.5 left-0 px-1 text-[10px] font-medium uppercase tracking-wide">
+              eller koblet til prosess / issue
+            </span>
+          ) : null}
+          <div className={cn("space-y-2", variant === "ros" && "pt-3")}>
           <p className="text-foreground text-xs font-semibold tracking-tight">
             Fra prosessregisteret
           </p>
@@ -334,6 +452,7 @@ export function GithubIssueStartCard({
                 ? "Start vurdering"
                 : "Start ROS"}
             </Button>
+          </div>
           </div>
         </div>
 

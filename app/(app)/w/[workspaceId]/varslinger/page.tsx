@@ -12,14 +12,12 @@ import { Separator } from "@/components/ui/separator";
 
 export default function WorkspaceNotificationsPage() {
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="font-heading text-2xl font-semibold">Varslinger</h1>
-        <p className="mt-1 text-muted-foreground text-sm">
-          Velg hvordan du vil bli holdt orientert om invitasjoner og endringer.
-          Utvides med e-post og in-app-varsler.
-        </p>
-      </div>
+    <div className="space-y-4">
+      <header className="border-border/60 border-b pb-3">
+        <h1 className="font-heading text-lg font-semibold tracking-tight text-foreground sm:text-xl">
+          Varslinger
+        </h1>
+      </header>
 
       <Card>
         <CardHeader>

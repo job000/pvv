@@ -30,6 +30,25 @@ type NavItem = {
 function navSections(wid: string): { heading: string; items: NavItem[] }[] {
   return [
     {
+      heading: "Register",
+      items: [
+        {
+          href: `/w/${wid}/vurderinger?fane=prosesser`,
+          label: "Prosessregister",
+          icon: Users,
+          exact: false,
+          kind: "prosesser",
+        },
+        {
+          href: `/w/${wid}/organisasjon`,
+          label: "Organisasjon",
+          icon: Building2,
+          exact: false,
+          kind: "default",
+        },
+      ],
+    },
+    {
       heading: "Arbeid",
       items: [
         {
@@ -50,25 +69,6 @@ function navSections(wid: string): { heading: string; items: NavItem[] }[] {
           href: `/w/${wid}/ros`,
           label: "ROS og risiko",
           icon: Shield,
-          exact: false,
-          kind: "default",
-        },
-      ],
-    },
-    {
-      heading: "Register",
-      items: [
-        {
-          href: `/w/${wid}/vurderinger?fane=prosesser`,
-          label: "Prosessregister",
-          icon: Users,
-          exact: false,
-          kind: "prosesser",
-        },
-        {
-          href: `/w/${wid}/organisasjon`,
-          label: "Organisasjon",
-          icon: Building2,
           exact: false,
           kind: "default",
         },

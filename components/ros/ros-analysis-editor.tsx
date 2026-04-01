@@ -49,6 +49,7 @@ import {
 } from "@/lib/helsesector-labels";
 import { ROS_PDD_ALIGNMENT_HINT_NB } from "@/lib/ros-compliance";
 import { toast } from "@/lib/app-toast";
+import { toastDeleteWithUndo } from "@/lib/toast-delete-undo";
 import { cn } from "@/lib/utils";
 import type { RosRequirementRef } from "@/lib/ros-requirement-catalog";
 import { downloadRosAnalysisPdf } from "@/lib/ros-pdf";
@@ -287,7 +288,6 @@ export function RosAnalysisEditor({
 
   const analysisRevisionRef = useRef<number | null>(null);
   const rosSaveQueueRef = useRef(Promise.resolve());
-  const deletingRef = useRef(false);
   const saveRef = useRef<
     ((opts?: { silent?: boolean }) => Promise<void>) | null
   >(null);
@@ -1524,17 +1524,19 @@ export function RosAnalysisEditor({
             <Button
               type="button"
               variant="outline"
-              disabled={isDeleting}
+              disabled={isDeleting || data === undefined || data === null}
               onClick={() => {
-                if (
-                  typeof window !== "undefined" &&
-                  window.confirm("Slette denne ROS-analysen?")
-                ) {
-                  deletingRef.current = true;
-                  setIsDeleting(true);
-                  router.replace(`/w/${workspaceId}/ros`);
-                  void removeAnalysis({ analysisId });
-                }
+                if (!data) return;
+                toastDeleteWithUndo({
+                  title: "Sletter ROS-analyse",
+                  itemLabel: data.title,
+                  onCommit: async () => {
+                    setIsDeleting(true);
+                    await removeAnalysis({ analysisId });
+                    router.replace(`/w/${workspaceId}/ros`);
+                  },
+                  onFailed: () => setIsDeleting(false),
+                });
               }}
             >
               {isDeleting ? "Sletter…" : "Slett"}

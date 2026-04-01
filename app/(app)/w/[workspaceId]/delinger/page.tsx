@@ -18,16 +18,12 @@ export default function WorkspaceSharingPage() {
   const wid = String(workspaceId);
 
   return (
-    <div className="space-y-8">
-      <div>
-        <h1 className="font-heading text-2xl font-semibold">Team og tilgang</h1>
-        <p className="mt-1 text-muted-foreground text-sm leading-relaxed">
-          Her styrer du <strong className="text-foreground">hvem som er med</strong>{" "}
-          i arbeidsområdet: invitasjoner, roller og fjerning av medlemmer. Hver{" "}
-          <strong className="text-foreground">vurdering</strong> kan i tillegg ha
-          eget team under fanen <strong className="text-foreground">Samarbeid</strong>.
-        </p>
-      </div>
+    <div className="space-y-6">
+      <header className="border-border/60 border-b pb-3">
+        <h1 className="font-heading text-lg font-semibold tracking-tight text-foreground sm:text-xl">
+          Team og tilgang
+        </h1>
+      </header>
 
       <WorkspaceTeamPanel workspaceId={workspaceId} />
 

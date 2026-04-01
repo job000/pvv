@@ -4,6 +4,11 @@ import type { QueryCtx } from "./_generated/server";
 import { getAuthUserId } from "@convex-dev/auth/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import { requireUserId, requireWorkspaceMember } from "./lib/access";
+import {
+  RPA_JOURNAL_SEED_CATEGORY_NAME,
+  RPA_JOURNAL_SEED_ITEMS,
+  RPA_JOURNAL_SEED_TAG,
+} from "../lib/ros-library-rpa-journal-seed";
 
 async function workspaceIdsForUser(
   ctx: QueryCtx,
@@ -406,5 +411,104 @@ export const duplicateLibraryItemToWorkspace = mutation({
       updatedAt: now,
       visibility: "workspace",
     });
+  },
+});
+
+/**
+ * Legger inn eksempelkategori og bibliotekstekster for RPA × journalsystemer (DIPS, MetaVision, Medanets).
+ * Elementene merkes med tag «seed-rpa-journal» og kan redigeres eller slettes som vanlig.
+ */
+export const seedRpaJournalLibraryExamples = mutation({
+  args: {
+    workspaceId: v.id("workspaces"),
+    /** Slett eksisterende seed-elementer i arbeidsområdet og legg inn på nytt */
+    replace: v.optional(v.boolean()),
+  },
+  handler: async (ctx, args) => {
+    const userId = await requireUserId(ctx);
+    await requireWorkspaceMember(ctx, args.workspaceId, userId, "member");
+    const wsId = args.workspaceId;
+    const replace = args.replace ?? false;
+
+    let workspaceItems = await ctx.db
+      .query("rosLibraryItems")
+      .withIndex("by_workspace", (q) => q.eq("workspaceId", wsId))
+      .collect();
+
+    const seeded = workspaceItems.filter((i) =>
+      i.tags?.includes(RPA_JOURNAL_SEED_TAG),
+    );
+
+    if (seeded.length > 0 && !replace) {
+      throw new Error(
+        "Eksempler er allerede innlagt (tag «seed-rpa-journal»). Bruk «Erstatt» for å slette disse og legge inn på nytt, eller slett/endre elementene manuelt i biblioteket.",
+      );
+    }
+
+    if (replace && seeded.length > 0) {
+      for (const it of seeded) {
+        await ctx.db.delete(it._id);
+      }
+      workspaceItems = await ctx.db
+        .query("rosLibraryItems")
+        .withIndex("by_workspace", (q) => q.eq("workspaceId", wsId))
+        .collect();
+    }
+
+    const cats = await ctx.db
+      .query("rosLibraryCategories")
+      .withIndex("by_workspace", (q) => q.eq("workspaceId", wsId))
+      .collect();
+    let categoryId: Id<"rosLibraryCategories">;
+    const match = cats.find(
+      (c) =>
+        c.name.localeCompare(RPA_JOURNAL_SEED_CATEGORY_NAME, "nb", {
+          sensitivity: "base",
+        }) === 0,
+    );
+    const now = Date.now();
+    if (match) {
+      categoryId = match._id;
+    } else {
+      const maxSort = cats.reduce((m, c) => Math.max(m, c.sortOrder), 0);
+      categoryId = await ctx.db.insert("rosLibraryCategories", {
+        workspaceId: wsId,
+        name: RPA_JOURNAL_SEED_CATEGORY_NAME,
+        sortOrder: maxSort + 1,
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
+
+    let inserted = 0;
+    for (const row of RPA_JOURNAL_SEED_ITEMS) {
+      const exists = workspaceItems.some(
+        (i) =>
+          i.title === row.title && i.tags?.includes(RPA_JOURNAL_SEED_TAG),
+      );
+      if (exists) {
+        continue;
+      }
+      await ctx.db.insert("rosLibraryItems", {
+        workspaceId: wsId,
+        categoryId,
+        title: row.title,
+        riskText: row.riskText,
+        tiltakText: row.tiltakText,
+        tags: [row.system, RPA_JOURNAL_SEED_TAG],
+        flags: ["RPA", "Journalsystem"],
+        createdByUserId: userId,
+        createdAt: now,
+        updatedAt: now,
+        visibility: "workspace",
+      });
+      inserted += 1;
+    }
+
+    return {
+      categoryId,
+      inserted,
+      totalSeedItems: RPA_JOURNAL_SEED_ITEMS.length,
+    };
   },
 });

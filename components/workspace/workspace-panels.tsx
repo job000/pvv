@@ -654,6 +654,11 @@ export function WorkspaceCandidatesPanel({
   const [issueImportCode, setIssueImportCode] = useState("");
   const [issueImportBusy, setIssueImportBusy] = useState(false);
 
+  /** Én synlig importflyt om gangen: issue-URL eller prosjektkolonne */
+  const [githubImportTab, setGithubImportTab] = useState<"issue" | "column">(
+    "issue",
+  );
+
   const editingCandidate = useMemo(() => {
     if (!editCandidateId || !candidates) {
       return undefined;
@@ -1267,11 +1272,7 @@ export function WorkspaceCandidatesPanel({
         data-tutorial-anchor={
           hubMode ? "prosess-oversikt-header" : undefined
         }
-        className={
-          hubMode
-            ? "border-b border-border/50 bg-gradient-to-br from-emerald-500/[0.05] via-card to-card pb-6"
-            : undefined
-        }
+        className={hubMode ? "border-b border-border/50 pb-4" : undefined}
       >
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="space-y-1">
@@ -1282,25 +1283,14 @@ export function WorkspaceCandidatesPanel({
                 medlem- eller admin-rolle.
               </p>
             ) : null}
-            <CardDescription className="max-w-2xl text-base leading-relaxed">
-              {hubMode ? (
-                <>
-                  Her registrerer dere <strong>forretningsprosesser</strong> med
-                  unik <strong>prosess-ID</strong>. ID-en brukes i vurderingen og
-                  når ROS kobles til. Én prosess kan ha flere vurderinger; én
-                  vurdering peker på én prosess-ID i skjemaet. ROS-analyser kan
-                  knyttes til både prosesser og vurderinger. Valgfrie felt under
-                  fylles inn i vurderingen første gang noen velger prosessen.
-                </>
-              ) : (
-                <>
-                  Registrer prosesser med navn og prosess-ID. Du kan knytte til
-                  organisasjonskart (HF/avdeling/seksjon). Sletting krever
-                  administrator. Samme prosess kan brukes i flere vurderinger; ROS
-                  kan kobles til flere vurderinger og prosesser.
-                </>
-              )}
-            </CardDescription>
+            {!hubMode ? (
+              <CardDescription className="max-w-2xl text-base leading-relaxed">
+                Registrer prosesser med navn og prosess-ID. Du kan knytte til
+                organisasjonskart (HF/avdeling/seksjon). Sletting krever
+                administrator. Samme prosess kan brukes i flere vurderinger; ROS
+                kan kobles til flere vurderinger og prosesser.
+              </CardDescription>
+            ) : null}
           </div>
           {hubMode ? (
             <span className="bg-emerald-500/15 text-emerald-900 dark:text-emerald-100 inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold tabular-nums">
@@ -1311,7 +1301,7 @@ export function WorkspaceCandidatesPanel({
           ) : null}
         </div>
       </CardHeader>
-      <CardContent className="space-y-8 pt-6">
+      <CardContent className={hubMode ? "space-y-6 pt-4" : "space-y-8 pt-6"}>
         {hubMode ? (
           <ProsessregisterHubLead
             canEdit={Boolean(canEditCandidates)}
@@ -1333,15 +1323,12 @@ export function WorkspaceCandidatesPanel({
             role="status"
           >
             <p className="text-foreground text-sm font-medium">
-              GitHub-tavle er ikke koblet til dette arbeidsområdet
+              Prosjekt-tavle er ikke koblet — kolonne-import er ikke tilgjengelig
             </p>
             <p className="text-muted-foreground mt-1 text-xs leading-relaxed">
-              Knappen «Legg til i tavle» kommer først etter at{" "}
-              <strong className="text-foreground font-medium">
-                prosjekt (node-ID)
-              </strong>{" "}
-              er lagret sammen med token under Innstillinger. Uten det vises bare
-              hjelpetekst når du åpner en prosess for redigering.
+              Issue-import fungerer når GitHub er satt opp under Innstillinger.
+              Koble også <strong className="text-foreground">prosjekt (node-ID)</strong>{" "}
+              der for å hente kort fra kolonner.
             </p>
             {isAdmin ? (
               <Link
@@ -1351,11 +1338,11 @@ export function WorkspaceCandidatesPanel({
                   "mt-3 inline-flex gap-2",
                 )}
               >
-                Åpne Innstillinger → GitHub
+                GitHub under Innstillinger
               </Link>
             ) : (
               <p className="text-muted-foreground mt-2 text-xs">
-                Be en administrator om å sette opp GitHub under Innstillinger.
+                Be administrator koble prosjekt-tavle ved behov.
               </p>
             )}
           </div>
@@ -1363,50 +1350,63 @@ export function WorkspaceCandidatesPanel({
         {canEditCandidates ? (
           <div
             data-tutorial-anchor="github-prosess"
-            className="from-card ring-border/50 rounded-2xl border border-border/60 bg-gradient-to-br via-card to-muted/[0.35] p-5 shadow-sm ring-1"
+            className="rounded-xl border border-border/60 bg-card p-4 shadow-sm ring-1 ring-black/[0.03] dark:ring-white/[0.05]"
           >
-            <div className="mb-5 flex flex-wrap items-start gap-3">
-              <div className="bg-primary/8 flex size-10 shrink-0 items-center justify-center rounded-xl ring-1 ring-primary/15">
-                <GitBranch className="text-primary size-5" aria-hidden />
+            <div className="mb-3 flex flex-wrap items-center gap-2.5">
+              <div className="bg-primary/8 flex size-8 shrink-0 items-center justify-center rounded-md ring-1 ring-primary/15">
+                <GitBranch className="text-primary size-3.5" aria-hidden />
               </div>
-              <div className="min-w-0 flex-1 space-y-1">
-                <h2 className="text-foreground font-heading text-lg font-semibold tracking-tight">
-                  GitHub og prosessregister
-                </h2>
-                <p className="text-muted-foreground text-sm leading-relaxed">
-                  Hent eksisterende saker fra en issue-URL eller fra en kolonne i
-                  prosjekt-tavlen. Når en prosess er koblet, bruker du «Hent til PVV» og
-                  «Send til GitHub» i prosessvinduet for å holde tekst synket.
-                </p>
-              </div>
+              <h2 className="text-foreground font-heading text-base font-semibold tracking-tight">
+                GitHub-import
+              </h2>
             </div>
-            <div className="space-y-6">
-              <section
-                className="space-y-4"
-                aria-labelledby="github-issue-import-heading"
+
+            {w.githubProjectNodeId?.trim() ? (
+              <div
+                className="mb-3 flex gap-1 rounded-lg border border-border/60 bg-muted/30 p-1"
+                role="tablist"
+                aria-label="Importkilde"
               >
-                <div className="space-y-1">
-                  <h3
-                    id="github-issue-import-heading"
-                    className="text-foreground text-sm font-semibold tracking-tight"
-                  >
-                    Hent fra GitHub-issue
-                  </h3>
-                  <p className="text-muted-foreground text-xs leading-relaxed">
-                    Lim inn en{" "}
-                    <strong className="text-foreground font-medium">issue-URL</strong>{" "}
-                    (
-                    <span className="font-mono text-[11px]">
-                      …/owner/repo/issues/123
-                    </span>
-                    ). Krever GitHub-token under Innstillinger. Saken trenger ikke å ligge i
-                    prosjekt-tavle — du kan koble til tavle eller opprette issue fra PVV senere.
-                  </p>
-                </div>
-                <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
-                  <div className="min-w-0 flex-1 space-y-1.5">
-                    <Label htmlFor="gh-issue-url" className="text-xs font-medium">
-                      Issue-URL
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={githubImportTab === "issue"}
+                  className={cn(
+                    "flex-1 rounded-md px-3 py-2 text-center text-sm font-medium transition-colors",
+                    githubImportTab === "issue"
+                      ? "bg-card text-foreground shadow-sm ring-1 ring-black/[0.06] dark:ring-white/[0.08]"
+                      : "text-muted-foreground hover:text-foreground",
+                  )}
+                  onClick={() => setGithubImportTab("issue")}
+                >
+                  Issue (lenke)
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={githubImportTab === "column"}
+                  className={cn(
+                    "flex-1 rounded-md px-3 py-2 text-center text-sm font-medium transition-colors",
+                    githubImportTab === "column"
+                      ? "bg-card text-foreground shadow-sm ring-1 ring-black/[0.06] dark:ring-white/[0.08]"
+                      : "text-muted-foreground hover:text-foreground",
+                  )}
+                  onClick={() => setGithubImportTab("column")}
+                >
+                  Prosjektkolonne
+                </button>
+              </div>
+            ) : null}
+
+            {(!w.githubProjectNodeId?.trim() || githubImportTab === "issue") ? (
+              <section
+                className="space-y-2"
+                aria-label="Importer fra GitHub-issue"
+              >
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-stretch">
+                  <div className="min-w-0 flex-1">
+                    <Label htmlFor="gh-issue-url" className="sr-only">
+                      Issue-URL fra GitHub
                     </Label>
                     <Input
                       id="gh-issue-url"
@@ -1421,7 +1421,7 @@ export function WorkspaceCandidatesPanel({
                   <Button
                     type="button"
                     variant="secondary"
-                    className="h-10 shrink-0 gap-2"
+                    className="h-10 shrink-0 gap-2 sm:w-auto"
                     disabled={issueUrlFetchBusy || !issueGithubUrlInput.trim()}
                     onClick={() => void fetchGithubIssueForImport()}
                   >
@@ -1430,7 +1430,7 @@ export function WorkspaceCandidatesPanel({
                     ) : (
                       <ExternalLink className="size-4" aria-hidden />
                     )}
-                    Hent issue
+                    Hent
                   </Button>
                 </div>
                 {issueUrlFetchError ? (
@@ -1439,26 +1439,13 @@ export function WorkspaceCandidatesPanel({
                   </p>
                 ) : null}
               </section>
-              {w.githubProjectNodeId?.trim() ? (
-                <>
-                  <Separator className="bg-border/60" />
-                  <section
-                    className="space-y-4"
-                    aria-labelledby="github-column-fetch-heading"
-                  >
-            <div className="space-y-1">
-              <h3
-                id="github-column-fetch-heading"
-                className="text-foreground text-sm font-semibold tracking-tight"
+            ) : null}
+
+            {w.githubProjectNodeId?.trim() && githubImportTab === "column" ? (
+              <section
+                className="space-y-3"
+                aria-label="Hent kort fra prosjektkolonne"
               >
-                Hent kort fra prosjektkolonne
-              </h3>
-              <p className="text-muted-foreground text-xs leading-relaxed">
-                Velg samme <strong className="text-foreground font-medium">statuskolonne</strong>{" "}
-                som i GitHub Projects (feltet «{githubProjectStatus.fieldName ?? "Status"}»).
-                Listen viser kort i den kolonnen — opprett prosess i PVV for vurdering og ROS.
-              </p>
-            </div>
             {githubProjectStatus.loading ? (
               <p className="text-muted-foreground flex items-center gap-2 text-sm">
                 <Loader2 className="size-4 animate-spin" aria-hidden />
@@ -1468,14 +1455,14 @@ export function WorkspaceCandidatesPanel({
               <p className="text-destructive text-sm">{githubProjectStatus.error}</p>
             ) : (githubProjectStatus.options?.length ?? 0) === 0 ? (
               <p className="text-muted-foreground text-sm">
-                Ingen statuskolonner funnet. Sjekk prosjekt og token under Innstillinger, eller
-                bruk «Prøv på nytt» der du redigerer en prosess.
+                Ingen kolonner funnet — sjekk prosjekt under Innstillinger eller prøv igjen fra en
+                prosessrad.
               </p>
             ) : (
-              <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
-                <div className="min-w-[12rem] flex-1 space-y-1">
-                  <Label htmlFor="gh-column-pick" className="text-xs">
-                    Kolonne (status)
+              <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-end">
+                <div className="min-w-[12rem] flex-1">
+                  <Label htmlFor="gh-column-pick" className="sr-only">
+                    Statuskolonne i GitHub-prosjekt
                   </Label>
                   <select
                     id="gh-column-pick"
@@ -1505,7 +1492,7 @@ export function WorkspaceCandidatesPanel({
                   ) : (
                     <Search className="size-4" aria-hidden />
                   )}
-                  Hent kort
+                  Hent
                 </Button>
               </div>
             )}
@@ -1521,13 +1508,16 @@ export function WorkspaceCandidatesPanel({
                   · {columnItemsResult.items.length}{" "}
                   {columnItemsResult.items.length === 1 ? "kort" : "kort"}
                 </p>
-                <p className="text-muted-foreground text-xs leading-relaxed">
-                  Når du oppretter en prosess fra <strong className="text-foreground font-medium">issue</strong> eller{" "}
-                  <strong className="text-foreground font-medium">PR</strong>, lagrer PVV repo, issue-/PR-nummer og
-                  kobling til prosjektkort. <strong className="text-foreground font-medium">Utkast</strong> har ikke
-                  issue-nummer før det konverteres i GitHub. «I PVV» betyr at prosessen er registrert; «ROS» viser om
-                  minst én ROS-analyse er knyttet til prosessen i dette arbeidsområdet.
-                </p>
+                <details className="text-muted-foreground text-xs leading-relaxed">
+                  <summary className="cursor-pointer text-foreground font-medium hover:underline">
+                    Hva betyr kolonnene?
+                  </summary>
+                  <p className="mt-2 pl-0.5">
+                    Issue/PR lagrer repo og saksnummer i PVV. Utkast mangler issue til det er
+                    konvertert i GitHub. «I PVV» = prosess registrert her. «ROS» = minst én
+                    ROS-analyse knyttet til prosessen.
+                  </p>
+                </details>
                 <div className="border-border/80 max-h-[min(28rem,55vh)] overflow-auto rounded-lg border">
                   <table className="w-full min-w-[36rem] text-left text-sm">
                     <thead>
@@ -1660,10 +1650,8 @@ export function WorkspaceCandidatesPanel({
                 Ingen kort i denne kolonnen akkurat nå.
               </p>
             ) : null}
-                  </section>
-                </>
-              ) : null}
-            </div>
+              </section>
+            ) : null}
           </div>
         ) : null}
         {candidates.length > 0 ? (

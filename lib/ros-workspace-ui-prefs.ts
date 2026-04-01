@@ -10,7 +10,8 @@ export type RosWorkspaceUiPrefs = {
 };
 
 const DEFAULT_PREFS: RosWorkspaceUiPrefs = {
-  scaleReferenceOpen: true,
+  /** Lukket som standard — mindre støy på «Alle ROS»; brukeren kan åpne ved behov */
+  scaleReferenceOpen: false,
   helpMethodologyOpen: false,
   scaleReferenceAxis: "probability",
 };

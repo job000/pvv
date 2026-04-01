@@ -77,23 +77,56 @@ function MetricCard({
   );
 }
 
+export type WorkspaceDashboardSectionVisibility = {
+  showMetrics?: boolean;
+  showPrioritySection?: boolean;
+  showRecentSection?: boolean;
+};
+
 export function WorkspaceOperationalDashboard({
   workspaceId,
+  sectionVisibility,
 }: {
   workspaceId: Id<"workspaces">;
+  /** Udefinert felt = synlig (standard). */
+  sectionVisibility?: WorkspaceDashboardSectionVisibility;
 }) {
   const dash = useQuery(api.assessments.workspaceDashboard, { workspaceId });
   const wid = String(workspaceId);
 
+  const showMetrics = sectionVisibility?.showMetrics !== false;
+  const showPriority = sectionVisibility?.showPrioritySection !== false;
+  const showRecent = sectionVisibility?.showRecentSection !== false;
+
   if (dash === undefined) {
     return (
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {Array.from({ length: 4 }).map((_, i) => (
+      <div className="space-y-8">
+        {showMetrics ? (
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <div
+                key={i}
+                className="h-28 animate-pulse rounded-2xl border border-border/40 bg-muted/40 ring-1 ring-black/[0.03]"
+              />
+            ))}
+          </div>
+        ) : null}
+        {showPriority || showRecent ? (
           <div
-            key={i}
-            className="h-28 animate-pulse rounded-2xl border border-border/40 bg-muted/40 ring-1 ring-black/[0.03]"
-          />
-        ))}
+            className={
+              showPriority && showRecent
+                ? "grid gap-6 lg:grid-cols-2"
+                : "grid max-w-2xl gap-6"
+            }
+          >
+            {showPriority ? (
+              <div className="bg-muted/20 h-40 animate-pulse rounded-2xl border border-border/40" />
+            ) : null}
+            {showRecent ? (
+              <div className="bg-muted/20 h-40 animate-pulse rounded-2xl border border-border/40" />
+            ) : null}
+          </div>
+        ) : null}
       </div>
     );
   }
@@ -112,6 +145,7 @@ export function WorkspaceOperationalDashboard({
 
   return (
     <div className="space-y-8">
+      {showMetrics ? (
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <MetricCard
           title="Vurderinger"
@@ -148,8 +182,17 @@ export function WorkspaceOperationalDashboard({
           icon={Users}
         />
       </div>
+      ) : null}
 
-      <div className="grid gap-6 lg:grid-cols-2">
+      {showPriority || showRecent ? (
+      <div
+        className={
+          showPriority && showRecent
+            ? "grid gap-6 lg:grid-cols-2"
+            : "grid max-w-2xl gap-6"
+        }
+      >
+        {showPriority ? (
         <section className="space-y-3">
           <div className="flex items-center justify-between gap-2">
             <h2 className="font-heading text-base font-semibold tracking-tight">
@@ -198,7 +241,9 @@ export function WorkspaceOperationalDashboard({
             </ul>
           )}
         </section>
+        ) : null}
 
+        {showRecent ? (
         <section className="space-y-3">
           <div className="flex items-center justify-between gap-2">
             <h2 className="font-heading text-base font-semibold tracking-tight">
@@ -234,7 +279,9 @@ export function WorkspaceOperationalDashboard({
             </ul>
           )}
         </section>
+        ) : null}
       </div>
+      ) : null}
     </div>
   );
 }

@@ -219,6 +219,22 @@ export default defineSchema({
     prosessregisterTutorialDismissed: v.optional(v.boolean()),
   }).index("by_user", ["userId"]),
 
+  /**
+   * Per-bruker visning av arbeidsområdets dashboard (snarveier og seksjoner).
+   * Manglende rad = standard (alle snarveier og alle seksjoner synlige).
+   */
+  workspaceUserViewPrefs: defineTable({
+    userId: v.id("users"),
+    workspaceId: v.id("workspaces"),
+    /** Synlige snarveier (id-strenger, f.eks. vurderinger, ros) */
+    visibleShortcutIds: v.array(v.string()),
+    showMetrics: v.boolean(),
+    showPrioritySection: v.boolean(),
+    showRecentSection: v.boolean(),
+    showBegreperSection: v.boolean(),
+    updatedAt: v.number(),
+  }).index("by_user_workspace", ["userId", "workspaceId"]),
+
   /** Ventende e-postinvitasjoner til workspace */
   workspaceInvites: defineTable({
     workspaceId: v.id("workspaces"),

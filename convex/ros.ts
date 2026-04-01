@@ -383,6 +383,20 @@ export const listAnalyses = query({
       )
       .order("desc")
       .collect();
+    const tplIds = new Set<Id<"rosTemplates">>();
+    for (const r of rows) {
+      if (r.templateId) {
+        tplIds.add(r.templateId);
+      }
+    }
+    const templateNameById = new Map<Id<"rosTemplates">, string>();
+    for (const tid of tplIds) {
+      const t = await ctx.db.get(tid);
+      if (t) {
+        templateNameById.set(tid, t.name);
+      }
+    }
+
     const out = [];
     for (const r of rows) {
       const cand = r.candidateId ? await ctx.db.get(r.candidateId) : null;
@@ -390,6 +404,9 @@ export const listAnalyses = query({
         ...r,
         candidateName: cand?.name ?? null,
         candidateCode: cand?.code ?? null,
+        templateName: r.templateId
+          ? (templateNameById.get(r.templateId) ?? null)
+          : null,
       });
     }
     return out;

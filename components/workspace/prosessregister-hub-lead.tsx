@@ -2,15 +2,22 @@
 
 import { Button, buttonVariants } from "@/components/ui/button";
 import {
+  Dialog,
+  DialogBody,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+} from "@/components/ui/dialog";
+import {
   PROSESSREGISTER_TUTORIAL_STEPS,
   ProsessregisterTutorialOverlay,
 } from "@/components/workspace/prosessregister-tutorial-overlay";
 import { api } from "@/convex/_generated/api";
 import { cn } from "@/lib/utils";
 import { useMutation, useQuery } from "convex/react";
-import { BookOpen, Plus, Sparkles } from "lucide-react";
+import { BookOpen, CircleHelp, Plus } from "lucide-react";
 import Link from "next/link";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useState } from "react";
 
 type Props = {
   canEdit: boolean;
@@ -22,34 +29,16 @@ export function ProsessregisterHubLead({ canEdit, onRegisterClick }: Props) {
   const dismissTutorial = useMutation(api.workspaces.dismissProsessregisterTutorial);
 
   const [tutorialOpen, setTutorialOpen] = useState(false);
-  const didAutoOpen = useRef(false);
+  const [helpOpen, setHelpOpen] = useState(false);
 
   const tutorialAllowed =
     settings?.prosessregisterTutorialEnabled !== false;
-  const tutorialDismissed =
-    settings?.prosessregisterTutorialDismissed === true;
-
-  /** Én auto-popup per mount. Avbryt lukker bare overlay — ved ny navigasjon til siden kjører ny mount og veiledning kan vises igjen. */
-  useEffect(() => {
-    if (settings === undefined || didAutoOpen.current) return;
-    if (tutorialAllowed && !tutorialDismissed) {
-      didAutoOpen.current = true;
-      const id = requestAnimationFrame(() => {
-        setTutorialOpen(true);
-      });
-      return () => cancelAnimationFrame(id);
-    }
-  }, [settings, tutorialAllowed, tutorialDismissed]);
-
-  const handleLukk = useCallback(() => {
-    setTutorialOpen(false);
-  }, []);
 
   const handleIkkeVisMer = useCallback(async () => {
     try {
       await dismissTutorial({});
     } catch {
-      /* toast optional */
+      /* optional */
     }
     setTutorialOpen(false);
   }, [dismissTutorial]);
@@ -60,110 +49,118 @@ export function ProsessregisterHubLead({ canEdit, onRegisterClick }: Props) {
 
   return (
     <>
-      <section
+      <div
         data-tutorial-anchor="hub-registrering"
-        className="border-border/60 from-emerald-500/[0.06] via-card to-card relative overflow-hidden rounded-2xl border bg-gradient-to-br p-5 shadow-sm ring-1 ring-emerald-500/15 sm:p-6"
-        aria-labelledby="prosess-hub-lead-heading"
+        className="flex flex-col gap-3 rounded-xl border border-border/60 bg-muted/20 px-3 py-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-2"
       >
-        <div
-          className="pointer-events-none absolute -right-12 -top-8 h-36 w-48 rounded-full bg-emerald-500/[0.12] blur-3xl"
-          aria-hidden
-        />
-        <div className="relative flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between lg:gap-8">
-          <div className="min-w-0 space-y-3">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="text-muted-foreground inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide">
-                <Sparkles className="text-emerald-600 dark:text-emerald-400 size-3.5" aria-hidden />
-                Start her
-              </span>
-            </div>
-            <h2
-              id="prosess-hub-lead-heading"
-              className="font-heading text-foreground text-lg font-semibold tracking-tight sm:text-xl"
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
+          {canEdit ? (
+            <Button
+              type="button"
+              size="default"
+              className="gap-2"
+              onClick={onRegisterClick}
             >
-              Registrer prosesser først
-            </h2>
-            <ol className="text-muted-foreground max-w-prose space-y-2 text-sm leading-relaxed">
-              <li className="flex gap-2">
-                <span
-                  className="bg-emerald-500/15 text-emerald-900 dark:text-emerald-100 mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full text-xs font-bold tabular-nums"
-                  aria-hidden
-                >
-                  1
-                </span>
-                <span>
-                  <strong className="text-foreground">Legg inn prosess</strong> med
-                  navn og prosess-ID i registeret (eller hent fra GitHub under).
-                </span>
+              <Plus className="size-4 shrink-0" aria-hidden />
+              Registrer ny prosess
+            </Button>
+          ) : (
+            <p className="text-muted-foreground text-sm">
+              Lesetilgang — be om medlem-rolle for å registrere.
+            </p>
+          )}
+          <Button
+            type="button"
+            variant="outline"
+            size="default"
+            className="gap-2"
+            onClick={openTutorial}
+            disabled={!tutorialAllowed}
+            title={
+              !tutorialAllowed
+                ? "Veiledning er slått av under Bruker → Innstillinger"
+                : undefined
+            }
+          >
+            <BookOpen className="size-4 shrink-0" aria-hidden />
+            Vis veiledning
+          </Button>
+          <button
+            type="button"
+            onClick={() => setHelpOpen(true)}
+            className={cn(
+              buttonVariants({ variant: "ghost", size: "default" }),
+              "gap-2 text-muted-foreground",
+            )}
+          >
+            <CircleHelp className="size-4 shrink-0" aria-hidden />
+            Hjelp
+          </button>
+        </div>
+        <Link
+          href="/bruker/innstillinger#veiledning-prosessregister"
+          className="text-muted-foreground hover:text-foreground shrink-0 text-xs underline-offset-4 hover:underline sm:text-right"
+        >
+          Innstillinger for veiledning
+        </Link>
+      </div>
+
+      <Dialog open={helpOpen} onOpenChange={setHelpOpen}>
+        <DialogContent size="lg" titleId="prosess-help-title" descriptionId="prosess-help-desc">
+          <DialogHeader>
+            <p
+              id="prosess-help-title"
+              className="font-heading text-lg font-semibold tracking-tight"
+            >
+              Om prosessregisteret
+            </p>
+            <p
+              id="prosess-help-desc"
+              className="text-muted-foreground text-sm leading-relaxed"
+            >
+              Kort om ROS, PVV og når du trenger en prosess-ID.
+            </p>
+          </DialogHeader>
+          <DialogBody className="space-y-4 text-sm leading-relaxed">
+            <p className="text-muted-foreground">
+              <strong className="text-foreground">ROS</strong> kan opprettes uten
+              prosess (meny «ROS og risiko»), også frittstående.{" "}
+              <strong className="text-foreground">Prosessregisteret</strong> bruker du
+              når PVV-vurdering skal knyttes til en{" "}
+              <strong className="text-foreground">prosess-ID</strong>, eller når dere
+              vil se dekning (PVV/ROS) per prosess.
+            </p>
+            <ol className="text-muted-foreground list-decimal space-y-2 pl-5">
+              <li>
+                Legg inn prosess med navn og ID (eller hent fra GitHub lenger ned på
+                siden).
               </li>
-              <li className="flex gap-2">
-                <span
-                  className="bg-emerald-500/15 text-emerald-900 dark:text-emerald-100 mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full text-xs font-bold tabular-nums"
-                  aria-hidden
-                >
-                  2
-                </span>
-                <span>
-                  <strong className="text-foreground">Start vurdering</strong> fra
-                  listen under — samme ID brukes i veiviseren steg «Prosess».
-                </span>
+              <li>
+                Start vurdering fra listen under — samme ID brukes i veiviseren (steg
+                «Prosess»).
               </li>
-              <li className="flex gap-2">
-                <span
-                  className="bg-emerald-500/15 text-emerald-900 dark:text-emerald-100 mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full text-xs font-bold tabular-nums"
-                  aria-hidden
-                >
-                  3
-                </span>
-                <span>
-                  <strong className="text-foreground">ROS</strong> kan kobles til
-                  prosess eller vurdering når dere er klare — valgfritt.
-                </span>
+              <li>
+                ROS kan senere kobles til prosess eller vurdering om dere ønsker.
               </li>
             </ol>
-          </div>
-          <div className="flex w-full shrink-0 flex-col gap-3 sm:flex-row sm:items-center lg:w-auto lg:flex-col lg:items-stretch">
-            {canEdit ? (
-              <Button
-                type="button"
-                size="lg"
-                className="h-12 min-h-[48px] w-full gap-2 text-[15px] font-semibold shadow-md sm:w-auto"
-                onClick={onRegisterClick}
-              >
-                <Plus className="size-5 shrink-0" aria-hidden />
-                Registrer ny prosess
-              </Button>
-            ) : (
-              <p className="text-muted-foreground text-sm">
-                Du har lesetilgang — be om medlem-rolle for å registrere nye
-                prosesser.
-              </p>
-            )}
-            <button
-              type="button"
-              onClick={openTutorial}
-              className={cn(
-                buttonVariants({ variant: "outline", size: "default" }),
-                "h-11 min-h-[44px] w-full gap-2 border-emerald-500/25 bg-background/80 text-[13px] font-medium sm:h-10 sm:min-h-0 sm:w-auto",
-              )}
-            >
-              <BookOpen className="size-4 shrink-0" aria-hidden />
-              Vis veiledning
-            </button>
-            <Link
-              href="/bruker/innstillinger#veiledning-prosessregister"
-              className="text-muted-foreground hover:text-foreground text-center text-xs underline-offset-4 hover:underline sm:text-left lg:text-center"
-            >
-              Innstillinger for veiledning
-            </Link>
-          </div>
-        </div>
-      </section>
+            <p className="text-muted-foreground">
+              Én prosess kan ha flere vurderinger; én vurdering peker på én prosess-ID
+              i skjemaet. Valgfrie felt under hver prosess fylles inn i vurderingen
+              første gang noen velger prosessen.
+            </p>
+          </DialogBody>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setHelpOpen(false)}>
+              Lukk
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <ProsessregisterTutorialOverlay
         open={tutorialOpen}
         steps={PROSESSREGISTER_TUTORIAL_STEPS}
-        onClose={handleLukk}
+        onClose={() => setTutorialOpen(false)}
         onDismissPermanent={handleIkkeVisMer}
       />
     </>

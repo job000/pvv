@@ -23,6 +23,7 @@ import {
   positionRiskLevel,
 } from "@/lib/ros-defaults";
 import { toast } from "@/lib/app-toast";
+import { toastDeleteWithUndo } from "@/lib/toast-delete-undo";
 import { cellRiskClass } from "@/lib/ros-risk-colors";
 import { useRosWorkspaceUiPrefs } from "@/lib/ros-workspace-ui-prefs";
 import { cn } from "@/lib/utils";
@@ -84,10 +85,23 @@ function formatRelative(ts: number | undefined): string {
 
 type Tab = "maler" | "analyser" | "oversikt" | "bibliotek";
 
+/** Rekkefølge: hovedarbeid → maler → oversikt → referansemateriale sist */
 const FLOW_STEPS = [
-  { id: "maler" as const, n: 1, label: "Maler", icon: Grid3x3, hint: "Definer risikoakser" },
-  { id: "analyser" as const, n: 2, label: "Analyser", icon: ClipboardList, hint: "Fyll risikomatrise" },
-  { id: "oversikt" as const, n: 3, label: "Oversikt", icon: BarChart3, hint: "Dashboard og rapport" },
+  {
+    id: "analyser" as const,
+    n: 1,
+    label: "Alle ROS",
+    icon: ClipboardList,
+    hint: "Liste, søk og opprett",
+  },
+  { id: "maler" as const, n: 2, label: "Maler", icon: Grid3x3, hint: "Definer risikoakser" },
+  {
+    id: "oversikt" as const,
+    n: 3,
+    label: "Dashboard",
+    icon: BarChart3,
+    hint: "Nøkkeltall og fordeling",
+  },
   { id: "bibliotek" as const, n: 4, label: "Bibliotek", icon: BookMarked, hint: "Gjenbruk risiko og tiltak" },
 ] as const;
 
@@ -100,16 +114,14 @@ function RosFlowNav({
   onTab: (t: Tab) => void;
   counts?: { maler: number; analyser: number };
 }) {
-  const activeIdx = FLOW_STEPS.findIndex((s) => s.id === tab);
   return (
     <nav
-      className="flex items-stretch gap-0.5 rounded-2xl border border-border/50 bg-muted/40 p-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] backdrop-blur-sm dark:bg-muted/25 dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]"
+      className="-mx-1 flex max-w-full flex-nowrap items-stretch gap-0.5 overflow-x-auto px-1 pb-0.5 pt-0.5 [scrollbar-width:thin] sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0 sm:pb-0"
       role="tablist"
-      aria-label="ROS-arbeidsflyt"
+      aria-label="ROS-faner — scroll sideveis på smal skjerm om du ikke ser alle"
     >
-      {FLOW_STEPS.map((s, i) => {
+      {FLOW_STEPS.map((s) => {
         const active = tab === s.id;
-        const done = activeIdx > i;
         const Icon = s.icon;
         const count =
           s.id === "maler"
@@ -125,7 +137,7 @@ function RosFlowNav({
             aria-selected={active}
             onClick={() => onTab(s.id)}
             className={cn(
-              "group relative flex flex-1 items-center justify-center gap-2 rounded-lg px-2 py-2.5 text-sm font-medium transition-[color,box-shadow,transform] duration-200 sm:justify-start sm:px-3",
+              "group relative flex min-w-[6.75rem] shrink-0 flex-1 items-center justify-center gap-2 rounded-lg px-2 py-2.5 text-sm font-medium transition-[color,box-shadow,transform] duration-200 sm:min-w-0 sm:justify-start sm:px-3",
               active
                 ? "bg-card text-foreground shadow-[0_1px_3px_rgba(0,0,0,0.08),0_1px_0_rgba(255,255,255,0.9)_inset] ring-1 ring-black/[0.06] dark:shadow-[0_1px_3px_rgba(0,0,0,0.35)] dark:ring-white/[0.08]"
                 : "text-muted-foreground hover:bg-card/60 hover:text-foreground",
@@ -136,15 +148,15 @@ function RosFlowNav({
                 "flex size-7 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold tabular-nums transition-colors",
                 active
                   ? "bg-primary text-primary-foreground shadow-sm"
-                  : done
-                    ? "bg-emerald-500/15 text-emerald-700 ring-1 ring-emerald-500/25 dark:text-emerald-300"
-                    : "bg-background/80 text-muted-foreground ring-1 ring-border/60 group-hover:bg-muted",
+                  : "bg-background/80 text-muted-foreground ring-1 ring-border/60 group-hover:bg-muted",
               )}
             >
-              {done ? "✓" : s.n}
+              {s.n}
             </span>
-            <span className="hidden sm:inline">{s.label}</span>
-            <Icon className="size-4 opacity-70 sm:hidden" aria-hidden />
+            <span className="max-w-[5rem] truncate text-center text-[11px] leading-tight sm:max-w-none sm:text-left sm:text-sm">
+              {s.label}
+            </span>
+            <Icon className="hidden size-4 shrink-0 opacity-70 sm:block" aria-hidden />
             {count !== undefined && count > 0 ? (
               <span
                 className={cn(
@@ -183,25 +195,38 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
   const { prefs: rosUiPrefs, updatePrefs: updateRosUiPrefs } =
     useRosWorkspaceUiPrefs(workspaceId);
   const rawFane = searchParams.get("fane");
-  const tab: Tab =
-    rawFane === "analyser" ||
-    rawFane === "oversikt" ||
-    rawFane === "bibliotek"
-      ? rawFane
-      : "maler";
+  const tab: Tab = useMemo(() => {
+    if (
+      rawFane === "analyser" ||
+      rawFane === "oversikt" ||
+      rawFane === "bibliotek"
+    ) {
+      return rawFane;
+    }
+    if (rawFane === "maler") {
+      return "maler";
+    }
+    return "analyser";
+  }, [rawFane]);
+
+  useEffect(() => {
+    if (rawFane !== null) {
+      return;
+    }
+    if (analyses === undefined) {
+      return;
+    }
+    router.replace(`/w/${workspaceId}/ros?fane=analyser`, { scroll: false });
+  }, [rawFane, analyses, workspaceId, router]);
 
   const setTab = useCallback(
     (t: Tab) => {
       const params = new URLSearchParams(searchParams.toString());
-      if (t === "maler") {
-        params.delete("fane");
-      } else {
-        params.set("fane", t);
-      }
+      // Alltid sett fane eksplisitt — «maler» kan ikke kodes som manglende param,
+      // fordi tom URL trigget useEffect som erstatter med ?fane=analyser.
+      params.set("fane", t);
       const qs = params.toString();
-      router.replace(`/w/${workspaceId}/ros${qs ? `?${qs}` : ""}`, {
-        scroll: false,
-      });
+      router.replace(`/w/${workspaceId}/ros?${qs}`, { scroll: false });
     },
     [router, searchParams, workspaceId],
   );
@@ -310,6 +335,19 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
     return rows;
   }, [analyses, analysisSearch, analysisSort]);
 
+  const requestRemoveAnalysis = useCallback(
+    (a: { _id: Id<"rosAnalyses">; title: string }) => {
+      toastDeleteWithUndo({
+        title: "Sletter ROS-analyse",
+        itemLabel: a.title,
+        onCommit: async () => {
+          await removeAnalysis({ analysisId: a._id });
+        },
+      });
+    },
+    [removeAnalysis],
+  );
+
   const startAnalysisForCandidate = useCallback(
     (candidateId: Id<"candidates">) => {
       setTab("analyser");
@@ -322,7 +360,7 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
         setAnaTemplateId(hub.defaultTemplateId);
       }
     },
-    [templates, hub?.defaultTemplateId, candidates],
+    [setTab, templates, hub?.defaultTemplateId, candidates],
   );
 
   const openNewTemplateDialog = useCallback(() => {
@@ -475,110 +513,33 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
         counts={{ maler: templatesList.length, analyser: analysesList.length }}
       />
 
-      <GithubIssueStartCard
-        workspaceId={workspaceId}
-        variant="ros"
-        defaultTemplateId={hub?.defaultTemplateId ?? null}
-      />
-
-      <div className="overflow-hidden rounded-2xl border border-border/40 bg-card shadow-[0_1px_2px_rgba(0,0,0,0.04)] ring-1 ring-black/[0.04] dark:ring-white/[0.06]">
-        <details
-          open={rosUiPrefs.scaleReferenceOpen}
-          onToggle={(e) => {
-            updateRosUiPrefs({ scaleReferenceOpen: e.currentTarget.open });
-          }}
-        >
-          <summary className="hover:bg-muted/30 flex cursor-pointer list-none items-start gap-3 rounded-t-2xl px-4 py-3.5 transition-colors sm:px-5 sm:py-4 [&::-webkit-details-marker]:hidden">
-            <div className="bg-primary/12 text-primary flex size-10 shrink-0 items-center justify-center rounded-xl ring-1 ring-primary/15">
-              <Info className="size-5" aria-hidden />
-            </div>
-            <div className="min-w-0 flex-1 pt-0.5">
-              <p className="text-foreground font-heading text-sm font-semibold tracking-tight sm:text-base">
-                Hva betyr tallene 1, 2, 3 … på aksene?
-              </p>
-              <p className="text-muted-foreground mt-1 text-xs leading-relaxed sm:text-[13px]">
-                Standard nivåtekst; malen kan tilpasse akser og definisjon. Visning og valgt akse
-                huskes i denne nettleseren.
-              </p>
-            </div>
-            <div className="flex shrink-0 flex-col items-end gap-1 sm:flex-row sm:items-center sm:gap-2">
-              <span className="text-muted-foreground text-xs font-medium tabular-nums">
-                {rosUiPrefs.scaleReferenceOpen ? "Skjul" : "Vis"}
-              </span>
-              <ChevronDown
-                className={cn(
-                  "text-muted-foreground size-5 shrink-0 transition-transform duration-200",
-                  rosUiPrefs.scaleReferenceOpen && "rotate-180",
-                )}
-                aria-hidden
-              />
-            </div>
-          </summary>
-          <div className="border-border/40 border-t px-3 pb-4 pt-2 sm:px-4">
-            <RosScaleReference
-              axis={rosUiPrefs.scaleReferenceAxis}
-              onAxisChange={(axis) =>
-                updateRosUiPrefs({ scaleReferenceAxis: axis })
-              }
-            />
+      {tab === "bibliotek" ? (
+        <section aria-labelledby="ros-bibliotek-heading" className="space-y-4">
+          <RosLibraryPanel workspaceId={workspaceId} />
+        </section>
+      ) : tab === "oversikt" ? (
+        <section aria-labelledby="ros-dashboard-heading" className="space-y-6">
+          <div className="rounded-2xl border border-border/50 bg-card/50 px-4 py-4 sm:px-5">
+            <h2
+              id="ros-dashboard-heading"
+              className="font-heading text-lg font-semibold tracking-tight text-foreground"
+            >
+              Dashboard
+            </h2>
+            <p className="text-muted-foreground mt-2 text-sm leading-relaxed">
+              Oversikt over analyser, prosessdekning og nøkkeltall — uten startskjema for nye ROS.
+            </p>
           </div>
-        </details>
-      </div>
-
-      <RosWorkspaceHub
-        workspaceId={workspaceId}
-        hub={hub}
-        compact={tab !== "oversikt"}
-        onTab={setTab}
-        onStartAnalysisForCandidate={startAnalysisForCandidate}
-        onOpenTemplateDialog={openNewTemplateDialog}
-      />
-
-      <div className="overflow-hidden rounded-2xl border border-border/40 bg-muted/20 shadow-[0_1px_2px_rgba(0,0,0,0.03)] ring-1 ring-black/[0.03] dark:bg-muted/15 dark:ring-white/[0.05]">
-        <details
-          data-ros-methodology-panel
-          open={rosUiPrefs.helpMethodologyOpen}
-          onToggle={(e) => {
-            updateRosUiPrefs({ helpMethodologyOpen: e.currentTarget.open });
-          }}
-        >
-          <summary className="hover:bg-muted/35 flex cursor-pointer list-none items-start gap-3 rounded-t-2xl px-4 py-3 transition-colors sm:px-5 sm:py-3.5 [&::-webkit-details-marker]:hidden">
-            <div className="bg-background/80 flex size-9 shrink-0 items-center justify-center rounded-xl ring-1 ring-border/50">
-              <HelpCircle className="text-muted-foreground size-4" aria-hidden />
-            </div>
-            <div className="min-w-0 flex-1 pt-0.5">
-              <p className="text-foreground text-sm font-medium sm:text-[15px]">
-                Hjelp og metode
-                <span className="text-muted-foreground hidden font-normal sm:inline">
-                  {" "}
-                  (ISO, personvern, kobling til vurderinger)
-                </span>
-              </p>
-              <p className="text-muted-foreground mt-0.5 text-[11px] leading-snug sm:text-xs">
-                Veiledning og lenker — visning huskes i denne nettleseren.
-              </p>
-            </div>
-            <div className="flex shrink-0 flex-col items-end gap-1 sm:flex-row sm:items-center sm:gap-2">
-              <span className="text-muted-foreground text-xs font-medium">
-                {rosUiPrefs.helpMethodologyOpen ? "Skjul" : "Vis"}
-              </span>
-              <ChevronDown
-                className={cn(
-                  "text-muted-foreground size-5 shrink-0 transition-transform duration-200",
-                  rosUiPrefs.helpMethodologyOpen && "rotate-180",
-                )}
-                aria-hidden
-              />
-            </div>
-          </summary>
-          <div className="border-border/40 border-t px-3 pb-3 pt-2 sm:px-4">
-            <RosMethodologyGuide workspaceId={workspaceId} variant="compact" />
-          </div>
-        </details>
-      </div>
-
-      {tab === "oversikt" ? (
-        <RosDashboardPanel workspaceId={workspaceId} />
+          <RosWorkspaceHub
+            workspaceId={workspaceId}
+            hub={hub}
+            compact={false}
+            onTab={setTab}
+            onStartAnalysisForCandidate={startAnalysisForCandidate}
+            onOpenTemplateDialog={openNewTemplateDialog}
+          />
+          <RosDashboardPanel workspaceId={workspaceId} />
+        </section>
       ) : tab === "maler" ? (
         <div className="space-y-6">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -905,19 +866,102 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
             </DialogContent>
           </Dialog>
         </div>
-      ) : tab === "analyser" ? (
+      ) : (
+        <>
+          <GithubIssueStartCard
+            workspaceId={workspaceId}
+            variant="ros"
+            defaultTemplateId={hub?.defaultTemplateId ?? null}
+          />
+
+          <div className="overflow-hidden rounded-2xl border border-border/40 bg-card shadow-[0_1px_2px_rgba(0,0,0,0.04)] ring-1 ring-black/[0.04] dark:ring-white/[0.06]">
+            <details
+              open={rosUiPrefs.scaleReferenceOpen}
+              onToggle={(e) => {
+                updateRosUiPrefs({ scaleReferenceOpen: e.currentTarget.open });
+              }}
+            >
+              <summary className="hover:bg-muted/30 flex cursor-pointer list-none items-start gap-3 rounded-t-2xl px-4 py-3.5 transition-colors sm:px-5 sm:py-4 [&::-webkit-details-marker]:hidden">
+                <div className="bg-primary/12 text-primary flex size-10 shrink-0 items-center justify-center rounded-xl ring-1 ring-primary/15">
+                  <Info className="size-5" aria-hidden />
+                </div>
+                <div className="min-w-0 flex-1 pt-0.5">
+                  <p className="text-foreground font-heading text-sm font-semibold tracking-tight sm:text-base">
+                    Hva betyr tallene 1, 2, 3 … på aksene?
+                  </p>
+                </div>
+                <div className="flex shrink-0 flex-col items-end gap-1 sm:flex-row sm:items-center sm:gap-2">
+                  <span className="text-muted-foreground text-xs font-medium tabular-nums">
+                    {rosUiPrefs.scaleReferenceOpen ? "Skjul" : "Vis"}
+                  </span>
+                  <ChevronDown
+                    className={cn(
+                      "text-muted-foreground size-5 shrink-0 transition-transform duration-200",
+                      rosUiPrefs.scaleReferenceOpen && "rotate-180",
+                    )}
+                    aria-hidden
+                  />
+                </div>
+              </summary>
+              <div className="border-border/40 border-t px-3 pb-4 pt-2 sm:px-4">
+                <RosScaleReference
+                  axis={rosUiPrefs.scaleReferenceAxis}
+                  onAxisChange={(axis) =>
+                    updateRosUiPrefs({ scaleReferenceAxis: axis })
+                  }
+                />
+              </div>
+            </details>
+          </div>
+
+          <div className="overflow-hidden rounded-2xl border border-border/40 bg-muted/20 shadow-[0_1px_2px_rgba(0,0,0,0.03)] ring-1 ring-black/[0.03] dark:bg-muted/15 dark:ring-white/[0.05]">
+            <details
+              data-ros-methodology-panel
+              open={rosUiPrefs.helpMethodologyOpen}
+              onToggle={(e) => {
+                updateRosUiPrefs({ helpMethodologyOpen: e.currentTarget.open });
+              }}
+            >
+              <summary className="hover:bg-muted/35 flex cursor-pointer list-none items-start gap-3 rounded-t-2xl px-4 py-3 transition-colors sm:px-5 sm:py-3.5 [&::-webkit-details-marker]:hidden">
+                <div className="bg-background/80 flex size-9 shrink-0 items-center justify-center rounded-xl ring-1 ring-border/50">
+                  <HelpCircle className="text-muted-foreground size-4" aria-hidden />
+                </div>
+                <div className="min-w-0 flex-1 pt-0.5">
+                  <p className="text-foreground text-sm font-medium sm:text-[15px]">
+                    Hjelp og metode
+                  </p>
+                </div>
+                <div className="flex shrink-0 flex-col items-end gap-1 sm:flex-row sm:items-center sm:gap-2">
+                  <span className="text-muted-foreground text-xs font-medium">
+                    {rosUiPrefs.helpMethodologyOpen ? "Skjul" : "Vis"}
+                  </span>
+                  <ChevronDown
+                    className={cn(
+                      "text-muted-foreground size-5 shrink-0 transition-transform duration-200",
+                      rosUiPrefs.helpMethodologyOpen && "rotate-180",
+                    )}
+                    aria-hidden
+                  />
+                </div>
+              </summary>
+              <div className="border-border/40 border-t px-3 pb-3 pt-2 sm:px-4">
+                <RosMethodologyGuide workspaceId={workspaceId} variant="compact" />
+              </div>
+            </details>
+          </div>
+
         <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,22rem)]">
           <div className="space-y-4">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
               <div>
                 <h2 className="font-heading text-lg font-semibold tracking-tight">
-                  Dine ROS-analyser
+                  Alle ROS-analyser
                 </h2>
-                <p className="text-muted-foreground mt-0.5 text-sm">
-                  {analysesList.length > 0
-                    ? `${analysesList.length} analyse${analysesList.length === 1 ? "" : "r"} i dette arbeidsområdet`
-                    : "Opprett din første analyse for å komme i gang"}
-                </p>
+                {analysesList.length > 0 ? (
+                  <p className="text-muted-foreground mt-0.5 text-sm tabular-nums">
+                    {analysesList.length} i arbeidsområdet
+                  </p>
+                ) : null}
               </div>
             </div>
             {analysesList.length > 0 ? (
@@ -957,18 +1001,11 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
                 <div className="flex size-14 items-center justify-center rounded-full bg-primary/10">
                   <ClipboardList className="size-7 text-primary" />
                 </div>
-                <div className="max-w-sm space-y-1">
+                <div className="max-w-md space-y-1">
                   <p className="text-foreground text-sm font-medium">Ingen analyser ennå</p>
                   <p className="text-muted-foreground text-xs leading-relaxed">
-                    Du trenger minst én <strong>mal</strong> og én <strong>kandidat</strong> (prosess).
-                    Opprett kandidater under{" "}
-                    <Link
-                      href={`/w/${workspaceId}/vurderinger?fane=prosesser`}
-                      className="text-primary font-medium underline-offset-4 hover:underline"
-                    >
-                      Kandidater
-                    </Link>
-                    , deretter fyll ut skjemaet til høyre.
+                    Opprett en <strong className="text-foreground">mal</strong> under «Maler», deretter
+                    skjemaet til høyre eller kortet over.
                   </p>
                 </div>
               </div>
@@ -987,69 +1024,147 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
                 </p>
               </div>
             ) : (
-              <ul className="space-y-2">
-                {filteredSortedAnalyses.map((a) => (
-                  <li key={a._id} className="group/card relative">
-                    <Link
-                      href={`/w/${workspaceId}/ros/a/${a._id}`}
-                      className="flex items-center gap-4 rounded-xl border border-border/60 bg-card p-4 shadow-sm transition-all hover:border-primary/30 hover:shadow-md"
-                    >
-                      <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 transition-colors group-hover/card:bg-primary/15">
-                        <Shield className="size-5 text-primary" />
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate font-medium">{a.title}</p>
-                        <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
-                          {a.candidateName ? (
-                            <span>
-                              {a.candidateName}{" "}
-                              <span className="font-mono">({a.candidateCode})</span>
-                            </span>
-                          ) : (
-                            <span className="italic">Ingen prosess koblet</span>
-                          )}
-                          <span className="inline-flex items-center gap-1">
-                            <Grid3x3 className="size-3" aria-hidden />
-                            {a.rowLabels.length}×{a.colLabels.length}
-                          </span>
-                          <span className="inline-flex items-center gap-1">
-                            <Clock className="size-3" aria-hidden />
-                            {formatRelative(a.updatedAt)}
-                          </span>
+              <div className="overflow-hidden rounded-xl border border-border/50 bg-card shadow-sm">
+                <div className="overflow-x-auto">
+                  <table className="hidden w-full min-w-[44rem] caption-bottom border-collapse text-sm sm:table">
+                    <caption className="sr-only">
+                      Alle ROS-analyser i dette arbeidsområdet
+                    </caption>
+                    <thead>
+                      <tr className="border-b border-border/60 bg-muted/25 text-left">
+                        <th scope="col" className="px-4 py-3 font-semibold">
+                          Tittel
+                        </th>
+                        <th scope="col" className="px-4 py-3 font-semibold">
+                          Prosess
+                        </th>
+                        <th scope="col" className="px-4 py-3 font-semibold">
+                          Mal
+                        </th>
+                        <th scope="col" className="px-4 py-3 font-semibold">
+                          Matrise
+                        </th>
+                        <th scope="col" className="px-4 py-3 font-semibold">
+                          Oppdatert
+                        </th>
+                        <th scope="col" className="px-4 py-3 font-semibold">
+                          <span className="sr-only">Handlinger</span>
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredSortedAnalyses.map((a) => {
+                        const tplName =
+                          (a as { templateName?: string | null }).templateName ??
+                          null;
+                        return (
+                          <tr
+                            key={a._id}
+                            className="border-b border-border/40 transition-colors last:border-0 hover:bg-muted/20"
+                          >
+                            <td className="max-w-[min(280px,28vw)] px-4 py-3 align-middle">
+                              <Link
+                                href={`/w/${workspaceId}/ros/a/${a._id}`}
+                                className="font-medium text-foreground underline-offset-4 hover:text-primary hover:underline"
+                              >
+                                {a.title}
+                              </Link>
+                            </td>
+                            <td className="px-4 py-3 align-middle text-xs text-muted-foreground">
+                              {a.candidateName ? (
+                                <span>
+                                  {a.candidateName}{" "}
+                                  <span className="font-mono text-[11px]">
+                                    ({a.candidateCode})
+                                  </span>
+                                </span>
+                              ) : (
+                                <span className="italic">—</span>
+                              )}
+                            </td>
+                            <td
+                              className="max-w-[10rem] truncate px-4 py-3 align-middle text-xs text-muted-foreground"
+                              title={tplName ?? undefined}
+                            >
+                              {tplName ?? "—"}
+                            </td>
+                            <td className="px-4 py-3 align-middle tabular-nums text-xs text-muted-foreground">
+                              {a.rowLabels.length}×{a.colLabels.length}
+                            </td>
+                            <td className="whitespace-nowrap px-4 py-3 align-middle text-xs text-muted-foreground">
+                              {formatRelative(a.updatedAt)}
+                            </td>
+                            <td className="px-4 py-3 align-middle">
+                              <div className="flex flex-wrap items-center gap-1.5">
+                                <Button variant="outline" size="sm" className="h-8" asChild>
+                                  <Link href={`/w/${workspaceId}/ros/a/${a._id}`}>
+                                    Åpne
+                                  </Link>
+                                </Button>
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon"
+                                  className="size-8 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                                  title="Slett analyse"
+                                  onClick={() => requestRemoveAnalysis(a)}
+                                >
+                                  <Trash2 className="size-4" aria-hidden />
+                                </Button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+
+                <ul className="divide-border/50 space-y-0 divide-y sm:hidden">
+                  {filteredSortedAnalyses.map((a) => (
+                    <li key={a._id} className="group/card relative">
+                      <Link
+                        href={`/w/${workspaceId}/ros/a/${a._id}`}
+                        className="flex items-center gap-4 p-4 transition-colors hover:bg-muted/25"
+                      >
+                        <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 transition-colors group-hover/card:bg-primary/15">
+                          <Shield className="size-5 text-primary" />
                         </div>
-                      </div>
-                      <ArrowRight className="size-4 shrink-0 text-muted-foreground/40 transition-transform group-hover/card:translate-x-0.5 group-hover/card:text-primary" />
-                    </Link>
-                    <button
-                      type="button"
-                      className="absolute right-2 top-2 rounded-md p-1.5 text-muted-foreground/50 opacity-0 transition-all hover:bg-destructive/10 hover:text-destructive group-hover/card:opacity-100"
-                      title="Slett analyse"
-                      onClick={() => {
-                        if (
-                          window.confirm(
-                            `Slette «${a.title}»? Matrisedata, oppgaver og koblinger fjernes permanent.`,
-                          )
-                        ) {
-                          void (async () => {
-                            try {
-                              await removeAnalysis({ analysisId: a._id });
-                              toast.success("Analyse slettet.");
-                            } catch (e) {
-                              toast.error(
-                                e instanceof Error
-                                  ? e.message
-                                  : "Kunne ikke slette analysen.",
-                              );
-                            }
-                          })();
-                        }
-                      }}
-                    >
-                      <Trash2 className="size-3.5" />
-                    </button>
-                  </li>
-                ))}
-              </ul>
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate font-medium">{a.title}</p>
+                          <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
+                            {a.candidateName ? (
+                              <span>
+                                {a.candidateName}{" "}
+                                <span className="font-mono">({a.candidateCode})</span>
+                              </span>
+                            ) : (
+                              <span className="italic">Ingen prosess koblet</span>
+                            )}
+                            <span className="inline-flex items-center gap-1">
+                              <Grid3x3 className="size-3" aria-hidden />
+                              {a.rowLabels.length}×{a.colLabels.length}
+                            </span>
+                            <span className="inline-flex items-center gap-1">
+                              <Clock className="size-3" aria-hidden />
+                              {formatRelative(a.updatedAt)}
+                            </span>
+                          </div>
+                        </div>
+                        <ArrowRight className="size-4 shrink-0 text-muted-foreground/40 transition-transform group-hover/card:translate-x-0.5 group-hover/card:text-primary" />
+                      </Link>
+                      <button
+                        type="button"
+                        className="absolute right-2 top-3 rounded-md p-1.5 text-muted-foreground/50 opacity-0 transition-all hover:bg-destructive/10 hover:text-destructive group-hover/card:opacity-100"
+                        title="Slett analyse"
+                        onClick={() => requestRemoveAnalysis(a)}
+                      >
+                        <Trash2 className="size-3.5" />
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
             )}
           </div>
 
@@ -1167,8 +1282,7 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
             </form>
           </Card>
         </div>
-      ) : (
-        <RosLibraryPanel workspaceId={workspaceId} />
+      </>
       )}
     </div>
   );

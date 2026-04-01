@@ -35,6 +35,7 @@ import type * as ros from "../ros.js";
 import type * as rosAxisLists from "../rosAxisLists.js";
 import type * as rosLibrary from "../rosLibrary.js";
 import type * as users from "../users.js";
+import type * as workspaceViewPrefs from "../workspaceViewPrefs.js";
 import type * as workspaces from "../workspaces.js";
 
 import type {
@@ -71,6 +72,7 @@ declare const fullApi: ApiFromModules<{
   rosAxisLists: typeof rosAxisLists;
   rosLibrary: typeof rosLibrary;
   users: typeof users;
+  workspaceViewPrefs: typeof workspaceViewPrefs;
   workspaces: typeof workspaces;
 }>;
 

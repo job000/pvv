@@ -22,6 +22,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import { toast } from "@/lib/app-toast";
+import { RPA_JOURNAL_SEED_CATEGORY_NAME } from "@/lib/ros-library-rpa-journal-seed";
 import {
   ROS_CELL_FLAG_REQUIRES_ACTION,
   ROS_CELL_FLAG_WATCH,
@@ -36,6 +37,7 @@ import {
   FolderInput,
   Globe2,
   LayoutGrid,
+  Sparkles,
   Lock,
   Pencil,
   Plus,
@@ -74,6 +76,9 @@ export function RosLibraryPanel({ workspaceId }: { workspaceId: Id<"workspaces">
   const createCategory = useMutation(api.rosLibrary.createLibraryCategory);
   const updateCategory = useMutation(api.rosLibrary.updateLibraryCategory);
   const removeCategory = useMutation(api.rosLibrary.removeLibraryCategory);
+  const seedRpaJournalExamples = useMutation(
+    api.rosLibrary.seedRpaJournalLibraryExamples,
+  );
 
   const [search, setSearch] = useState("");
   const [filterCategory, setFilterCategory] = useState<
@@ -109,6 +114,8 @@ export function RosLibraryPanel({ workspaceId }: { workspaceId: Id<"workspaces">
   const [deleteCategoryId, setDeleteCategoryId] = useState<
     Id<"rosLibraryCategories"> | null
   >(null);
+  const [seedBusy, setSeedBusy] = useState(false);
+  const [seedReplaceDialogOpen, setSeedReplaceDialogOpen] = useState(false);
 
   const resetItemForm = useCallback(() => {
     setTitle("");
@@ -291,13 +298,17 @@ export function RosLibraryPanel({ workspaceId }: { workspaceId: Id<"workspaces">
                 Gjenbruk
               </span>
             </div>
-            <h2 className="font-heading text-lg font-semibold tracking-tight sm:text-xl">
+            <h2
+              id="ros-bibliotek-heading"
+              className="font-heading text-lg font-semibold tracking-tight sm:text-xl"
+            >
               Risiko- og tiltaksbibliotek
             </h2>
             <p className="text-muted-foreground text-sm leading-relaxed">
-              Organiser med kategorier, sorter i listen, og sett inn tekster i nye
-              analyser. «Delt» gjør teksten tilgjengelig på tvers av arbeidsområder du er
-              medlem av.
+              Gjenbrukbare risiko- og tiltakstekster (ikke analyse-listen — den ligger under
+              «Alle ROS»). Organiser med kategorier, sorter, og bruk innhold i analyser. «Delt»
+              gjør tekst tilgjengelig på tvers av arbeidsområder du er medlem av. Under finner du
+              «Legg inn eksempler» for RPA/journalsystem.
             </p>
           </div>
           <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap">
@@ -323,6 +334,128 @@ export function RosLibraryPanel({ workspaceId }: { workspaceId: Id<"workspaces">
           </div>
         </div>
       </div>
+
+      <Card className="border-border/60 bg-muted/10">
+        <CardHeader className="pb-2">
+          <div className="flex items-start gap-3">
+            <div className="bg-primary/12 text-primary flex size-10 shrink-0 items-center justify-center rounded-xl ring-1 ring-primary/15">
+              <Sparkles className="size-5" aria-hidden />
+            </div>
+            <div className="min-w-0 space-y-1">
+              <CardTitle className="text-base">Eksempler: RPA og journalsystemer</CardTitle>
+              <CardDescription className="text-sm leading-relaxed">
+                Legg inn kategorien «{RPA_JOURNAL_SEED_CATEGORY_NAME}» med risiko og tiltak
+                for{" "}
+                <strong className="text-foreground font-medium">DIPS</strong>,{" "}
+                <strong className="text-foreground font-medium">MetaVision</strong> og{" "}
+                <strong className="text-foreground font-medium">Medanets</strong>. Du kan
+                redigere eller slette hvert element etterpå — de er vanlige biblioteksposter.
+                Taggen <span className="font-mono text-[11px]">seed-rpa-journal</span> brukes
+                til å gjenkjenne innlagte eksempler (søk eller filtrer i listen).
+              </CardDescription>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-2 pt-0 sm:flex-row sm:flex-wrap">
+          <Button
+            type="button"
+            variant="secondary"
+            className="min-h-11 touch-manipulation gap-2 sm:min-h-10"
+            disabled={seedBusy}
+            onClick={() => {
+              setSeedBusy(true);
+              void (async () => {
+                try {
+                  const r = await seedRpaJournalExamples({ workspaceId });
+                  if (r.inserted === 0) {
+                    toast.message("Alle eksempler fantes allerede.");
+                  } else {
+                    toast.success(
+                      `Lagt inn ${r.inserted} eksempler (${r.totalSeedItems} totalt i settet).`,
+                    );
+                  }
+                } catch (e) {
+                  toast.error(
+                    e instanceof Error ? e.message : "Kunne ikke legge inn eksempler.",
+                  );
+                } finally {
+                  setSeedBusy(false);
+                }
+              })();
+            }}
+          >
+            {seedBusy ? "Legger inn …" : "Legg inn eksempler"}
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            className="min-h-11 touch-manipulation gap-2 sm:min-h-10"
+            disabled={seedBusy}
+            onClick={() => setSeedReplaceDialogOpen(true)}
+          >
+            Erstatt eksempler …
+          </Button>
+        </CardContent>
+      </Card>
+
+      <Dialog open={seedReplaceDialogOpen} onOpenChange={setSeedReplaceDialogOpen}>
+        <DialogContent size="default" titleId="seed-replace-title" descriptionId="seed-replace-desc">
+          <DialogHeader>
+            <p id="seed-replace-title" className="font-heading text-lg font-semibold">
+              Erstatt RPA-eksempler?
+            </p>
+            <p
+              id="seed-replace-desc"
+              className="text-muted-foreground text-sm leading-relaxed"
+            >
+              Alle bibliotekselementer med taggen{" "}
+              <span className="font-mono text-xs">seed-rpa-journal</span> i dette
+              arbeidsområdet slettes, deretter legges eksemplene inn på nytt. Andre
+              elementer i biblioteket påvirkes ikke.
+            </p>
+          </DialogHeader>
+          <DialogFooter className="gap-2 sm:justify-end">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setSeedReplaceDialogOpen(false)}
+              disabled={seedBusy}
+            >
+              Avbryt
+            </Button>
+            <Button
+              type="button"
+              variant="default"
+              disabled={seedBusy}
+              onClick={() => {
+                setSeedBusy(true);
+                void (async () => {
+                  try {
+                    const r = await seedRpaJournalExamples({
+                      workspaceId,
+                      replace: true,
+                    });
+                    toast.success(
+                      `Eksempler oppdatert: ${r.inserted} elementer lagt inn.`,
+                    );
+                    setSeedReplaceDialogOpen(false);
+                  } catch (e) {
+                    toast.error(
+                      e instanceof Error
+                        ? e.message
+                        : "Kunne ikke erstatte eksempler.",
+                    );
+                  } finally {
+                    setSeedBusy(false);
+                  }
+                })();
+              }}
+            >
+              {seedBusy ? "Erstatter …" : "Slett og legg inn på nytt"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Card className="border-border/60">
         <CardHeader className="pb-3">

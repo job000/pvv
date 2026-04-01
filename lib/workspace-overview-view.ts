@@ -1,0 +1,93 @@
+import type { LucideIcon } from "lucide-react";
+import {
+  Bell,
+  Building2,
+  ClipboardList,
+  Settings2,
+  Share2,
+  Shield,
+  Users,
+} from "lucide-react";
+
+/** Stabile ID-er for snarveier — lagres per bruker per arbeidsområde. */
+export const WORKSPACE_OVERVIEW_SHORTCUT_IDS = [
+  "vurderinger",
+  "prosessregister",
+  "ros",
+  "organisasjon",
+  "delinger",
+  "varslinger",
+  "innstillinger",
+] as const;
+
+export type WorkspaceOverviewShortcutId =
+  (typeof WORKSPACE_OVERVIEW_SHORTCUT_IDS)[number];
+
+export type WorkspaceOverviewShortcut = {
+  id: WorkspaceOverviewShortcutId;
+  href: string;
+  title: string;
+  desc: string;
+  icon: LucideIcon;
+};
+
+export function buildWorkspaceOverviewShortcuts(
+  workspaceIdStr: string,
+): WorkspaceOverviewShortcut[] {
+  const w = workspaceIdStr;
+  return [
+    {
+      id: "vurderinger",
+      href: `/w/${w}/vurderinger`,
+      title: "Vurderinger",
+      desc: "RPA-saker med skjema og status",
+      icon: ClipboardList,
+    },
+    {
+      id: "prosessregister",
+      href: `/w/${w}/vurderinger?fane=prosesser`,
+      title: "Prosessregister",
+      desc: "Prosesser med ID før ny vurdering",
+      icon: Users,
+    },
+    {
+      id: "ros",
+      href: `/w/${w}/ros`,
+      title: "ROS og risiko",
+      desc: "Analyse og kobling til vurderinger",
+      icon: Shield,
+    },
+    {
+      id: "organisasjon",
+      href: `/w/${w}/organisasjon`,
+      title: "Organisasjon",
+      desc: "Enheter og kontaktpunkter",
+      icon: Building2,
+    },
+    {
+      id: "delinger",
+      href: `/w/${w}/delinger`,
+      title: "Team og tilgang",
+      desc: "Medlemmer og roller",
+      icon: Share2,
+    },
+    {
+      id: "varslinger",
+      href: `/w/${w}/varslinger`,
+      title: "Varsler",
+      desc: "E-post og påminnelser",
+      icon: Bell,
+    },
+    {
+      id: "innstillinger",
+      href: `/w/${w}/innstillinger`,
+      title: "Innstillinger",
+      desc: "Navn og merknader for området",
+      icon: Settings2,
+    },
+  ];
+}
+
+export function isValidShortcutId(id: string): id is WorkspaceOverviewShortcutId {
+  return (WORKSPACE_OVERVIEW_SHORTCUT_IDS as readonly string[]).includes(id);
+}

@@ -302,13 +302,13 @@ export const PROSESSREGISTER_TUTORIAL_STEPS: TutorialStep[] = [
     targetSelectors: ['[data-tutorial-anchor="prosess-oversikt-header"]'],
     title: "Prosessregister-kortet",
     targetHint: "Overskrift og beskrivelse",
-    body: "Her står arbeidsområdets prosessregister forklart: hver rad er en forretningsprosess med en unik prosess-ID. Samme ID gjenbrukes i vurderinger og ROS når dere kobler dem til.",
+    body: "Her står arbeidsområdets prosessregister forklart: hver rad er en forretningsprosess med en unik prosess-ID. ROS kan også startes uten prosess (meny «ROS og risiko»). Registeret brukes når dere vil knytte PVV eller ROS til en prosess-ID.",
   },
   {
     targetSelectors: ['[data-tutorial-anchor="hub-registrering"]'],
-    title: "Registrer nye prosesser",
-    targetHint: "«Start her» og knapper",
-    body: "Bruk «Registrer ny prosess» for å fylle inn navn og prosess-ID manuelt. Tom ID kan fylles automatisk. «Vis veiledning» åpner denne turen; innstillinger for popup finner du på dashboard.",
+    title: "Veiledning og nye prosesser",
+    targetHint: "Veiledning og knapper",
+    body: "Verktøylinjen har «Registrer ny prosess», «Vis veiledning» (denne turen) og «Hjelp» med full forklaring. «Innstillinger for veiledning» åpner brukerinnstillinger. Tom prosess-ID kan fylles automatisk ved registrering.",
   },
   {
     targetSelectors: ['[data-tutorial-anchor="pvv-ros"]'],
@@ -324,12 +324,12 @@ export const PROSESSREGISTER_TUTORIAL_STEPS: TutorialStep[] = [
     ],
     title: "GitHub (valgfritt)",
     targetHint: "Import eller oppsett",
-    body: "Med redigeringstilgang og GitHub konfigurert: hent fra issue-URL eller prosjektkolonne i boksen under. Uten kobling vises et gult varsel — da må token og prosjekt-ID settes under Innstillinger (evt. be administrator).",
+    body: "Velg «Issue (lenke)» eller «Prosjektkolonne», lim inn URL eller velg kolonne, og trykk Hent. Oppsett under Innstillinger — gult varsel betyr at prosjekt-tavle mangler for kolonne-import.",
   },
   {
     targetSelectors: ['[data-tutorial-anchor="prosess-oversikt-liste"]'],
     title: "Tabellen «Prosessoversikt»",
     targetHint: "Alle registrerte ID-er",
-    body: "Listen viser prosess-ID, navn og GitHub-status. Klikk en rad for å redigere. Uten prosesser ennå ser du en tom tilstand her — registrer først via «Start her» over.",
+    body: "Listen viser prosess-ID, navn og GitHub-status. Klikk en rad for å redigere. Uten rader ennå er listen tom — bruk «Registrer ny prosess» over når dere trenger prosess-ID i PVV.",
   },
 ];

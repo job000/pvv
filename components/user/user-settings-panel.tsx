@@ -13,6 +13,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
+import { WorkspaceOverviewViewSettings } from "@/components/workspace/workspace-overview-view-settings";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import { userProfileInitials } from "@/lib/user-profile-initials";
@@ -22,15 +23,18 @@ import {
   BookOpen,
   Camera,
   Check,
+  ExternalLink,
   LayoutGrid,
   LayoutList,
   Loader2,
   Mail,
   Monitor,
   Moon,
+  PanelsTopLeft,
   Sun,
   User,
 } from "lucide-react";
+import Link from "next/link";
 import { useTheme } from "next-themes";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "@/lib/app-toast";
@@ -52,6 +56,7 @@ function SettingsSkeleton() {
 
 export function UserSettingsPanel() {
   const profile = useQuery(api.users.getMyProfile);
+  const myWorkspaces = useQuery(api.workspaces.listMine);
   const patch = useMutation(api.users.patchMyUserSettings);
   const generateUploadUrl = useMutation(api.users.generateProfileImageUploadUrl);
   const setProfileImage = useMutation(api.users.setMyProfileImage);
@@ -580,6 +585,69 @@ export function UserSettingsPanel() {
               );
             })}
           </div>
+        </CardContent>
+      </Card>
+
+      {/* Dashboard per arbeidsområde */}
+      <Card className={cardShell} id="dashboard-arbeidsomrader">
+        <CardHeader className="pb-2">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:gap-4">
+            <div className="bg-primary/12 text-primary flex size-12 shrink-0 items-center justify-center rounded-2xl shadow-sm ring-1 ring-primary/15">
+              <PanelsTopLeft className="size-6" aria-hidden />
+            </div>
+            <div className="min-w-0 space-y-1.5">
+              <CardTitle className="text-lg font-semibold tracking-tight">
+                Dashboard per arbeidsområde
+              </CardTitle>
+              <CardDescription className="text-[15px] leading-relaxed">
+                Velg hvilke nøkkeltall, lister, snarveier og begreper som vises på
+                arbeidsområdets forside. Dette er{" "}
+                <strong className="text-foreground font-medium">dine egne</strong>{" "}
+                valg per arbeidsområde — andre medlemmer påvirkes ikke.
+              </CardDescription>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {myWorkspaces === undefined ? (
+            <div className="space-y-2">
+              <div className="bg-muted/40 h-12 animate-pulse rounded-xl" />
+              <div className="bg-muted/40 h-12 animate-pulse rounded-xl" />
+            </div>
+          ) : myWorkspaces.length === 0 ? (
+            <p className="text-muted-foreground text-sm leading-relaxed">
+              Du er ikke medlem av noen arbeidsområder ennå. Når du har tilgang,
+              kan du tilpasse visningen her eller fra arbeidsområdets dashboard.
+            </p>
+          ) : (
+            <ul className="divide-border/60 divide-y rounded-xl border border-border/60 bg-muted/10">
+              {myWorkspaces.map(({ workspace }) => (
+                <li
+                  key={workspace._id}
+                  className="flex flex-col gap-3 px-4 py-3.5 sm:flex-row sm:items-center sm:justify-between sm:gap-4"
+                >
+                  <div className="min-w-0">
+                    <p className="text-foreground truncate text-sm font-medium">
+                      {workspace.name}
+                    </p>
+                    <Link
+                      href={`/w/${workspace._id}`}
+                      className="text-muted-foreground hover:text-foreground mt-1 inline-flex items-center gap-1 text-xs font-medium transition-colors"
+                    >
+                      Åpne dashboard
+                      <ExternalLink className="size-3 shrink-0 opacity-70" aria-hidden />
+                    </Link>
+                  </div>
+                  <WorkspaceOverviewViewSettings
+                    workspaceId={workspace._id}
+                    workspaceName={workspace.name}
+                    compactTrigger
+                    triggerClassName="shrink-0 self-start sm:self-center"
+                  />
+                </li>
+              ))}
+            </ul>
+          )}
         </CardContent>
       </Card>
 

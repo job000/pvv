@@ -121,6 +121,8 @@ export function RosWorkspaceHub({
   });
   const overdueReviewCount = useMemo(() => {
     if (!reviewSchedule?.items?.length) return 0;
+    // Brukes kun til telling av forfalte punkter fra serverdata (ikke som render-klokke).
+    // eslint-disable-next-line react-hooks/purity -- Date.now() er akseptabelt for denne filtreringen
     const now = Date.now();
     return reviewSchedule.items.filter((i) => i.dueAt <= now).length;
   }, [reviewSchedule]);
@@ -201,6 +203,18 @@ export function RosWorkspaceHub({
             <div className="flex flex-wrap gap-1.5">
             <button
               type="button"
+              onClick={() => onTab("analyser")}
+              className={buttonVariants({
+                variant: "default",
+                size: "sm",
+                className: "h-7 gap-1 px-2 text-xs",
+              })}
+            >
+              <ClipboardList className="size-3" aria-hidden />
+              Alle ROS
+            </button>
+            <button
+              type="button"
               onClick={() => onTab("oversikt")}
               className={buttonVariants({
                 variant: "ghost",
@@ -209,7 +223,7 @@ export function RosWorkspaceHub({
               })}
             >
               <BarChart3 className="size-3" aria-hidden />
-              Full oversikt
+              Dashboard
             </button>
             <Link
               href={`/w/${workspaceId}/ros/akser`}

@@ -64,22 +64,17 @@ export function RosAxisListsPage({ workspaceId }: { workspaceId: Id<"workspaces"
   );
 
   return (
-    <div className="mx-auto w-full max-w-3xl space-y-8 pb-10">
-      <header className="space-y-2">
+    <div className="mx-auto w-full max-w-3xl space-y-6 pb-10">
+      <header className="border-border/60 border-b pb-3">
         <Link
           href={`/w/${workspaceId}/ros`}
-          className="text-muted-foreground hover:text-foreground inline-flex text-sm"
+          className="text-muted-foreground hover:text-foreground mb-2 inline-flex text-sm"
         >
           ← Tilbake til ROS
         </Link>
-        <h1 className="font-heading text-2xl font-semibold tracking-tight md:text-3xl">
+        <h1 className="font-heading text-lg font-semibold tracking-tight text-foreground sm:text-xl">
           ROS-akser og etiketter
         </h1>
-        <p className="text-muted-foreground max-w-prose text-sm leading-relaxed">
-          Gjenbrukbare lister med rader eller kolonner (f.eks. konsekvens, sannsynlighet,
-          tiltak). Kopier linjer inn i en analyse når du redigerer mal eller matrise.
-          Full CRUD: opprett, endre, slett lister og punkter.
-        </p>
       </header>
 
       <Card>
