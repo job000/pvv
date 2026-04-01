@@ -94,13 +94,24 @@ function levelBadge(level: number) {
   return (
     <span
       className={cn(
-        "inline-flex h-8 min-w-8 shrink-0 items-center justify-center rounded-lg border px-2 text-xs font-bold tabular-nums shadow-sm",
+        "inline-flex size-8 shrink-0 items-center justify-center rounded-lg border text-xs font-bold tabular-nums shadow-sm",
         cellRiskClass(level),
       )}
     >
       {level}
     </span>
   );
+}
+
+function riskBorderClass(level: number): string {
+  switch (level) {
+    case 1: return "border-l-emerald-500";
+    case 2: return "border-l-lime-500";
+    case 3: return "border-l-amber-400";
+    case 4: return "border-l-orange-500";
+    case 5: return "border-l-red-500";
+    default: return "border-l-border";
+  }
 }
 
 function DeltaArrow({ before, after }: { before: number; after: number }) {
@@ -391,21 +402,21 @@ export function RosRiskList({
                 key={risk.id}
                 data-risk-id={risk.id}
                 className={cn(
-                  "list-none rounded-2xl border border-border/45 bg-card shadow-sm transition-[box-shadow,ring] duration-200 ring-1 ring-black/[0.02] hover:shadow-md dark:ring-white/[0.04]",
+                  "list-none overflow-hidden rounded-xl border border-l-[3px] bg-card shadow-sm transition-[box-shadow,ring] duration-200 hover:shadow-md",
+                  riskBorderClass(bLvl),
                   highlighted && "ring-2 ring-primary/35 shadow-md",
                   expanded && "shadow-md ring-1 ring-black/[0.05] dark:ring-white/[0.08]",
                 )}
               >
-                {/* Kompakt rad: min. 44px touch-mål (WCAG 2.5.5 / M3 / Fluent) */}
                 <button
                   type="button"
                   aria-expanded={expanded}
                   aria-controls={`ros-risk-expand-${risk.id}`}
                   id={`ros-risk-trigger-${risk.id}`}
-                  className="flex min-h-[48px] w-full items-center gap-3 px-4 py-3 text-left sm:min-h-[44px] sm:items-start sm:py-3.5"
+                  className="flex min-h-[48px] w-full items-center gap-3 px-4 py-3 text-left sm:min-h-[44px]"
                   onClick={() => setExpandedId(expanded ? null : risk.id)}
                 >
-                  <div className="flex shrink-0 items-center gap-1.5 self-center sm:pt-0.5">
+                  <div className="flex shrink-0 items-center gap-1.5">
                     {levelBadge(bLvl)}
                     {(afterOpen || risk.afterRow !== risk.beforeRow || risk.afterCol !== risk.beforeCol) && (
                       <>
@@ -418,7 +429,7 @@ export function RosRiskList({
                   <div className="min-w-0 flex-1">
                     <p
                       className={cn(
-                        "text-sm",
+                        "text-sm leading-snug",
                         risk.text.trim()
                           ? "text-foreground font-medium"
                           : "text-muted-foreground italic",
@@ -426,7 +437,7 @@ export function RosRiskList({
                     >
                       {risk.text.trim() || "Ny risiko — klikk for å beskrive"}
                     </p>
-                    <div className="mt-0.5 flex flex-wrap gap-1.5">
+                    <div className="mt-1 flex flex-wrap items-center gap-1.5">
                       <span className="text-muted-foreground text-[10px]">
                         {rowLabels[risk.beforeRow]} × {colLabels[risk.beforeCol]}
                       </span>
@@ -442,18 +453,21 @@ export function RosRiskList({
                           Følg
                         </Badge>
                       )}
+                      {linkedRosTasksForRisk.length > 0 && (
+                        <Badge variant="outline" className="h-4 gap-0.5 px-1 text-[9px]">
+                          <ListTodo className="size-2.5" />
+                          {linkedRosTasksForRisk.length}
+                        </Badge>
+                      )}
                     </div>
                   </div>
-                  <span
-                    className="text-muted-foreground flex size-11 shrink-0 items-center justify-center rounded-lg sm:size-10"
-                    aria-hidden
-                  >
-                    {expanded ? (
-                      <ChevronUp className="size-5" />
-                    ) : (
-                      <ChevronDown className="size-5" />
+                  <ChevronDown
+                    className={cn(
+                      "text-muted-foreground size-5 shrink-0 transition-transform duration-200",
+                      expanded && "rotate-180",
                     )}
-                  </span>
+                    aria-hidden
+                  />
                 </button>
 
                 {/* Expanded editor */}

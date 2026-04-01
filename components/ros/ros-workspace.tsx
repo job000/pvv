@@ -3,14 +3,6 @@
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { buttonVariants } from "@/components/ui/button-variants";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -49,19 +41,15 @@ import {
 import { RosLabelLevelsEditor } from "@/components/ros/ros-label-levels-editor";
 import { ROS_TEMPLATE_PRESETS, presetToFormState } from "@/lib/ros-template-presets";
 import {
-  ArrowRight,
   BarChart3,
   BookMarked,
-  ChevronDown,
   ClipboardList,
-  Clock,
   Grid3x3,
   HelpCircle,
   History,
   Info,
   Plus,
   Search,
-  Shield,
   Trash2,
 } from "lucide-react";
 import Link from "next/link";
@@ -237,6 +225,9 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
   const [templateDialogOpen, setTemplateDialogOpen] = useState(false);
   const [analysisSearch, setAnalysisSearch] = useState("");
   const [analysisSort, setAnalysisSort] = useState<AnalysisSort>("updated");
+  const [createDialogOpen, setCreateDialogOpen] = useState(false);
+  const [scaleRefOpen, setScaleRefOpen] = useState(false);
+  const [methodHelpOpen, setMethodHelpOpen] = useState(false);
   const [versionsQuickDialog, setVersionsQuickDialog] = useState<{
     analysisId: Id<"rosAnalyses">;
     title: string;
@@ -865,510 +856,329 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
             defaultTemplateId={hub?.defaultTemplateId ?? null}
           />
 
-          <div className="overflow-hidden rounded-2xl border border-border/40 bg-card shadow-[0_1px_2px_rgba(0,0,0,0.04)] ring-1 ring-black/[0.04] dark:ring-white/[0.06]">
-            <details
-              open={rosUiPrefs.scaleReferenceOpen}
-              onToggle={(e) => {
-                updateRosUiPrefs({ scaleReferenceOpen: e.currentTarget.open });
-              }}
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h2 className="font-heading text-lg font-semibold tracking-tight">
+                Alle ROS-analyser
+              </h2>
+              {analysesList.length > 0 ? (
+                <p className="text-muted-foreground mt-0.5 text-sm tabular-nums">
+                  {analysesList.length} analyse{analysesList.length !== 1 ? "r" : ""} i arbeidsområdet
+                </p>
+              ) : null}
+            </div>
+            <Button
+              type="button"
+              className="shrink-0 gap-2 shadow-sm"
+              onClick={() => setCreateDialogOpen(true)}
             >
-              <summary className="hover:bg-muted/30 flex cursor-pointer list-none items-start gap-3 rounded-t-2xl px-4 py-3.5 transition-colors sm:px-5 sm:py-4 [&::-webkit-details-marker]:hidden">
-                <div className="bg-primary/12 text-primary flex size-10 shrink-0 items-center justify-center rounded-xl ring-1 ring-primary/15">
-                  <Info className="size-5" aria-hidden />
-                </div>
-                <div className="min-w-0 flex-1 pt-0.5">
-                  <p className="text-foreground font-heading text-sm font-semibold tracking-tight sm:text-base">
-                    Hva betyr tallene 1, 2, 3 … på aksene?
-                  </p>
-                </div>
-                <div className="flex shrink-0 flex-col items-end gap-1 sm:flex-row sm:items-center sm:gap-2">
-                  <span className="text-muted-foreground text-xs font-medium tabular-nums">
-                    {rosUiPrefs.scaleReferenceOpen ? "Skjul" : "Vis"}
-                  </span>
-                  <ChevronDown
-                    className={cn(
-                      "text-muted-foreground size-5 shrink-0 transition-transform duration-200",
-                      rosUiPrefs.scaleReferenceOpen && "rotate-180",
-                    )}
-                    aria-hidden
-                  />
-                </div>
-              </summary>
-              <div className="border-border/40 border-t px-3 pb-4 pt-2 sm:px-4">
-                <RosScaleReference
-                  axis={rosUiPrefs.scaleReferenceAxis}
-                  onAxisChange={(axis) =>
-                    updateRosUiPrefs({ scaleReferenceAxis: axis })
-                  }
+              <Plus className="size-4" aria-hidden />
+              Ny analyse
+            </Button>
+          </div>
+
+          {analysesList.length > 0 ? (
+            <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-end">
+              <div className="relative min-w-[12rem] flex-1">
+                <Search className="text-muted-foreground pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2" />
+                <Input
+                  type="search"
+                  value={analysisSearch}
+                  onChange={(e) => setAnalysisSearch(e.target.value)}
+                  placeholder="Søk i tittel eller prosess …"
+                  className="pl-9"
+                  aria-label="Filtrer analyser"
                 />
               </div>
-            </details>
-          </div>
-
-          <div className="overflow-hidden rounded-2xl border border-border/40 bg-muted/20 shadow-[0_1px_2px_rgba(0,0,0,0.03)] ring-1 ring-black/[0.03] dark:bg-muted/15 dark:ring-white/[0.05]">
-            <details
-              data-ros-methodology-panel
-              open={rosUiPrefs.helpMethodologyOpen}
-              onToggle={(e) => {
-                updateRosUiPrefs({ helpMethodologyOpen: e.currentTarget.open });
-              }}
-            >
-              <summary className="hover:bg-muted/35 flex cursor-pointer list-none items-start gap-3 rounded-t-2xl px-4 py-3 transition-colors sm:px-5 sm:py-3.5 [&::-webkit-details-marker]:hidden">
-                <div className="bg-background/80 flex size-9 shrink-0 items-center justify-center rounded-xl ring-1 ring-border/50">
-                  <HelpCircle className="text-muted-foreground size-4" aria-hidden />
-                </div>
-                <div className="min-w-0 flex-1 pt-0.5">
-                  <p className="text-foreground text-sm font-medium sm:text-[15px]">
-                    Hjelp og metode
-                  </p>
-                </div>
-                <div className="flex shrink-0 flex-col items-end gap-1 sm:flex-row sm:items-center sm:gap-2">
-                  <span className="text-muted-foreground text-xs font-medium">
-                    {rosUiPrefs.helpMethodologyOpen ? "Skjul" : "Vis"}
-                  </span>
-                  <ChevronDown
-                    className={cn(
-                      "text-muted-foreground size-5 shrink-0 transition-transform duration-200",
-                      rosUiPrefs.helpMethodologyOpen && "rotate-180",
-                    )}
-                    aria-hidden
-                  />
-                </div>
-              </summary>
-              <div className="border-border/40 border-t px-3 pb-3 pt-2 sm:px-4">
-                <RosMethodologyGuide workspaceId={workspaceId} variant="compact" />
-              </div>
-            </details>
-          </div>
-
-        <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,22rem)]">
-          <div className="space-y-4">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-              <div>
-                <h2 className="font-heading text-lg font-semibold tracking-tight">
-                  Alle ROS-analyser
-                </h2>
-                {analysesList.length > 0 ? (
-                  <>
-                    <p className="text-muted-foreground mt-0.5 text-sm tabular-nums">
-                      {analysesList.length} i arbeidsområdet
-                    </p>
-                    <p className="text-muted-foreground mt-2 max-w-2xl text-xs leading-relaxed">
-                      Klikk på tallet eller <strong className="text-foreground">Versjoner</strong>{" "}
-                      for å se alle lagrede øyeblikksbilder i et vindu. For å gjenopprette,
-                      slette eller forhåndsvise: åpne{" "}
-                      <strong className="text-foreground">Versjonskontroll</strong> fra popup
-                      eller under Innstillinger i analysen.
-                    </p>
-                  </>
-                ) : null}
+              <div className="flex items-center gap-2">
+                <Label htmlFor="ros-ana-sort" className="text-muted-foreground shrink-0 text-xs">
+                  Sorter
+                </Label>
+                <select
+                  id="ros-ana-sort"
+                  className="border-input bg-background flex h-10 rounded-lg border px-2 text-sm"
+                  value={analysisSort}
+                  onChange={(e) => setAnalysisSort(e.target.value as AnalysisSort)}
+                >
+                  <option value="updated">Sist oppdatert</option>
+                  <option value="title">Tittel A–Å</option>
+                  <option value="candidate">Prosess</option>
+                </select>
               </div>
             </div>
-            {analysesList.length > 0 ? (
-              <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-end">
-                <div className="relative min-w-[12rem] flex-1">
-                  <Search className="text-muted-foreground pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2" />
-                  <Input
-                    type="search"
-                    value={analysisSearch}
-                    onChange={(e) => setAnalysisSearch(e.target.value)}
-                    placeholder="Søk i tittel eller prosess …"
-                    className="pl-9"
-                    aria-label="Filtrer analyser"
-                  />
-                </div>
-                <div className="flex items-center gap-2">
-                  <Label htmlFor="ros-ana-sort" className="text-muted-foreground shrink-0 text-xs">
-                    Sorter
-                  </Label>
-                  <select
-                    id="ros-ana-sort"
-                    className="border-input bg-background flex h-10 rounded-lg border px-2 text-sm"
-                    value={analysisSort}
-                    onChange={(e) =>
-                      setAnalysisSort(e.target.value as AnalysisSort)
-                    }
-                  >
-                    <option value="updated">Sist oppdatert</option>
-                    <option value="title">Tittel A–Å</option>
-                    <option value="candidate">Prosess</option>
-                  </select>
-                </div>
+          ) : null}
+
+          {analysesList.length === 0 ? (
+            <div className="flex flex-col items-center gap-4 rounded-2xl border border-dashed bg-muted/5 py-14 text-center">
+              <div className="flex size-14 items-center justify-center rounded-full bg-primary/10">
+                <ClipboardList className="size-7 text-primary" />
               </div>
-            ) : null}
-            {analysesList.length === 0 ? (
-              <div className="flex flex-col items-center gap-4 rounded-2xl border border-dashed bg-muted/5 py-14 text-center">
-                <div className="flex size-14 items-center justify-center rounded-full bg-primary/10">
-                  <ClipboardList className="size-7 text-primary" />
-                </div>
-                <div className="max-w-md space-y-1">
-                  <p className="text-foreground text-sm font-medium">Ingen analyser ennå</p>
-                  <p className="text-muted-foreground text-xs leading-relaxed">
-                    Opprett en <strong className="text-foreground">mal</strong> under «Maler», deretter
-                    skjemaet til høyre eller kortet over.
-                  </p>
-                </div>
-              </div>
-            ) : filteredSortedAnalyses.length === 0 ? (
-              <div className="flex flex-col items-center gap-3 rounded-2xl border border-dashed bg-muted/5 py-10 text-center">
-                <Search className="size-8 text-muted-foreground/50" />
-                <p className="text-muted-foreground text-sm">
-                  Ingen analyser matcher søket.{" "}
-                  <button
-                    type="button"
-                    className="text-primary font-medium underline-offset-4 hover:underline"
-                    onClick={() => setAnalysisSearch("")}
-                  >
-                    Nullstill filter
-                  </button>
+              <div className="max-w-md space-y-1">
+                <p className="text-foreground text-sm font-medium">Ingen analyser ennå</p>
+                <p className="text-muted-foreground text-xs leading-relaxed">
+                  Opprett en <strong className="text-foreground">mal</strong> under «Maler», deretter
+                  klikk «Ny analyse».
                 </p>
               </div>
-            ) : (
-              <div className="overflow-hidden rounded-xl border border-border/50 bg-card shadow-sm">
-                <div className="overflow-x-auto">
-                  <table className="hidden w-full min-w-[52rem] caption-bottom border-collapse text-sm sm:table">
-                    <caption className="sr-only">
-                      Alle ROS-analyser i dette arbeidsområdet med antall lagrede versjoner
-                    </caption>
-                    <thead>
-                      <tr className="border-b border-border/60 bg-muted/25 text-left">
-                        <th scope="col" className="px-4 py-3 font-semibold">
-                          Tittel
-                        </th>
-                        <th scope="col" className="px-4 py-3 font-semibold">
-                          Prosess
-                        </th>
-                        <th scope="col" className="px-4 py-3 font-semibold">
-                          Mal
-                        </th>
-                        <th scope="col" className="px-4 py-3 font-semibold">
-                          Matrise
-                        </th>
-                        <th
-                          scope="col"
-                          className="px-4 py-3 font-semibold tabular-nums"
-                          title="Antall lagrede versjoner (øyeblikksbilder)"
-                        >
-                          Versjoner
-                        </th>
-                        <th scope="col" className="px-4 py-3 font-semibold">
-                          Oppdatert
-                        </th>
-                        <th scope="col" className="px-4 py-3 font-semibold">
-                          <span className="sr-only">Handlinger</span>
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {filteredSortedAnalyses.map((a) => {
-                        const tplName =
-                          (a as { templateName?: string | null }).templateName ??
-                          null;
-                        const versionCount =
-                          (a as { versionCount?: number }).versionCount ?? 0;
-                        return (
-                          <tr
-                            key={a._id}
-                            className="border-b border-border/40 transition-colors last:border-0 hover:bg-muted/20"
-                          >
-                            <td className="max-w-[min(280px,28vw)] px-4 py-3 align-middle">
-                              <Link
-                                href={`/w/${workspaceId}/ros/a/${a._id}`}
-                                className="font-medium text-foreground underline-offset-4 hover:text-primary hover:underline"
-                              >
-                                {a.title}
-                              </Link>
-                            </td>
-                            <td className="px-4 py-3 align-middle text-xs text-muted-foreground">
-                              {a.candidateName ? (
-                                <span>
-                                  {a.candidateName}{" "}
-                                  <span className="font-mono text-[11px]">
-                                    ({a.candidateCode})
-                                  </span>
-                                </span>
-                              ) : (
-                                <span className="italic">—</span>
-                              )}
-                            </td>
-                            <td
-                              className="max-w-[10rem] truncate px-4 py-3 align-middle text-xs text-muted-foreground"
-                              title={tplName ?? undefined}
-                            >
-                              {tplName ?? "—"}
-                            </td>
-                            <td className="px-4 py-3 align-middle tabular-nums text-xs text-muted-foreground">
-                              {a.rowLabels.length}×{a.colLabels.length}
-                            </td>
-                            <td className="px-4 py-3 align-middle tabular-nums text-xs">
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  setVersionsQuickDialog({
-                                    analysisId: a._id,
-                                    title: a.title,
-                                  })
-                                }
-                                className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 rounded-lg px-2 py-1 text-left transition-colors hover:bg-muted/60"
-                                title="Vis lagrede versjoner"
-                              >
-                                <History
-                                  className="size-3.5 shrink-0 opacity-70"
-                                  aria-hidden
+              <Button type="button" className="gap-2" onClick={() => setCreateDialogOpen(true)}>
+                <Plus className="size-4" aria-hidden />
+                Opprett første analyse
+              </Button>
+            </div>
+          ) : filteredSortedAnalyses.length === 0 ? (
+            <div className="flex flex-col items-center gap-3 rounded-2xl border border-dashed bg-muted/5 py-10 text-center">
+              <Search className="size-8 text-muted-foreground/50" />
+              <p className="text-muted-foreground text-sm">
+                Ingen analyser matcher søket.{" "}
+                <button
+                  type="button"
+                  className="text-primary font-medium underline-offset-4 hover:underline"
+                  onClick={() => setAnalysisSearch("")}
+                >
+                  Nullstill
+                </button>
+              </p>
+            </div>
+          ) : (
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+              {filteredSortedAnalyses.map((a) => {
+                const versionCount = (a as { versionCount?: number }).versionCount ?? 0;
+                const maxLvl = Math.max(0, ...a.matrixValues.flat().map((v) => Math.min(5, Math.max(0, Math.round(v)))));
+                return (
+                  <div
+                    key={a._id}
+                    className="group/card relative flex flex-col overflow-hidden rounded-xl border border-border/50 bg-card shadow-sm transition-all hover:border-primary/25 hover:shadow-md"
+                  >
+                    <Link
+                      href={`/w/${workspaceId}/ros/a/${a._id}`}
+                      className="flex flex-1 items-start gap-3 p-4"
+                    >
+                      <span
+                        className={cn(
+                          "flex size-10 shrink-0 items-center justify-center rounded-xl text-base font-bold tabular-nums",
+                          cellRiskClass(maxLvl),
+                        )}
+                      >
+                        {maxLvl}
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-semibold group-hover/card:text-primary">
+                          {a.title}
+                        </p>
+                        <p className="text-muted-foreground mt-0.5 text-xs">
+                          {a.candidateName ? (
+                            <>
+                              {a.candidateName}{" "}
+                              <span className="font-mono text-[10px]">({a.candidateCode})</span>
+                            </>
+                          ) : (
+                            <span className="italic">Ingen prosess</span>
+                          )}
+                        </p>
+                        <div className="mt-2 flex h-1.5 w-full overflow-hidden rounded-full bg-muted/50">
+                          {(() => {
+                            const flat = a.matrixValues.flat().map((v) => Math.min(5, Math.max(0, Math.round(v))));
+                            const counts = [0, 0, 0, 0, 0, 0];
+                            for (const v of flat) counts[v]++;
+                            const total = flat.length || 1;
+                            return [5, 4, 3, 2, 1, 0].map((lvl) =>
+                              counts[lvl] > 0 ? (
+                                <div
+                                  key={lvl}
+                                  className={cn("min-w-[2px]", cellRiskClass(lvl))}
+                                  style={{ width: `${(counts[lvl] / total) * 100}%` }}
                                 />
-                                <span className="tabular-nums">{versionCount}</span>
-                              </button>
-                            </td>
-                            <td className="whitespace-nowrap px-4 py-3 align-middle text-xs text-muted-foreground">
-                              {formatRelative(a.updatedAt)}
-                            </td>
-                            <td className="px-4 py-3 align-middle">
-                              <div className="flex flex-wrap items-center gap-1.5">
-                                <Link
-                                  href={`/w/${workspaceId}/ros/a/${a._id}`}
-                                  className={cn(
-                                    buttonVariants({
-                                      variant: "outline",
-                                      size: "sm",
-                                    }),
-                                    "h-8",
-                                  )}
-                                >
-                                  Åpne
-                                </Link>
-                                <Button
-                                  type="button"
-                                  variant="secondary"
-                                  size="sm"
-                                  className="h-8 gap-1"
-                                  title="Vis lagrede versjoner"
-                                  onClick={() =>
-                                    setVersionsQuickDialog({
-                                      analysisId: a._id,
-                                      title: a.title,
-                                    })
-                                  }
-                                >
-                                  <History className="size-3.5" aria-hidden />
-                                  Versjoner
-                                </Button>
-                                <Button
-                                  type="button"
-                                  variant="ghost"
-                                  size="icon"
-                                  className="size-8 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-                                  title="Slett analyse"
-                                  onClick={() => requestRemoveAnalysis(a)}
-                                >
-                                  <Trash2 className="size-4" aria-hidden />
-                                </Button>
-                              </div>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-
-                <ul className="divide-border/50 space-y-0 divide-y sm:hidden">
-                  {filteredSortedAnalyses.map((a) => {
-                    const versionCount =
-                      (a as { versionCount?: number }).versionCount ?? 0;
-                    return (
-                    <li key={a._id} className="group/card relative">
+                              ) : null,
+                            );
+                          })()}
+                        </div>
+                        <div className="text-muted-foreground mt-2 flex flex-wrap gap-x-3 gap-y-0.5 text-[10px]">
+                          <span>{a.rowLabels.length}×{a.colLabels.length}</span>
+                          <span>{formatRelative(a.updatedAt)}</span>
+                        </div>
+                      </div>
+                    </Link>
+                    <div className="flex items-center gap-1.5 border-t border-border/40 bg-muted/10 px-3 py-2">
+                      <button
+                        type="button"
+                        onClick={() => setVersionsQuickDialog({ analysisId: a._id, title: a.title })}
+                        className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] transition-colors hover:bg-muted/60"
+                      >
+                        <History className="size-3" aria-hidden />
+                        {versionCount} vers.
+                      </button>
+                      <span className="flex-1" />
                       <Link
                         href={`/w/${workspaceId}/ros/a/${a._id}`}
-                        className="flex items-center gap-4 p-4 transition-colors hover:bg-muted/25"
+                        className={cn(buttonVariants({ variant: "ghost", size: "sm" }), "h-7 text-xs")}
                       >
-                        <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 transition-colors group-hover/card:bg-primary/15">
-                          <Shield className="size-5 text-primary" />
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <p className="truncate font-medium">{a.title}</p>
-                          <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
-                            {a.candidateName ? (
-                              <span>
-                                {a.candidateName}{" "}
-                                <span className="font-mono">({a.candidateCode})</span>
-                              </span>
-                            ) : (
-                              <span className="italic">Ingen prosess koblet</span>
-                            )}
-                            <span className="inline-flex items-center gap-1">
-                              <Grid3x3 className="size-3" aria-hidden />
-                              {a.rowLabels.length}×{a.colLabels.length}
-                            </span>
-                            <span className="inline-flex items-center gap-1">
-                              <Clock className="size-3" aria-hidden />
-                              {formatRelative(a.updatedAt)}
-                            </span>
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.preventDefault();
-                                e.stopPropagation();
-                                setVersionsQuickDialog({
-                                  analysisId: a._id,
-                                  title: a.title,
-                                });
-                              }}
-                              className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 rounded-md px-1 py-0.5 underline-offset-4 hover:underline"
-                            >
-                              <History className="size-3" aria-hidden />
-                              {versionCount} vers.
-                            </button>
-                          </div>
-                        </div>
-                        <ArrowRight className="size-4 shrink-0 text-muted-foreground/40 transition-transform group-hover/card:translate-x-0.5 group-hover/card:text-primary" />
+                        Åpne
                       </Link>
-                      <div className="mt-3 flex flex-wrap gap-2 px-4 pb-2">
-                        <Button
-                          type="button"
-                          variant="secondary"
-                          size="sm"
-                          className="h-8 gap-1"
-                          onClick={() =>
-                            setVersionsQuickDialog({
-                              analysisId: a._id,
-                              title: a.title,
-                            })
-                          }
-                        >
-                          <History className="size-3.5" aria-hidden />
-                          Versjoner
-                        </Button>
-                      </div>
-                      <button
+                      <Button
                         type="button"
-                        className="absolute right-2 top-3 rounded-md p-1.5 text-muted-foreground/50 opacity-0 transition-all hover:bg-destructive/10 hover:text-destructive group-hover/card:opacity-100"
-                        title="Slett analyse"
+                        variant="ghost"
+                        size="icon"
+                        className="size-7 text-muted-foreground/60 hover:bg-destructive/10 hover:text-destructive"
+                        title="Slett"
                         onClick={() => requestRemoveAnalysis(a)}
                       >
-                        <Trash2 className="size-3.5" />
-                      </button>
-                    </li>
-                  );
-                  })}
-                </ul>
-              </div>
-            )}
+                        <Trash2 className="size-3.5" aria-hidden />
+                      </Button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-8 gap-1.5 text-xs"
+              onClick={() => setScaleRefOpen(true)}
+            >
+              <Info className="size-3.5 text-primary" aria-hidden />
+              Skalareferanse
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-8 gap-1.5 text-xs"
+              onClick={() => setMethodHelpOpen(true)}
+            >
+              <HelpCircle className="size-3.5" aria-hidden />
+              Hjelp og metode
+            </Button>
           </div>
 
-          <Card className="h-fit border-primary/15 bg-gradient-to-b from-primary/[0.04] to-card shadow-md">
-            <CardHeader className="pb-3">
-              <CardTitle className="flex items-center gap-2 text-base">
-                <div className="flex size-7 items-center justify-center rounded-lg bg-primary/10">
-                  <Plus className="size-4 text-primary" />
-                </div>
-                Ny ROS-analyse
-              </CardTitle>
-              <CardDescription className="text-xs">
-                Opprett en analyse, koble prosess og PVV etterpå.
-              </CardDescription>
-            </CardHeader>
-            <form onSubmit={(e) => void submitAnalysis(e)}>
-              <CardContent className="space-y-3">
-                {templatesList.length === 0 ? (
-                  <Alert className="border-amber-500/35 bg-amber-500/[0.06]">
-                    <Info className="text-amber-700 dark:text-amber-400" />
-                    <AlertTitle>Ingen mal</AlertTitle>
-                    <AlertDescription>
-                      <button
-                        type="button"
-                        className="text-primary font-medium underline underline-offset-4"
-                        onClick={() => setTab("maler")}
-                      >
-                        Opprett en mal
-                      </button>{" "}
-                      før du lager analyse.
-                    </AlertDescription>
-                  </Alert>
-                ) : null}
-                <div className="space-y-1.5">
-                  <Label htmlFor="ana-title">Tittel</Label>
-                  <Input
-                    id="ana-title"
-                    value={anaTitle}
-                    onChange={(e) => setAnaTitle(e.target.value)}
-                    placeholder="F.eks. ROS — Rekruttering"
-                    required
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="ana-tpl">Mal</Label>
-                  <select
-                    id="ana-tpl"
-                    className="border-input bg-background flex h-10 w-full rounded-lg border px-2 text-sm"
-                    value={anaTemplateId}
-                    onChange={(e) =>
-                      setAnaTemplateId(
-                        e.target.value === ""
-                          ? ""
-                          : (e.target.value as Id<"rosTemplates">),
-                      )
-                    }
-                    required
-                  >
-                    <option value="">— Velg mal —</option>
-                    {templatesList.map((t) => (
-                      <option key={t._id} value={t._id}>
-                        {t.name} ({t.rowLabels.length}×{t.colLabels.length})
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <details className="text-xs">
-                  <summary className="cursor-pointer text-muted-foreground hover:text-foreground">
-                    Koble prosess nå (valgfritt)
-                  </summary>
-                  <div className="mt-2 space-y-1.5">
-                    <Label htmlFor="ana-cand" className="text-xs">Prosess</Label>
+          <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
+            <DialogContent size="lg" titleId="ros-create-title" descriptionId="ros-create-desc">
+              <DialogHeader>
+                <p id="ros-create-title" className="font-heading text-lg font-semibold">
+                  Ny ROS-analyse
+                </p>
+                <p id="ros-create-desc" className="text-muted-foreground text-sm">
+                  Opprett en analyse, koble prosess og PVV etterpå.
+                </p>
+              </DialogHeader>
+              <DialogBody>
+                <form id="ros-create-form" onSubmit={(e) => void submitAnalysis(e)} className="space-y-4">
+                  {templatesList.length === 0 ? (
+                    <Alert className="border-amber-500/35 bg-amber-500/[0.06]">
+                      <Info className="text-amber-700 dark:text-amber-400" />
+                      <AlertTitle>Ingen mal</AlertTitle>
+                      <AlertDescription>
+                        <button
+                          type="button"
+                          className="text-primary font-medium underline underline-offset-4"
+                          onClick={() => { setCreateDialogOpen(false); setTab("maler"); }}
+                        >
+                          Opprett en mal
+                        </button>{" "}
+                        før du lager analyse.
+                      </AlertDescription>
+                    </Alert>
+                  ) : null}
+                  <div className="space-y-1.5">
+                    <Label htmlFor="ana-title">Tittel</Label>
+                    <Input
+                      id="ana-title"
+                      value={anaTitle}
+                      onChange={(e) => setAnaTitle(e.target.value)}
+                      placeholder="F.eks. ROS — Rekruttering"
+                      required
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="ana-tpl">Mal</Label>
+                    <select
+                      id="ana-tpl"
+                      className="border-input bg-background flex h-10 w-full rounded-lg border px-2 text-sm"
+                      value={anaTemplateId}
+                      onChange={(e) =>
+                        setAnaTemplateId(e.target.value === "" ? "" : (e.target.value as Id<"rosTemplates">))
+                      }
+                      required
+                    >
+                      <option value="">— Velg mal —</option>
+                      {templatesList.map((t) => (
+                        <option key={t._id} value={t._id}>
+                          {t.name} ({t.rowLabels.length}×{t.colLabels.length})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="ana-cand" className="text-xs">Prosess (valgfritt)</Label>
                     <select
                       id="ana-cand"
-                      className="border-input bg-background flex h-9 w-full rounded-lg border px-2 text-xs"
+                      className="border-input bg-background flex h-10 w-full rounded-lg border px-2 text-sm"
                       value={anaCandidateId}
                       onChange={(e) => {
                         const val = e.target.value;
                         setAnaCandidateId(val === "" ? "" : (val as Id<"candidates">));
                         if (val && candidates) {
                           const c = candidates.find((x) => x._id === val);
-                          if (c && !anaTitle.trim()) {
-                            setAnaTitle(`ROS — ${c.name} (${c.code})`);
-                          }
+                          if (c && !anaTitle.trim()) setAnaTitle(`ROS — ${c.name} (${c.code})`);
                         }
                       }}
                     >
                       <option value="">— Ingen (koble senere) —</option>
                       {(candidates ?? []).map((c) => (
-                        <option key={c._id} value={c._id}>
-                          {c.name} ({c.code})
-                        </option>
+                        <option key={c._id} value={c._id}>{c.name} ({c.code})</option>
                       ))}
                     </select>
-                    <p className="text-[10px] text-muted-foreground leading-snug">
-                      Du kan koble prosess og PVV inne i analysen etterpå.
-                    </p>
                   </div>
-                </details>
-              </CardContent>
-              <CardFooter className="border-t">
+                </form>
+              </DialogBody>
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={() => setCreateDialogOpen(false)}>
+                  Avbryt
+                </Button>
                 <Button
                   type="submit"
-                  className="w-full"
-                  disabled={
-                    busy ||
-                    !anaTemplateId ||
-                    !anaTitle.trim() ||
-                    templatesList.length === 0
-                  }
+                  form="ros-create-form"
+                  disabled={busy || !anaTemplateId || !anaTitle.trim() || templatesList.length === 0}
                 >
                   {busy ? "Oppretter …" : "Opprett analyse"}
                 </Button>
-              </CardFooter>
-            </form>
-          </Card>
-        </div>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
+          <Dialog open={scaleRefOpen} onOpenChange={setScaleRefOpen}>
+            <DialogContent size="lg" titleId="ros-scale-title" descriptionId="ros-scale-desc">
+              <DialogHeader>
+                <p id="ros-scale-title" className="font-heading text-lg font-semibold">Skalareferanse</p>
+                <p id="ros-scale-desc" className="text-muted-foreground text-sm">
+                  Hva betyr tallene 1, 2, 3 … på aksene i risikomatrisen.
+                </p>
+              </DialogHeader>
+              <DialogBody>
+                <RosScaleReference
+                  axis={rosUiPrefs.scaleReferenceAxis}
+                  onAxisChange={(axis) => updateRosUiPrefs({ scaleReferenceAxis: axis })}
+                />
+              </DialogBody>
+            </DialogContent>
+          </Dialog>
+
+          <Dialog open={methodHelpOpen} onOpenChange={setMethodHelpOpen}>
+            <DialogContent size="lg" titleId="ros-method-title" descriptionId="ros-method-desc">
+              <DialogHeader>
+                <p id="ros-method-title" className="font-heading text-lg font-semibold">Hjelp og metode</p>
+                <p id="ros-method-desc" className="text-muted-foreground text-sm">
+                  Metodikk, begreper og veiledning for ROS-analyse.
+                </p>
+              </DialogHeader>
+              <DialogBody>
+                <RosMethodologyGuide workspaceId={workspaceId} variant="compact" />
+              </DialogBody>
+            </DialogContent>
+          </Dialog>
       </>
       )}
 

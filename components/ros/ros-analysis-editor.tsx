@@ -1443,88 +1443,67 @@ export function RosAnalysisEditor({
   }
 
   return (
-    <div className="space-y-6 pb-28">
-      <div className="relative overflow-hidden rounded-3xl border border-border/40 bg-card shadow-[0_1px_2px_rgba(0,0,0,0.04),0_12px_40px_-12px_rgba(0,0,0,0.08)] ring-1 ring-black/[0.04] dark:shadow-[0_1px_0_rgba(255,255,255,0.06)_inset] dark:ring-white/[0.06]">
-        <div className="from-primary/[0.07] pointer-events-none absolute inset-0 bg-gradient-to-br via-transparent to-muted/30" />
-        <div className="relative flex flex-col gap-5 p-5 sm:flex-row sm:items-start sm:justify-between sm:p-7">
-          <div className="min-w-0">
-            <Link
-              href={`/w/${workspaceId}/ros`}
-              className="text-muted-foreground hover:text-foreground mb-3 inline-flex items-center gap-1.5 text-[13px] font-medium transition-colors"
-            >
-              <ChevronLeft className="size-4 opacity-70" aria-hidden />
-              Tilbake til ROS
-            </Link>
-            <p className="text-muted-foreground text-[11px] font-semibold uppercase tracking-[0.12em]">
-              ROS-analyse
-            </p>
-            <h1 className="font-heading mt-1 text-2xl font-semibold tracking-tight text-foreground sm:text-[1.75rem]">
+    <div className="space-y-4 pb-28">
+      <div className="sticky top-0 z-20 -mx-1 border-b border-border/50 bg-background/95 px-1 pb-3 pt-2 backdrop-blur-md supports-[backdrop-filter]:bg-background/85">
+        <div className="flex items-center gap-3">
+          <Link
+            href={`/w/${workspaceId}/ros`}
+            className="text-muted-foreground hover:text-foreground flex size-9 shrink-0 items-center justify-center rounded-lg transition-colors hover:bg-muted/60"
+            title="Tilbake til ROS"
+          >
+            <ChevronLeft className="size-5" aria-hidden />
+          </Link>
+          <div className="min-w-0 flex-1">
+            <h1 className="font-heading truncate text-base font-semibold tracking-tight text-foreground sm:text-lg">
               {data.title}
             </h1>
-            <p className="text-muted-foreground mt-3 flex flex-wrap items-center gap-x-2 gap-y-1.5 text-[14px] leading-relaxed">
+            <div className="text-muted-foreground flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs">
               {data.candidateName ? (
-                <span className="inline-flex items-center gap-1.5 rounded-full border border-border/50 bg-muted/40 px-3 py-1 text-[13px] ring-1 ring-black/[0.03] dark:ring-white/[0.05]">
-                  <span className="text-muted-foreground">Prosess</span>
-                  <span className="text-foreground font-medium">
-                    {data.candidateName}
-                  </span>
-                  <span className="font-mono text-xs opacity-90">({data.candidateCode})</span>
+                <span>
+                  {data.candidateName}{" "}
+                  <span className="font-mono text-[10px]">({data.candidateCode})</span>
                 </span>
               ) : (
-                <span className="italic">Ingen prosess koblet</span>
+                <span className="italic">Ingen prosess</span>
               )}
               {data.linkedAssessments.length > 0 ? (
-                <span className="flex flex-wrap items-center gap-1.5">
-                  <Link2 className="text-muted-foreground size-3.5" aria-hidden />
-                  {data.linkedAssessments.map((l) => (
-                    <Link
-                      key={l.linkId}
-                      href={`/w/${workspaceId}/a/${l.assessmentId}`}
-                      className="text-primary font-medium hover:underline"
-                    >
-                      {l.title}
-                    </Link>
-                  ))}
-                </span>
+                <>
+                  <span className="text-border">·</span>
+                  <span className="flex items-center gap-1">
+                    <Link2 className="size-3" aria-hidden />
+                    {data.linkedAssessments.map((l, i) => (
+                      <span key={l.linkId}>
+                        {i > 0 ? ", " : ""}
+                        <Link href={`/w/${workspaceId}/a/${l.assessmentId}`} className="text-primary hover:underline">
+                          {l.title}
+                        </Link>
+                      </span>
+                    ))}
+                  </span>
+                </>
               ) : null}
-              {data.legacyAssessmentId && data.legacyAssessmentTitle ? (
-                <Badge variant="outline" className="font-normal">
-                  Eldre kobling: {data.legacyAssessmentTitle}
-                </Badge>
-              ) : null}
-            </p>
+            </div>
           </div>
-          <div className="flex shrink-0 flex-wrap items-center gap-2">
+          <div className="flex shrink-0 items-center gap-1.5">
             <Button
               type="button"
+              size="sm"
               onClick={() => void save()}
               disabled={saving}
-              title={
-                dirty
-                  ? "Lagre endringer og opprett ny versjon"
-                  : "Alt er synkronisert. Klikk for å lagre en ny versjon (øyeblikksbilde)."
-              }
-              className="min-w-[7.5rem] font-semibold shadow-sm"
+              className="gap-1.5 font-semibold shadow-sm"
             >
-              {saving
-                ? "Lagrer …"
-                : dirty
-                  ? "Lagre endringer"
-                  : "Lagre versjon"}
+              {saving ? "Lagrer …" : dirty ? "Lagre" : "Versjon"}
+            </Button>
+            <Button type="button" variant="ghost" size="icon" className="size-8" title="Eksporter PDF" onClick={exportPdf}>
+              <FileDown className="size-4" aria-hidden />
             </Button>
             <Button
               type="button"
-              variant="outline"
-              title="PDF med alle faner: risiko, oppgaver, oppsummering, PVV-detaljer, innstillinger, logg og matriser (nåværende visning, inkl. ulagrede celler)."
-              onClick={exportPdf}
-            >
-              <FileDown className="mr-2 size-4" aria-hidden />
-              Eksporter PDF
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              disabled={isDeleting || data === undefined || data === null}
+              variant="ghost"
+              size="icon"
+              className="size-8 text-muted-foreground hover:text-destructive"
+              title="Slett analyse"
+              disabled={isDeleting}
               onClick={() => {
                 if (!data) return;
                 toastDeleteWithUndo({
@@ -1539,27 +1518,11 @@ export function RosAnalysisEditor({
                 });
               }}
             >
-              {isDeleting ? "Sletter…" : "Slett"}
+              <Trash2 className="size-4" aria-hidden />
             </Button>
           </div>
         </div>
       </div>
-
-      <details className="group border-border/60 bg-muted/25 text-muted-foreground rounded-xl border px-3 py-2 text-xs leading-relaxed">
-        <summary className="cursor-pointer list-none font-medium text-foreground marker:hidden [&::-webkit-details-marker]:hidden">
-          <span className="inline-flex items-center gap-1.5">
-            Autosave
-            <ChevronRight className="size-3.5 transition-transform group-open:rotate-90" />
-          </span>
-        </summary>
-        <p className="mt-2 pl-0.5">
-          Automatisk lagring (uten ny versjon) skjer etter kort pause og ved
-          fanebytte. «Lagre endringer» og «Lagre versjon» lagrer på serveren og
-          oppretter et nytt øyeblikksbilde du kan gjenopprette under
-          Innstillinger. Nettleseren kan advare ved lukking hvis det fortsatt er
-          ulagrede endringer.
-        </p>
-      </details>
 
       <p className="sr-only">
         Piltastene venstre og høyre bytter del når fokus ikke er i et felt. På
@@ -1568,7 +1531,7 @@ export function RosAnalysisEditor({
       </p>
 
       <nav
-        className="flex gap-1 overflow-x-auto rounded-2xl border border-border/45 bg-muted/35 p-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] [-ms-overflow-style:none] [scrollbar-width:none] backdrop-blur-sm dark:bg-muted/20 dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] [&::-webkit-scrollbar]:hidden"
+        className="relative flex gap-0 overflow-x-auto border-b border-border/50 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
         aria-label="ROS-seksjoner"
       >
         {ROS_EDITOR_SECTIONS.map((sec, i) => {
@@ -1579,21 +1542,16 @@ export function RosAnalysisEditor({
               type="button"
               onClick={() => setRosSection(i)}
               className={cn(
-                "shrink-0 rounded-lg px-3 py-2.5 text-left text-sm font-medium transition-[color,box-shadow,background] duration-200 sm:min-w-0 sm:px-4",
+                "relative shrink-0 px-4 pb-2.5 pt-2 text-sm font-medium transition-colors duration-150",
                 active
-                  ? "bg-card text-foreground shadow-[0_1px_3px_rgba(0,0,0,0.08)] ring-1 ring-black/[0.06] dark:shadow-[0_1px_3px_rgba(0,0,0,0.35)] dark:ring-white/[0.08]"
-                  : "text-muted-foreground hover:bg-card/50 hover:text-foreground",
+                  ? "text-foreground"
+                  : "text-muted-foreground hover:text-foreground/80",
               )}
             >
-              <span className="block leading-tight">{sec.label}</span>
-              <span
-                className={cn(
-                  "mt-0.5 hidden text-[11px] font-normal leading-snug sm:block",
-                  active ? "text-muted-foreground" : "text-muted-foreground/80",
-                )}
-              >
-                {sec.hint}
-              </span>
+              <span className="leading-tight">{sec.label}</span>
+              {active ? (
+                <span className="bg-primary absolute inset-x-0 -bottom-px h-0.5 rounded-full" />
+              ) : null}
             </button>
           );
         })}
@@ -2419,64 +2377,62 @@ export function RosAnalysisEditor({
 
       {/* Dead old sections removed — bottom nav follows */}
 
-      <div className="fixed bottom-0 left-0 right-0 z-30 border-t border-border/60 bg-background/95 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-2 backdrop-blur-md supports-[backdrop-filter]:bg-background/85">
-        <div className="mx-auto grid max-w-6xl grid-cols-[minmax(0,1fr)_minmax(0,auto)_minmax(0,1fr)] items-center gap-2 px-3 sm:gap-3 sm:px-4">
-          <div className="flex justify-start">
+      <div className="fixed bottom-0 left-0 right-0 z-30 border-t border-border/50 bg-background/95 pb-[max(0.375rem,env(safe-area-inset-bottom))] pt-1.5 shadow-[0_-2px_8px_rgba(0,0,0,0.06)] backdrop-blur-md supports-[backdrop-filter]:bg-background/85">
+        <div className="mx-auto flex max-w-6xl items-center gap-2 px-3 sm:px-4">
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-9 gap-1 px-2.5 text-xs font-medium"
+            onClick={() => setRosSection((s) => Math.max(0, s - 1))}
+            disabled={rosSection <= 0}
+          >
+            <ChevronLeft className="size-4" aria-hidden />
+            <span className="hidden sm:inline">Forrige</span>
+          </Button>
+          <div className="flex flex-1 items-center justify-center gap-1.5">
+            {ROS_EDITOR_SECTIONS.map((_, i) => (
+              <button
+                key={i}
+                type="button"
+                onClick={() => setRosSection(i)}
+                className={cn(
+                  "rounded-full transition-all",
+                  i === rosSection
+                    ? "bg-primary h-2 w-6"
+                    : "bg-muted-foreground/25 hover:bg-muted-foreground/40 size-2",
+                )}
+                aria-label={`Steg ${i + 1}: ${ROS_EDITOR_SECTIONS[i]?.label}`}
+              />
+            ))}
+          </div>
+          {rosSection >= ROS_EDITOR_SECTIONS.length - 1 ? (
             <Button
               type="button"
-              variant="outline"
-              className="h-11 min-h-[44px] gap-1.5 px-3 text-[13px] font-medium sm:h-10 sm:min-h-0 sm:px-4"
-              onClick={() => setRosSection((s) => Math.max(0, s - 1))}
-              disabled={rosSection <= 0}
+              size="sm"
+              className="h-9 gap-1 px-3 text-xs font-semibold shadow-sm"
+              disabled={saving}
+              onClick={async () => {
+                const ok = await save();
+                if (!ok) return;
+                router.push(`/w/${workspaceId}/ros`);
+              }}
             >
-              <ChevronLeft className="size-4 shrink-0" aria-hidden />
-              Forrige
+              {saving ? "Lagrer …" : "Ferdig"}
+              <ChevronRight className="size-4" aria-hidden />
             </Button>
-          </div>
-          <div className="flex min-w-0 flex-col items-center justify-center gap-0 px-1 text-center">
-            <span className="text-muted-foreground text-[10px] font-semibold uppercase tracking-wider">
-              Steg {rosSection + 1} av {ROS_EDITOR_SECTIONS.length}
-            </span>
-            <span className="text-foreground max-w-[min(100%,14rem)] truncate text-xs font-semibold sm:max-w-none sm:text-[13px]">
-              {ROS_EDITOR_SECTIONS[rosSection]?.label ?? ""}
-            </span>
-          </div>
-          <div className="flex justify-end">
-            {rosSection >= ROS_EDITOR_SECTIONS.length - 1 ? (
-              <Button
-                type="button"
-                className="h-11 min-h-[44px] gap-1.5 px-4 text-[13px] font-semibold shadow-sm sm:h-10 sm:min-h-0"
-                disabled={saving}
-                onClick={async () => {
-                  const ok = await save();
-                  if (!ok) return;
-                  router.push(`/w/${workspaceId}/ros`);
-                }}
-              >
-                {saving ? (
-                  "Lagrer …"
-                ) : (
-                  <>
-                    Ferdig
-                    <ChevronRight className="size-4 shrink-0" aria-hidden />
-                  </>
-                )}
-              </Button>
-            ) : (
-              <Button
-                type="button"
-                className="h-11 min-h-[44px] gap-1.5 px-4 text-[13px] font-semibold shadow-sm sm:h-10 sm:min-h-0"
-                onClick={() =>
-                  setRosSection((s) =>
-                    Math.min(ROS_EDITOR_SECTIONS.length - 1, s + 1),
-                  )
-                }
-              >
-                Neste
-                <ChevronRight className="size-4 shrink-0" aria-hidden />
-              </Button>
-            )}
-          </div>
+          ) : (
+            <Button
+              type="button"
+              size="sm"
+              className="h-9 gap-1 px-3 text-xs font-semibold shadow-sm"
+              onClick={() => setRosSection((s) => Math.min(ROS_EDITOR_SECTIONS.length - 1, s + 1))}
+            >
+              <span className="hidden sm:inline">Neste</span>
+              <span className="sm:hidden">→</span>
+              <ChevronRight className="hidden size-4 sm:block" aria-hidden />
+            </Button>
+          )}
         </div>
       </div>
     </div>
