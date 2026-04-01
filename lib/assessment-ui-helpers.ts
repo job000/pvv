@@ -73,3 +73,53 @@ export function priorityBorderAccentClass(score: number): string {
   if (score >= 45) return "border-l-amber-500/80";
   return "border-l-slate-400/60";
 }
+
+/** Fyllfarge på hovedprioritet (0–100). */
+export function priorityFillClass(score: number): string {
+  if (!Number.isFinite(score)) return "bg-slate-400";
+  if (score >= 70) return "bg-emerald-500";
+  if (score >= 45) return "bg-amber-500";
+  return "bg-slate-400";
+}
+
+export type PriorityBandTone = "high" | "mid" | "low";
+
+/** Kort norsk forklaring av porteføljeprioritet for lister og kort. */
+export function priorityBandLabel(score: number): {
+  label: string;
+  short: string;
+  tone: PriorityBandTone;
+} {
+  if (!Number.isFinite(score)) {
+    return { label: "Ukjent prioritet", short: "—", tone: "low" };
+  }
+  if (score >= 70) {
+    return { label: "Høy prioritet i porteføljen", short: "Høy", tone: "high" };
+  }
+  if (score >= 45) {
+    return {
+      label: "Middels prioritet i porteføljen",
+      short: "Middels",
+      tone: "mid",
+    };
+  }
+  return {
+    label: "Lavere prioritet — kan vurderes senere",
+    short: "Lavere",
+    tone: "low",
+  };
+}
+
+/** Badge-styling som matcher prioriteringsbånd. */
+export function priorityBandBadgeClass(score: number): string {
+  if (!Number.isFinite(score)) {
+    return "border-transparent bg-muted text-muted-foreground";
+  }
+  if (score >= 70) {
+    return "border-emerald-500/25 bg-emerald-500/12 text-emerald-900 dark:text-emerald-100";
+  }
+  if (score >= 45) {
+    return "border-amber-500/30 bg-amber-500/12 text-amber-950 dark:text-amber-100";
+  }
+  return "border-border bg-muted/80 text-foreground";
+}

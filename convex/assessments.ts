@@ -72,6 +72,8 @@ async function refreshCachedPriority(
     cachedPriorityScore: computed.priorityScore,
     cachedAp: computed.ap,
     cachedCriticality: computed.criticality,
+    cachedEase: computed.ease,
+    cachedEaseLabel: computed.easeLabel,
   });
 }
 
@@ -365,6 +367,8 @@ export const create = mutation({
       cachedPriorityScore: computed.priorityScore,
       cachedAp: computed.ap,
       cachedCriticality: computed.criticality,
+      cachedEase: computed.ease,
+      cachedEaseLabel: computed.easeLabel,
       kanbanRank: now,
     });
     await ctx.db.insert("assessmentCollaborators", {
@@ -545,6 +549,8 @@ export const createVersion = mutation({
       cachedPriorityScore: computed.priorityScore,
       cachedAp: computed.ap,
       cachedCriticality: computed.criticality,
+      cachedEase: computed.ease,
+      cachedEaseLabel: computed.easeLabel,
     });
     return nextVersion;
   },

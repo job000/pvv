@@ -367,6 +367,10 @@ export default defineSchema({
     cachedAp: v.optional(v.number()),
     /** Viktighet / konsekvens % — cache for oversikter */
     cachedCriticality: v.optional(v.number()),
+    /** Implementeringskompleksitet % — cache (høyere = enklere å bygge) */
+    cachedEase: v.optional(v.number()),
+    /** Enkel / Middels / Vanskelig — fra siste utkast */
+    cachedEaseLabel: v.optional(v.string()),
     /** 0–100 manuell justering av prioritet (overstyrer visning når satt) */
     manualPriorityOverride: v.optional(v.number()),
     /** Rekkefølge i Kanban-kolonne (lavere = høyere) */

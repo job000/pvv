@@ -40,10 +40,14 @@ import {
   compliancePlainLine,
   effectiveAssessmentPriority,
   formatRelativeUpdatedAt,
+  priorityBandBadgeClass,
+  priorityBandLabel,
   priorityBorderAccentClass,
+  priorityFillClass,
 } from "@/lib/assessment-ui-helpers";
 import { cn } from "@/lib/utils";
 import {
+  AlertTriangle,
   ChevronRight,
   ExternalLink,
   GitBranch,
@@ -51,10 +55,14 @@ import {
   Loader2,
   Plus,
   Search,
+  Shield,
   Sparkles,
   Trash2,
   Users,
+  Wrench,
+  Zap,
 } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 
 import { WorkspaceDeleteDialog } from "@/components/workspace/workspace-delete-dialog";
 import { useRouter } from "next/navigation";
@@ -71,6 +79,54 @@ import { WorkspaceCandidateRow } from "./workspace-candidate-row";
 import { WorkspaceGithubIntegrationCard } from "./workspace-github-integration-card";
 import { ProcessCoverageOverview } from "./process-coverage-overview";
 import { ProsessregisterHubLead } from "./prosessregister-hub-lead";
+
+function AssessmentListMetricBar({
+  label,
+  value,
+  icon: Icon,
+  barClass,
+}: {
+  label: string;
+  value: number | null | undefined;
+  icon: LucideIcon;
+  barClass: string;
+}) {
+  const pct =
+    value == null || !Number.isFinite(value)
+      ? null
+      : Math.min(100, Math.max(0, value));
+  return (
+    <div className="space-y-1">
+      <div className="flex items-center justify-between gap-2 text-[11px]">
+        <span className="text-muted-foreground flex min-w-0 items-center gap-1.5 font-medium">
+          <Icon
+            className="text-muted-foreground/85 size-3.5 shrink-0"
+            aria-hidden
+          />
+          <span className="truncate">{label}</span>
+        </span>
+        {pct != null ? (
+          <span className="text-foreground shrink-0 tabular-nums font-semibold">
+            {pct.toFixed(0)}%
+          </span>
+        ) : (
+          <span className="text-muted-foreground shrink-0">—</span>
+        )}
+      </div>
+      <div
+        className="bg-muted/70 h-1.5 overflow-hidden rounded-full ring-1 ring-black/[0.04] dark:ring-white/[0.06]"
+        aria-hidden
+      >
+        {pct != null ? (
+          <div
+            className={cn("h-full rounded-full transition-[width]", barClass)}
+            style={{ width: `${pct}%` }}
+          />
+        ) : null}
+      </div>
+    </div>
+  );
+}
 
 /** Rad fra `listGithubProjectItemsInStatusColumn` — brukt i prosessregister-UI. */
 type GithubColumnItemRow = {
@@ -2452,6 +2508,9 @@ export function WorkspaceAssessmentsPanel({
   const [statusFilter, setStatusFilter] = useState<PipelineStatus | "all">(
     "all",
   );
+  const [sortBy, setSortBy] = useState<
+    "priority" | "updated" | "ap" | "criticality" | "ease"
+  >("priority");
 
   const filteredAssessments = useMemo(() => {
     let rows = assessments ?? [];
@@ -2464,8 +2523,58 @@ export function WorkspaceAssessmentsPanel({
         (a) => normalizePipelineStatus(a.pipelineStatus) === statusFilter,
       );
     }
-    return rows;
-  }, [assessments, search, statusFilter]);
+    const copy = [...rows];
+    switch (sortBy) {
+      case "priority":
+        copy.sort((a, b) => {
+          const d =
+            effectiveAssessmentPriority(b) - effectiveAssessmentPriority(a);
+          if (d !== 0) return d;
+          return b.updatedAt - a.updatedAt;
+        });
+        break;
+      case "updated":
+        copy.sort((a, b) => b.updatedAt - a.updatedAt);
+        break;
+      case "ap":
+        copy.sort((a, b) => {
+          const x = a.cachedAp ?? -1;
+          const y = b.cachedAp ?? -1;
+          return y - x;
+        });
+        break;
+      case "criticality":
+        copy.sort((a, b) => {
+          const x = a.cachedCriticality ?? -1;
+          const y = b.cachedCriticality ?? -1;
+          return y - x;
+        });
+        break;
+      case "ease":
+        copy.sort((a, b) => {
+          const x = a.cachedEase ?? -1;
+          const y = b.cachedEase ?? -1;
+          return y - x;
+        });
+        break;
+      default:
+        break;
+    }
+    return copy;
+  }, [assessments, search, statusFilter, sortBy]);
+
+  const priorityDistribution = useMemo(() => {
+    let high = 0;
+    let mid = 0;
+    let low = 0;
+    for (const row of filteredAssessments) {
+      const p = effectiveAssessmentPriority(row);
+      if (p >= 70) high += 1;
+      else if (p >= 45) mid += 1;
+      else low += 1;
+    }
+    return { high, mid, low };
+  }, [filteredAssessments]);
 
   if (workspace === undefined || assessments === undefined) {
     return <p className="text-muted-foreground text-sm">Laster …</p>;
@@ -2559,59 +2668,165 @@ export function WorkspaceAssessmentsPanel({
       </Card>
 
       <section
-        className="space-y-4"
+        className="space-y-5"
         role="region"
         aria-labelledby="vurderinger-liste-heading"
       >
-        <div>
-          <p className="text-muted-foreground text-[11px] font-semibold uppercase tracking-[0.12em]">
-            Register
-          </p>
-          <h2
-            id="vurderinger-liste-heading"
-            className="font-heading text-lg font-semibold tracking-tight text-foreground"
-          >
-            Alle vurderinger
-          </h2>
-          <p className="text-muted-foreground mt-1 text-[13px] leading-relaxed sm:text-sm">
-            {assessments.length === 0
-              ? "Ingen saker i listen — opprett med kortet over."
-              : `${assessments.length} ${assessments.length === 1 ? "vurdering" : "vurderinger"} · søk eller filtrer på status.`}
-          </p>
+        <div className="space-y-4">
+          <div>
+            <p className="text-muted-foreground text-[11px] font-semibold uppercase tracking-[0.12em]">
+              Register
+            </p>
+            <h2
+              id="vurderinger-liste-heading"
+              className="font-heading text-lg font-semibold tracking-tight text-foreground sm:text-xl"
+            >
+              Alle vurderinger
+            </h2>
+            <p className="text-muted-foreground mt-1 max-w-2xl text-[13px] leading-relaxed sm:text-sm">
+              {assessments.length === 0
+                ? "Ingen saker i listen — opprett med kortet over."
+                : `${assessments.length} ${assessments.length === 1 ? "vurdering" : "vurderinger"} på tvers av arbeidsområdet. Hver sak viser én samlet prioritering (0–100) og tre tydelige målinger som forklarer den.`}
+            </p>
+          </div>
+
+          {assessments.length > 0 ? (
+            <div className="rounded-2xl border border-border/50 bg-gradient-to-br from-muted/35 via-muted/15 to-transparent p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] ring-1 ring-black/[0.03] dark:from-muted/25 dark:via-muted/10 dark:ring-white/[0.05] sm:p-5">
+              <p className="text-foreground text-[13px] font-semibold leading-snug">
+                Slik leser du listen
+              </p>
+              <ul className="text-muted-foreground mt-3 grid gap-3 text-[12px] leading-relaxed sm:grid-cols-3">
+                <li className="flex gap-2.5">
+                  <span className="bg-sky-500/18 text-sky-800 dark:text-sky-100 flex size-8 shrink-0 items-center justify-center rounded-xl text-[11px] font-bold ring-1 ring-sky-500/25">
+                    AP
+                  </span>
+                  <span>
+                    <strong className="text-foreground">Gevinst</strong> — hvor
+                    stort automatiseringspotensialet er.
+                  </span>
+                </li>
+                <li className="flex gap-2.5">
+                  <span className="bg-rose-500/18 text-rose-900 dark:text-rose-100 flex size-8 shrink-0 items-center justify-center rounded-xl text-[11px] font-bold ring-1 ring-rose-500/25">
+                    VK
+                  </span>
+                  <span>
+                    <strong className="text-foreground">Alvor</strong> — hvor
+                    viktig saken er for personvern og konsekvenser.
+                  </span>
+                </li>
+                <li className="flex gap-2.5">
+                  <span className="bg-violet-500/18 text-violet-900 dark:text-violet-100 flex size-8 shrink-0 items-center justify-center rounded-xl text-[11px] font-bold ring-1 ring-violet-500/25">
+                    IM
+                  </span>
+                  <span>
+                    <strong className="text-foreground">Gjennomføring</strong>{" "}
+                    — hvor enkelt tiltaket er å få på plass.
+                  </span>
+                </li>
+              </ul>
+            </div>
+          ) : null}
         </div>
 
         {assessments.length > 0 ? (
-          <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
-            <div className="relative min-w-0 flex-1 sm:min-w-[min(100%,18rem)]">
+          <div className="flex flex-col gap-3 lg:flex-row lg:flex-wrap lg:items-end">
+            <div className="relative min-w-0 flex-1 lg:min-w-[min(100%,18rem)]">
               <Search className="text-muted-foreground pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2" />
               <Input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Søk i tittel …"
-                className="h-11 min-h-[44px] bg-background pl-9 text-[16px] sm:h-10 sm:min-h-0 sm:text-sm"
+                className="border-border/60 bg-background h-11 min-h-[44px] rounded-2xl pl-9 text-[16px] shadow-sm sm:h-10 sm:min-h-0 sm:text-sm"
                 aria-label="Søk i vurderinger"
               />
             </div>
-            <div className="flex w-full min-w-0 items-center gap-2 sm:w-auto sm:min-w-[11rem]">
-              <Label htmlFor="assessment-status-filter" className="sr-only">
-                Filtrer på status
-              </Label>
-              <select
-                id="assessment-status-filter"
-                className="border-input bg-background h-11 min-h-[44px] w-full rounded-lg border px-3 text-[13px] shadow-xs sm:h-10 sm:min-h-0 sm:text-sm"
-                value={statusFilter}
-                onChange={(e) =>
-                  setStatusFilter(e.target.value as PipelineStatus | "all")
-                }
-              >
-                <option value="all">Alle statuser</option>
-                {PIPELINE_KANBAN_ORDER.map((s) => (
-                  <option key={s} value={s}>
-                    {PIPELINE_STATUS_LABELS[s]}
+            <div className="grid w-full min-w-0 items-center gap-2 sm:grid-cols-2 lg:flex lg:w-auto lg:max-w-none lg:grid-cols-none">
+              <div className="min-w-0 space-y-1">
+                <Label
+                  htmlFor="assessment-sort"
+                  className="text-muted-foreground text-[10px] font-semibold uppercase tracking-wide"
+                >
+                  Sorter
+                </Label>
+                <select
+                  id="assessment-sort"
+                  className="border-border/60 bg-background h-11 min-h-[44px] w-full rounded-2xl border px-3 text-[13px] shadow-sm sm:h-10 sm:min-h-0 sm:text-sm"
+                  value={sortBy}
+                  onChange={(e) =>
+                    setSortBy(
+                      e.target.value as
+                        | "priority"
+                        | "updated"
+                        | "ap"
+                        | "criticality"
+                        | "ease",
+                    )
+                  }
+                >
+                  <option value="priority">
+                    Prioritet (portefølje, høy → lav)
                   </option>
-                ))}
-              </select>
+                  <option value="ap">
+                    Automatiseringspotensial (AP, høy → lav)
+                  </option>
+                  <option value="criticality">
+                    Viktighet / konsekvens (høy → lav)
+                  </option>
+                  <option value="ease">
+                    Implementering (enklest først)
+                  </option>
+                  <option value="updated">Sist oppdatert</option>
+                </select>
+              </div>
+              <div className="min-w-0 space-y-1">
+                <Label
+                  htmlFor="assessment-status-filter"
+                  className="text-muted-foreground text-[10px] font-semibold uppercase tracking-wide"
+                >
+                  Status
+                </Label>
+                <select
+                  id="assessment-status-filter"
+                  className="border-border/60 bg-background h-11 min-h-[44px] w-full rounded-2xl border px-3 text-[13px] shadow-sm sm:h-10 sm:min-h-0 sm:text-sm"
+                  value={statusFilter}
+                  onChange={(e) =>
+                    setStatusFilter(e.target.value as PipelineStatus | "all")
+                  }
+                >
+                  <option value="all">Alle statuser</option>
+                  {PIPELINE_KANBAN_ORDER.map((s) => (
+                    <option key={s} value={s}>
+                      {PIPELINE_STATUS_LABELS[s]}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
+          </div>
+        ) : null}
+
+        {assessments.length > 0 && filteredAssessments.length > 0 ? (
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-2xl border border-border/45 bg-card/40 px-3 py-2.5 text-[12px] ring-1 ring-black/[0.03] dark:bg-card/25 dark:ring-white/[0.05]">
+            <span className="text-muted-foreground font-medium">Treff</span>
+            <span className="text-foreground font-bold tabular-nums">
+              {filteredAssessments.length}
+            </span>
+            <span
+              className="bg-border hidden h-4 w-px sm:inline-block"
+              aria-hidden
+            />
+            <span className="text-muted-foreground font-medium">
+              Fordeling på prioritet
+            </span>
+            <span className="inline-flex items-center gap-1 rounded-full border border-emerald-500/30 bg-emerald-500/12 px-2.5 py-0.5 font-semibold text-emerald-950 dark:text-emerald-100">
+              Høy {priorityDistribution.high}
+            </span>
+            <span className="inline-flex items-center gap-1 rounded-full border border-amber-500/35 bg-amber-500/12 px-2.5 py-0.5 font-semibold text-amber-950 dark:text-amber-100">
+              Middels {priorityDistribution.mid}
+            </span>
+            <span className="inline-flex items-center gap-1 rounded-full border border-slate-400/35 bg-slate-500/10 px-2.5 py-0.5 font-semibold text-slate-800 dark:text-slate-200">
+              Lavere {priorityDistribution.low}
+            </span>
           </div>
         ) : null}
 
@@ -2647,17 +2862,25 @@ export function WorkspaceAssessmentsPanel({
             Ingen treff — prøv annet søk eller fjern filter.
           </p>
         ) : (
-          <ul className="grid gap-3 sm:grid-cols-2">
+          <ul className="grid gap-4 sm:grid-cols-2">
             {filteredAssessments.map((a) => {
               const pipeline = normalizePipelineStatus(a.pipelineStatus);
               const prio = effectiveAssessmentPriority(a);
               const ap = a.cachedAp;
               const crit = a.cachedCriticality;
+              const band = priorityBandLabel(prio);
+              const hasModelScores =
+                ap !== undefined &&
+                ap !== null &&
+                crit !== undefined &&
+                crit !== null &&
+                Number.isFinite(ap) &&
+                Number.isFinite(crit);
               return (
                 <li key={a._id} className="group/card relative">
                   <div
                     className={cn(
-                      "bg-card hover:border-primary/35 relative overflow-hidden rounded-xl border border-l-[3px] bg-gradient-to-br from-card to-muted/10 p-4 shadow-sm transition-all hover:shadow-md sm:p-3.5",
+                      "bg-card hover:border-primary/40 relative overflow-hidden rounded-2xl border border-l-[4px] bg-gradient-to-br from-card via-card to-muted/15 p-4 shadow-[0_2px_12px_rgba(0,0,0,0.04)] transition-all hover:shadow-[0_8px_24px_rgba(0,0,0,0.07)] dark:shadow-[0_2px_16px_rgba(0,0,0,0.35)] dark:hover:shadow-[0_8px_28px_rgba(0,0,0,0.45)] sm:p-4",
                       priorityBorderAccentClass(prio),
                     )}
                   >
@@ -2667,14 +2890,10 @@ export function WorkspaceAssessmentsPanel({
                     */}
                     <Link
                       href={`/w/${workspaceId}/a/${a._id}`}
-                      className="absolute inset-0 z-0 rounded-xl"
+                      className="absolute inset-0 z-0 rounded-2xl"
                       aria-label={`Åpne vurdering: ${a.title}`}
                     />
-                    <div className="relative z-10 flex flex-col gap-0 pr-9 pointer-events-none sm:pr-0">
-                      {/*
-                        Mobil: stablet (tittel → status) for full bredde på nedtrekk.
-                        Desktop: tittel og status på én rad.
-                      */}
+                    <div className="relative z-10 flex flex-col gap-3 pr-9 pointer-events-none sm:pr-0">
                       <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-2">
                         <span className="font-heading group-hover/card:text-primary line-clamp-2 min-w-0 text-base font-semibold leading-snug transition-colors sm:text-[0.9375rem]">
                           {a.title}
@@ -2696,45 +2915,113 @@ export function WorkspaceAssessmentsPanel({
                           )}
                         </div>
                       </div>
-                      <p className="text-muted-foreground mt-1.5 line-clamp-2 text-xs leading-snug">
-                        {compliancePlainLine(a)}
-                      </p>
-                      <div className="mt-3 flex flex-wrap items-end justify-between gap-2 border-t border-border/40 pt-2.5">
-                        <div className="min-w-0 space-y-0.5">
-                          <p className="text-muted-foreground text-[10px] font-medium uppercase tracking-wide">
-                            Prioritet
-                          </p>
-                          <p className="font-heading text-xl font-bold tabular-nums tracking-tight">
-                            {prio.toFixed(1)}
-                            <span className="text-muted-foreground ml-1 text-xs font-normal">
-                              / 100
-                            </span>
-                          </p>
-                          {ap !== undefined &&
-                          ap !== null &&
-                          crit !== undefined &&
-                          crit !== null ? (
-                            <p className="text-muted-foreground text-[11px] tabular-nums">
-                              AP {ap.toFixed(0)} % · Vikt. {crit.toFixed(0)} %
+                      <div className="text-muted-foreground flex items-start gap-2 text-xs leading-snug">
+                        <Shield
+                          className="mt-0.5 size-3.5 shrink-0 opacity-80"
+                          aria-hidden
+                        />
+                        <span className="line-clamp-2">{compliancePlainLine(a)}</span>
+                      </div>
+
+                      <div className="rounded-xl border border-border/50 bg-gradient-to-b from-muted/30 to-muted/10 p-3.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] dark:from-muted/25 dark:to-muted/5">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <p className="text-muted-foreground text-[10px] font-semibold uppercase tracking-wide">
+                              Porteføljeprioritet
                             </p>
-                          ) : (
-                            <p className="text-muted-foreground text-[11px]">
-                              Fullfør skjema for poeng
+                            <p className="text-foreground font-heading text-3xl font-bold tabular-nums leading-none tracking-tight">
+                              {prio.toFixed(1)}
+                              <span className="text-muted-foreground ml-1.5 text-sm font-normal">
+                                / 100
+                              </span>
                             </p>
-                          )}
-                        </div>
-                        <div className="text-muted-foreground shrink-0 text-right text-[11px] leading-snug">
-                          <span
-                            className="block"
-                            title={new Date(a.updatedAt).toLocaleString("nb-NO")}
+                            <p className="text-muted-foreground mt-1 text-[11px] leading-snug">
+                              {band.label}
+                            </p>
+                          </div>
+                          <Badge
+                            variant="outline"
+                            className={cn(
+                              "shrink-0 border font-semibold",
+                              priorityBandBadgeClass(prio),
+                            )}
                           >
-                            {formatRelativeUpdatedAt(a.updatedAt)}
-                          </span>
-                          <span className="mt-0.5 inline-flex items-center gap-0.5 font-medium text-foreground group-hover/card:text-primary">
-                            Åpne
-                            <ChevronRight className="size-3.5 opacity-80" aria-hidden />
-                          </span>
+                            {band.short}
+                          </Badge>
                         </div>
+                        <div
+                          className="bg-muted/80 mt-3 h-2.5 overflow-hidden rounded-full shadow-inner"
+                          role="presentation"
+                          aria-label={`${prio.toFixed(0)} av 100 poeng`}
+                        >
+                          <div
+                            className={cn(
+                              "h-full rounded-full shadow-sm ring-1 ring-black/5 dark:ring-white/10",
+                              priorityFillClass(prio),
+                            )}
+                            style={{
+                              width: `${Math.min(100, Math.max(0, prio))}%`,
+                            }}
+                          />
+                        </div>
+                      </div>
+
+                      {hasModelScores ? (
+                        <div className="space-y-2.5">
+                          <p className="text-muted-foreground text-[10px] font-semibold uppercase tracking-wide">
+                            Underliggende målinger
+                          </p>
+                          <AssessmentListMetricBar
+                            label="Automatiseringspotensial (AP)"
+                            value={ap}
+                            icon={Zap}
+                            barClass="bg-sky-500"
+                          />
+                          <AssessmentListMetricBar
+                            label="Viktighet og konsekvens"
+                            value={crit}
+                            icon={AlertTriangle}
+                            barClass="bg-rose-500"
+                          />
+                          {a.cachedEase != null &&
+                          Number.isFinite(a.cachedEase) ? (
+                            <AssessmentListMetricBar
+                              label={
+                                a.cachedEaseLabel != null
+                                  ? `Implementering (${a.cachedEaseLabel})`
+                                  : "Implementering"
+                              }
+                              value={a.cachedEase}
+                              icon={Wrench}
+                              barClass="bg-violet-500"
+                            />
+                          ) : null}
+                        </div>
+                      ) : (
+                        <div className="text-muted-foreground rounded-xl border border-dashed border-border/70 bg-muted/15 px-3 py-2.5 text-[12px] leading-relaxed">
+                          <p className="text-foreground font-medium">
+                            Mangler PVV-data
+                          </p>
+                          <p className="mt-1">
+                            Fullfør skjemaet i veiviseren for å beregne poeng,
+                            søyler og prioritering.
+                          </p>
+                        </div>
+                      )}
+
+                      <div className="text-muted-foreground flex min-w-0 items-center justify-between gap-2 border-t border-border/40 pt-2.5 text-[11px] leading-snug">
+                        <span
+                          title={new Date(a.updatedAt).toLocaleString("nb-NO")}
+                        >
+                          {formatRelativeUpdatedAt(a.updatedAt)}
+                        </span>
+                        <span className="inline-flex shrink-0 items-center gap-0.5 font-medium text-foreground group-hover/card:text-primary">
+                          Åpne
+                          <ChevronRight
+                            className="size-3.5 opacity-80"
+                            aria-hidden
+                          />
+                        </span>
                       </div>
                     </div>
                   </div>
