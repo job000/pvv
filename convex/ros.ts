@@ -2059,6 +2059,68 @@ export const restoreVersion = mutation({
   },
 });
 
+/** Enkeltversjon for forhåndsvisning (uten full matrise til klienten). */
+export const getRosAnalysisVersion = query({
+  args: {
+    analysisId: v.id("rosAnalyses"),
+    version: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) {
+      return null;
+    }
+    if (!(await optionalRosAnalysisRead(ctx, args.analysisId, userId))) {
+      return null;
+    }
+    const ver = await ctx.db
+      .query("rosAnalysisVersions")
+      .withIndex("by_ros_version", (q) =>
+        q.eq("rosAnalysisId", args.analysisId).eq("version", args.version),
+      )
+      .unique();
+    if (!ver) {
+      return null;
+    }
+    const rows = ver.matrixValues.length;
+    const cols = ver.matrixValues[0]?.length ?? 0;
+    return {
+      version: ver.version,
+      note: ver.note,
+      createdAt: ver.createdAt,
+      rowAxisTitle: ver.rowAxisTitle,
+      colAxisTitle: ver.colAxisTitle,
+      rows,
+      cols,
+      hasAfterMatrix: Boolean(
+        ver.matrixValuesAfter && ver.matrixValuesAfter.length > 0,
+      ),
+    };
+  },
+});
+
+export const deleteRosAnalysisVersion = mutation({
+  args: {
+    analysisId: v.id("rosAnalyses"),
+    version: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const userId = await requireUserId(ctx);
+    await requireRosAnalysisEdit(ctx, args.analysisId, userId);
+    const ver = await ctx.db
+      .query("rosAnalysisVersions")
+      .withIndex("by_ros_version", (q) =>
+        q.eq("rosAnalysisId", args.analysisId).eq("version", args.version),
+      )
+      .unique();
+    if (!ver) {
+      throw new Error("Fant ikke denne versjonen.");
+    }
+    await ctx.db.delete(ver._id);
+    return null;
+  },
+});
+
 export const listTasksByRosAnalysis = query({
   args: { analysisId: v.id("rosAnalyses") },
   handler: async (ctx, args) => {

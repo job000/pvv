@@ -1,6 +1,7 @@
 "use client";
 
 import { RosJournalPanel } from "@/components/ros/ros-journal-panel";
+import { RosVersionsPanel } from "@/components/ros/ros-versions-panel";
 import { RosLifecycleCompliancePanel } from "@/components/ros/ros-lifecycle-compliance-panel";
 import { RosMatrix } from "@/components/ros/ros-matrix";
 import { RosScaleReference } from "@/components/ros/ros-scale-reference";
@@ -64,13 +65,11 @@ import {
   ChevronRight,
   CircleHelp,
   FileDown,
-  History,
   Link2,
   ListTodo,
   Plus,
   Sparkles,
   Trash2,
-  Undo2,
   X,
 } from "lucide-react";
 import Link from "next/link";
@@ -243,8 +242,6 @@ export function RosAnalysisEditor({
     api.ros.migrateLegacyAssessmentToLinks,
   );
   const clearLegacyAssessment = useMutation(api.ros.clearLegacyAssessment);
-  const createVersion = useMutation(api.ros.createVersion);
-  const restoreVersion = useMutation(api.ros.restoreVersion);
   const createRosTask = useMutation(api.ros.createRosTask);
   const updateRosTask = useMutation(api.ros.updateRosTask);
   const removeRosTask = useMutation(api.ros.removeRosTask);
@@ -283,8 +280,6 @@ export function RosAnalysisEditor({
   const [saving, setSaving] = useState(false);
 
   const [addPvId, setAddPvId] = useState<Id<"assessments"> | "">("");
-  const [versionNote, setVersionNote] = useState("");
-  const [snapshotBusy, setSnapshotBusy] = useState(false);
 
   const analysisRevisionRef = useRef<number | null>(null);
   const rosSaveQueueRef = useRef(Promise.resolve());
@@ -1351,42 +1346,6 @@ export function RosAnalysisEditor({
     }
   }
 
-  async function onSnapshot() {
-    setSnapshotBusy(true);
-    try {
-      await createVersion({
-        analysisId,
-        note: versionNote.trim() || undefined,
-      });
-      setVersionNote("");
-      toast.success("Versjon lagret.");
-    } catch (e) {
-      toast.error(
-        e instanceof Error ? e.message : "Kunne ikke lagre versjon.",
-      );
-    } finally {
-      setSnapshotBusy(false);
-    }
-  }
-
-  async function onRestore(version: number) {
-    if (
-      typeof window !== "undefined" &&
-      !window.confirm(
-        `Gjenopprette versjon ${version}? Nåværende matrise og notat overskrives (ikke slettet — lag ny versjon først om du vil beholde dagens stand).`,
-      )
-    ) {
-      return;
-    }
-    try {
-      await restoreVersion({ analysisId, version });
-      setDirty(false);
-      toast.success(`Versjon ${version} er gjenopprettet.`);
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Gjenoppretting feilet.");
-    }
-  }
-
   async function onCreateTask(e: React.FormEvent) {
     e.preventDefault();
     const t = taskTitle.trim();
@@ -2390,77 +2349,11 @@ export function RosAnalysisEditor({
           </CardContent>
         </Card>
 
-        {/* Versjoner */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base">
-              <History className="size-4" />
-              Versjonskontroll
-          </CardTitle>
-          <CardDescription>
-            Bruk versjoner til å dokumentere <strong className="text-foreground">før og
-            etter</strong> tiltak: lagre et bilde før endring, oppdater matrisen, lagre
-            ny versjon. Gjenopprett eldre stand ved behov.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
-            <div className="min-w-0 flex-1 space-y-1.5">
-              <Label htmlFor="snap-note">Notat til versjon (valgfritt)</Label>
-              <Input
-                id="snap-note"
-                value={versionNote}
-                onChange={(e) => setVersionNote(e.target.value)}
-                placeholder="F.eks. Før endring av akser"
-              />
-            </div>
-            <Button
-              type="button"
-              disabled={snapshotBusy}
-              onClick={() => void onSnapshot()}
-            >
-              {snapshotBusy ? "Lagrer …" : "Lagre versjon"}
-            </Button>
-          </div>
-          <Separator />
-          {versions === undefined ? (
-            <p className="text-muted-foreground text-sm">Henter versjoner …</p>
-          ) : versions.length === 0 ? (
-            <p className="text-muted-foreground text-sm">
-              Ingen lagrede versjoner ennå.
-            </p>
-          ) : (
-            <ul className="max-h-64 space-y-2 overflow-y-auto pr-1">
-              {versions.map((v) => (
-                <li
-                  key={v._id}
-                  className="flex flex-wrap items-center justify-between gap-2 rounded-lg border px-3 py-2 text-sm"
-                >
-                  <div>
-                    <span className="font-medium">v{v.version}</span>
-                    <span className="text-muted-foreground">
-                      {" "}
-                      · {formatTs(v.createdAt)}
-                    </span>
-                    {v.note ? (
-                      <p className="text-muted-foreground mt-0.5">{v.note}</p>
-                    ) : null}
-                  </div>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    onClick={() => void onRestore(v.version)}
-                  >
-                    <Undo2 className="size-3.5" />
-                    Gjenopprett
-                  </Button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </CardContent>
-        </Card>
+        <RosVersionsPanel
+          analysisId={analysisId}
+          versions={versions}
+          onRestored={() => setDirty(false)}
+        />
 
         {/* Journal */}
         <RosJournalPanel
