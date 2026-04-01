@@ -85,7 +85,8 @@ export function WorkspaceDashboardGrid({
   return (
     <>
       <section
-        className="space-y-5"
+        id="arbeidsområder"
+        className="space-y-5 scroll-mt-24"
         aria-labelledby="dash-workspaces-heading"
       >
         <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">

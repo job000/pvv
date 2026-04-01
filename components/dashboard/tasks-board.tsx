@@ -395,7 +395,11 @@ export function TasksBoard() {
 
   if (tasks === undefined) {
     return (
-      <section className="space-y-4" aria-labelledby="tasks-board-heading">
+      <section
+        id="oppgaver"
+        className="space-y-4 scroll-mt-24"
+        aria-labelledby="tasks-board-heading"
+      >
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <h2
@@ -418,7 +422,11 @@ export function TasksBoard() {
   }
 
   return (
-    <section className="space-y-5" aria-labelledby="tasks-board-heading">
+    <section
+      id="oppgaver"
+      className="space-y-5 scroll-mt-24"
+      aria-labelledby="tasks-board-heading"
+    >
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <div className="flex items-center gap-2">
