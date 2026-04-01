@@ -88,24 +88,11 @@ function formatRelative(ts: number | undefined): string {
 
 type Tab = "maler" | "analyser" | "oversikt" | "bibliotek";
 
-/** Rekkefølge: hovedarbeid → maler → oversikt → referansemateriale sist */
-const FLOW_STEPS = [
-  {
-    id: "analyser" as const,
-    n: 1,
-    label: "Alle ROS",
-    icon: ClipboardList,
-    hint: "Liste, søk og opprett",
-  },
-  { id: "maler" as const, n: 2, label: "Maler", icon: Grid3x3, hint: "Definer risikoakser" },
-  {
-    id: "oversikt" as const,
-    n: 3,
-    label: "Dashboard",
-    icon: BarChart3,
-    hint: "Nøkkeltall og fordeling",
-  },
-  { id: "bibliotek" as const, n: 4, label: "Bibliotek", icon: BookMarked, hint: "Gjenbruk risiko og tiltak" },
+const FLOW_TABS = [
+  { id: "analyser" as const, label: "Analyser", icon: ClipboardList },
+  { id: "maler" as const, label: "Maler", icon: Grid3x3 },
+  { id: "oversikt" as const, label: "Dashboard", icon: BarChart3 },
+  { id: "bibliotek" as const, label: "Bibliotek", icon: BookMarked },
 ] as const;
 
 function RosFlowNav({
@@ -119,11 +106,11 @@ function RosFlowNav({
 }) {
   return (
     <nav
-      className="-mx-1 flex max-w-full flex-nowrap items-stretch gap-0.5 overflow-x-auto px-1 pb-0.5 pt-0.5 [scrollbar-width:thin] sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0 sm:pb-0"
+      className="relative -mx-1 flex max-w-full flex-nowrap items-stretch gap-1 overflow-x-auto border-b border-border/50 px-1 pb-0 [scrollbar-width:none] sm:mx-0 sm:gap-0 sm:px-0 [&::-webkit-scrollbar]:hidden"
       role="tablist"
-      aria-label="ROS-faner — scroll sideveis på smal skjerm om du ikke ser alle"
+      aria-label="ROS-faner"
     >
-      {FLOW_STEPS.map((s) => {
+      {FLOW_TABS.map((s) => {
         const active = tab === s.id;
         const Icon = s.icon;
         const count =
@@ -140,37 +127,34 @@ function RosFlowNav({
             aria-selected={active}
             onClick={() => onTab(s.id)}
             className={cn(
-              "group relative flex min-w-[6.75rem] shrink-0 flex-1 items-center justify-center gap-2 rounded-lg px-2 py-2.5 text-sm font-medium transition-[color,box-shadow,transform] duration-200 sm:min-w-0 sm:justify-start sm:px-3",
+              "group relative flex shrink-0 items-center gap-2 px-4 pb-3 pt-2 text-sm font-medium transition-colors duration-150",
               active
-                ? "bg-card text-foreground shadow-[0_1px_3px_rgba(0,0,0,0.08),0_1px_0_rgba(255,255,255,0.9)_inset] ring-1 ring-black/[0.06] dark:shadow-[0_1px_3px_rgba(0,0,0,0.35)] dark:ring-white/[0.08]"
-                : "text-muted-foreground hover:bg-card/60 hover:text-foreground",
+                ? "text-foreground"
+                : "text-muted-foreground hover:text-foreground/80",
             )}
           >
-            <span
+            <Icon
               className={cn(
-                "flex size-7 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold tabular-nums transition-colors",
-                active
-                  ? "bg-primary text-primary-foreground shadow-sm"
-                  : "bg-background/80 text-muted-foreground ring-1 ring-border/60 group-hover:bg-muted",
+                "size-4 shrink-0 transition-colors",
+                active ? "text-primary" : "text-muted-foreground/70 group-hover:text-foreground/60",
               )}
-            >
-              {s.n}
-            </span>
-            <span className="max-w-[5rem] truncate text-center text-[11px] leading-tight sm:max-w-none sm:text-left sm:text-sm">
-              {s.label}
-            </span>
-            <Icon className="hidden size-4 shrink-0 opacity-70 sm:block" aria-hidden />
+              aria-hidden
+            />
+            <span>{s.label}</span>
             {count !== undefined && count > 0 ? (
               <span
                 className={cn(
-                  "ml-auto hidden rounded-full px-2 py-0.5 text-[10px] font-semibold tabular-nums sm:inline",
+                  "rounded-full px-1.5 py-0.5 text-[10px] font-semibold tabular-nums leading-none",
                   active
                     ? "bg-primary/10 text-primary"
-                    : "bg-muted/80 text-muted-foreground",
+                    : "bg-muted text-muted-foreground",
                 )}
               >
                 {count}
               </span>
+            ) : null}
+            {active ? (
+              <span className="bg-primary absolute inset-x-0 -bottom-px h-0.5 rounded-full" />
             ) : null}
           </button>
         );
