@@ -16,6 +16,8 @@ export type RosCellItem = {
   afterCol?: number;
   /** ID-referanse til opprinnnelig før-tiltak item (kun på etter-tiltak items) */
   sourceItemId?: string;
+  /** Hvorfor endret risikonivået seg etter tiltak (ned/opp/beholdt + begrunnelse) */
+  afterChangeNote?: string;
 };
 
 /** Rad × kolonne × punkter i cellen (eksplisitt — ikke forveksle med RosCellItem[][]) */
@@ -84,6 +86,7 @@ export type RosIdentifiedRiskPdfRow = {
   afterLevel: number;
   hasTiltak: boolean;
   hasFølg: boolean;
+  afterChangeNote?: string;
 };
 
 export function collectIdentifiedRisksForPdf(args: {
@@ -105,7 +108,8 @@ export function collectIdentifiedRisksForPdf(args: {
       for (const item of cell) {
         const t = item.text.trim();
         const hasFlags = (item.flags?.length ?? 0) > 0;
-        if (!t && !hasFlags) continue;
+        const hasAfterNote = Boolean(item.afterChangeNote?.trim());
+        if (!t && !hasFlags && !hasAfterNote) continue;
         const ar = item.afterRow ?? r;
         const ac = item.afterCol ?? c;
         const beforeLevel = args.matrixValues[r]?.[c] ?? 0;
@@ -122,6 +126,7 @@ export function collectIdentifiedRisksForPdf(args: {
             item.flags?.includes(ROS_CELL_FLAG_REQUIRES_ACTION),
           ),
           hasFølg: Boolean(item.flags?.includes(ROS_CELL_FLAG_WATCH)),
+          afterChangeNote: item.afterChangeNote?.trim() || undefined,
         });
       }
     }
@@ -164,6 +169,7 @@ export function normalizeCellItems(
             afterRow: it.afterRow,
             afterCol: it.afterCol,
             sourceItemId: it.sourceItemId,
+            afterChangeNote: it.afterChangeNote,
           })),
         );
       } else {

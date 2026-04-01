@@ -3,6 +3,7 @@
 import { RosJournalPanel } from "@/components/ros/ros-journal-panel";
 import { RosLifecycleCompliancePanel } from "@/components/ros/ros-lifecycle-compliance-panel";
 import { RosMatrix } from "@/components/ros/ros-matrix";
+import { RosScaleReference } from "@/components/ros/ros-scale-reference";
 import { RosLabelLevelsEditor } from "@/components/ros/ros-label-levels-editor";
 import { RosRiskRegisterTable } from "@/components/ros/ros-risk-register-table";
 import { RosRiskList, type FlatRisk } from "@/components/ros/ros-risk-list";
@@ -16,6 +17,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -51,8 +53,15 @@ import { cn } from "@/lib/utils";
 import type { RosRequirementRef } from "@/lib/ros-requirement-catalog";
 import { downloadRosAnalysisPdf } from "@/lib/ros-pdf";
 import {
+  buildRosTaskRiskLinkOptions,
+  parseRosTaskRiskLink,
+  riskTreatmentLabel,
+  ROS_RISK_TREATMENT_OPTIONS,
+} from "@/lib/ros-task-ui";
+import {
   ChevronLeft,
   ChevronRight,
+  CircleHelp,
   FileDown,
   History,
   Link2,
@@ -61,6 +70,7 @@ import {
   Sparkles,
   Trash2,
   Undo2,
+  X,
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -74,8 +84,8 @@ function tsToDatetimeLocal(ms: number): string {
 
 const ROS_EDITOR_SECTIONS = [
   { id: "risikoer", label: "Risikovurdering", hint: "Identifiser og vurder" },
-  { id: "oppsummering", label: "Oppsummering", hint: "Før/etter oversikt" },
   { id: "oppgaver", label: "Oppgaver", hint: "Tiltak og oppfølging" },
+  { id: "oppsummering", label: "Oppsummering", hint: "Før/etter oversikt" },
   { id: "pvv", label: "PVV-koblinger", hint: "Koble vurderinger" },
   { id: "innstillinger", label: "Innstillinger", hint: "Detaljer, akser, versjon" },
 ] as const;
@@ -261,6 +271,7 @@ export function RosAnalysisEditor({
   const [cellItemsAfterMatrix, setCellItemsAfterMatrix] =
     useState<RosCellItemMatrix>([]);
   const [matrixView, setMatrixView] = useState<"before" | "after">("before");
+  const [matrixScaleHelpOpen, setMatrixScaleHelpOpen] = useState(false);
   const [jumpRequest, setJumpRequest] = useState<{
     row: number;
     col: number;
@@ -277,6 +288,12 @@ export function RosAnalysisEditor({
   const analysisRevisionRef = useRef<number | null>(null);
   const rosSaveQueueRef = useRef(Promise.resolve());
   const deletingRef = useRef(false);
+  const saveRef = useRef<
+    ((opts?: { silent?: boolean }) => Promise<void>) | null
+  >(null);
+  const dirtyRef = useRef(false);
+  const canAutosaveRef = useRef(false);
+  dirtyRef.current = dirty;
 
   const [rosSection, setRosSection] = useState(ROS_MATRISE_SECTION_INDEX);
 
@@ -284,6 +301,12 @@ export function RosAnalysisEditor({
   const [taskDesc, setTaskDesc] = useState("");
   const [taskAssignee, setTaskAssignee] = useState<Id<"users"> | "">("");
   const [taskPriority, setTaskPriority] = useState(3);
+  const [taskRiskLink, setTaskRiskLink] = useState("");
+  const [taskRiskTreatment, setTaskRiskTreatment] = useState<
+    "" | "mitigate" | "accept" | "transfer" | "avoid"
+  >("");
+  const [taskResidualNote, setTaskResidualNote] = useState("");
+  const [taskDueAt, setTaskDueAt] = useState("");
   const [taskBusy, setTaskBusy] = useState(false);
 
   const [editingTaskId, setEditingTaskId] = useState<Id<"rosTasks"> | null>(
@@ -390,6 +413,49 @@ export function RosAnalysisEditor({
     }
     return data.colLabels;
   }, [data, useSeparateAfterAxes, colLabelsAfterText]);
+
+  const taskRiskLinkOptions = useMemo(() => {
+    if (!data) {
+      return [{ value: "", label: "— Ingen kobling —" }];
+    }
+    return buildRosTaskRiskLinkOptions({
+      cellItemsMatrix,
+      cellItemsAfterMatrix,
+      rowLabels: data.rowLabels,
+      colLabels: data.colLabels,
+      afterRowLabels: effectiveAfterRowLabels,
+      afterColLabels: effectiveAfterColLabels,
+    });
+  }, [
+    data,
+    cellItemsMatrix,
+    cellItemsAfterMatrix,
+    effectiveAfterRowLabels,
+    effectiveAfterColLabels,
+  ]);
+
+  /** Auto-lagring: ikke forsøk hvis skjema ville avvist manuell lagring (unngå støy). */
+  const canAutosave = useMemo(() => {
+    if (!data) return false;
+    if (useSeparateAfterAxes) {
+      const tr = parseLabelLines(rowLabelsAfterText).length;
+      const tc = parseLabelLines(colLabelsAfterText).length;
+      if (tr < 2 || tc < 2) return false;
+    }
+    const rawNext = nextReviewLocal.trim();
+    if (rawNext !== "") {
+      const parsed = new Date(rawNext).getTime();
+      if (!Number.isFinite(parsed)) return false;
+    }
+    return true;
+  }, [
+    data,
+    useSeparateAfterAxes,
+    rowLabelsAfterText,
+    colLabelsAfterText,
+    nextReviewLocal,
+  ]);
+  canAutosaveRef.current = canAutosave;
 
   /** Liste + PDF-lignende tabell (før/etter) — samme data som matrisen. */
   const riskRegisterSnapshot = useMemo(() => {
@@ -692,6 +758,7 @@ export function RosAnalysisEditor({
           flags: risk.flags,
           afterRow: risk.afterRow,
           afterCol: risk.afterCol,
+          afterChangeNote: risk.afterChangeNote,
         });
         return copy;
       });
@@ -731,6 +798,7 @@ export function RosAnalysisEditor({
                   flags: risk.flags,
                   afterRow: risk.afterRow,
                   afterCol: risk.afterCol,
+                  afterChangeNote: risk.afterChangeNote,
                 };
               } else {
                 const [item] = copy[r][c].splice(idx, 1);
@@ -743,6 +811,7 @@ export function RosAnalysisEditor({
                   flags: risk.flags,
                   afterRow: risk.afterRow,
                   afterCol: risk.afterCol,
+                  afterChangeNote: risk.afterChangeNote,
                 });
               }
               break;
@@ -949,7 +1018,7 @@ export function RosAnalysisEditor({
     }
   }
 
-  async function save() {
+  async function save(opts?: { silent?: boolean }) {
     if (!data) return;
     const targetRows = useSeparateAfterAxes
       ? parseLabelLines(rowLabelsAfterText).length
@@ -958,9 +1027,11 @@ export function RosAnalysisEditor({
       ? parseLabelLines(colLabelsAfterText).length
       : data.colLabels.length;
     if (useSeparateAfterAxes && (targetRows < 2 || targetCols < 2)) {
-      toast.error(
-        "Etter-tiltak med egne akser krever minst to rader og to kolonner (én etikett per linje).",
-      );
+      if (!opts?.silent) {
+        toast.error(
+          "Etter-tiltak med egne akser krever minst to rader og to kolonner (én etikett per linje).",
+        );
+      }
       return;
     }
     const matrixAfterToSave = resizeNumberMatrix(
@@ -986,7 +1057,9 @@ export function RosAnalysisEditor({
           rawNext !== "" &&
           (parsedNextMs === null || !Number.isFinite(parsedNextMs))
         ) {
-          toast.error("Ugyldig dato/tid for neste revisjon.");
+          if (!opts?.silent) {
+            toast.error("Ugyldig dato/tid for neste revisjon.");
+          }
           return;
         }
         const rev = analysisRevisionRef.current ?? data.revision ?? 0;
@@ -1032,7 +1105,9 @@ export function RosAnalysisEditor({
         if (result.ok) {
           analysisRevisionRef.current = result.revision;
           setDirty(false);
-          toast.success("ROS-analysen er lagret.");
+          if (!opts?.silent) {
+            toast.success("ROS-analysen er lagret.");
+          }
         } else {
           toast.error(
             "ROS-analysen er allerede oppdatert på serveren (annen bruker, annen fane eller journal). Last siden på nytt og prøv igjen.",
@@ -1049,6 +1124,61 @@ export function RosAnalysisEditor({
       setSaving(false);
     }
   }
+
+  saveRef.current = save;
+
+  /** Auto-lagre ulagret arbeid så matrise/risiko ikke tapes ved navigasjon. */
+  useEffect(() => {
+    if (!dirty || !data || !canAutosave) return;
+    const t = window.setTimeout(() => {
+      void saveRef.current?.({ silent: true });
+    }, 1200);
+    return () => window.clearTimeout(t);
+  }, [
+    dirty,
+    data,
+    canAutosave,
+    matrix,
+    cellItemsMatrix,
+    matrixAfter,
+    cellItemsAfterMatrix,
+    title,
+    notes,
+    nextReviewLocal,
+    reviewRoutineNotes,
+    methodologyStatement,
+    contextSummary,
+    scopeAndCriteria,
+    riskCriteriaVersion,
+    axisScaleNotes,
+    complianceScopeTags,
+    requirementRefs,
+    useSeparateAfterAxes,
+    rowAxisTitleAfter,
+    colAxisTitleAfter,
+    rowLabelsAfterText,
+    colLabelsAfterText,
+  ]);
+
+  useEffect(() => {
+    const onVis = () => {
+      if (document.visibilityState !== "hidden") return;
+      if (!dirtyRef.current || !canAutosaveRef.current) return;
+      void saveRef.current?.({ silent: true });
+    };
+    document.addEventListener("visibilitychange", onVis);
+    return () => document.removeEventListener("visibilitychange", onVis);
+  }, []);
+
+  useEffect(() => {
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (!dirtyRef.current) return;
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => window.removeEventListener("beforeunload", onBeforeUnload);
+  }, []);
 
   function exportPdf() {
     if (!data) return;
@@ -1219,6 +1349,15 @@ export function RosAnalysisEditor({
     e.preventDefault();
     const t = taskTitle.trim();
     if (!t) return;
+    const risk = parseRosTaskRiskLink(taskRiskLink);
+    const dueMs =
+      taskDueAt.trim() === ""
+        ? undefined
+        : new Date(taskDueAt).getTime();
+    if (taskDueAt.trim() !== "" && !Number.isFinite(dueMs)) {
+      toast.error("Ugyldig frist.");
+      return;
+    }
     setTaskBusy(true);
     try {
       await createRosTask({
@@ -1228,11 +1367,24 @@ export function RosAnalysisEditor({
         assigneeUserId:
           taskAssignee === "" ? undefined : taskAssignee,
         priority: taskPriority,
+        dueAt: dueMs,
+        linkedCellItemId: risk?.linkedCellItemId,
+        linkedCellItemPhase: risk?.linkedCellItemPhase,
+        riskTreatmentKind:
+          taskRiskTreatment === "" ? undefined : taskRiskTreatment,
+        residualRiskAcceptedNote:
+          taskRiskTreatment === "accept"
+            ? taskResidualNote.trim() || undefined
+            : undefined,
       });
       setTaskTitle("");
       setTaskDesc("");
       setTaskAssignee("");
       setTaskPriority(3);
+      setTaskRiskLink("");
+      setTaskRiskTreatment("");
+      setTaskResidualNote("");
+      setTaskDueAt("");
       toast.success("Oppgave opprettet.");
     } catch (e) {
       toast.error(
@@ -1341,6 +1493,13 @@ export function RosAnalysisEditor({
         </div>
       </div>
 
+      <p className="text-muted-foreground text-xs leading-relaxed">
+        Matrise, risiko og øvrige felt lagres automatisk til serveren ca. 1,2 s
+        etter siste endring, og når du bytter fane. Bruk «Lagre endringer» for
+        umiddelbar lagring. Ved lukking av vinduet kan nettleseren advare hvis det
+        fortsatt er ulagrede endringer.
+      </p>
+
       <p className="sr-only">
         Piltastene venstre og høyre bytter del når fokus ikke er i et felt. På
         matrisen er de reservert til matrisen. Bruk knappene under eller Forrige /
@@ -1376,6 +1535,7 @@ export function RosAnalysisEditor({
         <div className="space-y-6">
           {/* Matrix visualization */}
           {matrix.length > 0 ? (
+            <>
             <Card className="overflow-hidden">
               <CardHeader className="border-b border-border/50 bg-muted/20 pb-3">
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -1399,34 +1559,48 @@ export function RosAnalysisEditor({
                     )}
                   </div>
                 </div>
-                <div className="bg-muted/60 mt-2 inline-flex rounded-lg border p-1 shadow-sm" role="tablist">
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  <div className="bg-muted/60 inline-flex rounded-lg border p-1 shadow-sm" role="tablist">
+                    <Button
+                      type="button"
+                      role="tab"
+                      aria-selected={matrixView === "before"}
+                      variant={matrixView === "before" ? "default" : "ghost"}
+                      size="sm"
+                      className={cn(
+                        "rounded-md font-semibold",
+                        matrixView !== "before" && "text-muted-foreground hover:text-foreground",
+                      )}
+                      onClick={() => setMatrixView("before")}
+                    >
+                      Før tiltak
+                    </Button>
+                    <Button
+                      type="button"
+                      role="tab"
+                      aria-selected={matrixView === "after"}
+                      variant={matrixView === "after" ? "default" : "ghost"}
+                      size="sm"
+                      className={cn(
+                        "rounded-md font-semibold",
+                        matrixView !== "after" && "text-muted-foreground hover:text-foreground",
+                      )}
+                      onClick={() => setMatrixView("after")}
+                    >
+                      Etter tiltak
+                    </Button>
+                  </div>
                   <Button
                     type="button"
-                    role="tab"
-                    aria-selected={matrixView === "before"}
-                    variant={matrixView === "before" ? "default" : "ghost"}
+                    variant="outline"
                     size="sm"
-                    className={cn(
-                      "rounded-md font-semibold",
-                      matrixView !== "before" && "text-muted-foreground hover:text-foreground",
-                    )}
-                    onClick={() => setMatrixView("before")}
+                    className="gap-1.5 font-medium"
+                    onClick={() => setMatrixScaleHelpOpen(true)}
+                    aria-expanded={matrixScaleHelpOpen}
+                    aria-controls="ros-matrix-scale-help"
                   >
-                    Før tiltak
-                  </Button>
-                  <Button
-                    type="button"
-                    role="tab"
-                    aria-selected={matrixView === "after"}
-                    variant={matrixView === "after" ? "default" : "ghost"}
-                    size="sm"
-                    className={cn(
-                      "rounded-md font-semibold",
-                      matrixView !== "after" && "text-muted-foreground hover:text-foreground",
-                    )}
-                    onClick={() => setMatrixView("after")}
-                  >
-                    Etter tiltak
+                    <CircleHelp className="size-4 shrink-0" aria-hidden />
+                    Hjelp med skala
                   </Button>
                 </div>
               </CardHeader>
@@ -1471,12 +1645,60 @@ export function RosAnalysisEditor({
                 )}
               </CardContent>
             </Card>
+
+            <Sheet open={matrixScaleHelpOpen} onOpenChange={setMatrixScaleHelpOpen}>
+              <SheetContent
+                side="right"
+                showOnDesktop
+                className="w-full max-w-lg border-l"
+              >
+                <div
+                  id="ros-matrix-scale-help"
+                  className="flex h-full min-h-0 flex-col px-3 sm:px-4"
+                >
+                  <div className="border-border/60 shrink-0 border-b px-1 pb-4 pt-1">
+                    <div className="flex items-start gap-2">
+                      <div className="min-w-0 flex-1 pr-1">
+                        <h2
+                          id="ros-matrix-scale-help-title"
+                          className="font-heading text-lg font-semibold tracking-tight"
+                        >
+                          Hjelp: skala 1–5
+                        </h2>
+                        <p className="text-muted-foreground mt-1 text-sm leading-snug">
+                          Standard forklaring av nivå 1–5; malen kan tilpasse akser, nivåtekster og
+                          egen definisjon under Livsløp og etterlevelse. Gjelder både før og etter tiltak.
+                        </p>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="text-muted-foreground hover:text-foreground -mr-1 shrink-0"
+                        aria-label="Lukk hjelp"
+                        onClick={() => setMatrixScaleHelpOpen(false)}
+                      >
+                        <X className="size-5" aria-hidden />
+                      </Button>
+                    </div>
+                  </div>
+                  <div className="min-h-0 flex-1 overflow-y-auto px-0 pb-6 pt-3">
+                    <RosScaleReference
+                      variant="embedded"
+                      axisScaleNotes={axisScaleNotes}
+                    />
+                  </div>
+                </div>
+              </SheetContent>
+            </Sheet>
+            </>
           ) : null}
 
           {/* Risk list — primary input */}
           <Card>
             <CardContent className="pt-6">
               <RosRiskList
+                workspaceId={workspaceId}
                 rowLabels={data.rowLabels}
                 colLabels={data.colLabels}
                 rowAxisTitle={data.rowAxisTitle}
@@ -1491,68 +1713,50 @@ export function RosAnalysisEditor({
                 onUpdateRisk={onUpdateRisk}
                 onDeleteRisk={onDeleteRisk}
                 highlightCell={highlightCell}
+                rosTasks={tasks ?? undefined}
+                onGoToTasks={() => setRosSection(1)}
               />
             </CardContent>
           </Card>
         </div>
       )}
 
-      {/* === Section 1: Oppsummering === */}
+      {/* === Section 1: Oppgaver === */}
       {rosSection === 1 && (
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Oppsummering og risikoreduksjon</CardTitle>
-          <CardDescription>
-            Sammenligning av risiko før og etter tiltak — se hva som er redusert,
-            hva som gjenstår, og hva som trenger oppfølging.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-5">
-          <div id="ros-risk-register" className="space-y-3 scroll-mt-24">
-            {riskRegisterSnapshot ? (
-              <RosRiskRegisterTable
-                sameLayout={data.rosSummary.sameLayout}
-                before={riskRegisterSnapshot.before}
-                after={riskRegisterSnapshot.after}
-              />
-            ) : null}
-          </div>
-          {data.rosSummary.suggestedLinkFlags.length > 0 ? (
-            <p className="text-muted-foreground text-xs leading-relaxed">
-              <span className="text-foreground font-medium">PVV-flagg:</span>{" "}
-              {data.rosSummary.suggestedLinkFlags.join(", ")}
-            </p>
-          ) : null}
-        </CardContent>
-      </Card>
-      )}
-
-      {/* === Section 2: Oppgaver === */}
-      {rosSection === 2 && (
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-base">
-            <ListTodo className="size-4" />
-            Oppgaver
+      <Card className="border-border/60 overflow-hidden shadow-sm">
+        <CardHeader className="border-b border-border/50 bg-gradient-to-br from-muted/40 to-background pb-4">
+          <CardTitle className="flex items-center gap-2 text-lg font-semibold tracking-tight">
+            <span className="bg-primary/12 text-primary flex size-9 items-center justify-center rounded-xl">
+              <ListTodo className="size-4" aria-hidden />
+            </span>
+            Oppgaver og tiltak
           </CardTitle>
-          <CardDescription>
-            Oppfølgingspunkter for denne ROS-analysen — tildeling og status.
+          <CardDescription className="text-sm leading-relaxed">
+            Koble hver oppgave til det risiko- eller tiltakspunktet du har skrevet under
+            risikovurdering (samme tekst som i listen over matrisen). Velg risikohåndtering
+            etter ISO 31000. Oppgaver ligger før oppsummering slik at oppfølging planlegges før
+            den samlede før/etter-oversikten.
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-6">
+        <CardContent className="space-y-8 pt-6">
           <form
             onSubmit={(e) => void onCreateTask(e)}
-            className="space-y-3 rounded-xl border border-dashed p-4"
+            className="space-y-5 rounded-2xl border border-border/60 bg-muted/15 p-4 sm:p-5"
           >
-            <p className="text-sm font-medium">Ny oppgave</p>
-            <div className="grid gap-3 sm:grid-cols-2">
+            <div>
+              <p className="text-foreground text-sm font-semibold">Ny oppgave</p>
+              <p className="text-muted-foreground mt-0.5 text-xs">
+                Koble til et konkret risiko-/tiltakspunkt og strategi — eller la oppgaven være generell.
+              </p>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-1.5 sm:col-span-2">
                 <Label htmlFor="rt-title">Tittel</Label>
                 <Input
                   id="rt-title"
                   value={taskTitle}
                   onChange={(e) => setTaskTitle(e.target.value)}
-                  required
+                  placeholder="F.eks. Iverksett tiltak X …"
                 />
               </div>
               <div className="space-y-1.5 sm:col-span-2">
@@ -1563,8 +1767,80 @@ export function RosAnalysisEditor({
                   onChange={(e) => setTaskDesc(e.target.value)}
                   rows={2}
                   className="min-h-0"
+                  placeholder="Detaljer, ansvar, forutsetninger …"
                 />
               </div>
+              <div className="space-y-1.5 sm:col-span-2">
+                <Label
+                  htmlFor="rt-risk"
+                  className="inline-flex items-center gap-1.5"
+                >
+                  <Link2 className="text-muted-foreground size-3.5" aria-hidden />
+                  Kobling til risiko / tiltak
+                </Label>
+                <select
+                  id="rt-risk"
+                  className="border-input bg-background flex h-10 w-full rounded-lg border px-2 text-sm"
+                  value={taskRiskLink}
+                  onChange={(e) => setTaskRiskLink(e.target.value)}
+                >
+                  {taskRiskLinkOptions.map((o) => (
+                    <option key={o.value || "opt-none"} value={o.value}>
+                      {o.label}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-muted-foreground text-[11px] leading-snug">
+                  Listen bygges fra punktene du har lagt inn under «Identifiserte risikoer» (før og etter tiltak).
+                </p>
+              </div>
+              <div className="space-y-1.5 sm:col-span-2">
+                <Label htmlFor="rt-treatment">Risikohåndtering (valgfritt)</Label>
+                <select
+                  id="rt-treatment"
+                  className="border-input bg-background flex h-10 w-full rounded-lg border px-2 text-sm"
+                  value={taskRiskTreatment}
+                  onChange={(e) =>
+                    setTaskRiskTreatment(
+                      e.target.value === ""
+                        ? ""
+                        : (e.target.value as
+                            | "mitigate"
+                            | "accept"
+                            | "transfer"
+                            | "avoid"),
+                    )
+                  }
+                >
+                  {ROS_RISK_TREATMENT_OPTIONS.map((o) => (
+                    <option key={o.value || "none"} value={o.value}>
+                      {o.label}
+                    </option>
+                  ))}
+                </select>
+                {taskRiskTreatment ? (
+                  <p className="text-muted-foreground text-[11px] leading-snug">
+                    {
+                      ROS_RISK_TREATMENT_OPTIONS.find(
+                        (o) => o.value === taskRiskTreatment,
+                      )?.description
+                    }
+                  </p>
+                ) : null}
+              </div>
+              {taskRiskTreatment === "accept" ? (
+                <div className="space-y-1.5 sm:col-span-2">
+                  <Label htmlFor="rt-accept-note">Grunnlag for aksept (valgfritt)</Label>
+                  <Textarea
+                    id="rt-accept-note"
+                    value={taskResidualNote}
+                    onChange={(e) => setTaskResidualNote(e.target.value)}
+                    rows={2}
+                    className="min-h-0"
+                    placeholder="Kort begrunnelse for rest risiko …"
+                  />
+                </div>
+              ) : null}
               <div className="space-y-1.5">
                 <Label htmlFor="rt-assign">Tildelt</Label>
                 <select
@@ -1605,6 +1881,15 @@ export function RosAnalysisEditor({
                   }
                 />
               </div>
+              <div className="space-y-1.5 sm:col-span-2">
+                <Label htmlFor="rt-due">Frist (valgfritt)</Label>
+                <Input
+                  id="rt-due"
+                  type="datetime-local"
+                  value={taskDueAt}
+                  onChange={(e) => setTaskDueAt(e.target.value)}
+                />
+              </div>
             </div>
             <Button type="submit" disabled={taskBusy || !taskTitle.trim()}>
               {taskBusy ? "Oppretter …" : "Opprett oppgave"}
@@ -1616,15 +1901,27 @@ export function RosAnalysisEditor({
           {tasks === undefined ? (
             <p className="text-muted-foreground text-sm">Henter oppgaver …</p>
           ) : tasks.length === 0 ? (
-            <p className="text-muted-foreground text-sm">Ingen oppgaver ennå.</p>
+            <div className="border-border/40 text-muted-foreground rounded-xl border border-dashed px-4 py-8 text-center text-sm">
+              Ingen oppgaver ennå. Opprett én over, eller gå tilbake til
+              risikovurdering og legg inn risikoer først.
+            </div>
           ) : (
-            <ul className="space-y-4">
+            <ul className="space-y-3">
               {tasks.map((t) => (
-                <li key={t._id} className="rounded-xl border p-4 shadow-sm">
+                <li
+                  key={t._id}
+                  className={cn(
+                    "rounded-xl border bg-card p-4 shadow-sm transition-shadow hover:shadow-md",
+                    (t.linkedCellItemId ||
+                      t.matrixRow !== undefined) &&
+                      "border-l-primary border-l-4",
+                  )}
+                >
                   {editingTaskId === t._id ? (
                     <TaskEditForm
                       task={t}
                       members={members ?? []}
+                      riskLinkOptions={taskRiskLinkOptions}
                       onCancel={() => setEditingTaskId(null)}
                       onSave={async (patch) => {
                         await updateRosTask({ taskId: t._id, ...patch });
@@ -1633,14 +1930,29 @@ export function RosAnalysisEditor({
                     />
                   ) : (
                     <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                      <div className="min-w-0 space-y-1">
+                      <div className="min-w-0 space-y-2">
                         <div className="flex flex-wrap items-center gap-2">
                           <p className="font-medium">{t.title}</p>
                           <Badge variant={t.status === "done" ? "secondary" : "default"}>
                             {t.status === "done" ? "Fullført" : "Åpen"}
                           </Badge>
-                          <span className="text-muted-foreground text-xs">P{t.priority}</span>
+                          <span className="text-muted-foreground text-xs tabular-nums">
+                            P{t.priority ?? 3}
+                          </span>
+                          {riskTreatmentLabel(t.riskTreatmentKind) ? (
+                            <Badge variant="outline" className="font-normal">
+                              {riskTreatmentLabel(t.riskTreatmentKind)}
+                            </Badge>
+                          ) : null}
                         </div>
+                        {(t as { linkedRiskSummary?: string | null }).linkedRiskSummary ? (
+                          <p className="text-muted-foreground flex flex-wrap items-center gap-1.5 text-xs">
+                            <Link2 className="text-primary size-3.5 shrink-0" aria-hidden />
+                            <span>
+                              {(t as { linkedRiskSummary?: string | null }).linkedRiskSummary}
+                            </span>
+                          </p>
+                        ) : null}
                         {t.description ? (
                           <p className="text-muted-foreground text-sm whitespace-pre-wrap">{t.description}</p>
                         ) : null}
@@ -1686,6 +1998,36 @@ export function RosAnalysisEditor({
               ))}
             </ul>
           )}
+        </CardContent>
+      </Card>
+      )}
+
+      {/* === Section 2: Oppsummering === */}
+      {rosSection === 2 && (
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Oppsummering og risikoreduksjon</CardTitle>
+          <CardDescription>
+            Sammenligning av risiko før og etter tiltak — se hva som er redusert,
+            hva som gjenstår, og hva som trenger oppfølging.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-5">
+          <div id="ros-risk-register" className="space-y-3 scroll-mt-24">
+            {riskRegisterSnapshot ? (
+              <RosRiskRegisterTable
+                sameLayout={data.rosSummary.sameLayout}
+                before={riskRegisterSnapshot.before}
+                after={riskRegisterSnapshot.after}
+              />
+            ) : null}
+          </div>
+          {data.rosSummary.suggestedLinkFlags.length > 0 ? (
+            <p className="text-muted-foreground text-xs leading-relaxed">
+              <span className="text-foreground font-medium">PVV-flagg:</span>{" "}
+              {data.rosSummary.suggestedLinkFlags.join(", ")}
+            </p>
+          ) : null}
         </CardContent>
       </Card>
       )}
@@ -2130,6 +2472,7 @@ export function RosAnalysisEditor({
 function TaskEditForm({
   task,
   members,
+  riskLinkOptions,
   onCancel,
   onSave,
 }: {
@@ -2140,12 +2483,17 @@ function TaskEditForm({
     assigneeUserId?: Id<"users">;
     priority?: number;
     dueAt?: number;
+    linkedCellItemId?: string;
+    linkedCellItemPhase?: "before" | "after";
+    riskTreatmentKind?: "mitigate" | "accept" | "transfer" | "avoid";
+    residualRiskAcceptedNote?: string;
   };
   members: Array<{
     userId: Id<"users">;
     name?: string | null;
     email?: string | null;
   }>;
+  riskLinkOptions: { value: string; label: string }[];
   onCancel: () => void;
   onSave: (patch: {
     title: string;
@@ -2153,8 +2501,16 @@ function TaskEditForm({
     assigneeUserId: Id<"users"> | null;
     priority: number;
     dueAt: number | null;
+    linkedCellItemId: string | null;
+    linkedCellItemPhase: "before" | "after" | null;
+    riskTreatmentKind: "mitigate" | "accept" | "transfer" | "avoid" | null;
+    residualRiskAcceptedNote: string | null;
   }) => Promise<void>;
 }) {
+  const initialRiskLink =
+    task.linkedCellItemId && task.linkedCellItemPhase
+      ? `${task.linkedCellItemPhase}:${task.linkedCellItemId}`
+      : "";
   const [title, setTitle] = useState(task.title);
   const [description, setDescription] = useState(task.description ?? "");
   const [assigneeUserId, setAssigneeUserId] = useState<
@@ -2165,6 +2521,13 @@ function TaskEditForm({
     task.dueAt
       ? new Date(task.dueAt).toISOString().slice(0, 16)
       : "",
+  );
+  const [riskLink, setRiskLink] = useState(initialRiskLink);
+  const [treatment, setTreatment] = useState<
+    "" | "mitigate" | "accept" | "transfer" | "avoid"
+  >(task.riskTreatmentKind ?? "");
+  const [acceptNote, setAcceptNote] = useState(
+    task.residualRiskAcceptedNote ?? "",
   );
   const [busy, setBusy] = useState(false);
 
@@ -2185,6 +2548,54 @@ function TaskEditForm({
           rows={3}
         />
       </div>
+      <div className="space-y-1.5">
+        <Label>Kobling til risiko / tiltak</Label>
+        <select
+          className="border-input bg-background flex h-10 w-full rounded-lg border px-2 text-sm"
+          value={riskLink}
+          onChange={(e) => setRiskLink(e.target.value)}
+        >
+          {riskLinkOptions.map((o) => (
+            <option key={o.value || "opt-none"} value={o.value}>
+              {o.label}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div className="space-y-1.5">
+        <Label>Risikohåndtering</Label>
+        <select
+          className="border-input bg-background flex h-10 w-full rounded-lg border px-2 text-sm"
+          value={treatment}
+          onChange={(e) =>
+            setTreatment(
+              e.target.value === ""
+                ? ""
+                : (e.target.value as
+                    | "mitigate"
+                    | "accept"
+                    | "transfer"
+                    | "avoid"),
+            )
+          }
+        >
+          {ROS_RISK_TREATMENT_OPTIONS.map((o) => (
+            <option key={o.value || "none"} value={o.value}>
+              {o.label}
+            </option>
+          ))}
+        </select>
+      </div>
+      {treatment === "accept" ? (
+        <div className="space-y-1.5">
+          <Label>Grunnlag for aksept (valgfritt)</Label>
+          <Textarea
+            value={acceptNote}
+            onChange={(e) => setAcceptNote(e.target.value)}
+            rows={2}
+          />
+        </div>
+      ) : null}
       <div className="grid gap-3 sm:grid-cols-2">
         <div className="space-y-1.5">
           <Label>Tildelt</Label>
@@ -2240,6 +2651,7 @@ function TaskEditForm({
               dueAt === ""
                 ? null
                 : new Date(dueAt).getTime();
+            const risk = parseRosTaskRiskLink(riskLink);
             void onSave({
               title: title.trim(),
               description: description.trim() || null,
@@ -2247,6 +2659,13 @@ function TaskEditForm({
                 assigneeUserId === "" ? null : assigneeUserId,
               priority,
               dueAt: dueMs,
+              linkedCellItemId: risk ? risk.linkedCellItemId : null,
+              linkedCellItemPhase: risk ? risk.linkedCellItemPhase : null,
+              riskTreatmentKind: treatment === "" ? null : treatment,
+              residualRiskAcceptedNote:
+                treatment === "accept"
+                  ? acceptNote.trim() || null
+                  : null,
             }).finally(() => setBusy(false));
           }}
         >

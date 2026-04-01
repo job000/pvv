@@ -116,30 +116,26 @@ export function RosDashboardPanel({
 
   return (
     <div className="space-y-8">
-      <div className="border-border/60 bg-muted/10 rounded-2xl border p-5">
-        <div className="flex flex-wrap items-start gap-3">
-          <div className="bg-primary/12 text-primary flex size-11 shrink-0 items-center justify-center rounded-xl">
-            <BookOpen className="size-5" aria-hidden />
+      <div className="border-border/50 bg-muted/15 rounded-2xl border p-4 sm:p-5">
+        <div className="flex items-start gap-3">
+          <div className="bg-primary/12 text-primary flex size-10 shrink-0 items-center justify-center rounded-xl">
+            <BookOpen className="size-4" aria-hidden />
           </div>
           <div className="min-w-0 space-y-2">
-            <h2 className="font-heading text-lg font-semibold">
-              Slik leser du oversikten
+            <h2 className="font-heading text-base font-semibold sm:text-lg">
+              Oversikt
             </h2>
             <p className="text-muted-foreground text-sm leading-relaxed">
-              <strong className="text-foreground">ROS</strong> kartlegger risiko
-              i en matrise (sannsynlighet × konsekvens). Hver celle får nivå{" "}
-              <strong>0–5</strong> med farger fra grå (ikke vurdert) til rød
-              (kritisk). Denne siden summerer{" "}
-              <strong>alle analyser</strong> i arbeidsområdet slik at dere ser
-              fordeling, høyeste nivå og hvilke prosesser som har flest
-              høyrisiko-celler — i tillegg til kobling mot{" "}
-              <strong>PVV</strong> (antall koblede vurderinger per analyse).
+              Her ser du <strong className="text-foreground">samlet risiko</strong> på
+              tvers av ROS-analyser (celleverdier <strong className="text-foreground">0–5</strong>
+              ). <strong className="text-foreground">ROS kan brukes alene</strong> — kobling
+              til PVV eller prosess er valgfritt.
             </p>
-            <p className="text-muted-foreground text-sm leading-relaxed">
-              Bruk <strong className="text-foreground">søylediagrammet</strong>{" "}
-              under for å se total fordeling på tvers av analyser. Tabellen
-              under sammenligner hver analyse: maks nivå, gjennomsnitt av
-              vurderte celler, og «høy/sårbar» (nivå 4–5).
+            <p className="text-muted-foreground text-xs leading-relaxed">
+              Forklaring av nivå <strong className="text-foreground">1–5</strong> på
+              sannsynlighet og konsekvens ligger i boksen{" "}
+              <strong className="text-foreground">«Hva betyr tallene …»</strong> over fanene
+              (åpen som standard).
             </p>
           </div>
         </div>

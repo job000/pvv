@@ -106,6 +106,9 @@ function assertCellItemsShape(
         if (it.text.length > 8000) {
           throw new Error("Cellepunkt er for langt.");
         }
+        if (it.afterChangeNote && it.afterChangeNote.length > 8000) {
+          throw new Error("Begrunnelse for endring etter tiltak er for lang.");
+        }
       }
     }
   }
@@ -215,6 +218,45 @@ function normalizedAfterMatrices(row: Doc<"rosAnalyses">): {
   return { matrixValuesAfter, cellNotesAfter, cellItemsAfter };
 }
 
+function findRosCellItemInAnalysis(
+  analysis: Doc<"rosAnalyses">,
+  cellItemId: string,
+  phase: "before" | "after",
+): { item: RosCellItem; row: number; col: number } | null {
+  if (phase === "before") {
+    const cellItems = normalizeCellItems(
+      analysis.matrixValues,
+      analysis.cellNotes,
+      analysis.cellItems as RosCellItemMatrix | undefined,
+    );
+    for (let r = 0; r < cellItems.length; r++) {
+      const row = cellItems[r];
+      if (!row) continue;
+      for (let c = 0; c < row.length; c++) {
+        const cell = row[c];
+        if (!cell) continue;
+        for (const it of cell) {
+          if (it.id === cellItemId) return { item: it, row: r, col: c };
+        }
+      }
+    }
+  } else {
+    const { cellItemsAfter } = normalizedAfterMatrices(analysis);
+    for (let r = 0; r < cellItemsAfter.length; r++) {
+      const row = cellItemsAfter[r];
+      if (!row) continue;
+      for (let c = 0; c < row.length; c++) {
+        const cell = row[c];
+        if (!cell) continue;
+        for (const it of cell) {
+          if (it.id === cellItemId) return { item: it, row: r, col: c };
+        }
+      }
+    }
+  }
+  return null;
+}
+
 function clampRosPriority(p: number | undefined): number {
   if (p === undefined) return 3;
   return Math.min(5, Math.max(1, Math.round(p)));
@@ -255,10 +297,59 @@ async function enrichRosTask(
     ? await ctx.db.get(row.assigneeUserId)
     : null;
   const creator = await ctx.db.get(row.createdByUserId);
+  const analysis = await ctx.db.get(row.rosAnalysisId);
+  let linkedRiskSummary: string | null = null;
+  if (analysis) {
+    if (row.linkedCellItemId && row.linkedCellItemPhase) {
+      const found = findRosCellItemInAnalysis(
+        analysis,
+        row.linkedCellItemId,
+        row.linkedCellItemPhase,
+      );
+      if (found) {
+        const phaseNb = row.linkedCellItemPhase === "before" ? "Før" : "Etter";
+        const dim =
+          row.linkedCellItemPhase === "before"
+            ? {
+                rl: analysis.rowLabels,
+                cl: analysis.colLabels,
+              }
+            : (() => {
+                const d = afterDimensions(analysis);
+                return { rl: d.rowLabels, cl: d.colLabels };
+              })();
+        const rlab = dim.rl[found.row] ?? `R${found.row + 1}`;
+        const clab = dim.cl[found.col] ?? `K${found.col + 1}`;
+        const raw = found.item.text.trim();
+        const excerpt =
+          raw.length > 100 ? `${raw.slice(0, 100)}…` : raw;
+        linkedRiskSummary = excerpt
+          ? `${phaseNb} · ${rlab} × ${clab} — ${excerpt}`
+          : `${phaseNb} · ${rlab} × ${clab} — (tomt punkt)`;
+      }
+    } else if (
+      row.matrixRow !== undefined &&
+      row.matrixCol !== undefined &&
+      row.matrixPhase
+    ) {
+      const phaseNb = row.matrixPhase === "before" ? "Før" : "Etter";
+      const dim =
+        row.matrixPhase === "after"
+          ? afterDimensions(analysis)
+          : {
+              rowLabels: analysis.rowLabels,
+              colLabels: analysis.colLabels,
+            };
+      const rlab = dim.rowLabels[row.matrixRow] ?? `R${row.matrixRow + 1}`;
+      const clab = dim.colLabels[row.matrixCol] ?? `K${row.matrixCol + 1}`;
+      linkedRiskSummary = `${phaseNb} · ${rlab} × ${clab} (eldre cellekobling)`;
+    }
+  }
   return {
     ...row,
     assigneeName: assignee?.name ?? assignee?.email ?? null,
     creatorName: creator?.name ?? creator?.email ?? null,
+    linkedRiskSummary,
   };
 }
 
@@ -1074,10 +1165,15 @@ export const createAnalysis = mutation({
   },
 });
 
+/** Må matche `rosCellItemValidator` i schema.ts (plassering før/etter i matrisen). */
 const rosCellItemV = v.object({
   id: v.string(),
   text: v.string(),
   flags: v.optional(v.array(v.string())),
+  afterRow: v.optional(v.number()),
+  afterCol: v.optional(v.number()),
+  sourceItemId: v.optional(v.string()),
+  afterChangeNote: v.optional(v.string()),
 });
 const rosCellItemsMatrixV = v.array(v.array(v.array(rosCellItemV)));
 
@@ -1987,6 +2083,11 @@ export const createRosTask = mutation({
     assigneeUserId: v.optional(v.id("users")),
     priority: v.optional(v.number()),
     dueAt: v.optional(v.number()),
+    /** Kobling til risiko-/tiltakspunkt (anbefalt) */
+    linkedCellItemId: v.optional(v.string()),
+    linkedCellItemPhase: v.optional(
+      v.union(v.literal("before"), v.literal("after")),
+    ),
     matrixRow: v.optional(v.number()),
     matrixCol: v.optional(v.number()),
     matrixPhase: v.optional(
@@ -2009,9 +2110,33 @@ export const createRosTask = mutation({
     if (!title) {
       throw new Error("Oppgavetekst mangler.");
     }
+    const linkId = args.linkedCellItemId?.trim();
+    const hasRiskLink =
+      Boolean(linkId) && args.linkedCellItemPhase !== undefined;
+    if (linkId && args.linkedCellItemPhase === undefined) {
+      throw new Error("Velg fase (før eller etter tiltak) for risikokobling.");
+    }
+    if (!linkId && args.linkedCellItemPhase !== undefined) {
+      throw new Error("Mangler risiko-/tiltak-ID for kobling.");
+    }
+    if (hasRiskLink && linkId) {
+      const found = findRosCellItemInAnalysis(
+        analysis,
+        linkId,
+        args.linkedCellItemPhase!,
+      );
+      if (!found) {
+        throw new Error(
+          "Fant ikke dette risiko-/tiltakspunktet i analysen. Oppdater siden og prøv igjen.",
+        );
+      }
+    }
     const hasCell =
-      args.matrixRow !== undefined && args.matrixCol !== undefined;
+      !hasRiskLink &&
+      args.matrixRow !== undefined &&
+      args.matrixCol !== undefined;
     if (
+      !hasRiskLink &&
       (args.matrixRow !== undefined) !== (args.matrixCol !== undefined)
     ) {
       throw new Error("Oppgi både rad og kolonne for cellekobling, eller ingen.");
@@ -2042,9 +2167,13 @@ export const createRosTask = mutation({
       status: "open",
       priority: clampRosPriority(args.priority),
       dueAt: args.dueAt,
-      matrixRow: hasCell ? args.matrixRow : undefined,
-      matrixCol: hasCell ? args.matrixCol : undefined,
-      matrixPhase: hasCell ? args.matrixPhase : undefined,
+      linkedCellItemId: hasRiskLink ? linkId : undefined,
+      linkedCellItemPhase: hasRiskLink
+        ? args.linkedCellItemPhase
+        : undefined,
+      matrixRow: hasRiskLink ? undefined : hasCell ? args.matrixRow : undefined,
+      matrixCol: hasRiskLink ? undefined : hasCell ? args.matrixCol : undefined,
+      matrixPhase: hasRiskLink ? undefined : hasCell ? args.matrixPhase : undefined,
       riskTreatmentKind: args.riskTreatmentKind,
       residualRiskAcceptedAt:
         args.riskTreatmentKind === "accept" ? now : undefined,
@@ -2068,6 +2197,10 @@ export const updateRosTask = mutation({
     priority: v.optional(v.number()),
     dueAt: v.optional(v.union(v.number(), v.null())),
     status: v.optional(v.union(v.literal("open"), v.literal("done"))),
+    linkedCellItemId: v.optional(v.union(v.string(), v.null())),
+    linkedCellItemPhase: v.optional(
+      v.union(v.literal("before"), v.literal("after"), v.null()),
+    ),
     matrixRow: v.optional(v.union(v.number(), v.null())),
     matrixCol: v.optional(v.union(v.number(), v.null())),
     matrixPhase: v.optional(
@@ -2114,6 +2247,43 @@ export const updateRosTask = mutation({
     }
     if (args.status !== undefined) {
       patch.status = args.status;
+    }
+    if (
+      args.linkedCellItemId !== undefined ||
+      args.linkedCellItemPhase !== undefined
+    ) {
+      const lidIn =
+        args.linkedCellItemId !== undefined
+          ? args.linkedCellItemId
+          : row.linkedCellItemId;
+      const lphIn =
+        args.linkedCellItemPhase !== undefined
+          ? args.linkedCellItemPhase
+          : row.linkedCellItemPhase;
+      const trimmed =
+        lidIn === null || lidIn === undefined ? "" : lidIn.trim();
+      const explicitClear =
+        args.linkedCellItemId === null ||
+        args.linkedCellItemPhase === null ||
+        (args.linkedCellItemId !== undefined && trimmed === "");
+      if (explicitClear) {
+        patch.linkedCellItemId = undefined;
+        patch.linkedCellItemPhase = undefined;
+      } else if (trimmed && lphIn !== null && lphIn !== undefined) {
+        const found = findRosCellItemInAnalysis(analysis, trimmed, lphIn);
+        if (!found) {
+          throw new Error("Fant ikke risiko-/tiltakspunktet i analysen.");
+        }
+        patch.linkedCellItemId = trimmed;
+        patch.linkedCellItemPhase = lphIn;
+        patch.matrixRow = undefined;
+        patch.matrixCol = undefined;
+        patch.matrixPhase = undefined;
+      } else if (trimmed && (lphIn === null || lphIn === undefined)) {
+        throw new Error("Velg fase (før/etter tiltak) for risikokobling.");
+      } else if (!trimmed && lphIn !== null && lphIn !== undefined) {
+        throw new Error("Velg hvilket risiko-/tiltakspunkt oppgaven gjelder.");
+      }
     }
     if (
       args.matrixRow !== undefined ||

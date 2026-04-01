@@ -35,6 +35,7 @@ import type * as reminders from "../reminders.js";
 import type * as reviewSchedule from "../reviewSchedule.js";
 import type * as ros from "../ros.js";
 import type * as rosAxisLists from "../rosAxisLists.js";
+import type * as rosLibrary from "../rosLibrary.js";
 import type * as sprints from "../sprints.js";
 import type * as workspaces from "../workspaces.js";
 
@@ -72,6 +73,7 @@ declare const fullApi: ApiFromModules<{
   reviewSchedule: typeof reviewSchedule;
   ros: typeof ros;
   rosAxisLists: typeof rosAxisLists;
+  rosLibrary: typeof rosLibrary;
   sprints: typeof sprints;
   workspaces: typeof workspaces;
 }>;

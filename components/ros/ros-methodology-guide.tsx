@@ -19,7 +19,9 @@ import {
   Library,
   Link2,
   ListOrdered,
+  Scale3d,
 } from "lucide-react";
+import Link from "next/link";
 
 type Variant = "page" | "compact";
 
@@ -98,6 +100,38 @@ export function RosMethodologyGuide({
           <strong className="text-foreground">én aktiv risiko = ett eller få
           kryss</strong> i matrisen; dere kan bruke notatfeltet over matrisen for å
           forklare hvordan dere har tolket aksene.
+        </p>
+      </DetailsBlock>
+
+      <DetailsBlock
+        id="ros-metode-skala"
+        title="Hva betyr nivå 1–5 på aksene? (eksempel)"
+        icon={Scale3d}
+        defaultOpen={false}
+      >
+        <p>
+          I mange grovanalyser beskrives{" "}
+          <strong className="text-foreground">sannsynlighet</strong> og{" "}
+          <strong className="text-foreground">konsekvens</strong> med tekst per nivå
+          (frekvens, omfang, IKT osv.). I FRO ligger et{" "}
+          <strong className="text-foreground">konfigurerbart utgangspunkt</strong> du
+          kan sammenligne med — åpne{" "}
+          {workspaceId ? (
+            <Link
+              href={`/w/${workspaceId}/ros?fane=oversikt`}
+              className="text-primary font-medium underline-offset-4 hover:underline"
+            >
+              fanen «Oversikt»
+            </Link>
+          ) : (
+            "fanen «Oversikt»"
+          )}{" "}
+          og se rutenettet «Akseptkriterier (eksempel)».
+        </p>
+        <p>
+          <strong className="text-foreground">ROS er uavhengig av PVV:</strong> dere
+          kan bruke skalaen uten å koble analyse til prosess eller
+          personvernvurdering.
         </p>
       </DetailsBlock>
 

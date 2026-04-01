@@ -9,6 +9,7 @@ const rosCellItemValidator = v.object({
   afterRow: v.optional(v.number()),
   afterCol: v.optional(v.number()),
   sourceItemId: v.optional(v.string()),
+  afterChangeNote: v.optional(v.string()),
 });
 
 /** Felles input for én vurdering (Likert 1–5 som tall) */
@@ -531,6 +532,38 @@ export default defineSchema({
   }).index("by_list", ["listId"]),
 
   /**
+   * Brukerdefinerte kategorier for ROS-bibliotek (sortering og filtrering).
+   */
+  rosLibraryCategories: defineTable({
+    workspaceId: v.id("workspaces"),
+    name: v.string(),
+    sortOrder: v.number(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_workspace", ["workspaceId"]),
+
+  /**
+   * Gjenbrukbare risiko- og tiltakstekster (bibliotek).
+   * visibility "shared" = synlig i alle arbeidsområder brukeren er medlem av.
+   */
+  rosLibraryItems: defineTable({
+    workspaceId: v.id("workspaces"),
+    /** Valgfri kategori i samme arbeidsområde (sortering i liste) */
+    categoryId: v.optional(v.id("rosLibraryCategories")),
+    title: v.string(),
+    riskText: v.string(),
+    tiltakText: v.optional(v.string()),
+    flags: v.optional(v.array(v.string())),
+    tags: v.optional(v.array(v.string())),
+    createdByUserId: v.id("users"),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    visibility: v.union(v.literal("workspace"), v.literal("shared")),
+  })
+    .index("by_workspace", ["workspaceId"])
+    .index("by_visibility", ["visibility"]),
+
+  /**
    * Utfylt ROS-analyse med matrise (0–5 per celle). Kobles til kandidat.
    * @deprecated assessmentId — bruk rosAnalysisAssessments for PVV-kobling (mange-til-mange).
    */
@@ -691,7 +724,15 @@ export default defineSchema({
     priority: v.optional(v.number()),
     dueAt: v.optional(v.number()),
     dashboardRank: v.optional(v.number()),
-    /** Valgfri kobling til matrisecelle (risikobehandling) */
+    /**
+     * Kobling til konkret risiko-/tiltakspunkt (RosCellItem.id) i analysen.
+     * Primær kobling i UI — erstatter ren matrisecelle.
+     */
+    linkedCellItemId: v.optional(v.string()),
+    linkedCellItemPhase: v.optional(
+      v.union(v.literal("before"), v.literal("after")),
+    ),
+    /** @deprecated Eldre oppgaver — bruk linkedCellItemId */
     matrixRow: v.optional(v.number()),
     matrixCol: v.optional(v.number()),
     matrixPhase: v.optional(

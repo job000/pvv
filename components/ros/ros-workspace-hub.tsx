@@ -11,6 +11,7 @@ import { useQuery } from "convex/react";
 import {
   AlertCircle,
   ArrowRight,
+  BarChart3,
   CalendarClock,
   ClipboardList,
   Grid3x3,
@@ -41,7 +42,7 @@ export type RosWorkspaceHubData = {
   }>;
 };
 
-type Tab = "maler" | "analyser" | "oversikt";
+type RosHubTab = "maler" | "analyser" | "oversikt";
 
 function formatShort(ts: number) {
   try {
@@ -102,15 +103,16 @@ function StatTile({
 export function RosWorkspaceHub({
   workspaceId,
   hub,
-  activeTab,
+  compact = false,
   onTab,
   onStartAnalysisForCandidate,
   onOpenTemplateDialog,
 }: {
   workspaceId: Id<"workspaces">;
   hub: RosWorkspaceHubData | null | undefined;
-  activeTab: Tab;
-  onTab: (t: Tab) => void;
+  /** På Maler/Analyser: ett kompakt sammendrag. Full kontrollpanel på Oversikt. */
+  compact?: boolean;
+  onTab: (t: RosHubTab) => void;
   onStartAnalysisForCandidate: (candidateId: Id<"candidates">) => void;
   onOpenTemplateDialog: () => void;
 }) {
@@ -142,20 +144,180 @@ export function RosWorkspaceHub({
   const gap = hub.candidatesWithoutRosCount;
   const hasOrgScale = hub.candidateCount >= 8 || hub.analysisCount >= 6;
 
+  const overdueBlock =
+    reviewSchedule !== undefined && overdueReviewCount > 0 ? (
+      <Alert
+        className={
+          compact
+            ? "border-amber-500/40 bg-amber-500/[0.07] py-2.5 [&>svg]:top-2.5"
+            : "border-amber-500/40 bg-amber-500/[0.07]"
+        }
+      >
+        <CalendarClock className="size-4 text-amber-800 dark:text-amber-200" />
+        <AlertTitle>Planlagt revisjon forfalt</AlertTitle>
+        <AlertDescription
+          className={compact ? "text-foreground/90 text-xs leading-snug" : "text-foreground/90"}
+        >
+          {overdueReviewCount === 1
+            ? "Én ROS- eller PVV-gjennomgang har passert satt tidspunkt. Åpne analysen eller vurderingen og oppdater dato eller fullfør sjekken."
+            : `${overdueReviewCount} ROS- eller PVV-gjennomganger har passert satt tidspunkt. Oppdater dato eller dokumentasjon der det trengs.`}{" "}
+          {!compact ? (
+            <>E-post sendes også til eier (maks. én gang per uke per sak).</>
+          ) : null}
+        </AlertDescription>
+      </Alert>
+    ) : null;
+
+  if (compact) {
+    return (
+      <div className="space-y-3">
+        {overdueBlock}
+
+        <div className="space-y-2.5 rounded-xl border border-border/50 bg-muted/10 px-3 py-2.5">
+          <p className="text-muted-foreground text-[11px] leading-snug">
+            ROS kan stå alene — kobling til PVV eller prosess er valgfritt.
+          </p>
+          <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+            <p className="text-muted-foreground text-xs tabular-nums sm:text-[13px]">
+              <span className="text-foreground font-medium">{hub.analysisCount}</span>{" "}
+              {hub.analysisCount === 1 ? "analyse" : "analyser"}
+              <span className="mx-1.5 text-border">·</span>
+              <span className="text-foreground font-medium">{hub.templateCount}</span>{" "}
+              {hub.templateCount === 1 ? "mal" : "maler"}
+              <span className="mx-1.5 text-border">·</span>
+              <span
+                className={
+                  gap > 0
+                    ? "font-medium text-amber-800 dark:text-amber-200"
+                    : "text-foreground font-medium"
+                }
+              >
+                {gap} uten ROS
+              </span>
+              <span className="mx-1.5 text-border">·</span>
+              <span className="text-foreground font-medium">{hub.openRosTasksCount}</span>{" "}
+              åpne oppgaver
+            </p>
+            <div className="flex flex-wrap gap-1.5">
+            <button
+              type="button"
+              onClick={() => onTab("oversikt")}
+              className={buttonVariants({
+                variant: "ghost",
+                size: "sm",
+                className: "h-7 gap-1 px-2 text-xs",
+              })}
+            >
+              <BarChart3 className="size-3" aria-hidden />
+              Full oversikt
+            </button>
+            <Link
+              href={`/w/${workspaceId}/ros/akser`}
+              className={buttonVariants({
+                variant: "outline",
+                size: "sm",
+                className: "h-7 gap-1 px-2 text-xs",
+              })}
+            >
+              <Layers className="size-3" aria-hidden />
+              Akser
+            </Link>
+            <button
+              type="button"
+              onClick={() => {
+                onTab("maler");
+                onOpenTemplateDialog();
+              }}
+              className={buttonVariants({
+                variant: "outline",
+                size: "sm",
+                className: "h-7 gap-1 px-2 text-xs",
+              })}
+            >
+              <Sparkles className="size-3" aria-hidden />
+              Ny mal
+            </button>
+            </div>
+          </div>
+        </div>
+
+        {gap > 0 ? (
+          <div
+            className="rounded-lg border border-amber-500/30 bg-amber-500/[0.05] px-3 py-2"
+            role="status"
+          >
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-1.5">
+                <AlertCircle className="size-3.5 shrink-0 text-amber-600 dark:text-amber-400" />
+                <p className="text-foreground text-xs font-medium">
+                  {gap} prosess{gap === 1 ? "" : "er"} mangler ROS
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => onTab("analyser")}
+                className={buttonVariants({
+                  variant: "secondary",
+                  size: "sm",
+                  className: "h-7 text-xs gap-1",
+                })}
+              >
+                Opprett
+                <ArrowRight className="size-3" aria-hidden />
+              </button>
+            </div>
+            <ul className="mt-2 flex max-h-24 flex-wrap gap-1 overflow-y-auto [scrollbar-width:thin]">
+              {hub.candidatesWithoutRos.map((c) => (
+                <li key={c._id}>
+                  <button
+                    type="button"
+                    onClick={() => onStartAnalysisForCandidate(c._id)}
+                    className="border-border/60 bg-card hover:border-primary/40 hover:bg-primary/5 rounded border px-1.5 py-0.5 text-left text-[11px] transition-colors"
+                  >
+                    <span className="font-medium">{c.name}</span>{" "}
+                    <span className="text-muted-foreground font-mono">({c.code})</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+            {hub.candidatesWithoutRosCount > hub.candidatesWithoutRos.length ? (
+              <p className="text-muted-foreground mt-1.5 text-[10px]">
+                +{hub.candidatesWithoutRosCount - hub.candidatesWithoutRos.length}{" "}
+                til — se fanen Oversikt
+              </p>
+            ) : null}
+          </div>
+        ) : null}
+
+        {hub.recentAnalyses.length > 0 ? (
+          <div className="space-y-1.5">
+            <p className="text-muted-foreground text-[11px] font-medium">Sist oppdatert</p>
+            <div className="flex flex-wrap gap-1.5">
+              {hub.recentAnalyses.slice(0, 4).map((r) => (
+                <Link
+                  key={r.analysisId}
+                  href={`/w/${workspaceId}/ros/a/${r.analysisId}`}
+                  className="group inline-flex max-w-full items-center gap-1.5 rounded-md border border-border/50 bg-card px-2 py-1.5 text-xs shadow-sm transition-all hover:border-primary/30"
+                >
+                  <span className="min-w-0 truncate font-medium">{r.title}</span>
+                  {r.candidateCode ? (
+                    <span className="text-muted-foreground shrink-0 font-mono text-[10px]">
+                      {r.candidateCode}
+                    </span>
+                  ) : null}
+                  <ArrowRight className="size-2.5 shrink-0 text-muted-foreground/40 transition-transform group-hover:translate-x-0.5 group-hover:text-primary" />
+                </Link>
+              ))}
+            </div>
+          </div>
+        ) : null}
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-4">
-      {reviewSchedule !== undefined && overdueReviewCount > 0 ? (
-        <Alert className="border-amber-500/40 bg-amber-500/[0.07]">
-          <CalendarClock className="size-4 text-amber-800 dark:text-amber-200" />
-          <AlertTitle>Planlagt revisjon forfalt</AlertTitle>
-          <AlertDescription className="text-foreground/90">
-            {overdueReviewCount === 1
-              ? "Én ROS- eller PVV-gjennomgang har passert satt tidspunkt. Åpne analysen eller vurderingen og oppdater dato eller fullfør sjekken."
-              : `${overdueReviewCount} ROS- eller PVV-gjennomganger har passert satt tidspunkt. Oppdater dato eller dokumentasjon der det trengs.`}{" "}
-            E-post sendes også til eier (maks. én gang per uke per sak).
-          </AlertDescription>
-        </Alert>
-      ) : null}
+      {overdueBlock}
       <div className="space-y-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="min-w-0">
@@ -198,7 +360,7 @@ export function RosWorkspaceHub({
           </div>
         </div>
 
-        <div className="grid gap-3 grid-cols-2 xl:grid-cols-4">
+        <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
           <StatTile
             label="ROS-analyser"
             value={hub.analysisCount}

@@ -24,10 +24,13 @@ import {
 } from "@/lib/ros-defaults";
 import { toast } from "@/lib/app-toast";
 import { cellRiskClass } from "@/lib/ros-risk-colors";
+import { useRosWorkspaceUiPrefs } from "@/lib/ros-workspace-ui-prefs";
 import { cn } from "@/lib/utils";
 import { useMutation, useQuery } from "convex/react";
 import { RosDashboardPanel } from "@/components/ros/ros-dashboard-panel";
 import { RosMethodologyGuide } from "@/components/ros/ros-methodology-guide";
+import { RosScaleReference } from "@/components/ros/ros-scale-reference";
+import { RosLibraryPanel } from "@/components/ros/ros-library-panel";
 import { RosWorkspaceHub } from "@/components/ros/ros-workspace-hub";
 import {
   RosTemplatePreviewMini,
@@ -44,6 +47,8 @@ import { ROS_TEMPLATE_PRESETS, presetToFormState } from "@/lib/ros-template-pres
 import {
   ArrowRight,
   BarChart3,
+  BookMarked,
+  ChevronDown,
   ClipboardList,
   Clock,
   Grid3x3,
@@ -76,12 +81,13 @@ function formatRelative(ts: number | undefined): string {
   }
 }
 
-type Tab = "maler" | "analyser" | "oversikt";
+type Tab = "maler" | "analyser" | "oversikt" | "bibliotek";
 
 const FLOW_STEPS = [
   { id: "maler" as const, n: 1, label: "Maler", icon: Grid3x3, hint: "Definer risikoakser" },
   { id: "analyser" as const, n: 2, label: "Analyser", icon: ClipboardList, hint: "Fyll risikomatrise" },
   { id: "oversikt" as const, n: 3, label: "Oversikt", icon: BarChart3, hint: "Dashboard og rapport" },
+  { id: "bibliotek" as const, n: 4, label: "Bibliotek", icon: BookMarked, hint: "Gjenbruk risiko og tiltak" },
 ] as const;
 
 function RosFlowNav({
@@ -95,55 +101,58 @@ function RosFlowNav({
 }) {
   const activeIdx = FLOW_STEPS.findIndex((s) => s.id === tab);
   return (
-    <div className="space-y-1">
-      <nav className="flex items-stretch gap-1 rounded-2xl border border-border/60 bg-muted/20 p-1" role="tablist">
-        {FLOW_STEPS.map((s, i) => {
-          const active = tab === s.id;
-          const done = activeIdx > i;
-          const Icon = s.icon;
-          const count =
-            s.id === "maler" ? counts?.maler : s.id === "analyser" ? counts?.analyser : undefined;
-          return (
-            <button
-              key={s.id}
-              type="button"
-              role="tab"
-              aria-selected={active}
-              onClick={() => onTab(s.id)}
+    <nav
+      className="flex items-stretch gap-1 rounded-xl border border-border/60 bg-muted/20 p-1"
+      role="tablist"
+      aria-label="ROS-arbeidsflyt"
+    >
+      {FLOW_STEPS.map((s, i) => {
+        const active = tab === s.id;
+        const done = activeIdx > i;
+        const Icon = s.icon;
+        const count =
+          s.id === "maler"
+            ? counts?.maler
+            : s.id === "analyser"
+              ? counts?.analyser
+              : undefined;
+        return (
+          <button
+            key={s.id}
+            type="button"
+            role="tab"
+            aria-selected={active}
+            onClick={() => onTab(s.id)}
+            className={cn(
+              "group relative flex flex-1 items-center justify-center gap-2 rounded-lg px-2.5 py-2 text-sm font-medium transition-all sm:justify-start sm:px-3",
+              active
+                ? "bg-card text-foreground shadow-sm ring-1 ring-border/50"
+                : "text-muted-foreground hover:bg-card/50 hover:text-foreground",
+            )}
+          >
+            <span
               className={cn(
-                "group relative flex flex-1 items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-sm font-medium transition-all sm:justify-start sm:px-4",
+                "flex size-6 shrink-0 items-center justify-center rounded-full text-[10px] font-bold tabular-nums transition-colors",
                 active
-                  ? "bg-card text-foreground shadow-sm ring-1 ring-border/50"
-                  : "text-muted-foreground hover:bg-card/50 hover:text-foreground",
+                  ? "bg-primary text-primary-foreground"
+                  : done
+                    ? "bg-emerald-500/20 text-emerald-700 dark:text-emerald-300"
+                    : "bg-muted text-muted-foreground group-hover:bg-muted/80",
               )}
             >
-              <span
-                className={cn(
-                  "flex size-6 shrink-0 items-center justify-center rounded-full text-[10px] font-bold tabular-nums transition-colors",
-                  active
-                    ? "bg-primary text-primary-foreground"
-                    : done
-                      ? "bg-emerald-500/20 text-emerald-700 dark:text-emerald-300"
-                      : "bg-muted text-muted-foreground group-hover:bg-muted/80",
-                )}
-              >
-                {done ? "✓" : s.n}
+              {done ? "✓" : s.n}
+            </span>
+            <span className="hidden sm:inline">{s.label}</span>
+            <Icon className="size-4 sm:hidden" aria-hidden />
+            {count !== undefined && count > 0 ? (
+              <span className="ml-auto hidden rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-muted-foreground sm:inline">
+                {count}
               </span>
-              <span className="hidden sm:inline">{s.label}</span>
-              <Icon className="size-4 sm:hidden" aria-hidden />
-              {count !== undefined && count > 0 ? (
-                <span className="ml-auto hidden rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-muted-foreground sm:inline">
-                  {count}
-                </span>
-              ) : null}
-            </button>
-          );
-        })}
-      </nav>
-      <div className="flex items-center justify-center gap-1 px-2 text-[11px] text-muted-foreground">
-        <span>{FLOW_STEPS[activeIdx]?.hint}</span>
-      </div>
-    </div>
+            ) : null}
+          </button>
+        );
+      })}
+    </nav>
   );
 }
 
@@ -163,9 +172,15 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
 
   const searchParams = useSearchParams();
   const router = useRouter();
+  const { prefs: rosUiPrefs, updatePrefs: updateRosUiPrefs } =
+    useRosWorkspaceUiPrefs(workspaceId);
   const rawFane = searchParams.get("fane");
   const tab: Tab =
-    rawFane === "analyser" || rawFane === "oversikt" ? rawFane : "maler";
+    rawFane === "analyser" ||
+    rawFane === "oversikt" ||
+    rawFane === "bibliotek"
+      ? rawFane
+      : "maler";
 
   const setTab = useCallback(
     (t: Tab) => {
@@ -318,35 +333,31 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
   /** Anker #ros-metode-standarder ligger i lukkede `<details>`; åpne ytre + indre og scroll. */
   useEffect(() => {
     const anchorId = "ros-metode-standarder";
-    const outerSelector = "[data-ros-methodology-panel]";
 
     const openAndScroll = () => {
       if (typeof window === "undefined") return;
       if (window.location.hash !== `#${anchorId}`) return;
 
-      const outer = document.querySelector(outerSelector);
-      if (outer instanceof HTMLDetailsElement) {
-        outer.open = true;
-      }
-      const inner = document.getElementById(anchorId);
-      if (inner instanceof HTMLDetailsElement) {
-        inner.open = true;
-      }
+      updateRosUiPrefs({ helpMethodologyOpen: true });
 
       const scroll = () => {
+        const inner = document.getElementById(anchorId);
+        if (inner instanceof HTMLDetailsElement) {
+          inner.open = true;
+        }
         document.getElementById(anchorId)?.scrollIntoView({
           behavior: "smooth",
           block: "start",
         });
       };
       requestAnimationFrame(() => requestAnimationFrame(scroll));
-      window.setTimeout(scroll, 80);
+      window.setTimeout(scroll, 120);
     };
 
     openAndScroll();
     window.addEventListener("hashchange", openAndScroll);
     return () => window.removeEventListener("hashchange", openAndScroll);
-  }, []);
+  }, [updateRosUiPrefs]);
 
   async function submitTemplate(e: React.FormEvent) {
     e.preventDefault();
@@ -449,45 +460,108 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
   const analysesList = analyses ?? [];
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       <RosFlowNav
         tab={tab}
         onTab={setTab}
         counts={{ maler: templatesList.length, analyser: analysesList.length }}
       />
 
+      <div className="overflow-hidden rounded-2xl border border-border/50 bg-gradient-to-br from-card via-card to-muted/20 shadow-sm ring-1 ring-border/40">
+        <details
+          open={rosUiPrefs.scaleReferenceOpen}
+          onToggle={(e) => {
+            updateRosUiPrefs({ scaleReferenceOpen: e.currentTarget.open });
+          }}
+        >
+          <summary className="hover:bg-muted/15 flex cursor-pointer list-none items-start gap-3 rounded-t-2xl px-4 py-3.5 transition-colors sm:px-5 sm:py-4 [&::-webkit-details-marker]:hidden">
+            <div className="bg-primary/10 text-primary flex size-10 shrink-0 items-center justify-center rounded-xl">
+              <Info className="size-5" aria-hidden />
+            </div>
+            <div className="min-w-0 flex-1 pt-0.5">
+              <p className="text-foreground font-heading text-sm font-semibold tracking-tight sm:text-base">
+                Hva betyr tallene 1, 2, 3 … på aksene?
+              </p>
+              <p className="text-muted-foreground mt-1 text-xs leading-relaxed sm:text-[13px]">
+                Standard nivåtekst; malen kan tilpasse akser og definisjon. Visning og valgt akse
+                huskes i denne nettleseren.
+              </p>
+            </div>
+            <div className="flex shrink-0 flex-col items-end gap-1 sm:flex-row sm:items-center sm:gap-2">
+              <span className="text-muted-foreground text-xs font-medium tabular-nums">
+                {rosUiPrefs.scaleReferenceOpen ? "Skjul" : "Vis"}
+              </span>
+              <ChevronDown
+                className={cn(
+                  "text-muted-foreground size-5 shrink-0 transition-transform duration-200",
+                  rosUiPrefs.scaleReferenceOpen && "rotate-180",
+                )}
+                aria-hidden
+              />
+            </div>
+          </summary>
+          <div className="border-border/40 border-t px-3 pb-4 pt-2 sm:px-4">
+            <RosScaleReference
+              axis={rosUiPrefs.scaleReferenceAxis}
+              onAxisChange={(axis) =>
+                updateRosUiPrefs({ scaleReferenceAxis: axis })
+              }
+            />
+          </div>
+        </details>
+      </div>
+
       <RosWorkspaceHub
         workspaceId={workspaceId}
         hub={hub}
-        activeTab={tab}
+        compact={tab !== "oversikt"}
         onTab={setTab}
         onStartAnalysisForCandidate={startAnalysisForCandidate}
         onOpenTemplateDialog={openNewTemplateDialog}
       />
 
-      <details
-        data-ros-methodology-panel
-        className="border-border/60 bg-muted/10 group rounded-2xl border open:bg-muted/15"
-      >
-        <summary className="hover:bg-muted/30 flex cursor-pointer list-none items-center gap-2 rounded-2xl px-4 py-3 text-sm font-medium [&::-webkit-details-marker]:hidden">
-          <HelpCircle className="text-primary size-4 shrink-0" aria-hidden />
-          <span className="min-w-0 flex-1">
-            Metode og retningslinjer (ISO, personvern, kobling til vurderinger)
-            <span className="text-muted-foreground ml-1.5 font-normal">
-              — valgfritt, anbefales første gang
-            </span>
-          </span>
-          <span className="text-muted-foreground shrink-0 text-xs group-open:hidden">
-            Vis
-          </span>
-          <span className="text-muted-foreground hidden shrink-0 text-xs group-open:inline">
-            Skjul
-          </span>
-        </summary>
-        <div className="border-border/50 border-t px-3 pb-3 pt-1">
-          <RosMethodologyGuide workspaceId={workspaceId} variant="compact" />
-        </div>
-      </details>
+      <div className="overflow-hidden rounded-2xl border border-border/50 bg-muted/10 shadow-sm ring-1 ring-border/30">
+        <details
+          data-ros-methodology-panel
+          open={rosUiPrefs.helpMethodologyOpen}
+          onToggle={(e) => {
+            updateRosUiPrefs({ helpMethodologyOpen: e.currentTarget.open });
+          }}
+        >
+          <summary className="hover:bg-muted/20 flex cursor-pointer list-none items-start gap-3 rounded-t-2xl px-4 py-3 transition-colors sm:px-5 sm:py-3.5 [&::-webkit-details-marker]:hidden">
+            <div className="bg-muted flex size-9 shrink-0 items-center justify-center rounded-lg">
+              <HelpCircle className="text-muted-foreground size-4" aria-hidden />
+            </div>
+            <div className="min-w-0 flex-1 pt-0.5">
+              <p className="text-foreground text-sm font-medium sm:text-[15px]">
+                Hjelp og metode
+                <span className="text-muted-foreground hidden font-normal sm:inline">
+                  {" "}
+                  (ISO, personvern, kobling til vurderinger)
+                </span>
+              </p>
+              <p className="text-muted-foreground mt-0.5 text-[11px] leading-snug sm:text-xs">
+                Veiledning og lenker — visning huskes i denne nettleseren.
+              </p>
+            </div>
+            <div className="flex shrink-0 flex-col items-end gap-1 sm:flex-row sm:items-center sm:gap-2">
+              <span className="text-muted-foreground text-xs font-medium">
+                {rosUiPrefs.helpMethodologyOpen ? "Skjul" : "Vis"}
+              </span>
+              <ChevronDown
+                className={cn(
+                  "text-muted-foreground size-5 shrink-0 transition-transform duration-200",
+                  rosUiPrefs.helpMethodologyOpen && "rotate-180",
+                )}
+                aria-hidden
+              />
+            </div>
+          </summary>
+          <div className="border-border/40 border-t px-3 pb-3 pt-2 sm:px-4">
+            <RosMethodologyGuide workspaceId={workspaceId} variant="compact" />
+          </div>
+        </details>
+      </div>
 
       {tab === "oversikt" ? (
         <RosDashboardPanel workspaceId={workspaceId} />
@@ -817,7 +891,7 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
             </DialogContent>
           </Dialog>
         </div>
-      ) : (
+      ) : tab === "analyser" ? (
         <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,22rem)]">
           <div className="space-y-4">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
@@ -1079,6 +1153,8 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
             </form>
           </Card>
         </div>
+      ) : (
+        <RosLibraryPanel workspaceId={workspaceId} />
       )}
     </div>
   );

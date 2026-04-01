@@ -231,6 +231,10 @@ export function downloadRosAnalysisPdf(data: RosPdfInput): void {
       if (marks.length > 0) {
         parts.push(`Markeringer: ${marks.join(" · ")}`);
       }
+      const note = r.afterChangeNote?.trim();
+      if (note) {
+        parts.push(`Begrunnelse for endring (før → etter tiltak): ${note}`);
+      }
       addPara(parts.join("\n"), 9);
       y += 2;
     }

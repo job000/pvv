@@ -4,24 +4,42 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import {
+  Dialog,
+  DialogBody,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { api } from "@/convex/_generated/api";
+import type { Id } from "@/convex/_generated/dataModel";
+import { toast } from "@/lib/app-toast";
+import {
   ROS_CELL_FLAG_REQUIRES_ACTION,
   ROS_CELL_FLAG_WATCH,
   newRosCellItemId,
-  type RosCellItem,
   type RosCellItemMatrix,
 } from "@/lib/ros-cell-items";
 import { positionRiskLevel, RISK_LEVEL_HINTS } from "@/lib/ros-defaults";
 import { cellRiskClass } from "@/lib/ros-risk-colors";
 import { cn } from "@/lib/utils";
+import { useMutation, useQuery } from "convex/react";
 import {
   AlertTriangle,
   ArrowDown,
   ArrowRight,
+  BookMarked,
   ChevronDown,
   ChevronUp,
   Equal,
   Eye,
+  FolderInput,
+  Library,
+  ListTodo,
   Plus,
+  Search,
+  SquareArrowOutUpRight,
   Trash2,
 } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
@@ -34,6 +52,8 @@ export type FlatRisk = {
   beforeCol: number;
   afterRow: number;
   afterCol: number;
+  /** Begrunnelse for hvorfor nivået endret seg etter tiltak */
+  afterChangeNote?: string;
 };
 
 type Props = {
@@ -57,6 +77,17 @@ type Props = {
   /** Highlighted cell from matrix click — [row, col] */
   highlightCell?: [number, number] | null;
   readOnly?: boolean;
+  /** Når satt: vis «Fra bibliotek» og «Lagre til bibliotek» for gjenbruk i arbeidsområdet */
+  workspaceId?: Id<"workspaces">;
+  /** Oppgaver for denne analysen (for å vise koblinger til dette risikopunktet) */
+  rosTasks?: Array<{
+    _id: Id<"rosTasks">;
+    title: string;
+    status: "open" | "done";
+    linkedCellItemId?: string;
+  }>;
+  /** Hopp til Oppgaver-fanen (samme ROS-analyse) */
+  onGoToTasks?: () => void;
 };
 
 function levelBadge(level: number) {
@@ -110,9 +141,59 @@ export function RosRiskList({
   onDeleteRisk,
   highlightCell,
   readOnly,
+  workspaceId,
+  rosTasks,
+  onGoToTasks,
 }: Props) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [showAfter, setShowAfter] = useState<Record<string, boolean>>({});
+  const [libraryOpen, setLibraryOpen] = useState(false);
+  const [saveLibraryOpen, setSaveLibraryOpen] = useState(false);
+  const [saveRiskTitle, setSaveRiskTitle] = useState("");
+  const [saveTiltak, setSaveTiltak] = useState("");
+  const [saveVisibility, setSaveVisibility] = useState<"workspace" | "shared">(
+    "workspace",
+  );
+  const [saveBusy, setSaveBusy] = useState(false);
+  const [riskToSave, setRiskToSave] = useState<FlatRisk | null>(null);
+  const [saveCategoryId, setSaveCategoryId] = useState<
+    Id<"rosLibraryCategories"> | ""
+  >("");
+  const [libSearch, setLibSearch] = useState("");
+  const [libFilterCategory, setLibFilterCategory] = useState<
+    "all" | "none" | Id<"rosLibraryCategories">
+  >("all");
+
+  const libraryItems = useQuery(
+    api.rosLibrary.listLibraryItems,
+    workspaceId ? { workspaceId, sortBy: "category" } : "skip",
+  );
+  const libraryCategories = useQuery(
+    api.rosLibrary.listLibraryCategories,
+    workspaceId ? { workspaceId } : "skip",
+  );
+  const createLibraryItem = useMutation(api.rosLibrary.createLibraryItem);
+
+  const filteredLibraryItems = useMemo(() => {
+    if (!libraryItems) return [];
+    const q = libSearch.trim().toLowerCase();
+    return libraryItems.filter((it) => {
+      if (libFilterCategory === "all") {
+        /* ok */
+      } else if (libFilterCategory === "none") {
+        if (it.categoryId) return false;
+      } else if (it.categoryId !== libFilterCategory) {
+        return false;
+      }
+      if (!q) return true;
+      return (
+        it.title.toLowerCase().includes(q) ||
+        it.riskText.toLowerCase().includes(q) ||
+        (it.tiltakText?.toLowerCase().includes(q) ?? false) ||
+        (it.categoryName?.toLowerCase().includes(q) ?? false)
+      );
+    });
+  }, [libraryItems, libFilterCategory, libSearch]);
 
   const flatRisks = useMemo(() => {
     const risks: FlatRisk[] = [];
@@ -132,6 +213,7 @@ export function RosRiskList({
             beforeCol: c,
             afterRow: item.afterRow ?? r,
             afterCol: item.afterCol ?? c,
+            afterChangeNote: item.afterChangeNote,
           });
         }
       }
@@ -152,6 +234,41 @@ export function RosRiskList({
     onAddRisk(risk);
     setExpandedId(id);
   }, [onAddRisk]);
+
+  const insertFromLibrary = useCallback(
+    (item: {
+      riskText: string;
+      tiltakText?: string;
+      flags?: string[];
+    }) => {
+      const base = {
+        beforeRow: 0,
+        beforeCol: 0,
+        afterRow: 0,
+        afterCol: 0,
+      };
+      const id1 = newRosCellItemId();
+      onAddRisk({
+        id: id1,
+        text: item.riskText,
+        flags: item.flags,
+        ...base,
+      });
+      if (item.tiltakText?.trim()) {
+        const id2 = newRosCellItemId();
+        onAddRisk({
+          id: id2,
+          text: item.tiltakText.trim(),
+          flags: [ROS_CELL_FLAG_REQUIRES_ACTION],
+          ...base,
+        });
+      }
+      setLibraryOpen(false);
+      setExpandedId(id1);
+      toast.success("Oppføringer lagt inn fra biblioteket.");
+    },
+    [onAddRisk],
+  );
 
   const beforeLevel = useCallback(
     (r: number, c: number) =>
@@ -197,16 +314,30 @@ export function RosRiskList({
           </p>
         </div>
         {!readOnly && (
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            className="gap-1.5"
-            onClick={handleAdd}
-          >
-            <Plus className="size-3.5" />
-            Legg til risiko
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            {workspaceId ? (
+              <Button
+                type="button"
+                size="sm"
+                variant="secondary"
+                className="gap-1.5"
+                onClick={() => setLibraryOpen(true)}
+              >
+                <Library className="size-3.5" />
+                Fra bibliotek
+              </Button>
+            ) : null}
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="gap-1.5"
+              onClick={handleAdd}
+            >
+              <Plus className="size-3.5" />
+              Legg til risiko
+            </Button>
+          </div>
         )}
       </div>
 
@@ -245,6 +376,8 @@ export function RosRiskList({
             const expanded = expandedId === risk.id;
             const afterOpen = showAfter[risk.id] ?? (risk.afterRow !== risk.beforeRow || risk.afterCol !== risk.beforeCol);
             const highlighted = isHighlighted(risk);
+            const linkedRosTasksForRisk =
+              rosTasks?.filter((t) => t.linkedCellItemId === risk.id) ?? [];
 
             return (
               <div
@@ -482,6 +615,100 @@ export function RosRiskList({
                       )}
                     </div>
 
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-medium">
+                        Begrunnelse for endring (før → etter tiltak)
+                      </label>
+                      <p className="text-muted-foreground text-[10px] leading-relaxed">
+                        Forklar hvorfor nivået endret seg (planlagte tiltak, nye forutsetninger) — eller
+                        hvorfor det er uendret. «Etter tiltak» er mål-nivå etter planlagte tiltak; konkrete
+                        gjennomføringsoppgaver knytter du under{" "}
+                        <span className="text-foreground font-medium">Oppgaver</span>.
+                      </p>
+                      <Textarea
+                        value={risk.afterChangeNote ?? ""}
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          onUpdateRisk({
+                            ...risk,
+                            afterChangeNote: v.length === 0 ? undefined : v,
+                          });
+                        }}
+                        placeholder="F.eks.: planlagt kryptering reduserer sannsynlighet; konsekvens uendret fordi …"
+                        rows={2}
+                        className="min-h-0 text-sm"
+                      />
+                    </div>
+
+                    {linkedRosTasksForRisk.length > 0 && onGoToTasks ? (
+                      <div className="space-y-2 rounded-lg border border-border/50 bg-muted/20 px-3 py-2.5">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <span className="text-xs font-semibold">
+                            Oppgaver knyttet til dette punktet
+                          </span>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="h-7 gap-1 text-[11px]"
+                            onClick={onGoToTasks}
+                          >
+                            <SquareArrowOutUpRight className="size-3" />
+                            Gå til oppgaver
+                          </Button>
+                        </div>
+                        <ul className="space-y-1.5">
+                          {linkedRosTasksForRisk.map((t) => (
+                            <li
+                              key={t._id}
+                              className="text-muted-foreground flex items-start gap-2 text-[11px]"
+                            >
+                              <ListTodo className="mt-0.5 size-3.5 shrink-0" />
+                              <span className="min-w-0 flex-1">
+                                <span className="text-foreground font-medium">
+                                  {t.title}
+                                </span>
+                                <span className="ml-1.5">
+                                  (
+                                  {t.status === "done"
+                                    ? "Fullført"
+                                    : "Åpen"}
+                                  )
+                                </span>
+                              </span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    ) : null}
+
+                    {/* Save to library */}
+                    {workspaceId ? (
+                      <div className="flex flex-wrap gap-2 border-t border-border/40 pt-3">
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          size="sm"
+                          className="gap-1.5 text-xs"
+                          onClick={() => {
+                            setRiskToSave(risk);
+                            const firstLine = risk.text.trim().split("\n")[0] ?? "";
+                            setSaveRiskTitle(
+                              firstLine.slice(0, 80) ||
+                                `Risiko ${risk.beforeRow + 1}×${risk.beforeCol + 1}`,
+                            );
+                            setSaveTiltak("");
+                            setSaveVisibility("workspace");
+                            setSaveCategoryId("");
+                            setSaveLibraryOpen(true);
+                          }}
+                        >
+                          <BookMarked className="size-3.5" />
+                          Lagre til bibliotek
+                        </Button>
+                      </div>
+                    ) : null}
+
                     {/* Delete */}
                     <div className="flex justify-end">
                       <Button
@@ -504,6 +731,253 @@ export function RosRiskList({
           })}
         </div>
       )}
+
+      {workspaceId ? (
+        <>
+          <Dialog
+            open={libraryOpen}
+            onOpenChange={(open) => {
+              setLibraryOpen(open);
+              if (open) {
+                setLibSearch("");
+                setLibFilterCategory("all");
+              }
+            }}
+          >
+            <DialogContent size="lg" titleId="ros-lib-pick-title">
+              <DialogHeader>
+                <h2 id="ros-lib-pick-title" className="font-heading text-lg font-semibold">
+                  Velg fra bibliotek
+                </h2>
+                <p className="text-muted-foreground text-sm">
+                  Teksten settes inn i matrisen (først nederst til venstre — du kan flytte celle under).
+                </p>
+              </DialogHeader>
+              <DialogBody className="space-y-4">
+                {libraryItems === undefined || libraryCategories === undefined ? (
+                  <p className="text-muted-foreground text-sm">Henter …</p>
+                ) : libraryItems.length === 0 ? (
+                  <p className="text-muted-foreground text-sm">
+                    Ingen elementer i biblioteket ennå. Gå til ROS → Bibliotek, eller lagre en risiko herfra.
+                  </p>
+                ) : (
+                  <>
+                    <div className="relative">
+                      <Search className="text-muted-foreground pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2" />
+                      <Input
+                        value={libSearch}
+                        onChange={(e) => setLibSearch(e.target.value)}
+                        placeholder="Søk …"
+                        className="pl-9"
+                      />
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => setLibFilterCategory("all")}
+                        className={cn(
+                          "rounded-full border px-2.5 py-0.5 text-[11px] font-medium transition-colors",
+                          libFilterCategory === "all"
+                            ? "border-primary bg-primary/10"
+                            : "border-border/60 bg-muted/30 text-muted-foreground hover:bg-muted/60",
+                        )}
+                      >
+                        Alle
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setLibFilterCategory("none")}
+                        className={cn(
+                          "rounded-full border px-2.5 py-0.5 text-[11px] font-medium transition-colors",
+                          libFilterCategory === "none"
+                            ? "border-primary bg-primary/10"
+                            : "border-border/60 bg-muted/30 text-muted-foreground hover:bg-muted/60",
+                        )}
+                      >
+                        Uten kategori
+                      </button>
+                      {libraryCategories.map((c) => (
+                        <button
+                          key={c._id}
+                          type="button"
+                          onClick={() => setLibFilterCategory(c._id)}
+                          className={cn(
+                            "rounded-full border px-2.5 py-0.5 text-[11px] font-medium transition-colors",
+                            libFilterCategory === c._id
+                              ? "border-primary bg-primary/10"
+                              : "border-border/60 bg-muted/30 text-muted-foreground hover:bg-muted/60",
+                          )}
+                        >
+                          {c.name}
+                        </button>
+                      ))}
+                    </div>
+                    {filteredLibraryItems.length === 0 ? (
+                      <p className="text-muted-foreground text-sm">
+                        Ingen treff — prøv annet søk eller filter.
+                      </p>
+                    ) : (
+                      <ul className="max-h-[min(60vh,24rem)] space-y-2 overflow-y-auto pr-1">
+                        {filteredLibraryItems.map((item) => (
+                          <li key={item._id}>
+                            <button
+                              type="button"
+                              className="hover:bg-muted/50 w-full rounded-xl border border-border/60 bg-card px-3 py-3 text-left text-sm transition-colors"
+                              onClick={() =>
+                                insertFromLibrary({
+                                  riskText: item.riskText,
+                                  tiltakText: item.tiltakText,
+                                  flags: item.flags,
+                                })
+                              }
+                            >
+                              <div className="flex flex-wrap items-center gap-1.5">
+                                {item.categoryName ? (
+                                  <span className="bg-muted text-muted-foreground inline-flex items-center gap-0.5 rounded-md px-1.5 py-0.5 text-[10px] font-medium">
+                                    <FolderInput className="size-2.5" />
+                                    {item.categoryName}
+                                  </span>
+                                ) : null}
+                                {item.isFromOtherWorkspace ? (
+                                  <span className="text-muted-foreground text-[10px]">
+                                    {item.sourceWorkspaceName ?? "Annet rom"}
+                                  </span>
+                                ) : null}
+                              </div>
+                              <span className="mt-1 block font-medium">{item.title}</span>
+                              <p className="text-muted-foreground mt-0.5 line-clamp-2 text-xs">
+                                {item.riskText}
+                              </p>
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </>
+                )}
+              </DialogBody>
+              <DialogFooter>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setLibraryOpen(false)}
+                >
+                  Lukk
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
+          <Dialog open={saveLibraryOpen} onOpenChange={setSaveLibraryOpen}>
+            <DialogContent size="md" titleId="ros-lib-save-title">
+              <DialogHeader>
+                <h2 id="ros-lib-save-title" className="font-heading text-lg font-semibold">
+                  Lagre i bibliotek
+                </h2>
+              </DialogHeader>
+              <DialogBody>
+                <div className="space-y-3">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="ros-save-lib-title">Tittel</Label>
+                    <Input
+                      id="ros-save-lib-title"
+                      value={saveRiskTitle}
+                      onChange={(e) => setSaveRiskTitle(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="ros-save-lib-tiltak">Tiltak (valgfritt)</Label>
+                    <Textarea
+                      id="ros-save-lib-tiltak"
+                      value={saveTiltak}
+                      onChange={(e) => setSaveTiltak(e.target.value)}
+                      rows={2}
+                      placeholder="Legg ved foreslått tiltak …"
+                      className="min-h-0"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="ros-save-lib-cat">Kategori (valgfritt)</Label>
+                    <select
+                      id="ros-save-lib-cat"
+                      className="border-input bg-background flex h-10 w-full rounded-lg border px-2 text-sm"
+                      value={saveCategoryId}
+                      onChange={(e) =>
+                        setSaveCategoryId(
+                          (e.target.value || "") as Id<"rosLibraryCategories"> | "",
+                        )
+                      }
+                    >
+                      <option value="">— Ingen —</option>
+                      {(libraryCategories ?? []).map((c) => (
+                        <option key={c._id} value={c._id}>
+                          {c.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="ros-save-lib-vis">Synlighet</Label>
+                    <select
+                      id="ros-save-lib-vis"
+                      className="border-input bg-background flex h-10 w-full rounded-lg border px-2 text-sm"
+                      value={saveVisibility}
+                      onChange={(e) =>
+                        setSaveVisibility(
+                          e.target.value as "workspace" | "shared",
+                        )
+                      }
+                    >
+                      <option value="workspace">Kun dette arbeidsområdet</option>
+                      <option value="shared">Delt — alle mine arbeidsområder</option>
+                    </select>
+                  </div>
+                </div>
+              </DialogBody>
+              <DialogFooter>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setSaveLibraryOpen(false)}
+                >
+                  Avbryt
+                </Button>
+                <Button
+                  type="button"
+                  disabled={saveBusy || !saveRiskTitle.trim() || !riskToSave?.text.trim()}
+                  onClick={() => {
+                    if (!workspaceId || !riskToSave) return;
+                    setSaveBusy(true);
+                    void createLibraryItem({
+                      workspaceId,
+                      title: saveRiskTitle.trim(),
+                      riskText: riskToSave.text.trim(),
+                      tiltakText: saveTiltak.trim() || undefined,
+                      flags: riskToSave.flags,
+                      visibility: saveVisibility,
+                      categoryId:
+                        saveCategoryId === "" ? undefined : saveCategoryId,
+                    })
+                      .then(() => {
+                        toast.success("Lagret i biblioteket.");
+                        setSaveLibraryOpen(false);
+                        setRiskToSave(null);
+                      })
+                      .catch((e) =>
+                        toast.error(
+                          e instanceof Error ? e.message : "Kunne ikke lagre.",
+                        ),
+                      )
+                      .finally(() => setSaveBusy(false));
+                  }}
+                >
+                  {saveBusy ? "Lagrer …" : "Lagre"}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        </>
+      ) : null}
     </div>
   );
 }
