@@ -33,6 +33,7 @@ export type AssessmentPdfInput = {
     easeLabel: string;
     benH: number;
     benC: number;
+    benFte: number;
   };
   generatedAt: Date;
 };
@@ -98,21 +99,22 @@ export function downloadAssessmentPdf(data: AssessmentPdfInput): void {
   doc.setFont("helvetica", "normal");
   doc.setFontSize(10);
   addRow("Automatiseringspotensial", `${data.computed.ap.toFixed(1)} %`);
-  addRow("Kritikalitet", `${data.computed.criticality.toFixed(1)} %`);
-  addRow("Foreslått prioritet", data.computed.priorityScore.toFixed(1));
+  addRow("Viktighet og konsekvens", `${data.computed.criticality.toFixed(1)} %`);
+  addRow("Porteføljeprioritet", `${data.computed.priorityScore.toFixed(1)} / 100`);
   addRow(
-    "Stabile prosess og systemer",
-    data.computed.feasible ? "Ja" : "Trenger avklaring",
+    "Stabil nok for robot",
+    data.computed.feasible ? "Ja" : "Nei — ustabil, avklar før oppstart",
   );
   addRow(
-    "Enkelhet å bygge",
+    "Gjennomførbarhet",
     `${data.computed.ease.toFixed(1)} % (${data.computed.easeLabel})`,
   );
-  addRow("Timer spart /år (est.)", data.computed.benH.toFixed(1));
+  addRow("Timer spart /år (est.)", data.computed.benH.toFixed(0));
   addRow(
-    "NOK /år (est.)",
-    Math.round(data.computed.benC).toLocaleString("nb-NO"),
+    "Besparelse /år (est.)",
+    `${Math.round(data.computed.benC).toLocaleString("nb-NO")} kr`,
   );
+  addRow("Årsverk frigitt (est.)", data.computed.benFte.toFixed(2));
 
   const lvl = data.hfOperationsSupportLevel;
   if (lvl && lvl !== "unsure") {

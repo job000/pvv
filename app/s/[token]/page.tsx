@@ -95,23 +95,27 @@ export default function SharedAssessmentPage() {
             <dd className="tabular-nums">{computed.ap.toFixed(1)} %</dd>
           </div>
           <div className="flex justify-between gap-4">
-            <dt className="text-muted-foreground">Kritikalitet</dt>
+            <dt className="text-muted-foreground">Viktighet og konsekvens</dt>
             <dd className="tabular-nums">{computed.criticality.toFixed(1)} %</dd>
           </div>
           <div className="flex justify-between gap-4">
-            <dt className="text-muted-foreground">Enkelhet å bygge</dt>
+            <dt className="text-muted-foreground">Porteføljeprioritet</dt>
+            <dd className="tabular-nums">{computed.priorityScore.toFixed(1)} / 100</dd>
+          </div>
+          <div className="flex justify-between gap-4">
+            <dt className="text-muted-foreground">Gjennomførbarhet</dt>
             <dd className="tabular-nums">
               {computed.ease.toFixed(1)} % ({computed.easeLabel})
             </dd>
           </div>
           <div className="flex justify-between gap-4">
-            <dt className="text-muted-foreground">Timer spart /år (est.)</dt>
-            <dd className="tabular-nums">{computed.benH.toFixed(1)}</dd>
+            <dt className="text-muted-foreground">Timer spart / år (est.)</dt>
+            <dd className="tabular-nums">{computed.benH.toFixed(0)}</dd>
           </div>
           <div className="flex justify-between gap-4">
-            <dt className="text-muted-foreground">NOK /år (est.)</dt>
+            <dt className="text-muted-foreground">Besparelse / år (est.)</dt>
             <dd className="tabular-nums">
-              {Math.round(computed.benC).toLocaleString("nb-NO")}
+              {Math.round(computed.benC).toLocaleString("nb-NO")} kr
             </dd>
           </div>
         </dl>

@@ -8,6 +8,24 @@ import { resolveGithubToken } from "./githubTasks";
 const GITHUB_ACCEPT = "application/vnd.github+json";
 const GITHUB_API_VERSION = "2022-11-28";
 
+type GithubIssuePreview = {
+  title: string;
+  body: string | null;
+  state: string;
+  stateReason: string | null;
+  number: number;
+  repoFullName: string;
+  htmlUrl: string;
+  createdAt: string;
+  updatedAt: string;
+  closedAt: string | null;
+  author: { login: string; avatarUrl: string } | null;
+  assignees: { login: string; avatarUrl: string }[];
+  labels: { name: string; color: string }[];
+  milestone: string | null;
+  commentsCount: number;
+};
+
 /**
  * Henter issue-metadata via GitHub REST (krever lagret PAT for arbeidsområdet).
  * Brukes før opprettelse av prosess i PVV uten at saken ligger som prosjektkort.
@@ -108,5 +126,135 @@ export const fetchGithubIssueForProcessImport = action({
         typeof json.number === "number" ? json.number : issueNumber,
       issueNodeId,
     };
+  },
+});
+
+async function fetchGithubIssueRest(
+  token: string,
+  owner: string,
+  repo: string,
+  issueNumber: number,
+): Promise<Record<string, unknown>> {
+  const res = await fetch(
+    `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/issues/${issueNumber}`,
+    {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: GITHUB_ACCEPT,
+        "X-GitHub-Api-Version": GITHUB_API_VERSION,
+      },
+    },
+  );
+  if (!res.ok) {
+    const t = await res.text();
+    throw new Error(
+      `GitHub feil (HTTP ${res.status}). ${t.slice(0, 200)}`,
+    );
+  }
+  return (await res.json()) as Record<string, unknown>;
+}
+
+function parseGithubIssueJson(
+  json: Record<string, unknown>,
+  repoFullName: string,
+): GithubIssuePreview {
+  const user = json.user as Record<string, unknown> | null;
+  const assigneesRaw = Array.isArray(json.assignees) ? json.assignees : [];
+  const labelsRaw = Array.isArray(json.labels) ? json.labels : [];
+
+  return {
+    title: (json.title as string) || "(Uten tittel)",
+    body: typeof json.body === "string" ? json.body : null,
+    state: (json.state as string) || "unknown",
+    stateReason:
+      typeof json.state_reason === "string" ? json.state_reason : null,
+    number: (json.number as number) || 0,
+    repoFullName,
+    htmlUrl: (json.html_url as string) || "",
+    createdAt: (json.created_at as string) || "",
+    updatedAt: (json.updated_at as string) || "",
+    closedAt:
+      typeof json.closed_at === "string" ? json.closed_at : null,
+    author: user
+      ? {
+          login: (user.login as string) || "",
+          avatarUrl: (user.avatar_url as string) || "",
+        }
+      : null,
+    assignees: assigneesRaw.map((a: Record<string, unknown>) => ({
+      login: (a.login as string) || "",
+      avatarUrl: (a.avatar_url as string) || "",
+    })),
+    labels: labelsRaw.map((l: Record<string, unknown>) => ({
+      name: (l.name as string) || "",
+      color: (l.color as string) || "666",
+    })),
+    milestone:
+      json.milestone && typeof json.milestone === "object"
+        ? ((json.milestone as Record<string, unknown>).title as string) || null
+        : null,
+    commentsCount: typeof json.comments === "number" ? json.comments : 0,
+  };
+}
+
+/**
+ * Fetches a full preview of a GitHub issue/PR for inline display.
+ * Returns title, body (markdown), state, assignees, labels, dates, etc.
+ */
+export const previewGithubIssue = action({
+  args: {
+    workspaceId: v.id("workspaces"),
+    repoFullName: v.string(),
+    issueNumber: v.number(),
+  },
+  handler: async (ctx, args): Promise<GithubIssuePreview> => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) throw new Error("Du må være innlogget.");
+    await ctx.runQuery(internal.candidates.assertMemberForWorkspace, {
+      workspaceId: args.workspaceId,
+      userId,
+    });
+
+    const repo = normalizeGithubRepoFullName(args.repoFullName);
+    const num = Math.floor(args.issueNumber);
+    if (!Number.isFinite(num) || num < 1) {
+      throw new Error("Ugyldig issue-nummer.");
+    }
+
+    const token = await resolveGithubToken(ctx, args.workspaceId);
+    const [owner, repoName] = repo.split("/");
+    const json = await fetchGithubIssueRest(token, owner, repoName, num);
+    return parseGithubIssueJson(json, repo);
+  },
+});
+
+/**
+ * Fetches a full preview of a GitHub issue by URL.
+ */
+export const previewGithubIssueByUrl = action({
+  args: {
+    workspaceId: v.id("workspaces"),
+    issueUrl: v.string(),
+  },
+  handler: async (ctx, args): Promise<GithubIssuePreview> => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) throw new Error("Du må være innlogget.");
+    await ctx.runQuery(internal.candidates.assertMemberForWorkspace, {
+      workspaceId: args.workspaceId,
+      userId,
+    });
+
+    const parsed = parseGithubIssueUrl(args.issueUrl.trim());
+    if (!parsed) throw new Error("Ugyldig GitHub issue-URL.");
+
+    const token = await resolveGithubToken(ctx, args.workspaceId);
+    const [owner, repoName] = parsed.repoFullName.split("/");
+    const json = await fetchGithubIssueRest(
+      token,
+      owner,
+      repoName,
+      parsed.issueNumber,
+    );
+    return parseGithubIssueJson(json, parsed.repoFullName);
   },
 });

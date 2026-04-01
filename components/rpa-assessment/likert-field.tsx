@@ -18,6 +18,8 @@ type LikertFieldProps = {
   right: string;
   className?: string;
   disabled?: boolean;
+  /** Labels shown beneath each 1–5 button (e.g. count ranges) */
+  scaleLabels?: readonly [string, string, string, string, string];
 };
 
 export function LikertField({
@@ -30,6 +32,7 @@ export function LikertField({
   right,
   className,
   disabled = false,
+  scaleLabels,
 }: LikertFieldProps) {
   const hintId = hint ? `${id}-hint` : undefined;
   const captionId = `${id}-caption`;
@@ -128,29 +131,42 @@ export function LikertField({
         >
           {SCALE.map((n) => {
             const selected = value === n;
+            const scaleLabel = scaleLabels?.[n - 1];
             return (
-              <button
-                key={n}
-                ref={(el) => {
-                  buttonsRef.current[n - 1] = el;
-                }}
-                type="button"
-                role="radio"
-                aria-checked={selected}
-                tabIndex={selected ? 0 : -1}
-                disabled={disabled}
-                onClick={() => onChange(clampLikert5(n))}
-                onKeyDown={(e) => handleRadioKeyDown(n, e)}
-                className={cn(
-                  "focus-visible:ring-ring motion-safe:active:scale-[0.98] min-h-[44px] min-w-0 flex-1 rounded-xl text-base font-semibold tabular-nums transition-[transform,box-shadow,background-color] outline-none focus-visible:ring-3 motion-reduce:transition-none motion-reduce:active:scale-100 sm:min-h-11 sm:text-sm",
-                  selected
-                    ? "bg-primary text-primary-foreground shadow-md ring-2 ring-primary/25"
-                    : "bg-background/90 text-foreground border-border/80 hover:bg-muted/80 border shadow-xs",
-                  disabled && "pointer-events-none opacity-50",
-                )}
-              >
-                {n}
-              </button>
+              <div key={n} className="flex min-w-0 flex-1 flex-col items-stretch gap-1">
+                <button
+                  ref={(el) => {
+                    buttonsRef.current[n - 1] = el;
+                  }}
+                  type="button"
+                  role="radio"
+                  aria-checked={selected}
+                  aria-label={scaleLabel ? `${n} — ${scaleLabel}` : String(n)}
+                  tabIndex={selected ? 0 : -1}
+                  disabled={disabled}
+                  onClick={() => onChange(clampLikert5(n))}
+                  onKeyDown={(e) => handleRadioKeyDown(n, e)}
+                  className={cn(
+                    "focus-visible:ring-ring motion-safe:active:scale-[0.98] min-h-[44px] min-w-0 rounded-xl text-base font-semibold tabular-nums transition-[transform,box-shadow,background-color] outline-none focus-visible:ring-3 motion-reduce:transition-none motion-reduce:active:scale-100 sm:min-h-11 sm:text-sm",
+                    selected
+                      ? "bg-primary text-primary-foreground shadow-md ring-2 ring-primary/25"
+                      : "bg-background/90 text-foreground border-border/80 hover:bg-muted/80 border shadow-xs",
+                    disabled && "pointer-events-none opacity-50",
+                  )}
+                >
+                  {n}
+                </button>
+                {scaleLabel ? (
+                  <span
+                    className={cn(
+                      "text-center text-[9px] leading-tight sm:text-[10px]",
+                      selected ? "text-primary font-medium" : "text-muted-foreground",
+                    )}
+                  >
+                    {scaleLabel}
+                  </span>
+                ) : null}
+              </div>
             );
           })}
         </div>

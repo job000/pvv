@@ -90,6 +90,7 @@ export function AssessmentExportPanel({
         easeLabel: data.computed.easeLabel,
         benH: data.computed.benH,
         benC: data.computed.benC,
+        benFte: data.computed.benFte,
       },
       generatedAt: new Date(),
     });

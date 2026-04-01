@@ -31,20 +31,33 @@ export function appCountFavorability(s: Likert5): number {
   return (5 - s) / 4;
 }
 
-const W_AP_STRUCT = 1 / 3;
-const W_AP_VAR = 1 / 3;
-const W_AP_DIG = 1 / 3;
+const W_AP_STRUCT = 0.35;
+const W_AP_VAR = 0.35;
+const W_AP_DIG = 0.20;
+const W_AP_VOL = 0.10;
+
+/**
+ * Maps annual manual hours to a 0-1 volume signal.
+ * More volume = better automation candidate (more savings per build).
+ * 0h → 0, ~500h → 0.5, 2000+h → ~1.0
+ */
+export function volumeFactor(manualHoursPerYear: number): number {
+  const h = Math.max(0, manualHoursPerYear);
+  return 1 - Math.exp(-h / 1200);
+}
 
 export function automationPotentialPercent(args: {
   structuredInput: Likert5;
   processVariability: Likert5;
   digitization: Likert5;
+  manualHoursPerYear?: number;
 }): number {
   const struct = likert5ToUnit01(args.structuredInput);
   const varLow = variabilityFavorability(args.processVariability);
   const dig = likert5ToUnit01(args.digitization);
+  const vol = volumeFactor(args.manualHoursPerYear ?? 800);
   const raw =
-    W_AP_STRUCT * struct + W_AP_VAR * varLow + W_AP_DIG * dig;
+    W_AP_STRUCT * struct + W_AP_VAR * varLow + W_AP_DIG * dig + W_AP_VOL * vol;
   return Math.round(raw * 1000) / 10;
 }
 
@@ -55,7 +68,17 @@ export function feasibilityFeasible(args: {
   return args.processStability >= 3 && args.applicationStability >= 3;
 }
 
-const W_EASE = 1 / 6;
+/**
+ * Ease-of-implementation weights (sum = 1.0).
+ * Stability matters most — an unstable process/app kills the project.
+ * Length and app count are secondary friction factors.
+ */
+const W_E_PSTAB = 0.25;
+const W_E_ASTAB = 0.25;
+const W_E_STRUCT = 0.15;
+const W_E_VAR = 0.15;
+const W_E_LEN = 0.10;
+const W_E_APPS = 0.10;
 
 export function easeOfImplementationBasePercent(args: {
   processStability: Likert5;
@@ -72,7 +95,12 @@ export function easeOfImplementationBasePercent(args: {
   const len = lengthFavorability(args.processLength);
   const apps = appCountFavorability(args.applicationCount);
   const raw =
-    W_EASE * (pStab + aStab + struct + varLow + len + apps);
+    W_E_PSTAB * pStab +
+    W_E_ASTAB * aStab +
+    W_E_STRUCT * struct +
+    W_E_VAR * varLow +
+    W_E_LEN * len +
+    W_E_APPS * apps;
   return Math.round(raw * 1000) / 10;
 }
 
@@ -98,10 +126,11 @@ export function easeOfImplementationFinalPercent(args: {
 
 export function easeDifficultyLabel(
   percent: number,
-): "Enkel" | "Middels" | "Vanskelig" {
+): "Enkel" | "Middels" | "Krevende" | "Vanskelig" {
   const p = Number.isFinite(percent) ? percent : 0;
-  if (p >= 65) return "Enkel";
-  if (p >= 35) return "Middels";
+  if (p >= 60) return "Enkel";
+  if (p >= 40) return "Middels";
+  if (p >= 20) return "Krevende";
   return "Vanskelig";
 }
 
@@ -238,10 +267,13 @@ export type ComputedSnapshot = {
 };
 
 export function computeAllResults(input: AssessmentInputSnapshot): ComputedSnapshot {
+  const totalManualHours =
+    input.baselineHours + input.reworkHours + input.auditHours;
   const ap = automationPotentialPercent({
     structuredInput: input.structuredInput,
     processVariability: input.processVariability,
     digitization: input.digitization,
+    manualHoursPerYear: totalManualHours,
   });
   const feasible = feasibilityFeasible({
     processStability: input.processStability,

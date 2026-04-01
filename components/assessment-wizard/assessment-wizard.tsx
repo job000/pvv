@@ -34,7 +34,6 @@ import { Label } from "@/components/ui/label";
 import {
   Progress,
   ProgressLabel,
-  ProgressValue,
 } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
 import { Slider } from "@/components/ui/slider";
@@ -914,24 +913,26 @@ export function AssessmentWizard({ assessmentId }: Props) {
                 <div className="border-border/50 border-b px-6 py-5 sm:px-8 last:border-b-0">
                   <LikertField
                     id="cbi"
-                    label="Hvor stort er tapet hvis denne prosessen stopper eller feiler?"
-                    hint="Kunder, pasienter, økonomi eller omdømme."
+                    label="Hvor stort er konsekvensen om denne prosessen svikter eller stopper?"
+                    hint="Tenk på tap av inntekt, pasientsikkerhet, kundetillit, omdømme og driftsstans. Høy konsekvens = viktigere å automatisere bort menneskelig feil."
                     value={clampLikert5(payload.criticalityBusinessImpact)}
                     onChange={(v) => update("criticalityBusinessImpact", v)}
-                    left="Lite merkbart"
+                    left="Minimal konsekvens"
                     right="Svært alvorlig"
+                    scaleLabels={["Ubetydelig", "Liten", "Moderat", "Stor", "Kritisk"]}
                     disabled={readOnly}
                   />
                 </div>
                 <div className="border-border/50 border-b px-6 py-5 sm:px-8 last:border-b-0">
                   <LikertField
                     id="crr"
-                    label="Hvor strengt må dere følge regler og dokumentasjon?"
-                    hint="Personvern, helse, arkiv, offentlige krav."
+                    label="Hvor strenge er regulatoriske og dokumentasjonskrav?"
+                    hint="GDPR, helselovgivning, arkivplikt, tilsyn, sertifiseringskrav. Strenge krav = høyere verdi av feilfri, sporbar automatisering."
                     value={clampLikert5(payload.criticalityRegulatoryRisk)}
                     onChange={(v) => update("criticalityRegulatoryRisk", v)}
-                    left="Slakk krav"
-                    right="Strenge krav"
+                    left="Få krav"
+                    right="Svært strenge"
+                    scaleLabels={["Minimalt", "Noe", "Moderate", "Strenge", "Svært strenge"]}
                     disabled={readOnly}
                   />
                 </div>
@@ -950,24 +951,26 @@ export function AssessmentWizard({ assessmentId }: Props) {
                 <div className="border-border/50 border-b px-6 py-5 sm:px-8 last:border-b-0">
                   <LikertField
                     id="ps"
-                    label="Hvor ofte endrer dere måten dere jobber på i denne prosessen?"
-                    hint="Ofte endrede rutiner og unntak gjør automatisering vanskeligere."
+                    label="Hvor stabil er selve arbeidsmåten — endres reglene og rutinene ofte?"
+                    hint="Robot trenger faste regler. Hyppige endringer i skjema, policy eller unntaksregler betyr mer vedlikehold og større risiko for at roboten gjør feil."
                     value={clampLikert5(payload.processStability)}
                     onChange={(v) => update("processStability", v)}
                     left="Endrer seg ofte"
-                    right="Sjeldent endring"
+                    right="Svært stabil"
+                    scaleLabels={["Ukentlig", "Månedlig", "Kvartalsvis", "Halvårlig", "Sjelden/aldri"]}
                     disabled={readOnly}
                   />
                 </div>
                 <div className="border-border/50 border-b px-6 py-5 sm:px-8 last:border-b-0">
                   <LikertField
                     id="as"
-                    label="Kan dere stole på at IT-systemene oppfører seg likt fra dag til dag?"
-                    hint="Skjermbilder, felt og meldinger — forutsigbar opplevelse."
+                    label="Er IT-systemene stabile og forutsigbare?"
+                    hint="Robot navigerer via faste knapper, felt og menyer. Hyppige oppgraderinger, popup-vinduer, endrede skjermbilder eller treghet gjør at roboten feiler."
                     value={clampLikert5(payload.applicationStability)}
                     onChange={(v) => update("applicationStability", v)}
                     left="Uforutsigbart"
-                    right="Forutsigbart"
+                    right="Svært stabilt"
+                    scaleLabels={["Ofte feil", "Noe ustabilt", "OK", "Forutsigbart", "Solid og stabilt"]}
                     disabled={readOnly}
                   />
                 </div>
@@ -976,46 +979,51 @@ export function AssessmentWizard({ assessmentId }: Props) {
 
             <Slide>
               <CardHeader className="space-y-3 px-4 pb-2 pt-6 sm:px-8">
-                <CardTitle>Hvor mye av jobben kan en robot ta over?</CardTitle>
+                <CardTitle>Automatiseringspotensial — hvor mye kan automatiseres?</CardTitle>
                 <CardDescription className="text-muted-foreground max-w-prose text-sm leading-relaxed">
-                  Struktur på data, hvor like sakene er, og hvor digitalt det er
-                  — sier noe om hvor mye som er realistisk å automatisere.
+                  Tre nøkkelfaktorer avgjør hvor stor andel av prosessen en robot
+                  realistisk kan ta over: datastruktur, saksvariasjon og
+                  digitaliseringsgrad. Sammen gir de et estimat på
+                  automatiseringspotensialet i prosent.
                 </CardDescription>
               </CardHeader>
               <CardContent className="px-0 pb-4">
                 <div className="border-border/50 border-b px-6 py-5 sm:px-8 last:border-b-0">
                   <LikertField
                     id="si"
-                    label="Kommer opplysningene inn i faste felt, eller som fritekst, e-post og vedlegg?"
-                    hint="Faste felt og lister er enklere enn fri tekst og tunge PDF-er."
+                    label="Hvor strukturert er input-dataene?"
+                    hint="Robot håndterer faste felt, dropdown-lister og tall godt. Fritekst, e-postvedlegg, skannede PDF-er og ustrukturerte dokumenter krever AI/OCR og øker feilraten."
                     value={clampLikert5(payload.structuredInput)}
                     onChange={(v) => update("structuredInput", v)}
-                    left="Mye rot og varianter"
-                    right="Ryddige felt og regler"
+                    left="Ustrukturert"
+                    right="Fullt strukturert"
+                    scaleLabels={["Fritekst/PDF", "Mest fritekst", "Blanding", "Mest felt", "Kun faste felt"]}
                     disabled={readOnly}
                   />
                 </div>
                 <div className="border-border/50 border-b px-6 py-5 sm:px-8 last:border-b-0">
                   <LikertField
                     id="pv"
-                    label="Er sakene stort sett like, eller nesten unike hver gang?"
-                    hint="Svært ulike saker krever mer skjønn — vanskeligere å automatisere."
+                    label="Hvor mye varierer sakene fra gang til gang?"
+                    hint="Robot følger faste steg. Høy variasjon (mange unntak, skjønn, spesialtilfeller) betyr at større del må håndteres manuelt."
                     value={clampLikert5(payload.processVariability)}
                     onChange={(v) => update("processVariability", v)}
-                    left="Ganske like"
+                    left="Nesten identiske"
                     right="Svært ulike"
+                    scaleLabels={["< 5 % unntak", "5–15 %", "15–30 %", "30–50 %", "> 50 % unntak"]}
                     disabled={readOnly}
                   />
                 </div>
                 <div className="border-border/50 border-b px-6 py-5 sm:px-8 last:border-b-0">
                   <LikertField
                     id="dg"
-                    label="Skjer det meste digitalt, eller mye på papir og manuell flytting?"
-                    hint="Mer i systemer gir ofte enklere automatisering."
+                    label="Hvor digitalisert er prosessen allerede?"
+                    hint="Robot jobber i digitale systemer. Papirskjema, fysiske signaturer, manuell sortering av post osv. må digitaliseres først — det øker kost og tid."
                     value={clampLikert5(payload.digitization)}
                     onChange={(v) => update("digitization", v)}
-                    left="Mye papir/manuelt"
-                    right="Mest digitalt"
+                    left="Mye papir"
+                    right="Heldigitalt"
+                    scaleLabels={["Papirbasert", "Mest papir", "Halvt/halvt", "Mest digitalt", "100 % digitalt"]}
                     disabled={readOnly}
                   />
                 </div>
@@ -1034,24 +1042,26 @@ export function AssessmentWizard({ assessmentId }: Props) {
                 <div className="border-border/50 border-b px-6 py-5 sm:px-8 last:border-b-0">
                   <LikertField
                     id="processLength"
-                    label="Hvor mange steg og håndgrep er det fra start til ferdig?"
-                    hint="Kort flyt: færre feilkilder. Lang flyt: mer å kartlegge."
+                    label="Hvor lang og sammensatt er arbeidsflyten?"
+                    hint="Tell alt: klikk, tastetrykk, navigeringer, kopier/lim, menyvalg — fra du starter til du er ferdig. En kort flyt har få feilkilder; en lang flyt krever mer kartlegging."
                     value={clampLikert5(payload.processLength)}
                     onChange={(v) => update("processLength", v)}
-                    left="Få steg"
-                    right="Mange steg"
+                    left="Svært kort"
+                    right="Svært lang"
+                    scaleLabels={["1–5 steg", "6–15", "16–30", "31–60", "60+"]}
                     disabled={readOnly}
                   />
                 </div>
                 <div className="border-border/50 border-b px-6 py-5 sm:px-8 last:border-b-0">
                   <LikertField
                     id="applicationCount"
-                    label="Hvor mange ulike systemer må man inn i underveis?"
-                    hint="Flere vinduer og pålogginger øker kompleksitet."
+                    label="Hvor mange ulike systemer og verktøy brukes i prosessen?"
+                    hint="Inkluder alt som åpnes: fagapplikasjoner, e-post, Excel, intranett, skannerprogram, fjernskrivebord osv. Flere vinduer og pålogginger øker kompleksiteten."
                     value={clampLikert5(payload.applicationCount)}
                     onChange={(v) => update("applicationCount", v)}
-                    left="Ett–få"
-                    right="Mange"
+                    left="1 system"
+                    right="Mange systemer"
+                    scaleLabels={["1", "2", "3–4", "5–6", "7+"]}
                     disabled={readOnly}
                   />
                 </div>
@@ -1130,10 +1140,10 @@ export function AssessmentWizard({ assessmentId }: Props) {
                   </Badge>
                 </div>
                 <CardDescription className="text-muted-foreground max-w-prose text-sm leading-relaxed">
-                  Konkrete tall for tidsbruk og kost — brukes i beregningen av
-                  besparelse og porteføljeprioritet. Uten disse blir ikke
-                  kroner/timer i modellen meningsfulle. Anslag er nok; dere kan
-                  justere senere.
+                  Konkrete tall for tidsbruk og kost. Manuelle timer påvirker
+                  både automatiseringspotensial (volum) og estimert besparelse.
+                  Kosttall brukes til å beregne kroner spart. Anslag er nok —
+                  dere kan justere senere.
                 </CardDescription>
               </CardHeader>
               <CardContent className="grid gap-7 sm:grid-cols-2 sm:px-8">
@@ -1370,62 +1380,90 @@ export function AssessmentWizard({ assessmentId }: Props) {
                         Lim inn i eget KI-verktøy for sortering eller oppsummering.
                       </span>
                     </div>
+                    <div className="rounded-xl border border-primary/20 bg-primary/[0.04] p-4">
+                      <p className="text-muted-foreground text-xs font-medium uppercase tracking-wide">Samlet anbefaling</p>
+                      <p className="font-heading mt-1 text-lg font-semibold">
+                        {computed.priorityScore >= 60
+                          ? "Sterk kandidat for automatisering"
+                          : computed.priorityScore >= 35
+                            ? "Moderat kandidat — vurder nærmere"
+                            : "Lav prioritet — andre prosesser bør vurderes først"}
+                      </p>
+                      <p className="text-muted-foreground mt-1 text-sm leading-relaxed">
+                        {computed.priorityScore >= 60
+                          ? "Høyt potensial og viktig prosess. Anbefales prioritert i porteføljen."
+                          : computed.priorityScore >= 35
+                            ? "Kan ha verdi, men vurder om det finnes enklere eller viktigere prosesser."
+                            : "Enten lavt automatiseringspotensial, lav viktighet, eller begge deler."}
+                        {!computed.feasible
+                          ? " OBS: Prosess- eller systemstabilitet er for lav — avklar dette før oppstart."
+                          : ""}
+                      </p>
+                    </div>
                     <div className="grid gap-4 sm:grid-cols-2">
                       <ScoreCard
-                        label="Hvor mye som kan automatiseres (modell)"
+                        label="Automatiseringspotensial"
                         value={`${computed.ap.toFixed(1)} %`}
+                        sub="Andel av prosessen som kan automatiseres, basert på datastruktur, saksvariasjon, digitalisering og volum."
                       />
                       <ScoreCard
-                        label="Viktighet / konsekvens (modell)"
+                        label="Viktighet og konsekvens"
                         value={`${computed.criticality.toFixed(1)} %`}
+                        sub="Kombinasjon av forretningskonsekvens, regulatorisk risiko og tidsbruk."
                       />
                       <ScoreCard
-                        label="Foreslått porteføljeprioritet"
-                        value={computed.priorityScore.toFixed(1)}
-                        sub="Kombinasjon av automasjonspotensial og viktighet (√ AP × viktighet, 0–100)."
+                        label="Porteføljeprioritet"
+                        value={`${computed.priorityScore.toFixed(1)} / 100`}
+                        sub="Geometrisk snitt av potensial og viktighet — krever at begge er høye for toppscore."
                       />
                       <ScoreCard
-                        label="Trygg nok prosess og systemer?"
-                        value={
-                          computed.feasible
-                            ? "Ja — innenfor akseptabelt nivå"
-                            : "Trenger avklaring først"
-                        }
+                        label={computed.feasible ? "Stabil nok for robot" : "Stabilitet: Advarsel"}
+                        value={computed.feasible ? "Ja" : "Nei — ustabil"}
+                        sub={computed.feasible
+                          ? "Prosess og systemer er vurdert som tilstrekkelig forutsigbare."
+                          : "Prosess eller systemer endrer seg for ofte. Stabiliser før automatisering."}
                       />
                     </div>
-                    <p className="text-muted-foreground text-xs leading-relaxed">
-                      «Trygg nok» betyr at både arbeidsmåten og systemene er vurdert
-                      som minst middels forutsigbare (steg «Trygghet»).
-                    </p>
                     <div className="space-y-2">
                       <div className="flex justify-between gap-3 text-sm">
-                        <span className="text-muted-foreground max-w-[min(100%,18rem)]">
-                          Gjennomførbarhet (høyere % = enklere å bygge og drift)
+                        <span className="text-muted-foreground">
+                          Gjennomførbarhet — hvor enkelt er det å bygge?
                         </span>
-                        <span className="shrink-0 tabular-nums">
+                        <span className="shrink-0 font-semibold tabular-nums">
                           {computed.ease.toFixed(1)} % · {computed.easeLabel}
                         </span>
                       </div>
                       <Progress value={computed.ease}>
                         <div className="flex w-full justify-between gap-2 pb-2">
                           <ProgressLabel className="text-muted-foreground">
-                            Enklere mot høyre
+                            Vanskeligere
                           </ProgressLabel>
-                          <ProgressValue />
+                          <ProgressLabel className="text-muted-foreground">
+                            Enklere
+                          </ProgressLabel>
                         </div>
                       </Progress>
                     </div>
                     <Separator />
-                    <dl className="grid gap-2 text-sm">
-                      <div className="flex justify-between">
-                        <dt className="text-muted-foreground">Timer spart /år</dt>
-                        <dd className="font-mono">{computed.benH.toFixed(1)}</dd>
+                    <p className="text-muted-foreground text-xs font-medium uppercase tracking-wide">Estimert gevinst</p>
+                    <dl className="grid gap-3 text-sm sm:grid-cols-2">
+                      <div className="flex justify-between gap-2 rounded-lg bg-muted/30 px-3 py-2">
+                        <dt className="text-muted-foreground">Timer spart / år</dt>
+                        <dd className="font-mono font-semibold">{computed.benH.toFixed(0)}</dd>
                       </div>
-                      <div className="flex justify-between">
-                        <dt className="text-muted-foreground">NOK /år</dt>
-                        <dd className="font-mono">
-                          {Math.round(computed.benC).toLocaleString("nb-NO")}
+                      <div className="flex justify-between gap-2 rounded-lg bg-muted/30 px-3 py-2">
+                        <dt className="text-muted-foreground">Besparelse / år</dt>
+                        <dd className="font-mono font-semibold">
+                          {Math.round(computed.benC).toLocaleString("nb-NO")} kr
                         </dd>
+                      </div>
+                      <div className="flex justify-between gap-2 rounded-lg bg-muted/30 px-3 py-2">
+                        <dt className="text-muted-foreground">Årsverk frigitt</dt>
+                        <dd className="font-mono font-semibold">{computed.benFte.toFixed(2)}</dd>
+                      </div>
+                      <div className="flex justify-between gap-2 rounded-lg bg-muted/30 px-3 py-2">
+                        <dt className="text-muted-foreground">Totale timer / år</dt>
+                        <dd className="font-mono font-semibold">{computed.hoursY.toFixed(0)}</dd>
                       </div>
                     </dl>
                   </>

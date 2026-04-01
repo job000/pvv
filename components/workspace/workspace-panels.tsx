@@ -49,8 +49,13 @@ import { cn } from "@/lib/utils";
 import {
   AlertTriangle,
   ChevronRight,
+  Clock,
+  Eye,
   ExternalLink,
   GitBranch,
+  HelpCircle,
+  MessageSquare,
+  Tag,
   Ticket,
   Loader2,
   Plus,
@@ -58,6 +63,7 @@ import {
   Shield,
   Sparkles,
   Trash2,
+  User,
   Users,
   Wrench,
   Zap,
@@ -675,6 +681,82 @@ export function WorkspaceCandidatesPanel({
   const [autoRegGithub, setAutoRegGithub] = useState(false);
   const [autoRegStatusId, setAutoRegStatusId] = useState("");
   const [newProcessOpen, setNewProcessOpen] = useState(false);
+  const [autoGhHelpOpen, setAutoGhHelpOpen] = useState(false);
+  const [processRegHelpOpen, setProcessRegHelpOpen] = useState(false);
+
+  type GithubPreviewData = {
+    title: string;
+    body: string | null;
+    state: string;
+    stateReason: string | null;
+    number: number;
+    repoFullName: string;
+    htmlUrl: string;
+    createdAt: string;
+    updatedAt: string;
+    closedAt: string | null;
+    author: { login: string; avatarUrl: string } | null;
+    assignees: { login: string; avatarUrl: string }[];
+    labels: { name: string; color: string }[];
+    milestone: string | null;
+    commentsCount: number;
+  };
+  const [ghPreview, setGhPreview] = useState<GithubPreviewData | null>(null);
+  const [ghPreviewOpen, setGhPreviewOpen] = useState(false);
+  const [ghPreviewLoading, setGhPreviewLoading] = useState(false);
+  const previewGithubIssueAction = useAction(
+    api.githubIssueImport.previewGithubIssue,
+  );
+  const previewGithubIssueByUrlAction = useAction(
+    api.githubIssueImport.previewGithubIssueByUrl,
+  );
+
+  const openGhPreview = useCallback(
+    async (repoFullName: string, issueNumber: number) => {
+      setGhPreviewLoading(true);
+      setGhPreviewOpen(true);
+      setGhPreview(null);
+      try {
+        const data = await previewGithubIssueAction({
+          workspaceId,
+          repoFullName,
+          issueNumber,
+        });
+        setGhPreview(data);
+      } catch (err) {
+        toast.error(
+          err instanceof Error ? err.message : "Kunne ikke hente forhåndsvisning",
+        );
+        setGhPreviewOpen(false);
+      } finally {
+        setGhPreviewLoading(false);
+      }
+    },
+    [previewGithubIssueAction, workspaceId],
+  );
+
+  const openGhPreviewByUrl = useCallback(
+    async (issueUrl: string) => {
+      setGhPreviewLoading(true);
+      setGhPreviewOpen(true);
+      setGhPreview(null);
+      try {
+        const data = await previewGithubIssueByUrlAction({
+          workspaceId,
+          issueUrl,
+        });
+        setGhPreview(data);
+      } catch (err) {
+        toast.error(
+          err instanceof Error ? err.message : "Kunne ikke hente forhåndsvisning",
+        );
+        setGhPreviewOpen(false);
+      } finally {
+        setGhPreviewLoading(false);
+      }
+    },
+    [previewGithubIssueByUrlAction, workspaceId],
+  );
   const [editCandidateId, setEditCandidateId] =
     useState<Id<"candidates"> | null>(null);
 
@@ -1328,43 +1410,49 @@ export function WorkspaceCandidatesPanel({
         data-tutorial-anchor={
           hubMode ? "prosess-oversikt-header" : undefined
         }
-        className={hubMode ? "border-b border-border/50 pb-4" : undefined}
+        className={hubMode ? "border-b border-border/50 pb-4" : "pb-4"}
       >
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div className="space-y-1">
-            <CardTitle className="text-xl">Prosessregister</CardTitle>
-            {!canEditCandidates ? (
-              <p className="text-muted-foreground text-sm">
-                Lesertilgang — opprettelse, endring, sletting og GitHub-henting krever
-                medlem- eller admin-rolle.
-              </p>
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5">
+            <div className="bg-emerald-500/10 flex size-9 items-center justify-center rounded-xl">
+              <Users className="text-emerald-600 dark:text-emerald-400 size-4.5" aria-hidden />
+            </div>
+            <div>
+              <CardTitle className="text-lg">Prosessregister</CardTitle>
+              {!canEditCandidates ? (
+                <p className="text-muted-foreground text-xs">Lesertilgang</p>
+              ) : null}
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            {hubMode ? (
+              <span className="bg-emerald-500/15 text-emerald-900 dark:text-emerald-100 inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-semibold tabular-nums">
+                {candidates.length}{" "}
+                {candidates.length === 1 ? "prosess" : "prosesser"}
+              </span>
             ) : null}
             {!hubMode ? (
-              <CardDescription className="max-w-2xl text-base leading-relaxed">
-                Registrer prosesser med navn og prosess-ID. Du kan knytte til
-                organisasjonskart (HF/avdeling/seksjon). Sletting krever
-                administrator. Samme prosess kan brukes i flere vurderinger; ROS
-                kan kobles til flere vurderinger og prosesser.
-              </CardDescription>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="text-muted-foreground hover:text-foreground size-8"
+                title="Hjelp"
+                onClick={() => setProcessRegHelpOpen(true)}
+              >
+                <HelpCircle className="size-4" aria-hidden />
+              </Button>
             ) : null}
           </div>
-          {hubMode ? (
-            <span className="bg-emerald-500/15 text-emerald-900 dark:text-emerald-100 inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold tabular-nums">
-              <Users className="size-3.5" aria-hidden />
-              {candidates.length}{" "}
-              {candidates.length === 1 ? "prosess" : "prosesser"}
-            </span>
-          ) : null}
         </div>
       </CardHeader>
-      <CardContent className={hubMode ? "space-y-6 pt-4" : "space-y-8 pt-6"}>
+      <CardContent className={hubMode ? "space-y-5 pt-4" : "space-y-5 pt-4"}>
         {hubMode ? (
           <ProsessregisterHubLead
             canEdit={Boolean(canEditCandidates)}
             onRegisterClick={() => setNewProcessOpen(true)}
           />
         ) : null}
-        <ProcessCoverageOverview workspaceId={workspaceId} />
         {hubMode ? (
           <div
             data-tutorial-anchor="github-tur"
@@ -1375,51 +1463,42 @@ export function WorkspaceCandidatesPanel({
         {!w.githubProjectNodeId?.trim() ? (
           <div
             data-tutorial-anchor="github-varsling"
-            className="rounded-xl border border-amber-500/40 bg-amber-500/[0.09] px-4 py-3"
+            className="flex items-center gap-3 rounded-lg border border-amber-500/30 bg-amber-500/[0.06] px-3 py-2"
             role="status"
           >
-            <p className="text-foreground text-sm font-medium">
-              Prosjekt-tavle er ikke koblet — kolonne-import er ikke tilgjengelig
+            <AlertTriangle className="text-amber-500 size-4 shrink-0" aria-hidden />
+            <p className="text-foreground min-w-0 flex-1 text-xs">
+              GitHub-prosjekt ikke koblet.{" "}
+              {isAdmin ? (
+                <Link
+                  href={`/w/${workspaceId}/innstillinger#github-arbeidsomrade`}
+                  className="text-primary font-medium underline-offset-2 hover:underline"
+                >
+                  Konfigurer
+                </Link>
+              ) : (
+                <span className="text-muted-foreground">
+                  Be administrator koble prosjekt.
+                </span>
+              )}
             </p>
-            <p className="text-muted-foreground mt-1 text-xs leading-relaxed">
-              Issue-import fungerer når GitHub er satt opp under Innstillinger.
-              Koble også <strong className="text-foreground">prosjekt (node-ID)</strong>{" "}
-              der for å hente kort fra kolonner.
-            </p>
-            {isAdmin ? (
-              <Link
-                href={`/w/${workspaceId}/innstillinger#github-arbeidsomrade`}
-                className={cn(
-                  buttonVariants({ variant: "secondary", size: "sm" }),
-                  "mt-3 inline-flex gap-2",
-                )}
-              >
-                GitHub under Innstillinger
-              </Link>
-            ) : (
-              <p className="text-muted-foreground mt-2 text-xs">
-                Be administrator koble prosjekt-tavle ved behov.
-              </p>
-            )}
           </div>
         ) : null}
         {canEditCandidates ? (
           <div
             data-tutorial-anchor="github-prosess"
-            className="rounded-xl border border-border/60 bg-card p-4 shadow-sm ring-1 ring-black/[0.03] dark:ring-white/[0.05]"
+            className="rounded-lg border border-border/50 bg-muted/5 p-3"
           >
-            <div className="mb-3 flex flex-wrap items-center gap-2.5">
-              <div className="bg-primary/8 flex size-8 shrink-0 items-center justify-center rounded-md ring-1 ring-primary/15">
-                <GitBranch className="text-primary size-3.5" aria-hidden />
-              </div>
-              <h2 className="text-foreground font-heading text-base font-semibold tracking-tight">
-                GitHub-import
+            <div className="mb-2.5 flex items-center gap-2">
+              <GitBranch className="text-muted-foreground size-3.5" aria-hidden />
+              <h2 className="text-foreground text-sm font-semibold">
+                Importer fra GitHub
               </h2>
             </div>
 
             {w.githubProjectNodeId?.trim() ? (
               <div
-                className="mb-3 flex gap-1 rounded-lg border border-border/60 bg-muted/30 p-1"
+                className="mb-2.5 flex gap-0.5 rounded-md border border-border/50 bg-muted/30 p-0.5"
                 role="tablist"
                 aria-label="Importkilde"
               >
@@ -1428,21 +1507,21 @@ export function WorkspaceCandidatesPanel({
                   role="tab"
                   aria-selected={githubImportTab === "issue"}
                   className={cn(
-                    "flex-1 rounded-md px-3 py-2 text-center text-sm font-medium transition-colors",
+                    "flex-1 rounded px-2.5 py-1.5 text-center text-xs font-medium transition-colors",
                     githubImportTab === "issue"
                       ? "bg-card text-foreground shadow-sm ring-1 ring-black/[0.06] dark:ring-white/[0.08]"
                       : "text-muted-foreground hover:text-foreground",
                   )}
                   onClick={() => setGithubImportTab("issue")}
                 >
-                  Issue (lenke)
+                  Issue-lenke
                 </button>
                 <button
                   type="button"
                   role="tab"
                   aria-selected={githubImportTab === "column"}
                   className={cn(
-                    "flex-1 rounded-md px-3 py-2 text-center text-sm font-medium transition-colors",
+                    "flex-1 rounded px-2.5 py-1.5 text-center text-xs font-medium transition-colors",
                     githubImportTab === "column"
                       ? "bg-card text-foreground shadow-sm ring-1 ring-black/[0.06] dark:ring-white/[0.08]"
                       : "text-muted-foreground hover:text-foreground",
@@ -1455,42 +1534,36 @@ export function WorkspaceCandidatesPanel({
             ) : null}
 
             {(!w.githubProjectNodeId?.trim() || githubImportTab === "issue") ? (
-              <section
-                className="space-y-2"
-                aria-label="Importer fra GitHub-issue"
-              >
-                <div className="flex flex-col gap-2 sm:flex-row sm:items-stretch">
-                  <div className="min-w-0 flex-1">
-                    <Label htmlFor="gh-issue-url" className="sr-only">
-                      Issue-URL fra GitHub
-                    </Label>
-                    <Input
-                      id="gh-issue-url"
-                      type="url"
-                      value={issueGithubUrlInput}
-                      onChange={(e) => setIssueGithubUrlInput(e.target.value)}
-                      placeholder="https://github.com/org/repo/issues/42"
-                      className="h-10 border-border/80 font-mono text-sm shadow-xs"
-                      autoComplete="off"
-                    />
-                  </div>
+              <section aria-label="Importer fra GitHub-issue">
+                <div className="flex gap-2">
+                  <Input
+                    id="gh-issue-url"
+                    type="url"
+                    value={issueGithubUrlInput}
+                    onChange={(e) => setIssueGithubUrlInput(e.target.value)}
+                    placeholder="github.com/org/repo/issues/42"
+                    className="h-9 min-w-0 flex-1 font-mono text-xs"
+                    autoComplete="off"
+                    aria-label="Issue-URL"
+                  />
                   <Button
                     type="button"
                     variant="secondary"
-                    className="h-10 shrink-0 gap-2 sm:w-auto"
+                    size="sm"
+                    className="h-9 shrink-0 gap-1.5"
                     disabled={issueUrlFetchBusy || !issueGithubUrlInput.trim()}
                     onClick={() => void fetchGithubIssueForImport()}
                   >
                     {issueUrlFetchBusy ? (
-                      <Loader2 className="size-4 shrink-0 animate-spin" aria-hidden />
+                      <Loader2 className="size-3.5 animate-spin" aria-hidden />
                     ) : (
-                      <ExternalLink className="size-4" aria-hidden />
+                      <ExternalLink className="size-3.5" aria-hidden />
                     )}
                     Hent
                   </Button>
                 </div>
                 {issueUrlFetchError ? (
-                  <p className="text-destructive text-sm" role="alert">
+                  <p className="text-destructive mt-1.5 text-xs" role="alert">
                     {issueUrlFetchError}
                   </p>
                 ) : null}
@@ -1621,17 +1694,24 @@ export function WorkspaceCandidatesPanel({
                             className="border-border/40 border-b last:border-b-0"
                           >
                             <td className="text-foreground max-w-[16rem] px-3 py-2 align-top">
-                              <span className="line-clamp-2">{row.title}</span>
-                              {row.issueUrl ? (
-                                <a
-                                  href={row.issueUrl}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="text-primary mt-1 block text-xs font-medium underline-offset-2 hover:underline"
+                              {row.repoFullName?.trim() &&
+                              row.issueNumber != null &&
+                              row.issueNumber > 0 ? (
+                                <button
+                                  type="button"
+                                  className="text-foreground hover:text-primary line-clamp-2 text-left underline-offset-2 transition-colors hover:underline"
+                                  onClick={() =>
+                                    void openGhPreview(
+                                      row.repoFullName!,
+                                      row.issueNumber!,
+                                    )
+                                  }
                                 >
-                                  Åpne i GitHub
-                                </a>
-                              ) : null}
+                                  {row.title}
+                                </button>
+                              ) : (
+                                <span className="line-clamp-2">{row.title}</span>
+                              )}
                             </td>
                             <td className="text-muted-foreground px-3 py-2 align-top text-xs">
                               {githubColumnContentKindLabel(row.contentKind)}
@@ -1716,24 +1796,18 @@ export function WorkspaceCandidatesPanel({
             className="space-y-3"
             aria-labelledby="process-overview-heading"
           >
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div className="min-w-0 space-y-1">
-                <h2
-                  id="process-overview-heading"
-                  className="text-foreground font-heading text-lg font-semibold tracking-tight"
-                >
-                  Prosessoversikt
-                </h2>
-                <p className="text-muted-foreground mt-1 text-sm leading-relaxed">
-                  Klikk en rad for å åpne prosessen. Under GitHub kan du legge inn
-                  utkast i tavle eller opprette ekte issue i repo (når standard-repo er
-                  satt). Slett med søppelikonet, eller rediger og synk i vinduet.
-                </p>
-              </div>
+            <div className="flex items-center justify-between gap-3">
+              <h2
+                id="process-overview-heading"
+                className="text-foreground font-heading text-base font-semibold tracking-tight"
+              >
+                {candidates.length} prosess{candidates.length !== 1 ? "er" : ""}
+              </h2>
               {canEditCandidates ? (
                 <Button
                   type="button"
-                  className="h-10 shrink-0 gap-2"
+                  size="sm"
+                  className="gap-1.5 shadow-sm"
                   onClick={() => setNewProcessOpen(true)}
                 >
                   <Plus className="size-4" aria-hidden />
@@ -1782,12 +1856,30 @@ export function WorkspaceCandidatesPanel({
                       </td>
                       <td className="px-3 py-2.5">
                         {c.githubProjectItemNodeId ? (
-                          <Badge
-                            variant="secondary"
-                            className="border-emerald-500/30 bg-emerald-500/10 text-emerald-900 dark:text-emerald-100"
-                          >
-                            I prosjekt
-                          </Badge>
+                          c.githubRepoFullName &&
+                          c.githubIssueNumber != null &&
+                          c.githubIssueNumber > 0 ? (
+                            <Badge
+                              variant="secondary"
+                              className="border-emerald-500/30 bg-emerald-500/10 text-emerald-900 cursor-pointer hover:bg-emerald-500/20 dark:text-emerald-100"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                void openGhPreview(
+                                  c.githubRepoFullName!,
+                                  c.githubIssueNumber!,
+                                );
+                              }}
+                            >
+                              I prosjekt
+                            </Badge>
+                          ) : (
+                            <Badge
+                              variant="secondary"
+                              className="border-emerald-500/30 bg-emerald-500/10 text-emerald-900 dark:text-emerald-100"
+                            >
+                              I prosjekt
+                            </Badge>
+                          )
                         ) : (
                           <div className="flex flex-wrap items-center gap-2">
                             <Badge
@@ -1890,66 +1982,59 @@ export function WorkspaceCandidatesPanel({
           </section>
         ) : null}
 
+        <ProcessCoverageOverview workspaceId={workspaceId} />
+
         {isAdmin &&
         w.githubProjectNodeId?.trim() &&
         githubProjectStatus.options &&
         githubProjectStatus.options.length > 0 ? (
           <section
-            className="border-border/60 space-y-5 rounded-2xl border bg-muted/15 p-5 shadow-sm sm:p-6"
+            className="rounded-xl border border-border/50 bg-muted/10 p-4"
             aria-labelledby="auto-github-heading"
           >
-            <div className="flex flex-wrap items-start gap-3">
-              <div className="bg-muted/80 flex size-10 shrink-0 items-center justify-center rounded-xl ring-1 ring-border/50">
-                <GitBranch className="text-muted-foreground size-5" aria-hidden />
-              </div>
-              <div className="min-w-0 flex-1 space-y-1">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <GitBranch className="text-muted-foreground size-4" aria-hidden />
                 <h2
                   id="auto-github-heading"
-                  className="text-foreground font-heading text-base font-semibold tracking-tight"
+                  className="text-foreground text-sm font-semibold"
                 >
-                  Automatisk GitHub-prosjekt
+                  Auto-registrering
                 </h2>
-                <p className="text-muted-foreground text-xs leading-relaxed">
-                  Nye prosesser kan registreres som utkast i tavlen automatisk.
-                  Avkrysning og standardstatus gjelder når du trykker «Ny prosess»
-                  (uten å lagre innstilling først). Du kan også legge til manuelt
-                  fra tabellen («Utkast i tavle») eller opprette «Issue i repo» når
-                  standard-repo er satt.
-                </p>
               </div>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="text-muted-foreground hover:text-foreground size-7"
+                title="Nye prosesser registreres automatisk som utkast i GitHub-prosjekt. Velg standardstatus og lagre."
+                onClick={() => setAutoGhHelpOpen(true)}
+              >
+                <HelpCircle className="size-3.5" aria-hidden />
+              </Button>
             </div>
-            <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_minmax(11rem,18rem)_auto] sm:items-end">
-              <div className="flex min-w-0 flex-col gap-1.5">
-                <span className="text-muted-foreground text-xs font-medium leading-none">
-                  Automatisk
-                </span>
-                <label
-                  htmlFor="auto-reg-github"
-                  className="border-input bg-background flex min-h-10 cursor-pointer items-start gap-2.5 rounded-lg border border-border/80 px-3 py-2 text-sm shadow-xs transition-colors hover:bg-muted/50 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring"
-                >
-                  <input
-                    id="auto-reg-github"
-                    type="checkbox"
-                    className="border-input text-primary focus-visible:ring-ring mt-0.5 size-4 shrink-0 rounded border shadow-sm focus-visible:ring-2"
-                    checked={autoRegGithub}
-                    onChange={(e) => setAutoRegGithub(e.target.checked)}
-                  />
-                  <span className="text-foreground min-w-0 flex-1 leading-snug">
-                    Registrer automatisk ved ny prosess
-                  </span>
-                </label>
-              </div>
-              <div className="flex min-w-0 flex-col gap-1.5">
-                <Label htmlFor="auto-gh-status" className="text-xs font-medium">
-                  Standardstatus i prosjekt
-                </Label>
+            <div className="mt-3 flex flex-wrap items-end gap-3">
+              <label
+                htmlFor="auto-reg-github"
+                className="border-input bg-background flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-sm transition-colors hover:bg-muted/50"
+              >
+                <input
+                  id="auto-reg-github"
+                  type="checkbox"
+                  className="border-input text-primary size-4 shrink-0 rounded border shadow-sm"
+                  checked={autoRegGithub}
+                  onChange={(e) => setAutoRegGithub(e.target.checked)}
+                />
+                <span className="text-foreground text-xs">Ved ny prosess</span>
+              </label>
+              <div className="min-w-[10rem] flex-1">
                 <select
                   id="auto-gh-status"
-                  className="border-input bg-background h-10 w-full rounded-lg border border-border/80 px-3 text-sm shadow-xs outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  className="border-input bg-background h-9 w-full rounded-lg border px-2.5 text-xs shadow-xs outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   value={autoRegStatusId}
                   onChange={(e) => setAutoRegStatusId(e.target.value)}
                 >
-                  <option value="">— Velg —</option>
+                  <option value="">Status …</option>
                   {githubProjectStatus.options.map((o) => (
                     <option key={o.id} value={o.id}>
                       {o.name}
@@ -1957,33 +2042,27 @@ export function WorkspaceCandidatesPanel({
                   ))}
                 </select>
               </div>
-              <div className="flex min-w-0 flex-col gap-1.5 sm:justify-self-end">
-                <span className="text-muted-foreground hidden text-xs font-medium leading-none sm:block sm:h-[1.125rem] sm:select-none sm:opacity-0" aria-hidden>
-                  —
-                </span>
-                <Button
-                  type="button"
-                  variant="secondary"
-                  className="h-10 w-full sm:w-auto"
-                  onClick={() => void saveAutoGithubSettings()}
-                >
-                  Lagre innstilling
-                </Button>
-              </div>
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                className="h-9"
+                onClick={() => void saveAutoGithubSettings()}
+              >
+                Lagre
+              </Button>
             </div>
             {candidates.some((c) => !c.githubProjectItemNodeId) ? (
-              <div className="border-border/50 flex flex-col gap-2 border-t pt-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="mt-3 flex items-center justify-between gap-2 border-t border-border/40 pt-3">
                 <p className="text-muted-foreground text-xs">
-                  {
-                    candidates.filter((c) => !c.githubProjectItemNodeId).length
-                  }{" "}
-                  prosess(er) mangler kort i prosjektet.
+                  {candidates.filter((c) => !c.githubProjectItemNodeId).length} uten
+                  kort i prosjektet
                 </p>
                 <Button
                   type="button"
                   variant="outline"
                   size="sm"
-                  className="h-9 gap-2"
+                  className="h-8 gap-1.5 text-xs"
                   disabled={
                     bulkGithubBusy ||
                     githubProjectStatus.loading ||
@@ -1994,42 +2073,321 @@ export function WorkspaceCandidatesPanel({
                   onClick={() => void bulkRegisterMissingInGithub()}
                 >
                   {bulkGithubBusy ? (
-                    <Loader2 className="size-4 shrink-0 animate-spin" aria-hidden />
+                    <Loader2 className="size-3.5 animate-spin" aria-hidden />
                   ) : (
-                    <GitBranch className="size-4" aria-hidden />
+                    <GitBranch className="size-3.5" aria-hidden />
                   )}
-                  Registrer alle manglende
+                  Registrer alle
                 </Button>
               </div>
             ) : null}
           </section>
         ) : null}
 
+        <Dialog open={processRegHelpOpen} onOpenChange={setProcessRegHelpOpen}>
+          <DialogContent
+            size="sm"
+            className="max-w-md"
+            titleId="process-reg-help-title"
+          >
+            <DialogHeader>
+              <h2
+                id="process-reg-help-title"
+                className="text-foreground text-base font-semibold"
+              >
+                Om prosessregisteret
+              </h2>
+            </DialogHeader>
+            <DialogBody className="space-y-3 text-sm leading-relaxed">
+              <p>
+                Registrer prosesser med navn og en unik prosess-ID. Samme prosess
+                kan brukes i flere vurderinger og ROS-analyser.
+              </p>
+              <ul className="list-inside list-disc space-y-1 text-muted-foreground text-xs">
+                <li>Knytt prosesser til organisasjonsenheter (HF/avdeling)</li>
+                <li>Koble til GitHub-prosjekt for sporing</li>
+                <li>Klikk en rad for å redigere prosessen</li>
+                <li>Sletting krever administrator-rolle</li>
+              </ul>
+            </DialogBody>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog open={autoGhHelpOpen} onOpenChange={setAutoGhHelpOpen}>
+          <DialogContent
+            size="sm"
+            className="max-w-md"
+            titleId="auto-gh-help-title"
+          >
+            <DialogHeader>
+              <h2
+                id="auto-gh-help-title"
+                className="text-foreground text-base font-semibold"
+              >
+                Auto-registrering
+              </h2>
+            </DialogHeader>
+            <DialogBody className="space-y-3 text-sm leading-relaxed">
+              <p>
+                Nye prosesser kan registreres som utkast i GitHub-prosjektet
+                automatisk når du oppretter dem i PVV.
+              </p>
+              <ul className="list-inside list-disc space-y-1 text-muted-foreground text-xs">
+                <li>Kryss av for auto-registrering ved ny prosess</li>
+                <li>Velg standardstatus (kolonne) i prosjekttavlen</li>
+                <li>Trykk «Lagre» for å aktivere</li>
+                <li>Du kan også legge til manuelt fra prosesslisten</li>
+              </ul>
+            </DialogBody>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog
+          open={ghPreviewOpen}
+          onOpenChange={(open) => {
+            setGhPreviewOpen(open);
+            if (!open) setGhPreview(null);
+          }}
+        >
+          <DialogContent
+            size="xl"
+            className="max-h-[85vh] max-w-2xl"
+            titleId="gh-preview-title"
+            descriptionId="gh-preview-desc"
+          >
+            {ghPreviewLoading && !ghPreview ? (
+              <div className="flex flex-col items-center justify-center gap-3 py-12">
+                <Loader2 className="text-muted-foreground size-6 animate-spin" aria-hidden />
+                <p className="text-muted-foreground text-sm">
+                  Henter fra GitHub …
+                </p>
+              </div>
+            ) : ghPreview ? (
+              <>
+                <DialogHeader>
+                  <div className="flex items-start gap-3">
+                    <div
+                      className={cn(
+                        "flex size-9 shrink-0 items-center justify-center rounded-lg",
+                        ghPreview.state === "open"
+                          ? "bg-emerald-500/10"
+                          : "bg-violet-500/10",
+                      )}
+                    >
+                      <GitBranch
+                        className={cn(
+                          "size-4",
+                          ghPreview.state === "open"
+                            ? "text-emerald-600 dark:text-emerald-400"
+                            : "text-violet-600 dark:text-violet-400",
+                        )}
+                        aria-hidden
+                      />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <h2
+                        id="gh-preview-title"
+                        className="text-foreground text-base font-semibold leading-snug"
+                      >
+                        {ghPreview.title}
+                      </h2>
+                      <p
+                        id="gh-preview-desc"
+                        className="text-muted-foreground mt-0.5 text-xs"
+                      >
+                        {ghPreview.repoFullName}#{ghPreview.number}
+                      </p>
+                    </div>
+                    <Badge
+                      variant="secondary"
+                      className={cn(
+                        "shrink-0 text-xs",
+                        ghPreview.state === "open"
+                          ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-900 dark:text-emerald-100"
+                          : "border-violet-500/30 bg-violet-500/10 text-violet-900 dark:text-violet-100",
+                      )}
+                    >
+                      {ghPreview.state === "open" ? "Åpen" : "Lukket"}
+                    </Badge>
+                  </div>
+                </DialogHeader>
+                <DialogBody className="space-y-4">
+                  <div className="flex flex-wrap gap-x-5 gap-y-2 text-xs">
+                    {ghPreview.author ? (
+                      <div className="flex items-center gap-1.5">
+                        <User className="text-muted-foreground size-3" aria-hidden />
+                        <span className="text-muted-foreground">Opprettet av</span>
+                        <span className="text-foreground font-medium">
+                          {ghPreview.author.login}
+                        </span>
+                      </div>
+                    ) : null}
+                    {ghPreview.createdAt ? (
+                      <div className="flex items-center gap-1.5">
+                        <Clock className="text-muted-foreground size-3" aria-hidden />
+                        <span className="text-muted-foreground">
+                          {new Date(ghPreview.createdAt).toLocaleDateString(
+                            "nb-NO",
+                            { day: "numeric", month: "short", year: "numeric" },
+                          )}
+                        </span>
+                      </div>
+                    ) : null}
+                    {ghPreview.commentsCount > 0 ? (
+                      <div className="flex items-center gap-1.5">
+                        <MessageSquare className="text-muted-foreground size-3" aria-hidden />
+                        <span className="text-muted-foreground">
+                          {ghPreview.commentsCount} kommentar
+                          {ghPreview.commentsCount !== 1 ? "er" : ""}
+                        </span>
+                      </div>
+                    ) : null}
+                    {ghPreview.milestone ? (
+                      <div className="flex items-center gap-1.5">
+                        <Tag className="text-muted-foreground size-3" aria-hidden />
+                        <span className="text-muted-foreground">
+                          {ghPreview.milestone}
+                        </span>
+                      </div>
+                    ) : null}
+                  </div>
+
+                  {ghPreview.assignees.length > 0 ? (
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-muted-foreground text-xs">Tildelt:</span>
+                      {ghPreview.assignees.map((a) => (
+                        <span
+                          key={a.login}
+                          className="inline-flex items-center gap-1.5 rounded-full bg-muted/50 px-2 py-0.5 text-xs"
+                        >
+                          {a.avatarUrl ? (
+                            <img
+                              src={a.avatarUrl}
+                              alt=""
+                              className="size-4 rounded-full"
+                            />
+                          ) : null}
+                          <span className="text-foreground font-medium">
+                            {a.login}
+                          </span>
+                        </span>
+                      ))}
+                    </div>
+                  ) : null}
+
+                  {ghPreview.labels.length > 0 ? (
+                    <div className="flex flex-wrap gap-1.5">
+                      {ghPreview.labels.map((l) => (
+                        <span
+                          key={l.name}
+                          className="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium"
+                          style={{
+                            backgroundColor: `#${l.color}20`,
+                            color: `#${l.color}`,
+                            border: `1px solid #${l.color}40`,
+                          }}
+                        >
+                          {l.name}
+                        </span>
+                      ))}
+                    </div>
+                  ) : null}
+
+                  {ghPreview.body ? (
+                    <div className="rounded-lg border border-border/50 bg-muted/10 p-4">
+                      <h3 className="text-foreground mb-2 text-xs font-semibold uppercase tracking-wide">
+                        Beskrivelse
+                      </h3>
+                      <div className="prose prose-sm dark:prose-invert max-h-[40vh] overflow-y-auto text-sm leading-relaxed">
+                        <pre className="whitespace-pre-wrap font-sans text-sm">
+                          {ghPreview.body}
+                        </pre>
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="text-muted-foreground text-xs italic">
+                      Ingen beskrivelse.
+                    </p>
+                  )}
+
+                  {ghPreview.closedAt ? (
+                    <p className="text-muted-foreground text-xs">
+                      Lukket{" "}
+                      {new Date(ghPreview.closedAt).toLocaleDateString("nb-NO", {
+                        day: "numeric",
+                        month: "short",
+                        year: "numeric",
+                      })}
+                      {ghPreview.stateReason
+                        ? ` (${ghPreview.stateReason})`
+                        : ""}
+                    </p>
+                  ) : null}
+                </DialogBody>
+                <DialogFooter>
+                  {ghPreview.htmlUrl ? (
+                    <a
+                      href={ghPreview.htmlUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className={cn(
+                        buttonVariants({ variant: "outline", size: "sm" }),
+                        "gap-1.5",
+                      )}
+                    >
+                      <ExternalLink className="size-3.5" aria-hidden />
+                      Åpne i GitHub
+                    </a>
+                  ) : null}
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setGhPreviewOpen(false)}
+                  >
+                    Lukk
+                  </Button>
+                </DialogFooter>
+              </>
+            ) : null}
+          </DialogContent>
+        </Dialog>
+
         <Separator />
 
         <Dialog open={newProcessOpen} onOpenChange={setNewProcessOpen}>
           <DialogContent
-            size="xl"
-            className="max-h-[92vh] max-w-2xl"
+            size="lg"
+            className="max-h-[92vh] max-w-lg"
             titleId="new-process-title"
             descriptionId="new-process-desc"
           >
             <DialogHeader>
-              <h2
-                id="new-process-title"
-                className="text-foreground text-lg font-semibold tracking-tight"
-              >
-                Registrer ny prosess
-              </h2>
-              <p id="new-process-desc" className="text-muted-foreground text-sm">
-                Samme felt som før — i et vindu så siden forblir kort.
-              </p>
+              <div className="flex items-center gap-2">
+                <div className="bg-primary/10 flex size-8 items-center justify-center rounded-lg">
+                  <Plus className="text-primary size-4" aria-hidden />
+                </div>
+                <div>
+                  <h2
+                    id="new-process-title"
+                    className="text-foreground text-base font-semibold"
+                  >
+                    Ny prosess
+                  </h2>
+                  <p
+                    id="new-process-desc"
+                    className="text-muted-foreground text-xs"
+                  >
+                    Fyll inn navn. Resten er valgfritt.
+                  </p>
+                </div>
+              </div>
             </DialogHeader>
-            <DialogBody className="space-y-5">
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div className="space-y-2">
-                  <Label htmlFor="new-cand-name">
-                    {prosessRegisterCopy.displayName.label}
+            <DialogBody className="space-y-4">
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="space-y-1.5">
+                  <Label htmlFor="new-cand-name" className="text-xs font-medium">
+                    Prosessnavn
                   </Label>
                   <Input
                     id="new-cand-name"
@@ -2038,115 +2396,110 @@ export function WorkspaceCandidatesPanel({
                     placeholder="F.eks. Fakturamottak"
                     required
                     autoComplete="off"
-                    className="h-11"
                   />
-                  <p className="text-muted-foreground text-[11px] leading-snug">
-                    {prosessRegisterCopy.displayName.hint}
-                  </p>
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="new-cand-code">
-                    {prosessRegisterCopy.referenceCode.label}
-                    <span className="text-muted-foreground ml-1.5 text-xs font-normal">
-                      (valgfritt)
+                <div className="space-y-1.5">
+                  <div className="flex items-center gap-1">
+                    <Label htmlFor="new-cand-code" className="text-xs font-medium">
+                      Prosess-ID
+                    </Label>
+                    <span className="text-muted-foreground text-[10px]">
+                      valgfritt
                     </span>
-                  </Label>
+                  </div>
                   <Input
                     id="new-cand-code"
                     value={cCode}
                     onChange={(e) => setCCode(e.target.value)}
-                    placeholder={prosessRegisterCopy.referenceCode.placeholder}
+                    placeholder="F.eks. INN-EL-01"
                     autoComplete="off"
-                    className="h-11 font-mono"
+                    className="font-mono"
                   />
-                  <p className="text-muted-foreground text-[11px] leading-snug">
-                    {prosessRegisterCopy.referenceCode.emptyMeansAuto}
-                  </p>
-                  <p className="text-muted-foreground mt-1 text-[11px] leading-snug opacity-90">
-                    {prosessRegisterCopy.referenceCode.hint}
+                  <p className="text-muted-foreground text-[10px]">
+                    Tomt = auto-ID
                   </p>
                 </div>
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="new-cand-notes">
-                  {prosessRegisterCopy.notes.label}
+              <div className="space-y-1.5">
+                <Label htmlFor="new-cand-notes" className="text-xs font-medium">
+                  Notat
                 </Label>
                 <Textarea
                   id="new-cand-notes"
                   value={cNotes}
                   onChange={(e) => setCNotes(e.target.value)}
                   rows={2}
-                  placeholder="Valgfritt — f.eks. systemnavn, kontaktperson …"
+                  placeholder="Systemer, kontaktperson, notater …"
                   className="resize-y"
                 />
-                <p className="text-muted-foreground text-[11px] leading-snug">
-                  {prosessRegisterCopy.notes.hint}
-                </p>
               </div>
-              <div className="rounded-xl border border-border/60 bg-muted/20 p-4">
-                <p className="text-foreground mb-3 text-sm font-medium">
-                  Brukes i vurderingen når prosessen velges
-                </p>
-                <p className="text-muted-foreground mb-4 text-xs leading-relaxed">
-                  Tomme felt hoppes over. Ved første valg av prosessen i veiviseren
-                  fylles tilsvarende felt i vurderingen hvis de er tomme (roller,
-                  systemer, sikkerhet og personvern).
-                </p>
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <div className="space-y-1.5 sm:col-span-2">
-                    <Label htmlFor="new-cand-owner" className="text-xs">
-                      Ansvarlig / eier (til «Roller og ansvar» i skjemaet)
+
+              <details className="group">
+                <summary className="text-muted-foreground hover:text-foreground flex cursor-pointer items-center gap-1.5 text-xs font-medium transition-colors">
+                  <ChevronRight className="size-3 transition-transform group-open:rotate-90" aria-hidden />
+                  Forhåndsutfyll vurderingsfelt
+                </summary>
+                <div className="mt-3 grid gap-2.5">
+                  <div className="space-y-1">
+                    <Label htmlFor="new-cand-owner" className="text-[11px]">
+                      Ansvarlig / eier
                     </Label>
                     <Input
                       id="new-cand-owner"
                       value={cOwner}
                       onChange={(e) => setCOwner(e.target.value)}
-                      placeholder="F.eks. avdelingsleder, kontaktperson"
-                      className="h-10"
+                      placeholder="Avdelingsleder, kontaktperson"
+                      className="h-9"
                     />
                   </div>
-                  <div className="space-y-1.5 sm:col-span-2">
-                    <Label htmlFor="new-cand-systems" className="text-xs">
-                      Systemer og data (til «Systemer og data»)
+                  <div className="space-y-1">
+                    <Label htmlFor="new-cand-systems" className="text-[11px]">
+                      Systemer og data
                     </Label>
                     <Input
                       id="new-cand-systems"
                       value={cSystems}
                       onChange={(e) => setCSystems(e.target.value)}
-                      placeholder="F.eks. EPJ, faktura, integrasjoner"
-                      className="h-10"
+                      placeholder="EPJ, faktura, integrasjoner"
+                      className="h-9"
                     />
                   </div>
-                  <div className="space-y-1.5 sm:col-span-2">
-                    <Label htmlFor="new-cand-comp" className="text-xs">
-                      Sikkerhet og personvern (til «Sikkerhet og informasjon»)
+                  <div className="space-y-1">
+                    <Label htmlFor="new-cand-comp" className="text-[11px]">
+                      Sikkerhet og personvern
                     </Label>
                     <Textarea
                       id="new-cand-comp"
                       value={cCompliance}
                       onChange={(e) => setCCompliance(e.target.value)}
                       rows={2}
-                      placeholder="Kort om sensitivitet, tilgang, dokumentasjon …"
+                      placeholder="Sensitivitet, tilgang, dokumentasjon …"
                       className="resize-y"
                     />
                   </div>
+                  <p className="text-muted-foreground text-[10px] leading-relaxed">
+                    Fylles automatisk inn i vurderingen første gang prosessen
+                    velges. Tomme felt hoppes over.
+                  </p>
                 </div>
-              </div>
+              </details>
             </DialogBody>
             <DialogFooter>
               <Button
                 type="button"
-                variant="outline"
+                variant="ghost"
+                size="sm"
                 onClick={() => setNewProcessOpen(false)}
               >
                 Avbryt
               </Button>
               <Button
                 type="button"
+                size="sm"
                 disabled={!cName.trim()}
                 onClick={() => void addCandidate()}
               >
-                Legg til prosess
+                Legg til
               </Button>
             </DialogFooter>
           </DialogContent>
@@ -2319,11 +2672,23 @@ export function WorkspaceCandidatesPanel({
                   />
                 </div>
               </div>
-              <p className="text-muted-foreground text-xs leading-relaxed">
-                Prosessen kobles til denne GitHub-saken. Du kan legge kort i
-                prosjekt-tavle senere fra prosessvinduet hvis arbeidsområdet har
-                GitHub-prosjekt.
-              </p>
+              {issueImportPreview ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="gap-1.5 self-start text-xs"
+                  onClick={() =>
+                    void openGhPreview(
+                      issueImportPreview.repoFullName,
+                      issueImportPreview.issueNumber,
+                    )
+                  }
+                >
+                  <Eye className="size-3.5" aria-hidden />
+                  Vis detaljer fra GitHub
+                </Button>
+              ) : null}
             </DialogBody>
             <DialogFooter>
               <Button
