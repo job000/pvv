@@ -8,7 +8,6 @@ import {
   Building2,
   ClipboardList,
   LayoutDashboard,
-  LayoutGrid,
   Settings2,
   Share2,
   Shield,
@@ -46,13 +45,6 @@ function navSections(wid: string): { heading: string; items: NavItem[] }[] {
           icon: ClipboardList,
           exact: false,
           kind: "vurderinger",
-        },
-        {
-          href: `/w/${wid}/leveranse`,
-          label: "Leveranse",
-          icon: LayoutGrid,
-          exact: false,
-          kind: "default",
         },
         {
           href: `/w/${wid}/ros`,

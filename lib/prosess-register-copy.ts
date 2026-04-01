@@ -14,6 +14,9 @@ export const prosessRegisterCopy = {
     label: "Prosess-ID (kort referanse)",
     hint: "En fast, unik kode i dette arbeidsområdet som kobler prosessen til vurderinger og ROS (samme kode i utkast og referanse). Typisk kort: bokstaver og tall, f.eks. INN-EL-01 eller FAKT-LEV-02. Uavhengig av hvilken avdeling som «eier» prosessen akkurat nå.",
     placeholder: "F.eks. INN-EL-01",
+    /** Vises når feltet kan stå tomt */
+    emptyMeansAuto:
+      "Tomt felt: systemet tildeler en unik ID automatisk (f.eks. P-X7K2M9). Du kan også skrive egen kode.",
   },
   orgUnit: {
     label: "Primær organisatorisk tilhørighet",

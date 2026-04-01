@@ -70,7 +70,7 @@ export function buildAssessmentContextForAi(args: {
     parts.push(`Foreslått prioritet (modell): ${args.priorityScore.toFixed(1)}`);
   }
   if (args.pipelineLabel) {
-    parts.push(`Leveransestatus: ${args.pipelineLabel}`);
+    parts.push(`Pipelinestatus: ${args.pipelineLabel}`);
   }
   return parts.join("\n\n");
 }

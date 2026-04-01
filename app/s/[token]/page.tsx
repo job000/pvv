@@ -68,7 +68,7 @@ export default function SharedAssessmentPage() {
 
       <section className="mb-8 grid gap-3 sm:grid-cols-2">
         <div className="rounded-xl border bg-card p-4">
-          <p className="text-muted-foreground text-xs">Leveransestatus</p>
+          <p className="text-muted-foreground text-xs">Pipelinestatus</p>
           <p className="mt-1 font-medium">{data.pipelineLabel}</p>
         </div>
         <div className="rounded-xl border bg-card p-4">

@@ -31,6 +31,7 @@ import { RosDashboardPanel } from "@/components/ros/ros-dashboard-panel";
 import { RosMethodologyGuide } from "@/components/ros/ros-methodology-guide";
 import { RosScaleReference } from "@/components/ros/ros-scale-reference";
 import { RosLibraryPanel } from "@/components/ros/ros-library-panel";
+import { GithubIssueStartCard } from "@/components/github/github-issue-start-card";
 import { RosWorkspaceHub } from "@/components/ros/ros-workspace-hub";
 import {
   RosTemplatePreviewMini,
@@ -102,7 +103,7 @@ function RosFlowNav({
   const activeIdx = FLOW_STEPS.findIndex((s) => s.id === tab);
   return (
     <nav
-      className="flex items-stretch gap-1 rounded-xl border border-border/60 bg-muted/20 p-1"
+      className="flex items-stretch gap-0.5 rounded-2xl border border-border/50 bg-muted/40 p-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] backdrop-blur-sm dark:bg-muted/25 dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]"
       role="tablist"
       aria-label="ROS-arbeidsflyt"
     >
@@ -124,28 +125,35 @@ function RosFlowNav({
             aria-selected={active}
             onClick={() => onTab(s.id)}
             className={cn(
-              "group relative flex flex-1 items-center justify-center gap-2 rounded-lg px-2.5 py-2 text-sm font-medium transition-all sm:justify-start sm:px-3",
+              "group relative flex flex-1 items-center justify-center gap-2 rounded-lg px-2 py-2.5 text-sm font-medium transition-[color,box-shadow,transform] duration-200 sm:justify-start sm:px-3",
               active
-                ? "bg-card text-foreground shadow-sm ring-1 ring-border/50"
-                : "text-muted-foreground hover:bg-card/50 hover:text-foreground",
+                ? "bg-card text-foreground shadow-[0_1px_3px_rgba(0,0,0,0.08),0_1px_0_rgba(255,255,255,0.9)_inset] ring-1 ring-black/[0.06] dark:shadow-[0_1px_3px_rgba(0,0,0,0.35)] dark:ring-white/[0.08]"
+                : "text-muted-foreground hover:bg-card/60 hover:text-foreground",
             )}
           >
             <span
               className={cn(
-                "flex size-6 shrink-0 items-center justify-center rounded-full text-[10px] font-bold tabular-nums transition-colors",
+                "flex size-7 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold tabular-nums transition-colors",
                 active
-                  ? "bg-primary text-primary-foreground"
+                  ? "bg-primary text-primary-foreground shadow-sm"
                   : done
-                    ? "bg-emerald-500/20 text-emerald-700 dark:text-emerald-300"
-                    : "bg-muted text-muted-foreground group-hover:bg-muted/80",
+                    ? "bg-emerald-500/15 text-emerald-700 ring-1 ring-emerald-500/25 dark:text-emerald-300"
+                    : "bg-background/80 text-muted-foreground ring-1 ring-border/60 group-hover:bg-muted",
               )}
             >
               {done ? "✓" : s.n}
             </span>
             <span className="hidden sm:inline">{s.label}</span>
-            <Icon className="size-4 sm:hidden" aria-hidden />
+            <Icon className="size-4 opacity-70 sm:hidden" aria-hidden />
             {count !== undefined && count > 0 ? (
-              <span className="ml-auto hidden rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-muted-foreground sm:inline">
+              <span
+                className={cn(
+                  "ml-auto hidden rounded-full px-2 py-0.5 text-[10px] font-semibold tabular-nums sm:inline",
+                  active
+                    ? "bg-primary/10 text-primary"
+                    : "bg-muted/80 text-muted-foreground",
+                )}
+              >
                 {count}
               </span>
             ) : null}
@@ -467,15 +475,21 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
         counts={{ maler: templatesList.length, analyser: analysesList.length }}
       />
 
-      <div className="overflow-hidden rounded-2xl border border-border/50 bg-gradient-to-br from-card via-card to-muted/20 shadow-sm ring-1 ring-border/40">
+      <GithubIssueStartCard
+        workspaceId={workspaceId}
+        variant="ros"
+        defaultTemplateId={hub?.defaultTemplateId ?? null}
+      />
+
+      <div className="overflow-hidden rounded-2xl border border-border/40 bg-card shadow-[0_1px_2px_rgba(0,0,0,0.04)] ring-1 ring-black/[0.04] dark:ring-white/[0.06]">
         <details
           open={rosUiPrefs.scaleReferenceOpen}
           onToggle={(e) => {
             updateRosUiPrefs({ scaleReferenceOpen: e.currentTarget.open });
           }}
         >
-          <summary className="hover:bg-muted/15 flex cursor-pointer list-none items-start gap-3 rounded-t-2xl px-4 py-3.5 transition-colors sm:px-5 sm:py-4 [&::-webkit-details-marker]:hidden">
-            <div className="bg-primary/10 text-primary flex size-10 shrink-0 items-center justify-center rounded-xl">
+          <summary className="hover:bg-muted/30 flex cursor-pointer list-none items-start gap-3 rounded-t-2xl px-4 py-3.5 transition-colors sm:px-5 sm:py-4 [&::-webkit-details-marker]:hidden">
+            <div className="bg-primary/12 text-primary flex size-10 shrink-0 items-center justify-center rounded-xl ring-1 ring-primary/15">
               <Info className="size-5" aria-hidden />
             </div>
             <div className="min-w-0 flex-1 pt-0.5">
@@ -520,7 +534,7 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
         onOpenTemplateDialog={openNewTemplateDialog}
       />
 
-      <div className="overflow-hidden rounded-2xl border border-border/50 bg-muted/10 shadow-sm ring-1 ring-border/30">
+      <div className="overflow-hidden rounded-2xl border border-border/40 bg-muted/20 shadow-[0_1px_2px_rgba(0,0,0,0.03)] ring-1 ring-black/[0.03] dark:bg-muted/15 dark:ring-white/[0.05]">
         <details
           data-ros-methodology-panel
           open={rosUiPrefs.helpMethodologyOpen}
@@ -528,8 +542,8 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
             updateRosUiPrefs({ helpMethodologyOpen: e.currentTarget.open });
           }}
         >
-          <summary className="hover:bg-muted/20 flex cursor-pointer list-none items-start gap-3 rounded-t-2xl px-4 py-3 transition-colors sm:px-5 sm:py-3.5 [&::-webkit-details-marker]:hidden">
-            <div className="bg-muted flex size-9 shrink-0 items-center justify-center rounded-lg">
+          <summary className="hover:bg-muted/35 flex cursor-pointer list-none items-start gap-3 rounded-t-2xl px-4 py-3 transition-colors sm:px-5 sm:py-3.5 [&::-webkit-details-marker]:hidden">
+            <div className="bg-background/80 flex size-9 shrink-0 items-center justify-center rounded-xl ring-1 ring-border/50">
               <HelpCircle className="text-muted-foreground size-4" aria-hidden />
             </div>
             <div className="min-w-0 flex-1 pt-0.5">

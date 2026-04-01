@@ -24,15 +24,35 @@ import {
   canEditAssessment,
   canReadAssessment,
   getAssessmentCollaborator,
+  getAssessmentIfReadable,
   getWorkspaceMembership,
   requireAssessmentEdit,
-  requireAssessmentRead,
   requireUserId,
   requireWorkspaceMember,
 } from "./lib/access";
 import { sanitizeAssessmentProcessTextFields } from "../lib/assessment-process-profile";
 import { payloadToSnapshot } from "./lib/payloadSnapshot";
 import { computeAllResults } from "./lib/rpaScoring";
+
+async function nextKanbanRank(
+  ctx: MutationCtx,
+  workspaceId: Id<"workspaces">,
+  status: PipelineStatus,
+): Promise<number> {
+  const rows = await ctx.db
+    .query("assessments")
+    .withIndex("by_workspace", (q) => q.eq("workspaceId", workspaceId))
+    .collect();
+  let max = 0;
+  for (const a of rows) {
+    const s = normalizePipelineStatus(a.pipelineStatus);
+    if (s !== status) {
+      continue;
+    }
+    max = Math.max(max, a.kanbanRank ?? 0);
+  }
+  return max + 1;
+}
 
 async function refreshCachedPriority(
   ctx: MutationCtx,
@@ -55,26 +75,6 @@ async function refreshCachedPriority(
   });
 }
 
-async function nextKanbanRank(
-  ctx: MutationCtx,
-  workspaceId: Id<"workspaces">,
-  status: PipelineStatus,
-): Promise<number> {
-  const rows = await ctx.db
-    .query("assessments")
-    .withIndex("by_workspace", (q) => q.eq("workspaceId", workspaceId))
-    .collect();
-  let max = 0;
-  for (const a of rows) {
-    const s = normalizePipelineStatus(a.pipelineStatus);
-    if (s !== status) {
-      continue;
-    }
-    max = Math.max(max, a.kanbanRank ?? 0);
-  }
-  return max + 1;
-}
-
 async function requireOrgUnitInWorkspace(
   ctx: MutationCtx,
   workspaceId: Id<"workspaces">,
@@ -84,6 +84,23 @@ async function requireOrgUnitInWorkspace(
   if (!u || u.workspaceId !== workspaceId) {
     throw new Error("Ugyldig organisasjonsenhet.");
   }
+}
+
+function mergeCandidateIntoPayload(
+  payload: AssessmentPayload,
+  cand: Doc<"candidates">,
+): AssessmentPayload {
+  return {
+    ...payload,
+    processName: cand.name,
+    candidateId: cand.code,
+    processDescription: cand.notes?.trim() || payload.processDescription,
+    processActors: cand.linkHintBusinessOwner?.trim() || payload.processActors,
+    processSystems: cand.linkHintSystems?.trim() || payload.processSystems,
+    hfSecurityInformationNotes:
+      cand.linkHintComplianceNotes?.trim() ||
+      payload.hfSecurityInformationNotes,
+  };
 }
 
 function defaultPayload(): AssessmentPayload {
@@ -167,7 +184,7 @@ const DASH_CAP_BLOCKED = 25;
 const DASH_CAP_RECENT = 6;
 const DASH_CAP_PRIORITY_TOP = 5;
 
-/** Felles rad for workspace-dashboard (teller, lister, leveranse-kort). */
+/** Felles rad for workspace-dashboard (teller, lister). */
 export type WorkspaceDashboardAssessmentRow = {
   assessmentId: Id<"assessments">;
   title: string;
@@ -180,7 +197,6 @@ export type WorkspaceDashboardAssessmentRow = {
   hasRosLink: boolean;
   ownerName: string | null;
   nextStepHint: string;
-  sprintId?: Id<"sprints">;
   rosStatus: "not_started" | "in_progress" | "completed" | "not_applicable";
   pddStatus: "not_started" | "in_progress" | "completed" | "not_applicable";
   cachedAp?: number;
@@ -204,7 +220,6 @@ function buildDashboardRow(
     hasRosLink: rosLinked,
     ownerName,
     nextStepHint: nextStepHint(status),
-    sprintId: a.sprintId,
     rosStatus: a.rosStatus ?? "not_started",
     pddStatus: a.pddStatus ?? "not_started",
     cachedAp: a.cachedAp,
@@ -322,12 +337,21 @@ export const create = mutation({
     workspaceId: v.id("workspaces"),
     title: v.string(),
     shareWithWorkspace: v.boolean(),
+    /** Ferdigutfylt steg 1 i veiviseren fra valgt prosess (f.eks. etter GitHub-issue). */
+    fromCandidateId: v.optional(v.id("candidates")),
   },
   handler: async (ctx, args) => {
     const userId = await requireUserId(ctx);
     await requireWorkspaceMember(ctx, args.workspaceId, userId, "member");
     const now = Date.now();
-    const payload = defaultPayload();
+    let payload = defaultPayload();
+    if (args.fromCandidateId) {
+      const cand = await ctx.db.get(args.fromCandidateId);
+      if (!cand || cand.workspaceId !== args.workspaceId) {
+        throw new Error("Fant ikke prosessen i dette arbeidsområdet.");
+      }
+      payload = mergeCandidateIntoPayload(payload, cand);
+    }
     const computed = computeAllResults(
       payloadToSnapshot(payload as unknown as Record<string, unknown>),
     );
@@ -385,7 +409,11 @@ export const updateAssessmentTitle = mutation({
 export const getDraft = query({
   args: { assessmentId: v.id("assessments") },
   handler: async (ctx, args) => {
-    const { assessment } = await requireAssessmentRead(ctx, args.assessmentId);
+    const readable = await getAssessmentIfReadable(ctx, args.assessmentId);
+    if (!readable) {
+      return null;
+    }
+    const { assessment } = readable;
     const draft = await ctx.db
       .query("assessmentDrafts")
       .withIndex("by_assessment", (q) => q.eq("assessmentId", args.assessmentId))
@@ -579,179 +607,6 @@ export const restoreDraftFromVersion = mutation({
   },
 });
 
-export const listPipelineBoard = query({
-  args: {
-    workspaceId: v.id("workspaces"),
-    sprintFilter: v.optional(v.union(v.id("sprints"), v.literal("all"))),
-    /** Filtrer på tittel (delstreng, ikke versjonssensitiv) — for store porteføljer */
-    titleSearch: v.optional(v.string()),
-  },
-  handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) {
-      return [];
-    }
-    await requireWorkspaceMember(ctx, args.workspaceId, userId, "viewer");
-    const rows = await ctx.db
-      .query("assessments")
-      .withIndex("by_workspace_updated", (q) =>
-        q.eq("workspaceId", args.workspaceId),
-      )
-      .order("desc")
-      .collect();
-    const sprintFilter = args.sprintFilter ?? "all";
-    const searchQ = args.titleSearch?.trim().toLowerCase() ?? "";
-    const out: Array<{
-      assessment: (typeof rows)[0];
-      priorityScore: number;
-      effectivePriority: number;
-      pipelineStatus: PipelineStatus;
-      nextStepHint: string;
-      readinessLabel: string;
-      sprintName: string | null;
-      versionCount: number;
-      latestVersionNumber: number;
-      ownerName: string | null;
-    }> = [];
-    for (const a of rows) {
-      if (!(await canReadAssessment(ctx, a, userId))) {
-        continue;
-      }
-      if (sprintFilter !== "all" && a.sprintId !== sprintFilter) {
-        continue;
-      }
-      if (searchQ && !a.title.toLowerCase().includes(searchQ)) {
-        continue;
-      }
-      const draft = await ctx.db
-        .query("assessmentDrafts")
-        .withIndex("by_assessment", (q) => q.eq("assessmentId", a._id))
-        .unique();
-      const snapshot = draft
-        ? payloadToSnapshot(draft.payload as Record<string, unknown>)
-        : payloadToSnapshot(defaultPayload() as unknown as Record<string, unknown>);
-      const computed = computeAllResults(snapshot);
-      const status = normalizePipelineStatus(a.pipelineStatus);
-      const base = computed.priorityScore;
-      const effective =
-        a.manualPriorityOverride !== undefined && a.manualPriorityOverride !== null
-          ? a.manualPriorityOverride
-          : base;
-      let sprintName: string | null = null;
-      if (a.sprintId) {
-        const sp = await ctx.db.get(a.sprintId);
-        sprintName = sp?.name ?? null;
-      }
-      const versionRows = await ctx.db
-        .query("assessmentVersions")
-        .withIndex("by_assessment", (q) => q.eq("assessmentId", a._id))
-        .collect();
-      const versionCount = versionRows.length;
-      const latestVersionNumber =
-        versionCount === 0
-          ? 0
-          : Math.max(...versionRows.map((x) => x.version));
-      const owner = await ctx.db.get(a.createdByUserId);
-      const ownerName = owner?.name ?? owner?.email ?? null;
-      out.push({
-        assessment: a,
-        priorityScore: base,
-        effectivePriority: effective,
-        pipelineStatus: status,
-        nextStepHint: nextStepHint(status),
-        readinessLabel: readinessLabel(status),
-        sprintName,
-        versionCount,
-        latestVersionNumber,
-        ownerName,
-      });
-    }
-    out.sort((x, y) => {
-      const rx = x.assessment.kanbanRank ?? 0;
-      const ry = y.assessment.kanbanRank ?? 0;
-      if (y.effectivePriority !== x.effectivePriority) {
-        return y.effectivePriority - x.effectivePriority;
-      }
-      return ry - rx;
-    });
-    return out;
-  },
-});
-
-/** Forhåndsvisning fra leveranse-tavle (utvidet tekst + score uten å laste hele veiviseren). */
-export const getPipelinePreview = query({
-  args: { assessmentId: v.id("assessments") },
-  handler: async (ctx, args) => {
-    const { assessment } = await requireAssessmentRead(ctx, args.assessmentId);
-    const owner = await ctx.db.get(assessment.createdByUserId);
-    const ownerName = owner?.name ?? owner?.email ?? null;
-    let sprintName: string | null = null;
-    if (assessment.sprintId) {
-      const sp = await ctx.db.get(assessment.sprintId);
-      sprintName = sp?.name ?? null;
-    }
-    const draft = await ctx.db
-      .query("assessmentDrafts")
-      .withIndex("by_assessment", (q) => q.eq("assessmentId", args.assessmentId))
-      .unique();
-
-    let processName: string | null = null;
-    let processDescriptionPreview: string | null = null;
-    let priorityScore: number;
-    let apPercent: number;
-    let criticality: number;
-    let easeLabel: string;
-    let feasible: boolean;
-
-    if (draft) {
-      const payload = draft.payload as Record<string, unknown>;
-      const pn = payload.processName;
-      if (typeof pn === "string" && pn.trim()) {
-        processName = pn.trim();
-      }
-      const desc =
-        typeof payload.processDescription === "string"
-          ? payload.processDescription
-          : "";
-      const t = desc.trim();
-      if (t.length > 0) {
-        processDescriptionPreview = t.length > 420 ? `${t.slice(0, 420)}…` : t;
-      }
-      const snapshot = payloadToSnapshot(payload);
-      const c = computeAllResults(snapshot);
-      priorityScore = c.priorityScore;
-      apPercent = c.ap;
-      criticality = c.criticality;
-      easeLabel = c.easeLabel;
-      feasible = c.feasible;
-    } else {
-      const snapshot = payloadToSnapshot(
-        defaultPayload() as unknown as Record<string, unknown>,
-      );
-      const c = computeAllResults(snapshot);
-      priorityScore = assessment.cachedPriorityScore ?? c.priorityScore;
-      apPercent = assessment.cachedAp ?? c.ap;
-      criticality = assessment.cachedCriticality ?? c.criticality;
-      easeLabel = c.easeLabel;
-      feasible = c.feasible;
-    }
-
-    return {
-      assessment,
-      ownerName,
-      sprintName,
-      processName,
-      processDescriptionPreview,
-      hasDraft: draft !== null,
-      priorityScore,
-      apPercent,
-      criticality,
-      easeLabel,
-      feasible,
-    };
-  },
-});
-
 export const listPriorityHighlights = query({
   args: { limit: v.optional(v.number()) },
   handler: async (ctx, args) => {
@@ -856,26 +711,6 @@ export const setManualPriorityOverride = mutation({
   },
 });
 
-export const setAssessmentSprint = mutation({
-  args: {
-    assessmentId: v.id("assessments"),
-    sprintId: v.union(v.id("sprints"), v.null()),
-  },
-  handler: async (ctx, args) => {
-    const { assessment } = await requireAssessmentEdit(ctx, args.assessmentId);
-    if (args.sprintId !== null) {
-      const sprint = await ctx.db.get(args.sprintId);
-      if (!sprint || sprint.workspaceId !== assessment.workspaceId) {
-        throw new Error("Ugyldig sprint for dette arbeidsområdet.");
-      }
-    }
-    await ctx.db.patch(args.assessmentId, {
-      sprintId: args.sprintId === null ? undefined : args.sprintId,
-      updatedAt: Date.now(),
-    });
-  },
-});
-
 export const setAssessmentOrgUnit = mutation({
   args: {
     assessmentId: v.id("assessments"),
@@ -917,6 +752,7 @@ export const updateAssessmentCompliance = mutation({
       args.assessmentId,
     );
     const now = Date.now();
+    const prevRos = priorAssessment.rosStatus ?? "not_started";
     const patch: {
       updatedAt: number;
       rosStatus?: typeof args.rosStatus;
@@ -929,6 +765,8 @@ export const updateAssessmentCompliance = mutation({
       pddCompletedAt?: number;
       nextRosPvvReviewAt?: number;
       rosPvvReviewRoutineNotes?: string;
+      pipelineStatus?: PipelineStatus;
+      kanbanRank?: number;
     } = { updatedAt: now };
     const strOrClear = (val: string | null | undefined) => {
       if (val == null) {
@@ -976,8 +814,20 @@ export const updateAssessmentCompliance = mutation({
         args.rosPvvReviewRoutineNotes,
       );
     }
+    /** Når ROS markeres fullført første gang og PVV fortsatt er «Ikke vurdert», løft til «Vurdert». */
+    if (
+      args.rosStatus === "completed" &&
+      prevRos !== "completed" &&
+      normalizePipelineStatus(priorAssessment.pipelineStatus) === "not_assessed"
+    ) {
+      patch.pipelineStatus = "assessed";
+      patch.kanbanRank = await nextKanbanRank(
+        ctx,
+        priorAssessment.workspaceId,
+        "assessed",
+      );
+    }
     await ctx.db.patch(args.assessmentId, patch);
-    const prevRos = priorAssessment.rosStatus ?? "not_started";
     if (
       args.rosStatus === "completed" &&
       prevRos !== "completed"
@@ -994,7 +844,10 @@ export const updateAssessmentCompliance = mutation({
 export const listVersions = query({
   args: { assessmentId: v.id("assessments") },
   handler: async (ctx, args) => {
-    await requireAssessmentRead(ctx, args.assessmentId);
+    const readable = await getAssessmentIfReadable(ctx, args.assessmentId);
+    if (!readable) {
+      return [];
+    }
     const rows = await ctx.db
       .query("assessmentVersions")
       .withIndex("by_assessment", (q) =>
@@ -1021,7 +874,10 @@ export const getAssessmentVersion = query({
     version: v.number(),
   },
   handler: async (ctx, args) => {
-    await requireAssessmentRead(ctx, args.assessmentId);
+    const readable = await getAssessmentIfReadable(ctx, args.assessmentId);
+    if (!readable) {
+      return null;
+    }
     const row = await ctx.db
       .query("assessmentVersions")
       .withIndex("by_assessment_version", (q) =>
@@ -1055,7 +911,10 @@ export const compareAssessmentVersions = query({
     versionB: v.number(),
   },
   handler: async (ctx, args) => {
-    await requireAssessmentRead(ctx, args.assessmentId);
+    const readable = await getAssessmentIfReadable(ctx, args.assessmentId);
+    if (!readable) {
+      return null;
+    }
     const a = await ctx.db
       .query("assessmentVersions")
       .withIndex("by_assessment_version", (q) =>
@@ -1220,7 +1079,10 @@ export const deleteAssessment = mutation({
 export const listCollaborators = query({
   args: { assessmentId: v.id("assessments") },
   handler: async (ctx, args) => {
-    await requireAssessmentRead(ctx, args.assessmentId);
+    const readable = await getAssessmentIfReadable(ctx, args.assessmentId);
+    if (!readable) {
+      return [];
+    }
     const rows = await ctx.db
       .query("assessmentCollaborators")
       .withIndex("by_assessment", (q) =>

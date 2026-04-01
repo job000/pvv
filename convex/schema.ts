@@ -129,7 +129,7 @@ export const rosRequirementRefValidator = v.object({
   documentationUrl: v.optional(v.string()),
 });
 
-/** RPA / CoE-leveranse (iterativ, raskere enn klassisk utvikling) */
+/** RPA / CoE pipeline (iterativ, raskere enn klassisk utvikling) */
 export const pipelineStatusValidator = v.union(
   v.literal("not_assessed"),
   v.literal("assessed"),
@@ -182,30 +182,6 @@ export default defineSchema({
         options: v.array(v.object({ id: v.string(), name: v.string() })),
       }),
     ),
-    /**
-     * Hvilket iterasjonsfelt i GitHub-prosjektet som svarer til PVV-sprinter.
-     * Tom = første ProjectV2IterationField i prosjektet.
-     */
-    githubProjectIterationFieldId: v.optional(v.string()),
-    /** Cache av iterasjoner (synk til leveranse-sprinter) — reduserer rate limit */
-    githubProjectIterationFieldCacheAt: v.optional(v.number()),
-    githubProjectIterationFieldCache: v.optional(
-      v.object({
-        forProjectNodeId: v.string(),
-        /** __auto__ eller valgt felt-id (matcher githubProjectIterationFieldId) */
-        preferredFieldKey: v.optional(v.string()),
-        fieldId: v.string(),
-        fieldName: v.string(),
-        iterations: v.array(
-          v.object({
-            githubIterationId: v.string(),
-            name: v.string(),
-            startAt: v.number(),
-            endAt: v.number(),
-          }),
-        ),
-      }),
-    ),
   }).index("by_owner", ["ownerUserId"]),
 
   /**
@@ -223,22 +199,25 @@ export default defineSchema({
   userSettings: defineTable({
     userId: v.id("users"),
     defaultWorkspaceId: v.optional(v.id("workspaces")),
-  }).index("by_user", ["userId"]),
-
-  /**
-   * Leveranse-tavle per bruker og arbeidsområde (visning, sprintfilter, tetthet).
-   * Skiller seg fra global workspace-data — hver bruker velger egen måte å jobbe på.
-   */
-  userWorkspaceLeveransePrefs: defineTable({
-    userId: v.id("users"),
-    workspaceId: v.id("workspaces"),
-    viewMode: v.union(v.literal("kanban"), v.literal("list")),
-    sprintFilter: v.union(v.literal("all"), v.id("sprints")),
-    density: v.optional(
+    firstName: v.optional(v.string()),
+    lastName: v.optional(v.string()),
+    /** Valgfritt — brukes bare i profil/visning. null = fjernet eksplisitt. */
+    age: v.optional(v.union(v.number(), v.null())),
+    /** Synkroniseres med next-themes når innlogget. */
+    themePreference: v.optional(
+      v.union(v.literal("light"), v.literal("dark"), v.literal("system")),
+    ),
+    /** Global UI-tetthet (komfortabel vs kompakt). */
+    uiDensity: v.optional(
       v.union(v.literal("comfortable"), v.literal("compact")),
     ),
-    updatedAt: v.number(),
-  }).index("by_user_workspace", ["userId", "workspaceId"]),
+    /** Profilbilde i Convex storage; null = fjernet eksplisitt. */
+    profileImageId: v.optional(v.union(v.id("_storage"), v.null())),
+    /** false = aldri vis prosessregister-veiledning; undefined/true = tillat (se dismissed). */
+    prosessregisterTutorialEnabled: v.optional(v.boolean()),
+    /** true = bruker valgte «ikke vis mer»; kan nullstilles ved å slå på veiledning i dashboard. */
+    prosessregisterTutorialDismissed: v.optional(v.boolean()),
+  }).index("by_user", ["userId"]),
 
   /** Ventende e-postinvitasjoner til workspace */
   workspaceInvites: defineTable({
@@ -256,19 +235,6 @@ export default defineSchema({
     .index("by_email", ["email"])
     .index("by_token", ["token"])
     .index("by_workspace", ["workspaceId"]),
-
-  /** Sprint / tidsboks (Kanban + prioritering) */
-  sprints: defineTable({
-    workspaceId: v.id("workspaces"),
-    name: v.string(),
-    startAt: v.number(),
-    endAt: v.number(),
-    goal: v.optional(v.string()),
-    /** Når satt: synkronisert fra GitHub Projects iterasjonsfelt */
-    githubIterationId: v.optional(v.string()),
-    createdByUserId: v.id("users"),
-    createdAt: v.number(),
-  }).index("by_workspace", ["workspaceId"]),
 
   /**
    * Organisasjonskart (offentlig sektor / sykehus): Helseforetak → avdeling → seksjon.
@@ -370,9 +336,8 @@ export default defineSchema({
     updatedAt: v.number(),
     /** Alle i workspace kan se når true; ellers kun collaborators */
     shareWithWorkspace: v.boolean(),
-    /** Leveranse i RPA-pipeline */
+    /** RPA-pipeline (status i porteføljen) */
     pipelineStatus: v.optional(pipelineStatusValidator),
-    sprintId: v.optional(v.id("sprints")),
     /** Fra siste utkast (oppdateres ved lagring) */
     cachedPriorityScore: v.optional(v.number()),
     /** Automatiseringspotensial % — cache for oversikter */

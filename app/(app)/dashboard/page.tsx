@@ -18,7 +18,7 @@ import { useMutation, useQuery } from "convex/react";
 import {
   ArrowRight,
   ChevronRight,
-  LayoutGrid,
+  ClipboardList,
   LayoutDashboard,
   Sparkles,
   Star,
@@ -103,8 +103,8 @@ export default function DashboardPage() {
                 key={workspace._id}
                 href={`/w/${workspace._id}`}
                 className={cn(
-                  "border-border/80 bg-card/95 text-foreground inline-flex shrink-0 items-center gap-2 rounded-full border px-3.5 py-2 text-sm font-medium shadow-sm backdrop-blur-sm transition hover:border-primary/30 hover:bg-card",
-                  defaultId === workspace._id && "border-primary/35 ring-primary/15 ring-1",
+                  "border-border/80 bg-card/95 text-foreground inline-flex h-11 min-h-[44px] shrink-0 items-center gap-2 rounded-full border px-4 py-2 text-sm font-semibold shadow-sm backdrop-blur-sm transition hover:border-primary/30 hover:bg-card",
+                  defaultId === workspace._id && "border-primary/35 ring-1 ring-primary/15",
                 )}
               >
                 <span className="max-w-[140px] truncate">{workspace.name}</span>
@@ -113,7 +113,7 @@ export default function DashboardPage() {
             ))}
             <Link
               href="#arbeidsområder"
-              className="text-muted-foreground hover:text-foreground inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-2 text-xs font-medium"
+              className="text-muted-foreground hover:text-foreground inline-flex h-11 min-h-[44px] shrink-0 items-center gap-1 rounded-full px-3 text-xs font-semibold"
             >
               Alle
             </Link>
@@ -147,56 +147,56 @@ export default function DashboardPage() {
               ) : null}
             </div>
 
-            {/* Nøkkeltall — Meta-lignende tette kort */}
+            {/* Nøkkeltall */}
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              <div className="border-border/70 bg-card/90 flex items-center gap-3 rounded-2xl border p-4 shadow-sm">
-                <div className="bg-primary/12 text-primary flex size-11 items-center justify-center rounded-xl">
+              <div className="flex items-center gap-3 rounded-2xl border border-border/45 bg-card p-4 shadow-[0_1px_3px_rgba(0,0,0,0.04)] ring-1 ring-black/[0.03] dark:ring-white/[0.05]">
+                <div className="bg-primary/12 text-primary flex size-11 items-center justify-center rounded-2xl ring-1 ring-primary/12">
                   <LayoutDashboard className="size-5" aria-hidden />
                 </div>
                 <div>
-                  <p className="text-muted-foreground text-xs font-medium">
+                  <p className="text-muted-foreground text-[10px] font-semibold uppercase tracking-[0.12em]">
                     Aktive områder
                   </p>
-                  <p className="font-heading text-foreground text-2xl font-bold tracking-tight">
+                  <p className="font-heading text-foreground text-2xl font-semibold tabular-nums tracking-tight">
                     {workspaces.length}
                   </p>
                 </div>
               </div>
-              <div className="border-border/70 bg-card/90 flex items-center gap-3 rounded-2xl border p-4 shadow-sm">
-                <div className="bg-primary/12 text-primary flex size-11 items-center justify-center rounded-xl">
+              <div className="flex items-center gap-3 rounded-2xl border border-border/45 bg-card p-4 shadow-[0_1px_3px_rgba(0,0,0,0.04)] ring-1 ring-black/[0.03] dark:ring-white/[0.05]">
+                <div className="bg-primary/12 text-primary flex size-11 items-center justify-center rounded-2xl ring-1 ring-primary/12">
                   <Users className="size-5" aria-hidden />
                 </div>
                 <div>
-                  <p className="text-muted-foreground text-xs font-medium">
+                  <p className="text-muted-foreground text-[10px] font-semibold uppercase tracking-[0.12em]">
                     Delte vurderinger
                   </p>
-                  <p className="font-heading text-foreground text-2xl font-bold tracking-tight">
+                  <p className="font-heading text-foreground text-2xl font-semibold tabular-nums tracking-tight">
                     {mineAssessments?.length ?? 0}
                   </p>
                 </div>
               </div>
-              <div className="border-border/70 bg-card/90 flex items-center gap-3 rounded-2xl border p-4 shadow-sm">
-                <div className="bg-primary/12 text-primary flex size-11 items-center justify-center rounded-xl">
+              <div className="flex items-center gap-3 rounded-2xl border border-border/45 bg-card p-4 shadow-[0_1px_3px_rgba(0,0,0,0.04)] ring-1 ring-black/[0.03] dark:ring-white/[0.05]">
+                <div className="bg-primary/12 text-primary flex size-11 items-center justify-center rounded-2xl ring-1 ring-primary/12">
                   <Zap className="size-5" aria-hidden />
                 </div>
                 <div>
-                  <p className="text-muted-foreground text-xs font-medium">
+                  <p className="text-muted-foreground text-[10px] font-semibold uppercase tracking-[0.12em]">
                     Prioritert nå
                   </p>
-                  <p className="font-heading text-foreground text-2xl font-bold tracking-tight">
+                  <p className="font-heading text-foreground text-2xl font-semibold tabular-nums tracking-tight">
                     {priorityCount}
                   </p>
                 </div>
               </div>
-              <div className="border-border/70 bg-card/90 flex items-center gap-3 rounded-2xl border p-4 shadow-sm">
-                <div className="bg-primary/12 text-primary flex size-11 items-center justify-center rounded-xl">
+              <div className="flex items-center gap-3 rounded-2xl border border-border/45 bg-card p-4 shadow-[0_1px_3px_rgba(0,0,0,0.04)] ring-1 ring-black/[0.03] dark:ring-white/[0.05]">
+                <div className="bg-primary/12 text-primary flex size-11 items-center justify-center rounded-2xl ring-1 ring-primary/12">
                   <Star className="size-5" aria-hidden />
                 </div>
                 <div>
-                  <p className="text-muted-foreground text-xs font-medium">
+                  <p className="text-muted-foreground text-[10px] font-semibold uppercase tracking-[0.12em]">
                     Standard satt
                   </p>
-                  <p className="font-heading text-foreground truncate text-lg font-semibold tracking-tight">
+                  <p className="font-heading truncate text-base font-semibold tracking-tight text-foreground">
                     {defaultWorkspace ? defaultWorkspace.name : "—"}
                   </p>
                 </div>
@@ -205,42 +205,39 @@ export default function DashboardPage() {
           </header>
 
           {defaultWorkspace ? (
-            <Card className="border-border/80 bg-muted/20 overflow-hidden border shadow-sm">
-              <CardHeader className="flex flex-col gap-3 pb-3 sm:flex-row sm:items-center sm:justify-between sm:pb-2">
+            <Card className="overflow-hidden rounded-2xl border-border/40 bg-muted/15 shadow-[0_1px_3px_rgba(0,0,0,0.04)] ring-1 ring-black/[0.03] dark:ring-white/[0.05]">
+              <CardHeader className="flex flex-col gap-3 border-b border-border/40 bg-gradient-to-b from-muted/30 to-transparent pb-4 sm:flex-row sm:items-center sm:justify-between">
                 <div className="space-y-1">
-                  <CardTitle className="text-base font-semibold">
+                  <p className="text-muted-foreground text-[11px] font-semibold uppercase tracking-[0.12em]">
+                    Hurtigtilgang
+                  </p>
+                  <CardTitle className="text-base font-semibold tracking-tight">
                     Standard arbeidsområde
                   </CardTitle>
-                  <CardDescription className="text-sm">
+                  <CardDescription className="text-[13px] leading-relaxed sm:text-sm">
                     Neste gang du åpner FRO kan du gå rett til dette området.
                   </CardDescription>
                 </div>
                 <div className="flex flex-wrap gap-2">
                   <Link
-                    href={`/w/${defaultWorkspace._id}/leveranse`}
-                    className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5 rounded-lg border border-border/80 bg-background px-3 py-2 text-xs font-medium transition"
-                  >
-                    Leveranse
-                  </Link>
-                  <Link
                     href={`/w/${defaultWorkspace._id}/vurderinger`}
-                    className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5 rounded-lg border border-border/80 bg-background px-3 py-2 text-xs font-medium transition"
+                    className="text-muted-foreground hover:text-foreground inline-flex h-10 min-h-[44px] items-center gap-1.5 rounded-xl border border-border/60 bg-background px-3 text-xs font-semibold transition sm:min-h-0"
                   >
                     Vurderinger
                   </Link>
                   <Link
                     href={`/w/${defaultWorkspace._id}/innstillinger`}
-                    className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5 rounded-lg border border-border/80 bg-background px-3 py-2 text-xs font-medium transition"
+                    className="text-muted-foreground hover:text-foreground inline-flex h-10 min-h-[44px] items-center gap-1.5 rounded-xl border border-border/60 bg-background px-3 text-xs font-semibold transition sm:min-h-0"
                   >
                     Innstillinger
                   </Link>
                 </div>
               </CardHeader>
-              <CardFooter className="border-border/60 flex flex-wrap gap-2 border-t bg-muted/10 pt-4">
+              <CardFooter className="flex flex-wrap gap-2 border-t border-border/40 bg-muted/10 pt-4">
                 <Link
                   href={`/w/${defaultWorkspace._id}`}
                   className={cn(
-                    "group inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-primary px-5 text-sm font-semibold text-primary-foreground shadow-sm transition hover:bg-primary/90",
+                    "group inline-flex h-11 min-h-[44px] items-center justify-center gap-2 rounded-xl bg-primary px-5 text-[13px] font-semibold text-primary-foreground shadow-sm transition hover:bg-primary/90 sm:h-10 sm:min-h-0",
                   )}
                 >
                   Åpne {defaultWorkspace.name}
@@ -278,19 +275,19 @@ export default function DashboardPage() {
                   </div>
                   <p className="text-muted-foreground max-w-2xl pl-11 text-sm leading-relaxed">
                     Sortert etter vurderingsprioritet. Status viser hvor i
-                    RPA-leveransen hver sak er.
+                    RPA-pipeline hver sak er.
                   </p>
                 </div>
                 <Link
                   href={
                     defaultWorkspace
-                      ? `/w/${defaultWorkspace._id}/leveranse`
-                      : `/w/${priorityHighlights[0]!.workspaceId}/leveranse`
+                      ? `/w/${defaultWorkspace._id}/vurderinger`
+                      : `/w/${priorityHighlights[0]!.workspaceId}/vurderinger`
                   }
                   className="text-muted-foreground hover:text-foreground mt-1 inline-flex items-center gap-2 rounded-xl border border-border/80 bg-muted/30 px-3 py-2 text-sm font-medium transition-colors hover:bg-muted/50 sm:mt-0"
                 >
-                  <LayoutGrid className="size-4" aria-hidden />
-                  Åpne leveranse
+                  <ClipboardList className="size-4" aria-hidden />
+                  Åpne vurderinger
                 </Link>
               </div>
               <ul className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">

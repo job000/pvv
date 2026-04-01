@@ -21,6 +21,7 @@ import { useAction, useMutation, useQuery } from "convex/react";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { PipelineStatusSelect } from "@/components/assessment/pipeline-status-select";
 import { Badge } from "@/components/ui/badge";
 import {
   Dialog,
@@ -46,7 +47,7 @@ import {
   ChevronRight,
   ExternalLink,
   GitBranch,
-  LayoutGrid,
+  Ticket,
   Loader2,
   Plus,
   Search,
@@ -65,8 +66,11 @@ import {
   WORKSPACE_ROLE_DESC_NB,
   WORKSPACE_ROLE_LABEL_NB,
 } from "@/lib/role-labels-nb";
+import { GithubIssueStartCard } from "@/components/github/github-issue-start-card";
 import { WorkspaceCandidateRow } from "./workspace-candidate-row";
 import { WorkspaceGithubIntegrationCard } from "./workspace-github-integration-card";
+import { ProcessCoverageOverview } from "./process-coverage-overview";
+import { ProsessregisterHubLead } from "./prosessregister-hub-lead";
 
 /** Rad fra `listGithubProjectItemsInStatusColumn` — brukt i prosessregister-UI. */
 type GithubColumnItemRow = {
@@ -537,6 +541,10 @@ export function WorkspaceCandidatesPanel({
   const membership = useQuery(api.workspaces.getMyMembership, { workspaceId });
   const workspace = useQuery(api.workspaces.get, { workspaceId });
   const candidates = useQuery(api.candidates.listByWorkspace, { workspaceId });
+  /** Eksisterende query (alltid deployet) — ROS-kandidat-sett utledes i useMemo under. */
+  const rosAnalysesForWorkspace = useQuery(api.ros.listAnalyses, {
+    workspaceId,
+  });
   const orgUnits = useQuery(api.orgUnits.listByWorkspace, { workspaceId });
   const createCandidate = useMutation(api.candidates.create);
   const updateCandidate = useMutation(api.candidates.update);
@@ -574,6 +582,9 @@ export function WorkspaceCandidatesPanel({
   );
   const createCandidateFromGithubIssue = useMutation(
     api.candidates.createCandidateFromGithubIssue,
+  );
+  const createGithubRepoIssueForCandidate = useAction(
+    api.githubCandidateProject.createGithubRepoIssueForCandidate,
   );
 
   /** Unngår at useEffect re-kjører ved hver render hvis useAction bytter referanse. */
@@ -787,6 +798,33 @@ export function WorkspaceCandidatesPanel({
     return s;
   }, [candidates]);
 
+  const rosCandidateIdSet = useMemo(() => {
+    const s = new Set<string>();
+    if (!rosAnalysesForWorkspace) {
+      return s;
+    }
+    for (const a of rosAnalysesForWorkspace) {
+      if (a.candidateId) {
+        s.add(a.candidateId);
+      }
+    }
+    return s;
+  }, [rosAnalysesForWorkspace]);
+
+  const projectItemIdToCandidateId = useMemo(() => {
+    const m = new Map<string, Id<"candidates">>();
+    if (!candidates) {
+      return m;
+    }
+    for (const c of candidates) {
+      const pid = c.githubProjectItemNodeId?.trim();
+      if (pid) {
+        m.set(pid, c._id);
+      }
+    }
+    return m;
+  }, [candidates]);
+
   const isAdmin =
     membership?.role === "owner" || membership?.role === "admin";
   const canEditCandidates =
@@ -819,18 +857,15 @@ export function WorkspaceCandidatesPanel({
       return;
     }
     const name = cName.trim();
-    const code = cCode.trim();
-    if (!name || !code) {
-      toast.error(
-        "Fyll inn både navn og kode (kode kan ikke bare være mellomrom).",
-      );
+    if (!name) {
+      toast.error("Fyll inn prosessnavn.");
       return;
     }
     try {
-      const newId = await createCandidate({
+      const { candidateId: newId, code: resolvedCode } = await createCandidate({
         workspaceId,
         name,
-        code,
+        code: cCode.trim() === "" ? undefined : cCode,
         notes: cNotes.trim() === "" ? undefined : cNotes.trim(),
         linkHintBusinessOwner:
           cOwner.trim() === "" ? undefined : cOwner.trim(),
@@ -871,7 +906,11 @@ export function WorkspaceCandidatesPanel({
       }
       setNewProcessOpen(false);
       if (!githubAutoRegisterFailed) {
-        toast.success("Prosess opprettet.");
+        toast.success(
+          cCode.trim() === ""
+            ? `Prosess opprettet med ID ${resolvedCode}.`
+            : "Prosess opprettet.",
+        );
       }
     } catch (e) {
       toast.error(
@@ -961,6 +1000,37 @@ export function WorkspaceCandidatesPanel({
     } catch (e) {
       toast.error(
         e instanceof Error ? e.message : "Kunne ikke legge til i GitHub-tavle.",
+      );
+    } finally {
+      setRowGithubBusyId(null);
+    }
+  }
+
+  async function registerRepoIssueFromOverviewTable(
+    candidateId: Id<"candidates">,
+  ) {
+    const opt =
+      autoRegStatusId.trim() ||
+      w.githubAutoRegisterProcessStatusOptionId?.trim() ||
+      githubProjectStatus.options?.[0]?.id;
+    if (!opt) {
+      toast.error(
+        "Velg standardstatus under «Automatisk GitHub-prosjekt», eller vent til statuslisten er lastet.",
+      );
+      return;
+    }
+    setRowGithubBusyId(candidateId);
+    try {
+      await createGithubRepoIssueForCandidate({
+        candidateId,
+        statusOptionId: opt,
+      });
+      toast.success(
+        "GitHub-issue opprettet, lagt i tavle og synket fra PVV.",
+      );
+    } catch (e) {
+      toast.error(
+        e instanceof Error ? e.message : "Kunne ikke opprette issue i repo.",
       );
     } finally {
       setRowGithubBusyId(null);
@@ -1178,15 +1248,25 @@ export function WorkspaceCandidatesPanel({
     !githubProjectStatus.loading &&
     !githubProjectStatus.error;
 
+  const hasDefaultGithubRepo =
+    Boolean(w.githubDefaultRepoFullNames?.some((s) => s?.trim())) ||
+    Boolean(w.githubDefaultRepoFullName?.trim());
+
+  const canCreateGithubRepoIssue =
+    canQuickAddGithubCard && hasDefaultGithubRepo;
+
   return (
     <Card
       className={
         hubMode
-          ? "overflow-hidden border-emerald-500/20 shadow-md"
+          ? "overflow-hidden border-emerald-500/25 shadow-[0_1px_3px_rgba(0,0,0,0.04)] ring-1 ring-black/[0.03] dark:ring-white/[0.05]"
           : undefined
       }
     >
       <CardHeader
+        data-tutorial-anchor={
+          hubMode ? "prosess-oversikt-header" : undefined
+        }
         className={
           hubMode
             ? "border-b border-border/50 bg-gradient-to-br from-emerald-500/[0.05] via-card to-card pb-6"
@@ -1232,8 +1312,23 @@ export function WorkspaceCandidatesPanel({
         </div>
       </CardHeader>
       <CardContent className="space-y-8 pt-6">
+        {hubMode ? (
+          <ProsessregisterHubLead
+            canEdit={Boolean(canEditCandidates)}
+            onRegisterClick={() => setNewProcessOpen(true)}
+          />
+        ) : null}
+        <ProcessCoverageOverview workspaceId={workspaceId} />
+        {hubMode ? (
+          <div
+            data-tutorial-anchor="github-tur"
+            className="pointer-events-none h-px w-full shrink-0 bg-transparent"
+            aria-hidden
+          />
+        ) : null}
         {!w.githubProjectNodeId?.trim() ? (
           <div
+            data-tutorial-anchor="github-varsling"
             className="rounded-xl border border-amber-500/40 bg-amber-500/[0.09] px-4 py-3"
             role="status"
           >
@@ -1266,73 +1361,98 @@ export function WorkspaceCandidatesPanel({
           </div>
         ) : null}
         {canEditCandidates ? (
-          <section
-            className="border-border/60 space-y-4 rounded-xl border bg-card/40 p-4"
-            aria-labelledby="github-issue-import-heading"
+          <div
+            data-tutorial-anchor="github-prosess"
+            className="from-card ring-border/50 rounded-2xl border border-border/60 bg-gradient-to-br via-card to-muted/[0.35] p-5 shadow-sm ring-1"
           >
-            <div className="space-y-1">
-              <h2
-                id="github-issue-import-heading"
-                className="text-foreground text-base font-semibold"
-              >
-                Hent prosess fra GitHub-issue
-              </h2>
-              <p className="text-muted-foreground text-xs leading-relaxed">
-                Lim inn en <strong className="text-foreground font-medium">issue-URL</strong>{" "}
-                (<span className="font-mono text-[11px]">…/owner/repo/issues/123</span>). Krever
-                lagret GitHub-token under Innstillinger — trenger ikke at saken ligger i
-                prosjekt-tavle. Du kan koble til tavle senere fra prosessen.
-              </p>
-            </div>
-            <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
-              <div className="min-w-0 flex-1 space-y-1">
-                <Label htmlFor="gh-issue-url" className="text-xs">
-                  Issue-URL
-                </Label>
-                <Input
-                  id="gh-issue-url"
-                  type="url"
-                  value={issueGithubUrlInput}
-                  onChange={(e) => setIssueGithubUrlInput(e.target.value)}
-                  placeholder="https://github.com/org/repo/issues/42"
-                  className="h-10 font-mono text-sm"
-                  autoComplete="off"
-                />
+            <div className="mb-5 flex flex-wrap items-start gap-3">
+              <div className="bg-primary/8 flex size-10 shrink-0 items-center justify-center rounded-xl ring-1 ring-primary/15">
+                <GitBranch className="text-primary size-5" aria-hidden />
               </div>
-              <Button
-                type="button"
-                variant="secondary"
-                className="h-10 gap-2"
-                disabled={issueUrlFetchBusy || !issueGithubUrlInput.trim()}
-                onClick={() => void fetchGithubIssueForImport()}
-              >
-                {issueUrlFetchBusy ? (
-                  <Loader2 className="size-4 shrink-0 animate-spin" aria-hidden />
-                ) : (
-                  <ExternalLink className="size-4" aria-hidden />
-                )}
-                Hent issue
-              </Button>
+              <div className="min-w-0 flex-1 space-y-1">
+                <h2 className="text-foreground font-heading text-lg font-semibold tracking-tight">
+                  GitHub og prosessregister
+                </h2>
+                <p className="text-muted-foreground text-sm leading-relaxed">
+                  Hent eksisterende saker fra en issue-URL eller fra en kolonne i
+                  prosjekt-tavlen. Når en prosess er koblet, bruker du «Hent til PVV» og
+                  «Send til GitHub» i prosessvinduet for å holde tekst synket.
+                </p>
+              </div>
             </div>
-            {issueUrlFetchError ? (
-              <p className="text-destructive text-sm" role="alert">
-                {issueUrlFetchError}
-              </p>
-            ) : null}
-          </section>
-        ) : null}
-        {w.githubProjectNodeId?.trim() && canEditCandidates ? (
-          <section
-            className="border-border/60 space-y-4 rounded-xl border bg-card/40 p-4"
-            aria-labelledby="github-column-fetch-heading"
-          >
+            <div className="space-y-6">
+              <section
+                className="space-y-4"
+                aria-labelledby="github-issue-import-heading"
+              >
+                <div className="space-y-1">
+                  <h3
+                    id="github-issue-import-heading"
+                    className="text-foreground text-sm font-semibold tracking-tight"
+                  >
+                    Hent fra GitHub-issue
+                  </h3>
+                  <p className="text-muted-foreground text-xs leading-relaxed">
+                    Lim inn en{" "}
+                    <strong className="text-foreground font-medium">issue-URL</strong>{" "}
+                    (
+                    <span className="font-mono text-[11px]">
+                      …/owner/repo/issues/123
+                    </span>
+                    ). Krever GitHub-token under Innstillinger. Saken trenger ikke å ligge i
+                    prosjekt-tavle — du kan koble til tavle eller opprette issue fra PVV senere.
+                  </p>
+                </div>
+                <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
+                  <div className="min-w-0 flex-1 space-y-1.5">
+                    <Label htmlFor="gh-issue-url" className="text-xs font-medium">
+                      Issue-URL
+                    </Label>
+                    <Input
+                      id="gh-issue-url"
+                      type="url"
+                      value={issueGithubUrlInput}
+                      onChange={(e) => setIssueGithubUrlInput(e.target.value)}
+                      placeholder="https://github.com/org/repo/issues/42"
+                      className="h-10 border-border/80 font-mono text-sm shadow-xs"
+                      autoComplete="off"
+                    />
+                  </div>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    className="h-10 shrink-0 gap-2"
+                    disabled={issueUrlFetchBusy || !issueGithubUrlInput.trim()}
+                    onClick={() => void fetchGithubIssueForImport()}
+                  >
+                    {issueUrlFetchBusy ? (
+                      <Loader2 className="size-4 shrink-0 animate-spin" aria-hidden />
+                    ) : (
+                      <ExternalLink className="size-4" aria-hidden />
+                    )}
+                    Hent issue
+                  </Button>
+                </div>
+                {issueUrlFetchError ? (
+                  <p className="text-destructive text-sm" role="alert">
+                    {issueUrlFetchError}
+                  </p>
+                ) : null}
+              </section>
+              {w.githubProjectNodeId?.trim() ? (
+                <>
+                  <Separator className="bg-border/60" />
+                  <section
+                    className="space-y-4"
+                    aria-labelledby="github-column-fetch-heading"
+                  >
             <div className="space-y-1">
-              <h2
+              <h3
                 id="github-column-fetch-heading"
-                className="text-foreground text-base font-semibold"
+                className="text-foreground text-sm font-semibold tracking-tight"
               >
                 Hent kort fra prosjektkolonne
-              </h2>
+              </h3>
               <p className="text-muted-foreground text-xs leading-relaxed">
                 Velg samme <strong className="text-foreground font-medium">statuskolonne</strong>{" "}
                 som i GitHub Projects (feltet «{githubProjectStatus.fieldName ?? "Status"}»).
@@ -1359,7 +1479,7 @@ export function WorkspaceCandidatesPanel({
                   </Label>
                   <select
                     id="gh-column-pick"
-                    className="border-input bg-background h-10 w-full max-w-md rounded-lg border px-3 text-sm"
+                    className="border-input bg-background h-10 w-full max-w-md rounded-lg border border-border/80 px-3 text-sm shadow-xs outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     value={columnPickId}
                     onChange={(e) => setColumnPickId(e.target.value)}
                   >
@@ -1401,8 +1521,15 @@ export function WorkspaceCandidatesPanel({
                   · {columnItemsResult.items.length}{" "}
                   {columnItemsResult.items.length === 1 ? "kort" : "kort"}
                 </p>
-                <div className="border-border/80 max-h-[min(24rem,50vh)] overflow-auto rounded-lg border">
-                  <table className="w-full min-w-[28rem] text-left text-sm">
+                <p className="text-muted-foreground text-xs leading-relaxed">
+                  Når du oppretter en prosess fra <strong className="text-foreground font-medium">issue</strong> eller{" "}
+                  <strong className="text-foreground font-medium">PR</strong>, lagrer PVV repo, issue-/PR-nummer og
+                  kobling til prosjektkort. <strong className="text-foreground font-medium">Utkast</strong> har ikke
+                  issue-nummer før det konverteres i GitHub. «I PVV» betyr at prosessen er registrert; «ROS» viser om
+                  minst én ROS-analyse er knyttet til prosessen i dette arbeidsområdet.
+                </p>
+                <div className="border-border/80 max-h-[min(28rem,55vh)] overflow-auto rounded-lg border">
+                  <table className="w-full min-w-[36rem] text-left text-sm">
                     <thead>
                       <tr className="bg-muted/50 border-border/60 border-b text-xs uppercase tracking-wide">
                         <th className="text-foreground px-3 py-2 font-semibold">
@@ -1411,8 +1538,14 @@ export function WorkspaceCandidatesPanel({
                         <th className="text-foreground w-24 px-3 py-2 font-semibold">
                           Type
                         </th>
-                        <th className="text-foreground w-28 px-3 py-2 font-semibold">
+                        <th className="text-foreground w-[7.5rem] px-3 py-2 font-semibold">
+                          GitHub-ref
+                        </th>
+                        <th className="text-foreground w-24 px-3 py-2 font-semibold">
                           I PVV
+                        </th>
+                        <th className="text-foreground w-24 px-3 py-2 font-semibold">
+                          ROS
                         </th>
                         <th className="text-foreground w-40 px-3 py-2 font-semibold">
                           Handling
@@ -1421,13 +1554,27 @@ export function WorkspaceCandidatesPanel({
                     </thead>
                     <tbody>
                       {columnItemsResult.items.map((row) => {
-                        const linked = projectItemIdsLinkedInPvv.has(row.projectItemId);
+                        const linked = projectItemIdsLinkedInPvv.has(
+                          row.projectItemId,
+                        );
+                        const linkedCandidateId =
+                          projectItemIdToCandidateId.get(row.projectItemId) ??
+                          null;
+                        const hasRos =
+                          linkedCandidateId !== null &&
+                          rosCandidateIdSet.has(linkedCandidateId);
+                        const ghRef =
+                          row.repoFullName?.trim() &&
+                          row.issueNumber != null &&
+                          row.issueNumber > 0
+                            ? `${row.repoFullName}#${row.issueNumber}`
+                            : null;
                         return (
                           <tr
                             key={row.projectItemId}
                             className="border-border/40 border-b last:border-b-0"
                           >
-                            <td className="text-foreground max-w-[18rem] px-3 py-2 align-top">
+                            <td className="text-foreground max-w-[16rem] px-3 py-2 align-top">
                               <span className="line-clamp-2">{row.title}</span>
                               {row.issueUrl ? (
                                 <a
@@ -1443,11 +1590,34 @@ export function WorkspaceCandidatesPanel({
                             <td className="text-muted-foreground px-3 py-2 align-top text-xs">
                               {githubColumnContentKindLabel(row.contentKind)}
                             </td>
+                            <td className="text-muted-foreground px-3 py-2 align-top font-mono text-[0.7rem] leading-snug">
+                              {ghRef ? (
+                                <span title="Lagres i PVV når prosessen opprettes fra dette kortet (issue/PR)">
+                                  {ghRef}
+                                </span>
+                              ) : (
+                                <span className="text-muted-foreground/80">—</span>
+                              )}
+                            </td>
                             <td className="px-3 py-2 align-top">
                               {linked ? (
                                 <Badge
                                   variant="secondary"
                                   className="border-emerald-500/30 bg-emerald-500/10 text-emerald-900 dark:text-emerald-100"
+                                >
+                                  Ja
+                                </Badge>
+                              ) : (
+                                <span className="text-muted-foreground text-xs">Nei</span>
+                              )}
+                            </td>
+                            <td className="px-3 py-2 align-top">
+                              {!linked ? (
+                                <span className="text-muted-foreground text-xs">—</span>
+                              ) : hasRos ? (
+                                <Badge
+                                  variant="secondary"
+                                  className="border-sky-500/30 bg-sky-500/10 text-sky-950 dark:text-sky-100"
                                 >
                                   Ja
                                 </Badge>
@@ -1490,10 +1660,15 @@ export function WorkspaceCandidatesPanel({
                 Ingen kort i denne kolonnen akkurat nå.
               </p>
             ) : null}
-          </section>
+                  </section>
+                </>
+              ) : null}
+            </div>
+          </div>
         ) : null}
         {candidates.length > 0 ? (
           <section
+            data-tutorial-anchor="prosess-oversikt-liste"
             className="space-y-3"
             aria-labelledby="process-overview-heading"
           >
@@ -1506,9 +1681,9 @@ export function WorkspaceCandidatesPanel({
                   Prosessoversikt
                 </h2>
                 <p className="text-muted-foreground mt-1 text-sm leading-relaxed">
-                  Klikk en rad for å åpne prosessen. Du kan slette direkte med
-                  søppelikonet, eller redigere og slette i vinduet — inkludert
-                  henting fra GitHub der det er satt opp.
+                  Klikk en rad for å åpne prosessen. Under GitHub kan du legge inn
+                  utkast i tavle eller opprette ekte issue i repo (når standard-repo er
+                  satt). Slett med søppelikonet, eller rediger og synk i vinduet.
                 </p>
               </div>
               {canEditCandidates ? (
@@ -1578,28 +1753,61 @@ export function WorkspaceCandidatesPanel({
                               Ikke i prosjekt
                             </Badge>
                             {canEditCandidates && canQuickAddGithubCard ? (
-                              <Button
-                                type="button"
-                                variant="secondary"
-                                size="sm"
-                                className="h-8 gap-1.5 px-2 text-xs"
-                                disabled={rowGithubBusyId === c._id}
-                                aria-label={`Legg til ${c.code} i GitHub-tavle`}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  void registerOneFromOverviewTable(c._id);
-                                }}
+                              <div
+                                className="flex max-w-[min(100%,15rem)] flex-col gap-1.5 sm:max-w-none sm:flex-row sm:flex-wrap sm:items-center"
+                                onClick={(e) => e.stopPropagation()}
                               >
-                                {rowGithubBusyId === c._id ? (
-                                  <Loader2
-                                    className="size-3.5 shrink-0 animate-spin"
-                                    aria-hidden
-                                  />
-                                ) : (
-                                  <GitBranch className="size-3.5" aria-hidden />
-                                )}
-                                Legg til i tavle
-                              </Button>
+                                <Button
+                                  type="button"
+                                  variant="secondary"
+                                  size="sm"
+                                  className="h-8 gap-1.5 px-2.5 text-xs"
+                                  disabled={rowGithubBusyId === c._id}
+                                  aria-label={`Legg til ${c.code} som utkast i GitHub-tavle`}
+                                  title="Prosjektkort (utkast) i GitHub Projects"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    void registerOneFromOverviewTable(c._id);
+                                  }}
+                                >
+                                  {rowGithubBusyId === c._id ? (
+                                    <Loader2
+                                      className="size-3.5 shrink-0 animate-spin"
+                                      aria-hidden
+                                    />
+                                  ) : (
+                                    <GitBranch className="size-3.5" aria-hidden />
+                                  )}
+                                  Utkast i tavle
+                                </Button>
+                                {canCreateGithubRepoIssue ? (
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    className="h-8 gap-1.5 px-2.5 text-xs"
+                                    disabled={rowGithubBusyId === c._id}
+                                    aria-label={`Opprett GitHub-issue for ${c.code}`}
+                                    title="Ekte issue i standard-repo, lagt i tavle og synket fra PVV"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      void registerRepoIssueFromOverviewTable(
+                                        c._id,
+                                      );
+                                    }}
+                                  >
+                                    {rowGithubBusyId === c._id ? (
+                                      <Loader2
+                                        className="size-3.5 shrink-0 animate-spin"
+                                        aria-hidden
+                                      />
+                                    ) : (
+                                      <Ticket className="size-3.5" aria-hidden />
+                                    )}
+                                    Issue i repo
+                                  </Button>
+                                ) : null}
+                              </div>
                             ) : null}
                           </div>
                         )}
@@ -1643,44 +1851,57 @@ export function WorkspaceCandidatesPanel({
         githubProjectStatus.options &&
         githubProjectStatus.options.length > 0 ? (
           <section
-            className="border-border/60 space-y-4 rounded-xl border bg-muted/20 p-4"
+            className="border-border/60 space-y-5 rounded-2xl border bg-muted/15 p-5 shadow-sm sm:p-6"
             aria-labelledby="auto-github-heading"
           >
-            <div className="flex flex-wrap items-start gap-2">
-              <GitBranch className="text-muted-foreground mt-0.5 size-5 shrink-0" aria-hidden />
+            <div className="flex flex-wrap items-start gap-3">
+              <div className="bg-muted/80 flex size-10 shrink-0 items-center justify-center rounded-xl ring-1 ring-border/50">
+                <GitBranch className="text-muted-foreground size-5" aria-hidden />
+              </div>
               <div className="min-w-0 flex-1 space-y-1">
                 <h2
                   id="auto-github-heading"
-                  className="text-foreground text-base font-semibold"
+                  className="text-foreground font-heading text-base font-semibold tracking-tight"
                 >
                   Automatisk GitHub-prosjekt
                 </h2>
                 <p className="text-muted-foreground text-xs leading-relaxed">
-                  Nye prosesser kan legges inn som utkast i GitHub-tavlen med én
-                  gang. Avkrysning og standardstatus under gjelder allerede når du
-                  trykker «Legg til prosess» (du trenger ikke «Lagre innstilling»
-                  først). Krever lagret prosjekt-node-ID og token under
-                  innstillinger.
+                  Nye prosesser kan registreres som utkast i tavlen automatisk.
+                  Avkrysning og standardstatus gjelder når du trykker «Ny prosess»
+                  (uten å lagre innstilling først). Du kan også legge til manuelt
+                  fra tabellen («Utkast i tavle») eller opprette «Issue i repo» når
+                  standard-repo er satt.
                 </p>
               </div>
             </div>
-            <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
-              <label className="text-foreground flex cursor-pointer items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  className="border-input size-4 rounded"
-                  checked={autoRegGithub}
-                  onChange={(e) => setAutoRegGithub(e.target.checked)}
-                />
-                Registrer automatisk ved ny prosess
-              </label>
-              <div className="flex min-w-[12rem] flex-col gap-1 sm:max-w-xs">
-                <Label htmlFor="auto-gh-status" className="text-xs">
+            <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_minmax(11rem,18rem)_auto] sm:items-end">
+              <div className="flex min-w-0 flex-col gap-1.5">
+                <span className="text-muted-foreground text-xs font-medium leading-none">
+                  Automatisk
+                </span>
+                <label
+                  htmlFor="auto-reg-github"
+                  className="border-input bg-background flex min-h-10 cursor-pointer items-start gap-2.5 rounded-lg border border-border/80 px-3 py-2 text-sm shadow-xs transition-colors hover:bg-muted/50 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring"
+                >
+                  <input
+                    id="auto-reg-github"
+                    type="checkbox"
+                    className="border-input text-primary focus-visible:ring-ring mt-0.5 size-4 shrink-0 rounded border shadow-sm focus-visible:ring-2"
+                    checked={autoRegGithub}
+                    onChange={(e) => setAutoRegGithub(e.target.checked)}
+                  />
+                  <span className="text-foreground min-w-0 flex-1 leading-snug">
+                    Registrer automatisk ved ny prosess
+                  </span>
+                </label>
+              </div>
+              <div className="flex min-w-0 flex-col gap-1.5">
+                <Label htmlFor="auto-gh-status" className="text-xs font-medium">
                   Standardstatus i prosjekt
                 </Label>
                 <select
                   id="auto-gh-status"
-                  className="border-input bg-background h-10 rounded-lg border px-3 text-sm"
+                  className="border-input bg-background h-10 w-full rounded-lg border border-border/80 px-3 text-sm shadow-xs outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   value={autoRegStatusId}
                   onChange={(e) => setAutoRegStatusId(e.target.value)}
                 >
@@ -1692,15 +1913,19 @@ export function WorkspaceCandidatesPanel({
                   ))}
                 </select>
               </div>
-              <Button
-                type="button"
-                variant="secondary"
-                size="sm"
-                className="h-10"
-                onClick={() => void saveAutoGithubSettings()}
-              >
-                Lagre innstilling
-              </Button>
+              <div className="flex min-w-0 flex-col gap-1.5 sm:justify-self-end">
+                <span className="text-muted-foreground hidden text-xs font-medium leading-none sm:block sm:h-[1.125rem] sm:select-none sm:opacity-0" aria-hidden>
+                  —
+                </span>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  className="h-10 w-full sm:w-auto"
+                  onClick={() => void saveAutoGithubSettings()}
+                >
+                  Lagre innstilling
+                </Button>
+              </div>
             </div>
             {candidates.some((c) => !c.githubProjectItemNodeId) ? (
               <div className="border-border/50 flex flex-col gap-2 border-t pt-3 sm:flex-row sm:items-center sm:justify-between">
@@ -1776,23 +2001,24 @@ export function WorkspaceCandidatesPanel({
                   </p>
                 </div>
                 <div className="space-y-2">
-                  <Label
-                    htmlFor="new-cand-code"
-                    className="flex flex-wrap items-center gap-1"
-                  >
+                  <Label htmlFor="new-cand-code">
                     {prosessRegisterCopy.referenceCode.label}
-                    <span className="text-destructive">*</span>
+                    <span className="text-muted-foreground ml-1.5 text-xs font-normal">
+                      (valgfritt)
+                    </span>
                   </Label>
                   <Input
                     id="new-cand-code"
                     value={cCode}
                     onChange={(e) => setCCode(e.target.value)}
                     placeholder={prosessRegisterCopy.referenceCode.placeholder}
-                    required
                     autoComplete="off"
                     className="h-11 font-mono"
                   />
                   <p className="text-muted-foreground text-[11px] leading-snug">
+                    {prosessRegisterCopy.referenceCode.emptyMeansAuto}
+                  </p>
+                  <p className="text-muted-foreground mt-1 text-[11px] leading-snug opacity-90">
                     {prosessRegisterCopy.referenceCode.hint}
                   </p>
                 </div>
@@ -1873,7 +2099,7 @@ export function WorkspaceCandidatesPanel({
               </Button>
               <Button
                 type="button"
-                disabled={!cName.trim() || !cCode.trim()}
+                disabled={!cName.trim()}
                 onClick={() => void addCandidate()}
               >
                 Legg til prosess
@@ -2142,6 +2368,14 @@ export function WorkspaceCandidatesPanel({
                         candidateId,
                         statusOptionId,
                       }),
+                    createRepoIssue:
+                      canCreateGithubRepoIssue
+                        ? (candidateId, statusOptionId) =>
+                            createGithubRepoIssueForCandidate({
+                              candidateId,
+                              statusOptionId,
+                            })
+                        : undefined,
                     updateStatus: (candidateId, statusOptionId) =>
                       updateCandidateGithubProjectStatus({
                         candidateId,
@@ -2160,7 +2394,10 @@ export function WorkspaceCandidatesPanel({
         </Dialog>
 
         {candidates.length === 0 ? (
-          <div className="rounded-2xl border border-dashed border-emerald-500/25 bg-emerald-500/[0.03] px-6 py-12 text-center">
+          <div
+            data-tutorial-anchor="prosess-oversikt-liste"
+            className="rounded-2xl border border-dashed border-emerald-500/25 bg-emerald-500/[0.03] px-6 py-12 text-center"
+          >
             <div className="bg-muted/80 mx-auto mb-3 flex size-12 items-center justify-center rounded-2xl">
               <Users className="text-muted-foreground size-6" aria-hidden />
             </div>
@@ -2171,27 +2408,27 @@ export function WorkspaceCandidatesPanel({
               Trykk «Ny prosess» for å åpne skjemaet, eller gå til vurderinger og
               start en sak — der velger du prosess-ID i veiviseren.
             </p>
-            <div className="mt-5 flex flex-wrap items-center justify-center gap-3">
-              {canEditCandidates ? (
-                <Button
-                  type="button"
-                  className="gap-2"
-                  onClick={() => setNewProcessOpen(true)}
-                >
-                  <Plus className="size-4" aria-hidden />
-                  Ny prosess
-                </Button>
-              ) : null}
+            <div className="mt-6 flex flex-col-reverse flex-wrap items-stretch justify-center gap-3 sm:flex-row sm:items-center">
               {hubMode ? (
                 <Link
                   href={`/w/${workspaceId}/vurderinger`}
                   className={cn(
-                    buttonVariants({ variant: "secondary", size: "sm" }),
-                    "inline-flex",
+                    buttonVariants({ variant: "outline", size: "default" }),
+                    "inline-flex h-11 min-h-[44px] w-full justify-center px-4 text-[13px] font-medium sm:h-10 sm:min-h-0 sm:w-auto",
                   )}
                 >
                   Gå til vurderinger
                 </Link>
+              ) : null}
+              {canEditCandidates ? (
+                <Button
+                  type="button"
+                  className="h-11 min-h-[44px] w-full gap-2 px-4 text-[13px] font-semibold shadow-sm sm:h-10 sm:min-h-0 sm:w-auto"
+                  onClick={() => setNewProcessOpen(true)}
+                >
+                  <Plus className="size-4 shrink-0" aria-hidden />
+                  Ny prosess
+                </Button>
               ) : null}
             </div>
           </div>
@@ -2209,11 +2446,17 @@ export function WorkspaceAssessmentsPanel({
   hubMode?: boolean;
 }) {
   const workspace = useQuery(api.workspaces.get, { workspaceId });
+  const membership = useQuery(api.workspaces.getMyMembership, { workspaceId });
   const assessments = useQuery(api.assessments.listByWorkspace, {
     workspaceId,
   });
   const createAssessment = useMutation(api.assessments.create);
   const deleteAssessment = useMutation(api.assessments.deleteAssessment);
+
+  const canEditPipeline =
+    membership !== undefined &&
+    membership !== null &&
+    membership.role !== "viewer";
 
   const [title, setTitle] = useState("");
   const [busy, setBusy] = useState(false);
@@ -2260,17 +2503,17 @@ export function WorkspaceAssessmentsPanel({
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       {hubMode ? (
-        <div className="rounded-lg border border-border/60 bg-muted/30 px-3 py-2">
-          <p className="text-muted-foreground text-sm leading-snug">
-            <span className="text-foreground font-medium">
+        <div className="rounded-2xl border border-border/40 bg-muted/20 px-4 py-3.5 text-[14px] leading-relaxed shadow-[0_1px_2px_rgba(0,0,0,0.03)] ring-1 ring-black/[0.03] dark:ring-white/[0.05] sm:px-5">
+          <p className="text-muted-foreground">
+            <span className="text-foreground font-semibold">
               Ny prosess i registeret?
             </span>{" "}
             Legg den inn under{" "}
             <Link
               href={`/w/${workspaceId}/vurderinger?fane=prosesser`}
-              className="text-primary font-medium underline-offset-4 hover:underline"
+              className="font-medium text-primary underline-offset-4 hover:underline"
             >
               Prosessregister
             </Link>
@@ -2278,24 +2521,28 @@ export function WorkspaceAssessmentsPanel({
           </p>
         </div>
       ) : null}
-      <Card className="border-border/60 overflow-hidden shadow-sm">
-        <CardHeader className="pb-3 pt-4 sm:flex sm:flex-row sm:items-center sm:justify-between sm:gap-4 sm:pb-4">
+      <GithubIssueStartCard workspaceId={workspaceId} variant="assessment" />
+      <Card className="overflow-hidden border-border/40 shadow-[0_1px_3px_rgba(0,0,0,0.04)] ring-1 ring-black/[0.03] dark:ring-white/[0.05]">
+        <CardHeader className="border-b border-border/40 bg-gradient-to-b from-muted/35 to-transparent pb-4 pt-5 sm:flex sm:flex-row sm:items-center sm:justify-between sm:gap-4">
           <div className="flex min-w-0 items-start gap-3">
-            <div className="bg-primary/10 text-primary flex size-10 shrink-0 items-center justify-center rounded-xl">
-              <Sparkles className="size-[1.15rem]" aria-hidden />
+            <div className="bg-primary/12 text-primary flex size-11 shrink-0 items-center justify-center rounded-2xl ring-1 ring-primary/15">
+              <Sparkles className="size-5" aria-hidden />
             </div>
-            <div className="min-w-0 space-y-0.5">
-              <CardTitle className="text-lg tracking-tight">
+            <div className="min-w-0 space-y-1">
+              <p className="text-muted-foreground text-[11px] font-semibold uppercase tracking-[0.12em]">
+                Ny sak
+              </p>
+              <CardTitle className="text-lg font-semibold tracking-tight">
                 Ny vurdering
               </CardTitle>
-              <CardDescription className="text-sm leading-snug">
+              <CardDescription className="text-[13px] leading-relaxed sm:text-sm">
                 Gi saken et navn og gå rett til veiviseren. Utkast lagres
                 fortløpende.
               </CardDescription>
             </div>
           </div>
         </CardHeader>
-        <CardFooter className="flex flex-col gap-3 border-t border-border/50 bg-muted/20 pt-4 sm:flex-row sm:items-center">
+        <CardFooter className="flex flex-col gap-3 border-t border-border/45 bg-muted/10 pt-4 sm:flex-row sm:items-end">
           <div className="min-w-0 flex-1 space-y-1.5">
             <Label
               className="text-muted-foreground text-xs font-medium"
@@ -2308,13 +2555,12 @@ export function WorkspaceAssessmentsPanel({
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               placeholder="F.eks. Fakturamottak fra leverandører"
-              className="h-10 bg-background"
+              className="h-11 min-h-[44px] bg-background text-[16px] sm:h-10 sm:min-h-0 sm:text-sm"
               autoComplete="off"
             />
           </div>
           <Button
-            size="default"
-            className="h-10 w-full shrink-0 gap-1.5 px-5 sm:w-auto"
+            className="h-11 min-h-[44px] w-full shrink-0 gap-2 px-5 text-[13px] font-semibold shadow-sm sm:h-10 sm:min-h-0 sm:w-auto"
             onClick={() => void handleCreate()}
             disabled={busy}
           >
@@ -2324,36 +2570,37 @@ export function WorkspaceAssessmentsPanel({
         </CardFooter>
       </Card>
 
-      <section className="space-y-3">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h2 className="font-heading text-lg font-semibold tracking-tight">
-              Alle vurderinger
-            </h2>
-            <p className="text-muted-foreground mt-0.5 text-sm leading-snug">
-              {assessments.length === 0
-                ? "Ingen saker i listen — opprett med kortet over."
-                : `${assessments.length} ${assessments.length === 1 ? "vurdering" : "vurderinger"} · søk eller filtrer på status.`}
-            </p>
-          </div>
-          <Link
-            href={`/w/${workspaceId}/leveranse`}
-            className="text-muted-foreground hover:text-foreground inline-flex shrink-0 items-center gap-1.5 text-sm font-medium transition-colors"
+      <section
+        className="space-y-4"
+        role="region"
+        aria-labelledby="vurderinger-liste-heading"
+      >
+        <div>
+          <p className="text-muted-foreground text-[11px] font-semibold uppercase tracking-[0.12em]">
+            Register
+          </p>
+          <h2
+            id="vurderinger-liste-heading"
+            className="font-heading text-lg font-semibold tracking-tight text-foreground"
           >
-            <LayoutGrid className="size-4" aria-hidden />
-            Leveranse
-          </Link>
+            Alle vurderinger
+          </h2>
+          <p className="text-muted-foreground mt-1 text-[13px] leading-relaxed sm:text-sm">
+            {assessments.length === 0
+              ? "Ingen saker i listen — opprett med kortet over."
+              : `${assessments.length} ${assessments.length === 1 ? "vurdering" : "vurderinger"} · søk eller filtrer på status.`}
+          </p>
         </div>
 
         {assessments.length > 0 ? (
-          <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+          <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
             <div className="relative min-w-0 flex-1 sm:min-w-[min(100%,18rem)]">
               <Search className="text-muted-foreground pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2" />
               <Input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Søk i tittel …"
-                className="h-9 bg-background pl-9"
+                className="h-11 min-h-[44px] bg-background pl-9 text-[16px] sm:h-10 sm:min-h-0 sm:text-sm"
                 aria-label="Søk i vurderinger"
               />
             </div>
@@ -2363,7 +2610,7 @@ export function WorkspaceAssessmentsPanel({
               </Label>
               <select
                 id="assessment-status-filter"
-                className="border-input bg-background h-9 w-full rounded-lg border px-2.5 text-sm shadow-xs"
+                className="border-input bg-background h-11 min-h-[44px] w-full rounded-lg border px-3 text-[13px] shadow-xs sm:h-10 sm:min-h-0 sm:text-sm"
                 value={statusFilter}
                 onChange={(e) =>
                   setStatusFilter(e.target.value as PipelineStatus | "all")
@@ -2381,27 +2628,27 @@ export function WorkspaceAssessmentsPanel({
         ) : null}
 
         {assessments.length === 0 ? (
-          <div className="rounded-xl border border-dashed border-border/60 bg-muted/15 px-4 py-10 text-center">
+          <div className="rounded-2xl border border-dashed border-emerald-500/20 bg-gradient-to-b from-primary/[0.03] to-transparent px-4 py-10 text-center ring-1 ring-primary/10 sm:px-6">
             <p className="text-foreground mx-auto max-w-md text-sm font-semibold">
               Ingen vurderinger ennå
             </p>
-            <p className="text-muted-foreground mx-auto mt-3 max-w-lg text-sm leading-relaxed">
-              <strong className="text-foreground">Vurdering</strong> er én sak om
-              automatisering: skjema, status i leveranse og prioritering.{" "}
-              <strong className="text-foreground">Prosessregisteret</strong> er den
+            <p className="text-muted-foreground mx-auto mt-3 max-w-lg text-[13px] leading-relaxed sm:text-sm">
+              <strong className="text-foreground font-medium">Vurdering</strong> er én sak om
+              automatisering: skjema, pipeline-status og prioritering.{" "}
+              <strong className="text-foreground font-medium">Prosessregisteret</strong> er den
               felles listen over prosesser med ID — valgfritt før du oppretter
               saken, men nyttig når flere saker skal bruke samme prosesskode.
             </p>
-            <p className="text-muted-foreground mx-auto mt-3 max-w-md text-sm leading-relaxed">
-              <span className="text-foreground font-medium">Neste steg:</span> fyll
+            <p className="text-muted-foreground mx-auto mt-3 max-w-md text-[13px] leading-relaxed sm:text-sm">
+              <span className="text-foreground font-semibold">Neste steg:</span> fyll
               inn tittel i kortet over og velg{" "}
-              <span className="text-foreground font-medium">Start vurdering</span>.
+              <span className="text-foreground font-semibold">Start vurdering</span>.
             </p>
             <Link
               href={`/w/${workspaceId}/vurderinger?fane=prosesser`}
               className={cn(
-                buttonVariants({ variant: "outline", size: "sm" }),
-                "mt-5 inline-flex",
+                buttonVariants({ variant: "outline", size: "default" }),
+                "mt-6 inline-flex h-11 min-h-[44px] w-full max-w-sm justify-center px-4 text-[13px] font-medium sm:h-10 sm:min-h-0 sm:w-auto",
               )}
             >
               Legg inn prosesser først (prosessregister)
@@ -2420,68 +2667,92 @@ export function WorkspaceAssessmentsPanel({
               const crit = a.cachedCriticality;
               return (
                 <li key={a._id} className="group/card relative">
-                  <Link
-                    href={`/w/${workspaceId}/a/${a._id}`}
+                  <div
                     className={cn(
-                      "bg-card hover:border-primary/35 block overflow-hidden rounded-xl border border-l-[3px] bg-gradient-to-br from-card to-muted/10 p-3.5 shadow-sm transition-all hover:shadow-md",
+                      "bg-card hover:border-primary/35 relative overflow-hidden rounded-xl border border-l-[3px] bg-gradient-to-br from-card to-muted/10 p-4 shadow-sm transition-all hover:shadow-md sm:p-3.5",
                       priorityBorderAccentClass(prio),
                     )}
                   >
-                    <div className="flex items-start justify-between gap-2">
-                      <span className="font-heading group-hover/card:text-primary line-clamp-2 min-w-0 text-[0.9375rem] font-semibold leading-snug transition-colors">
-                        {a.title}
-                      </span>
-                      <Badge
-                        variant="secondary"
-                        className="shrink-0 max-w-[9rem] truncate text-[10px] font-medium"
-                      >
-                        {PIPELINE_STATUS_LABELS[pipeline]}
-                      </Badge>
-                    </div>
-                    <p className="text-muted-foreground mt-1.5 line-clamp-2 text-xs leading-snug">
-                      {compliancePlainLine(a)}
-                    </p>
-                    <div className="mt-3 flex flex-wrap items-end justify-between gap-2 border-t border-border/40 pt-2.5">
-                      <div className="min-w-0 space-y-0.5">
-                        <p className="text-muted-foreground text-[10px] font-medium uppercase tracking-wide">
-                          Prioritet
-                        </p>
-                        <p className="font-heading text-xl font-bold tabular-nums tracking-tight">
-                          {prio.toFixed(1)}
-                          <span className="text-muted-foreground ml-1 text-xs font-normal">
-                            / 100
+                    {/*
+                      Bakgrunnslenke: klikk går til vurdering. Innholdet har pointer-events-none
+                      slik at select/badge ikke konkurrerer med lenken; interaktive elementer får pointer-events-auto.
+                    */}
+                    <Link
+                      href={`/w/${workspaceId}/a/${a._id}`}
+                      className="absolute inset-0 z-0 rounded-xl"
+                      aria-label={`Åpne vurdering: ${a.title}`}
+                    />
+                    <div className="relative z-10 flex flex-col gap-0 pr-9 pointer-events-none sm:pr-0">
+                      {/*
+                        Mobil: stablet (tittel → status) for full bredde på nedtrekk.
+                        Desktop: tittel og status på én rad.
+                      */}
+                      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-2">
+                        <span className="font-heading group-hover/card:text-primary line-clamp-2 min-w-0 text-base font-semibold leading-snug transition-colors sm:text-[0.9375rem]">
+                          {a.title}
+                        </span>
+                        <div className="pointer-events-auto w-full shrink-0 sm:w-auto">
+                          {canEditPipeline ? (
+                            <PipelineStatusSelect
+                              assessmentId={a._id}
+                              value={pipeline}
+                              compact
+                            />
+                          ) : (
+                            <Badge
+                              variant="secondary"
+                              className="inline-flex max-w-full truncate text-xs font-medium sm:max-w-[9rem] sm:text-[10px]"
+                            >
+                              {PIPELINE_STATUS_LABELS[pipeline]}
+                            </Badge>
+                          )}
+                        </div>
+                      </div>
+                      <p className="text-muted-foreground mt-1.5 line-clamp-2 text-xs leading-snug">
+                        {compliancePlainLine(a)}
+                      </p>
+                      <div className="mt-3 flex flex-wrap items-end justify-between gap-2 border-t border-border/40 pt-2.5">
+                        <div className="min-w-0 space-y-0.5">
+                          <p className="text-muted-foreground text-[10px] font-medium uppercase tracking-wide">
+                            Prioritet
+                          </p>
+                          <p className="font-heading text-xl font-bold tabular-nums tracking-tight">
+                            {prio.toFixed(1)}
+                            <span className="text-muted-foreground ml-1 text-xs font-normal">
+                              / 100
+                            </span>
+                          </p>
+                          {ap !== undefined &&
+                          ap !== null &&
+                          crit !== undefined &&
+                          crit !== null ? (
+                            <p className="text-muted-foreground text-[11px] tabular-nums">
+                              AP {ap.toFixed(0)} % · Vikt. {crit.toFixed(0)} %
+                            </p>
+                          ) : (
+                            <p className="text-muted-foreground text-[11px]">
+                              Fullfør skjema for poeng
+                            </p>
+                          )}
+                        </div>
+                        <div className="text-muted-foreground shrink-0 text-right text-[11px] leading-snug">
+                          <span
+                            className="block"
+                            title={new Date(a.updatedAt).toLocaleString("nb-NO")}
+                          >
+                            {formatRelativeUpdatedAt(a.updatedAt)}
                           </span>
-                        </p>
-                        {ap !== undefined &&
-                        ap !== null &&
-                        crit !== undefined &&
-                        crit !== null ? (
-                          <p className="text-muted-foreground text-[11px] tabular-nums">
-                            AP {ap.toFixed(0)} % · Vikt. {crit.toFixed(0)} %
-                          </p>
-                        ) : (
-                          <p className="text-muted-foreground text-[11px]">
-                            Fullfør skjema for poeng
-                          </p>
-                        )}
-                      </div>
-                      <div className="text-muted-foreground shrink-0 text-right text-[11px] leading-snug">
-                        <span
-                          className="block"
-                          title={new Date(a.updatedAt).toLocaleString("nb-NO")}
-                        >
-                          {formatRelativeUpdatedAt(a.updatedAt)}
-                        </span>
-                        <span className="mt-0.5 inline-flex items-center gap-0.5 font-medium text-foreground group-hover/card:text-primary">
-                          Åpne
-                          <ChevronRight className="size-3.5 opacity-80" aria-hidden />
-                        </span>
+                          <span className="mt-0.5 inline-flex items-center gap-0.5 font-medium text-foreground group-hover/card:text-primary">
+                            Åpne
+                            <ChevronRight className="size-3.5 opacity-80" aria-hidden />
+                          </span>
+                        </div>
                       </div>
                     </div>
-                  </Link>
+                  </div>
                   <button
                     type="button"
-                    className="absolute right-2 top-2 rounded-md p-1.5 text-muted-foreground/50 opacity-0 transition-all hover:bg-destructive/10 hover:text-destructive group-hover/card:opacity-100"
+                    className="pointer-events-auto absolute right-1.5 top-1.5 z-20 flex min-h-[44px] min-w-[44px] items-center justify-center rounded-lg text-muted-foreground/70 opacity-100 transition-all hover:bg-destructive/10 hover:text-destructive sm:right-2 sm:top-2 sm:size-8 sm:min-h-0 sm:min-w-0 sm:opacity-0 sm:group-hover/card:opacity-100"
                     title="Slett vurdering"
                     onClick={(e) => {
                       e.stopPropagation();
@@ -2506,7 +2777,7 @@ export function WorkspaceAssessmentsPanel({
                       })();
                     }}
                   >
-                    <Trash2 className="size-3.5" />
+                    <Trash2 className="size-4 sm:size-3.5" />
                   </button>
                 </li>
               );

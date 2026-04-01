@@ -4,10 +4,12 @@ import {
   internalQuery,
   mutation,
   query,
+  type MutationCtx,
 } from "./_generated/server";
 import { getAuthUserId } from "@convex-dev/auth/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import {
+  canReadAssessment,
   requireUserId,
   requireWorkspaceMember,
 } from "./lib/access";
@@ -177,6 +179,39 @@ export const setGithubProjectItem = internalMutation({
               args.statusOptionId === null ? undefined : args.statusOptionId,
           }
         : {}),
+    });
+  },
+});
+
+/** Etter REST-opprettet issue + addProjectV2ItemById — én atomisk kobling til PVV. */
+export const setGithubProjectItemWithIssueLink = internalMutation({
+  args: {
+    candidateId: v.id("candidates"),
+    itemNodeId: v.string(),
+    statusOptionId: v.string(),
+    githubRepoFullName: v.string(),
+    githubIssueNumber: v.number(),
+    githubIssueNodeId: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    let repo: string;
+    try {
+      repo = normalizeGithubRepoFullName(args.githubRepoFullName);
+    } catch {
+      throw new Error("Ugyldig repo-navn.");
+    }
+    const n = Math.floor(args.githubIssueNumber);
+    if (!Number.isFinite(n) || n < 1) {
+      throw new Error("Ugyldig issue-nummer.");
+    }
+    const now = Date.now();
+    await ctx.db.patch(args.candidateId, {
+      githubProjectItemNodeId: args.itemNodeId.trim(),
+      githubProjectStatusOptionId: args.statusOptionId.trim(),
+      githubRepoFullName: repo,
+      githubIssueNumber: n,
+      githubIssueNodeId: args.githubIssueNodeId?.trim() || undefined,
+      updatedAt: now,
     });
   },
 });
@@ -388,17 +423,177 @@ export const listByWorkspace = query({
   },
 });
 
+function normalizeProcessCode(raw: string): string {
+  return raw.trim().toUpperCase();
+}
+
+/**
+ * Per prosess: koblede PVV-vurderinger (via utkastets prosess-ID) og ROS-analyser,
+ * med tidspunkt — for oversiktskort i prosessregisteret.
+ */
+export const listProcessCoverage = query({
+  args: { workspaceId: v.id("workspaces") },
+  handler: async (ctx, args) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) {
+      return [];
+    }
+    await requireWorkspaceMember(ctx, args.workspaceId, userId, "viewer");
+
+    const candidates = await ctx.db
+      .query("candidates")
+      .withIndex("by_workspace", (q) => q.eq("workspaceId", args.workspaceId))
+      .collect();
+
+    const assessments = await ctx.db
+      .query("assessments")
+      .withIndex("by_workspace_updated", (q) =>
+        q.eq("workspaceId", args.workspaceId),
+      )
+      .collect();
+
+    const pvvByCode = new Map<
+      string,
+      Array<{
+        assessmentId: Id<"assessments">;
+        title: string;
+        updatedAt: number;
+        pipelineStatus: string;
+      }>
+    >();
+
+    for (const a of assessments) {
+      if (!(await canReadAssessment(ctx, a, userId))) {
+        continue;
+      }
+      const draft = await ctx.db
+        .query("assessmentDrafts")
+        .withIndex("by_assessment", (q) => q.eq("assessmentId", a._id))
+        .unique();
+      const payload = draft?.payload as { candidateId?: string } | undefined;
+      const codeRaw = (payload?.candidateId ?? "").trim();
+      if (!codeRaw) {
+        continue;
+      }
+      const codeKey = normalizeProcessCode(codeRaw);
+      const row = {
+        assessmentId: a._id,
+        title: a.title,
+        updatedAt: a.updatedAt,
+        pipelineStatus: a.pipelineStatus ?? "not_assessed",
+      };
+      const list = pvvByCode.get(codeKey) ?? [];
+      list.push(row);
+      pvvByCode.set(codeKey, list);
+    }
+
+    for (const [, list] of pvvByCode) {
+      list.sort((x, y) => y.updatedAt - x.updatedAt);
+    }
+
+    const rosRows = await ctx.db
+      .query("rosAnalyses")
+      .withIndex("by_workspace", (q) => q.eq("workspaceId", args.workspaceId))
+      .collect();
+
+    const rosByCandidateId = new Map<
+      Id<"candidates">,
+      Array<{
+        analysisId: Id<"rosAnalyses">;
+        title: string;
+        updatedAt: number;
+      }>
+    >();
+
+    for (const r of rosRows) {
+      if (!r.candidateId) {
+        continue;
+      }
+      const item = {
+        analysisId: r._id,
+        title: r.title,
+        updatedAt: r.updatedAt,
+      };
+      const list = rosByCandidateId.get(r.candidateId) ?? [];
+      list.push(item);
+      rosByCandidateId.set(r.candidateId, list);
+    }
+
+    for (const [, list] of rosByCandidateId) {
+      list.sort((x, y) => y.updatedAt - x.updatedAt);
+    }
+
+    return candidates
+      .sort((a, b) =>
+        a.code.localeCompare(b.code, "nb", { sensitivity: "base" }),
+      )
+      .map((c) => {
+        const codeKey = normalizeProcessCode(c.code);
+        const pvvList = pvvByCode.get(codeKey) ?? [];
+        const rosList = rosByCandidateId.get(c._id) ?? [];
+        return {
+          candidateId: c._id,
+          name: c.name,
+          code: c.code,
+          candidateUpdatedAt: c.updatedAt,
+          githubRepoFullName: c.githubRepoFullName ?? null,
+          githubIssueNumber: c.githubIssueNumber ?? null,
+          githubProjectItemNodeId: c.githubProjectItemNodeId ?? null,
+          pvv: {
+            count: pvvList.length,
+            latestAt: pvvList[0]?.updatedAt ?? null,
+            assessments: pvvList,
+          },
+          ros: {
+            count: rosList.length,
+            latestAt: rosList[0]?.updatedAt ?? null,
+            analyses: rosList,
+          },
+        };
+      });
+  },
+});
+
 function trimOpt(s: string | undefined): string | undefined {
   if (s === undefined) return undefined;
   const t = s.trim();
   return t || undefined;
 }
 
+const AUTO_PROCESS_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+
+async function allocateUniqueProcessCode(
+  ctx: MutationCtx,
+  workspaceId: Id<"workspaces">,
+): Promise<string> {
+  for (let attempt = 0; attempt < 64; attempt++) {
+    let suffix = "";
+    for (let j = 0; j < 6; j++) {
+      suffix +=
+        AUTO_PROCESS_CODE_ALPHABET[
+          Math.floor(Math.random() * AUTO_PROCESS_CODE_ALPHABET.length)
+        ]!;
+    }
+    const code = `P-${suffix}`;
+    const clash = await ctx.db
+      .query("candidates")
+      .withIndex("by_workspace_code", (q) =>
+        q.eq("workspaceId", workspaceId).eq("code", code),
+      )
+      .unique();
+    if (!clash) {
+      return code;
+    }
+  }
+  throw new Error("Kunne ikke generere unik prosess-ID — prøv igjen.");
+}
+
 export const create = mutation({
   args: {
     workspaceId: v.id("workspaces"),
     name: v.string(),
-    code: v.string(),
+    /** Tom eller utelatt: genereres automatisk (f.eks. P-X7K2M9). */
+    code: v.optional(v.string()),
     notes: v.optional(v.string()),
     linkHintBusinessOwner: v.optional(v.string()),
     linkHintSystems: v.optional(v.string()),
@@ -408,9 +603,18 @@ export const create = mutation({
     const userId = await requireUserId(ctx);
     await requireWorkspaceMember(ctx, args.workspaceId, userId, "member");
     const name = args.name.trim();
-    const code = args.code.trim().toUpperCase().replace(/\s+/g, "-");
-    if (!name || !code) {
-      throw new Error("Navn og kode er påkrevd.");
+    if (!name) {
+      throw new Error("Navn er påkrevd.");
+    }
+    const raw = args.code?.trim() ?? "";
+    let code: string;
+    if (raw === "") {
+      code = await allocateUniqueProcessCode(ctx, args.workspaceId);
+    } else {
+      code = raw.toUpperCase().replace(/\s+/g, "-");
+      if (!code) {
+        throw new Error("Prosess-ID kan ikke være tom.");
+      }
     }
     const clash = await ctx.db
       .query("candidates")
@@ -422,7 +626,7 @@ export const create = mutation({
       throw new Error("Koden er allerede i bruk i dette arbeidsområdet.");
     }
     const now = Date.now();
-    return await ctx.db.insert("candidates", {
+    const candidateId = await ctx.db.insert("candidates", {
       workspaceId: args.workspaceId,
       name,
       code,
@@ -434,6 +638,7 @@ export const create = mutation({
       createdAt: now,
       updatedAt: now,
     });
+    return { candidateId, code };
   },
 });
 

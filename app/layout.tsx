@@ -1,6 +1,7 @@
 import { AppToaster } from "@/components/providers/app-toaster";
 import { ConvexClientProvider } from "@/components/providers/convex-provider";
 import { ThemeProvider } from "@/components/providers/theme-provider";
+import { UserPreferencesSync } from "@/components/user/user-preferences-sync";
 import { PwaClient } from "@/components/pwa-client";
 import { ConvexAuthNextjsServerProvider } from "@convex-dev/auth/nextjs/server";
 import type { Metadata } from "next";
@@ -27,10 +28,8 @@ export const viewport = {
   initialScale: 1,
   maximumScale: 5,
   viewportFit: "cover" as const,
-  themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#fafafa" },
-    { media: "(prefers-color-scheme: dark)", color: "#0a0a0a" },
-  ],
+  /** Enkel verdi — array-form ga hydreringsmismatch i MetadataWrapper (Next 16 + React 19). */
+  themeColor: "#fafafa",
 };
 
 export const metadata: Metadata = {
@@ -41,7 +40,7 @@ export const metadata: Metadata = {
     template: "%s · FRO",
   },
   description:
-    "Prioriter oppgaver, prosessvurderinger, ROS og leveranse — samarbeid i arbeidsområder.",
+    "Prioriter oppgaver, prosessvurderinger og ROS — samarbeid i arbeidsområder.",
   manifest: "/manifest.webmanifest",
   appleWebApp: {
     capable: true,
@@ -67,10 +66,14 @@ export default async function RootLayout({
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
       suppressHydrationWarning
     >
-      <body className="flex min-h-dvh flex-col touch-manipulation">
+      <body
+        className="flex min-h-dvh flex-col touch-manipulation"
+        suppressHydrationWarning
+      >
         <ConvexAuthNextjsServerProvider>
           <ConvexClientProvider>
             <ThemeProvider>
+              <UserPreferencesSync />
               {children}
               <AppToaster />
               <PwaClient />

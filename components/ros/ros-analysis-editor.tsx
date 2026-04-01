@@ -83,7 +83,7 @@ function tsToDatetimeLocal(ms: number): string {
 }
 
 const ROS_EDITOR_SECTIONS = [
-  { id: "risikoer", label: "Risikovurdering", hint: "Identifiser og vurder" },
+  { id: "risikoer", label: "Risikovurdering", hint: "Punkter først, matrise viser" },
   { id: "oppgaver", label: "Oppgaver", hint: "Tiltak og oppfølging" },
   { id: "oppsummering", label: "Oppsummering", hint: "Før/etter oversikt" },
   { id: "pvv", label: "PVV-koblinger", hint: "Koble vurderinger" },
@@ -1219,11 +1219,49 @@ export function RosAnalysisEditor({
         .filter(Boolean)
         .join(" · ");
     });
-    const openTaskLines =
-      tasks?.filter((t) => t.status === "open").map((t) => {
+    const taskLinesAll =
+      tasks?.map((t) => {
         const due = t.dueAt ? ` · frist ${formatTs(t.dueAt)}` : "";
-        return `${t.title}${due}`;
+        return {
+          line: `${t.title}${due}`,
+          statusLabel: t.status === "open" ? "Åpen" : "Fullført",
+        };
       }) ?? [];
+
+    const pvvLinksDetailed = data.linkedAssessments.map((l) => ({
+      title: l.title,
+      pddLabel:
+        COMPLIANCE_STATUS_LABELS[
+          (l.pddStatus ?? "not_started") as ComplianceStatusKey
+        ],
+      linkNote: l.note?.trim() || undefined,
+      pvvLinkNote: l.pvvLinkNote?.trim() || undefined,
+      flagsText: l.flags?.length ? l.flags.join(", ") : undefined,
+      highlightForPvv: Boolean(l.highlightForPvv),
+    }));
+
+    const summaryLines = [
+      ...data.rosSummary.summaryLines,
+      ...(data.rosSummary.suggestedLinkFlags.length > 0
+        ? [
+            `Forslag til PVV-flagg: ${data.rosSummary.suggestedLinkFlags.join(", ")}`,
+          ]
+        : []),
+    ];
+
+    const rawNext = nextReviewLocal.trim();
+    const nextReviewPdf =
+      rawNext === ""
+        ? undefined
+        : (() => {
+            const ms = new Date(rawNext).getTime();
+            return Number.isFinite(ms) ? formatTs(ms) : rawNext;
+          })();
+    const routinePdf = reviewRoutineNotes.trim() || undefined;
+    const reviewSchedule =
+      nextReviewPdf || routinePdf
+        ? { nextReview: nextReviewPdf, routine: routinePdf }
+        : undefined;
 
     const afterRowLabelsPdf = useSeparateAfterAxes
       ? parseLabelLines(rowLabelsAfterText)
@@ -1264,6 +1302,7 @@ export function RosAnalysisEditor({
         : data.colAxisTitle,
       afterSeparateLayout: useSeparateAfterAxes,
       analysisNotes: notes.trim() || null,
+      summaryLines: summaryLines.length > 0 ? summaryLines : undefined,
       methodologyStatement: methodologyStatement.trim() || null,
       contextSummary: contextSummary.trim() || null,
       scopeAndCriteria: scopeAndCriteria.trim() || null,
@@ -1273,10 +1312,13 @@ export function RosAnalysisEditor({
         complianceScopeTags.length > 0 ? complianceScopeTags : undefined,
       requirementRefLines:
         requirementRefLines.length > 0 ? requirementRefLines : undefined,
-      openTaskLines: openTaskLines.length > 0 ? openTaskLines : undefined,
+      reviewSchedule,
+      taskLinesAll: taskLinesAll.length > 0 ? taskLinesAll : undefined,
       identifiedRisks:
         identifiedRisks.length > 0 ? identifiedRisks : undefined,
       linkedPvvTitles: data.linkedAssessments.map((l) => l.title),
+      pvvLinksDetailed:
+        pvvLinksDetailed.length > 0 ? pvvLinksDetailed : undefined,
       journalEntries: (journalEntries ?? []).map((e) => ({
         body: e.body,
         authorName: e.authorName,
@@ -1410,95 +1452,110 @@ export function RosAnalysisEditor({
   }
 
   return (
-    <div className="space-y-4 pb-24">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <Link
-            href={`/w/${workspaceId}/ros`}
-            className="text-muted-foreground hover:text-foreground mb-2 inline-flex text-sm"
-          >
-            ← Tilbake til ROS
-          </Link>
-          <h1 className="font-heading text-2xl font-semibold tracking-tight">
-            {data.title}
-          </h1>
-          <p className="text-muted-foreground mt-1 flex flex-wrap items-center gap-2 text-sm">
-            {data.candidateName ? (
-              <span>
-                Prosess:{" "}
-                <span className="text-foreground font-medium">
-                  {data.candidateName}
-                </span>{" "}
-                <span className="font-mono">({data.candidateCode})</span>
-              </span>
-            ) : (
-              <span className="italic">Ingen prosess koblet</span>
-            )}
-            {data.linkedAssessments.length > 0 ? (
-              <span className="flex flex-wrap items-center gap-1.5">
-                <Link2 className="text-muted-foreground size-3.5" aria-hidden />
-                {data.linkedAssessments.map((l) => (
-                  <Link
-                    key={l.linkId}
-                    href={`/w/${workspaceId}/a/${l.assessmentId}`}
-                    className="text-primary font-medium hover:underline"
-                  >
-                    {l.title}
-                  </Link>
-                ))}
-              </span>
-            ) : null}
-            {data.legacyAssessmentId && data.legacyAssessmentTitle ? (
-              <Badge variant="outline" className="font-normal">
-                Eldre kobling: {data.legacyAssessmentTitle}
-              </Badge>
-            ) : null}
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <Button
-            type="button"
-            onClick={() => void save()}
-            disabled={saving || !dirty}
-          >
-            {saving ? "Lagrer …" : dirty ? "Lagre endringer" : "Lagret"}
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            title="Laster ned PDF med tittel, notat, PVV-koblinger, risikologg (siste 40) og matrise slik den vises nå (inkl. ulagrede celler)."
-            onClick={exportPdf}
-          >
-            <FileDown className="mr-2 size-4" aria-hidden />
-            Eksporter PDF
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            disabled={isDeleting}
-            onClick={() => {
-              if (
-                typeof window !== "undefined" &&
-                window.confirm("Slette denne ROS-analysen?")
-              ) {
-                deletingRef.current = true;
-                setIsDeleting(true);
-                router.replace(`/w/${workspaceId}/ros`);
-                void removeAnalysis({ analysisId });
-              }
-            }}
-          >
-            {isDeleting ? "Sletter…" : "Slett"}
-          </Button>
+    <div className="space-y-6 pb-28">
+      <div className="relative overflow-hidden rounded-3xl border border-border/40 bg-card shadow-[0_1px_2px_rgba(0,0,0,0.04),0_12px_40px_-12px_rgba(0,0,0,0.08)] ring-1 ring-black/[0.04] dark:shadow-[0_1px_0_rgba(255,255,255,0.06)_inset] dark:ring-white/[0.06]">
+        <div className="from-primary/[0.07] pointer-events-none absolute inset-0 bg-gradient-to-br via-transparent to-muted/30" />
+        <div className="relative flex flex-col gap-5 p-5 sm:flex-row sm:items-start sm:justify-between sm:p-7">
+          <div className="min-w-0">
+            <Link
+              href={`/w/${workspaceId}/ros`}
+              className="text-muted-foreground hover:text-foreground mb-3 inline-flex items-center gap-1.5 text-[13px] font-medium transition-colors"
+            >
+              <ChevronLeft className="size-4 opacity-70" aria-hidden />
+              Tilbake til ROS
+            </Link>
+            <p className="text-muted-foreground text-[11px] font-semibold uppercase tracking-[0.12em]">
+              ROS-analyse
+            </p>
+            <h1 className="font-heading mt-1 text-2xl font-semibold tracking-tight text-foreground sm:text-[1.75rem]">
+              {data.title}
+            </h1>
+            <p className="text-muted-foreground mt-3 flex flex-wrap items-center gap-x-2 gap-y-1.5 text-[14px] leading-relaxed">
+              {data.candidateName ? (
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-border/50 bg-muted/40 px-3 py-1 text-[13px] ring-1 ring-black/[0.03] dark:ring-white/[0.05]">
+                  <span className="text-muted-foreground">Prosess</span>
+                  <span className="text-foreground font-medium">
+                    {data.candidateName}
+                  </span>
+                  <span className="font-mono text-xs opacity-90">({data.candidateCode})</span>
+                </span>
+              ) : (
+                <span className="italic">Ingen prosess koblet</span>
+              )}
+              {data.linkedAssessments.length > 0 ? (
+                <span className="flex flex-wrap items-center gap-1.5">
+                  <Link2 className="text-muted-foreground size-3.5" aria-hidden />
+                  {data.linkedAssessments.map((l) => (
+                    <Link
+                      key={l.linkId}
+                      href={`/w/${workspaceId}/a/${l.assessmentId}`}
+                      className="text-primary font-medium hover:underline"
+                    >
+                      {l.title}
+                    </Link>
+                  ))}
+                </span>
+              ) : null}
+              {data.legacyAssessmentId && data.legacyAssessmentTitle ? (
+                <Badge variant="outline" className="font-normal">
+                  Eldre kobling: {data.legacyAssessmentTitle}
+                </Badge>
+              ) : null}
+            </p>
+          </div>
+          <div className="flex shrink-0 flex-wrap items-center gap-2">
+            <Button
+              type="button"
+              onClick={() => void save()}
+              disabled={saving || !dirty}
+              className="min-w-[7.5rem] font-semibold shadow-sm"
+            >
+              {saving ? "Lagrer …" : dirty ? "Lagre endringer" : "Lagret"}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              title="PDF med alle faner: risiko, oppgaver, oppsummering, PVV-detaljer, innstillinger, logg og matriser (nåværende visning, inkl. ulagrede celler)."
+              onClick={exportPdf}
+            >
+              <FileDown className="mr-2 size-4" aria-hidden />
+              Eksporter PDF
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={isDeleting}
+              onClick={() => {
+                if (
+                  typeof window !== "undefined" &&
+                  window.confirm("Slette denne ROS-analysen?")
+                ) {
+                  deletingRef.current = true;
+                  setIsDeleting(true);
+                  router.replace(`/w/${workspaceId}/ros`);
+                  void removeAnalysis({ analysisId });
+                }
+              }}
+            >
+              {isDeleting ? "Sletter…" : "Slett"}
+            </Button>
+          </div>
         </div>
       </div>
 
-      <p className="text-muted-foreground text-xs leading-relaxed">
-        Matrise, risiko og øvrige felt lagres automatisk til serveren ca. 1,2 s
-        etter siste endring, og når du bytter fane. Bruk «Lagre endringer» for
-        umiddelbar lagring. Ved lukking av vinduet kan nettleseren advare hvis det
-        fortsatt er ulagrede endringer.
-      </p>
+      <details className="group border-border/60 bg-muted/25 text-muted-foreground rounded-xl border px-3 py-2 text-xs leading-relaxed">
+        <summary className="cursor-pointer list-none font-medium text-foreground marker:hidden [&::-webkit-details-marker]:hidden">
+          <span className="inline-flex items-center gap-1.5">
+            Autosave
+            <ChevronRight className="size-3.5 transition-transform group-open:rotate-90" />
+          </span>
+        </summary>
+        <p className="mt-2 pl-0.5">
+          Lagring skjer automatisk etter kort pause og ved fanebytte. «Lagre
+          endringer» tvinger lagring med én gang. Nettleseren kan advare ved lukking
+          hvis det fortsatt er ulagrede endringer.
+        </p>
+      </details>
 
       <p className="sr-only">
         Piltastene venstre og høyre bytter del når fokus ikke er i et felt. På
@@ -1507,7 +1564,7 @@ export function RosAnalysisEditor({
       </p>
 
       <nav
-        className="bg-card flex flex-wrap items-center gap-1 rounded-xl border p-1 shadow-sm"
+        className="flex gap-1 overflow-x-auto rounded-2xl border border-border/45 bg-muted/35 p-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] [-ms-overflow-style:none] [scrollbar-width:none] backdrop-blur-sm dark:bg-muted/20 dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] [&::-webkit-scrollbar]:hidden"
         aria-label="ROS-seksjoner"
       >
         {ROS_EDITOR_SECTIONS.map((sec, i) => {
@@ -1518,31 +1575,66 @@ export function RosAnalysisEditor({
               type="button"
               onClick={() => setRosSection(i)}
               className={cn(
-                "rounded-lg px-3 py-2 text-sm font-medium transition-all",
+                "shrink-0 rounded-lg px-3 py-2.5 text-left text-sm font-medium transition-[color,box-shadow,background] duration-200 sm:min-w-0 sm:px-4",
                 active
-                  ? "bg-primary text-primary-foreground shadow-sm"
-                  : "text-muted-foreground hover:bg-muted/50 hover:text-foreground",
+                  ? "bg-card text-foreground shadow-[0_1px_3px_rgba(0,0,0,0.08)] ring-1 ring-black/[0.06] dark:shadow-[0_1px_3px_rgba(0,0,0,0.35)] dark:ring-white/[0.08]"
+                  : "text-muted-foreground hover:bg-card/50 hover:text-foreground",
               )}
             >
-              {sec.label}
+              <span className="block leading-tight">{sec.label}</span>
+              <span
+                className={cn(
+                  "mt-0.5 hidden text-[11px] font-normal leading-snug sm:block",
+                  active ? "text-muted-foreground" : "text-muted-foreground/80",
+                )}
+              >
+                {sec.hint}
+              </span>
             </button>
           );
         })}
       </nav>
 
-      {/* === Section 0: Risikovurdering (primary) === */}
+      {/* === Section 0: Risikovurdering — punkter først, matrise som visning === */}
       {rosSection === 0 && (
         <div className="space-y-6">
-          {/* Matrix visualization */}
+          {/* Identifiserte risikoer først (anbefalt flyt); matrisen fylles ut automatisk */}
+          <Card className="overflow-hidden border-border/40 shadow-[0_1px_3px_rgba(0,0,0,0.04)] ring-1 ring-black/[0.03] dark:ring-white/[0.05]">
+            <CardContent className="pt-6">
+              <RosRiskList
+                workspaceId={workspaceId}
+                rowLabels={data.rowLabels}
+                colLabels={data.colLabels}
+                rowAxisTitle={data.rowAxisTitle}
+                colAxisTitle={data.colAxisTitle}
+                cellItemsMatrix={cellItemsMatrix}
+                matrixValues={matrix}
+                matrixAfter={matrixAfter}
+                cellItemsAfterMatrix={cellItemsAfterMatrix}
+                afterRowLabels={effectiveAfterRowLabels}
+                afterColLabels={effectiveAfterColLabels}
+                onAddRisk={onAddRisk}
+                onUpdateRisk={onUpdateRisk}
+                onDeleteRisk={onDeleteRisk}
+                highlightCell={highlightCell}
+                rosTasks={tasks ?? undefined}
+                onGoToTasks={() => setRosSection(1)}
+              />
+            </CardContent>
+          </Card>
+
           {matrix.length > 0 ? (
             <>
-            <Card className="overflow-hidden">
-              <CardHeader className="border-b border-border/50 bg-muted/20 pb-3">
+            <Card className="overflow-hidden border-border/40 shadow-[0_1px_3px_rgba(0,0,0,0.04)] ring-1 ring-black/[0.03] dark:ring-white/[0.05]">
+              <CardHeader className="border-b border-border/45 bg-gradient-to-b from-muted/40 to-muted/15 pb-4">
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                   <div>
-                    <CardTitle className="text-base">Risikomatrise</CardTitle>
-                    <CardDescription>
-                      {data.rowAxisTitle} × {data.colAxisTitle} — klikk en celle for å se tilhørende risikoer.
+                    <CardTitle className="text-base font-semibold tracking-tight">
+                      Risikomatrise
+                    </CardTitle>
+                    <CardDescription className="max-w-prose text-[13px] leading-relaxed">
+                      {data.rowAxisTitle} × {data.colAxisTitle} — synkroniseres med listen over;
+                      klikk celler for å redigere.
                     </CardDescription>
                   </div>
                   <div className="flex flex-wrap gap-2 text-xs">
@@ -1559,16 +1651,19 @@ export function RosAnalysisEditor({
                     )}
                   </div>
                 </div>
-                <div className="mt-2 flex flex-wrap items-center gap-2">
-                  <div className="bg-muted/60 inline-flex rounded-lg border p-1 shadow-sm" role="tablist">
+                <div className="mt-4 flex flex-col gap-3 sm:mt-3 sm:flex-row sm:flex-wrap sm:items-center sm:gap-2">
+                  <div
+                    className="flex w-full min-w-0 rounded-xl border border-border/45 bg-muted/30 p-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] sm:inline-flex sm:w-auto"
+                    role="tablist"
+                    aria-label="Vis matrise før eller etter tiltak"
+                  >
                     <Button
                       type="button"
                       role="tab"
                       aria-selected={matrixView === "before"}
                       variant={matrixView === "before" ? "default" : "ghost"}
-                      size="sm"
                       className={cn(
-                        "rounded-md font-semibold",
+                        "h-11 min-h-[44px] flex-1 rounded-lg px-4 text-[13px] font-semibold shadow-sm sm:h-10 sm:min-h-0 sm:flex-initial",
                         matrixView !== "before" && "text-muted-foreground hover:text-foreground",
                       )}
                       onClick={() => setMatrixView("before")}
@@ -1580,9 +1675,8 @@ export function RosAnalysisEditor({
                       role="tab"
                       aria-selected={matrixView === "after"}
                       variant={matrixView === "after" ? "default" : "ghost"}
-                      size="sm"
                       className={cn(
-                        "rounded-md font-semibold",
+                        "h-11 min-h-[44px] flex-1 rounded-lg px-4 text-[13px] font-semibold shadow-sm sm:h-10 sm:min-h-0 sm:flex-initial",
                         matrixView !== "after" && "text-muted-foreground hover:text-foreground",
                       )}
                       onClick={() => setMatrixView("after")}
@@ -1592,15 +1686,16 @@ export function RosAnalysisEditor({
                   </div>
                   <Button
                     type="button"
-                    variant="outline"
-                    size="sm"
-                    className="gap-1.5 font-medium"
+                    variant="ghost"
+                    className="h-11 min-h-[44px] shrink-0 gap-2 px-3 text-[13px] font-medium text-primary hover:bg-primary/10 hover:text-primary sm:h-10 sm:min-h-0"
                     onClick={() => setMatrixScaleHelpOpen(true)}
                     aria-expanded={matrixScaleHelpOpen}
                     aria-controls="ros-matrix-scale-help"
                   >
                     <CircleHelp className="size-4 shrink-0" aria-hidden />
-                    Hjelp med skala
+                    <span className="underline-offset-4 hover:underline">
+                      Hjelp med skala
+                    </span>
                   </Button>
                 </div>
               </CardHeader>
@@ -1693,31 +1788,6 @@ export function RosAnalysisEditor({
             </Sheet>
             </>
           ) : null}
-
-          {/* Risk list — primary input */}
-          <Card>
-            <CardContent className="pt-6">
-              <RosRiskList
-                workspaceId={workspaceId}
-                rowLabels={data.rowLabels}
-                colLabels={data.colLabels}
-                rowAxisTitle={data.rowAxisTitle}
-                colAxisTitle={data.colAxisTitle}
-                cellItemsMatrix={cellItemsMatrix}
-                matrixValues={matrix}
-                matrixAfter={matrixAfter}
-                cellItemsAfterMatrix={cellItemsAfterMatrix}
-                afterRowLabels={effectiveAfterRowLabels}
-                afterColLabels={effectiveAfterColLabels}
-                onAddRisk={onAddRisk}
-                onUpdateRisk={onUpdateRisk}
-                onDeleteRisk={onDeleteRisk}
-                highlightCell={highlightCell}
-                rosTasks={tasks ?? undefined}
-                onGoToTasks={() => setRosSection(1)}
-              />
-            </CardContent>
-          </Card>
         </div>
       )}
 
@@ -2008,8 +2078,7 @@ export function RosAnalysisEditor({
         <CardHeader>
           <CardTitle className="text-base">Oppsummering og risikoreduksjon</CardTitle>
           <CardDescription>
-            Sammenligning av risiko før og etter tiltak — se hva som er redusert,
-            hva som gjenstår, og hva som trenger oppfølging.
+            Register før/etter tiltak — sammenlign celler og trender.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-5">
@@ -2041,9 +2110,7 @@ export function RosAnalysisEditor({
             PVV-vurderinger (mange-til-mange)
           </CardTitle>
           <CardDescription>
-            Koble én eller flere PVV-vurderinger i arbeidsområdet til denne
-            ROS-analysen. Marker hva som er viktig for PVV, og noter koblingen
-            mellom ROS og personvern.
+            Koble PVV-vurderinger og noter hva som er relevant for personvern.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -2414,23 +2481,25 @@ export function RosAnalysisEditor({
 
       {/* Dead old sections removed — bottom nav follows */}
 
-      <div className="fixed bottom-0 left-0 right-0 z-30 border-t bg-background/95 p-3 backdrop-blur supports-[backdrop-filter]:bg-background/80">
-        <div className="mx-auto grid max-w-6xl grid-cols-[1fr_minmax(0,auto)_1fr] items-center gap-3 px-4">
+      <div className="fixed bottom-0 left-0 right-0 z-30 border-t border-border/60 bg-background/95 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-2 backdrop-blur-md supports-[backdrop-filter]:bg-background/85">
+        <div className="mx-auto grid max-w-6xl grid-cols-[minmax(0,1fr)_minmax(0,auto)_minmax(0,1fr)] items-center gap-2 px-3 sm:gap-3 sm:px-4">
           <div className="flex justify-start">
             <Button
               type="button"
               variant="outline"
-              size="sm"
-              className="gap-1"
+              className="h-11 min-h-[44px] gap-1.5 px-3 text-[13px] font-medium sm:h-10 sm:min-h-0 sm:px-4"
               onClick={() => setRosSection((s) => Math.max(0, s - 1))}
               disabled={rosSection <= 0}
             >
-              <ChevronLeft className="size-4" />
+              <ChevronLeft className="size-4 shrink-0" aria-hidden />
               Forrige
             </Button>
           </div>
-          <div className="flex min-w-0 flex-col items-center justify-center gap-0.5 px-2 text-center">
-            <span className="text-foreground max-w-[min(100%,12rem)] truncate text-xs font-medium sm:max-w-none">
+          <div className="flex min-w-0 flex-col items-center justify-center gap-0 px-1 text-center">
+            <span className="text-muted-foreground text-[10px] font-semibold uppercase tracking-wider">
+              Steg {rosSection + 1} av {ROS_EDITOR_SECTIONS.length}
+            </span>
+            <span className="text-foreground max-w-[min(100%,14rem)] truncate text-xs font-semibold sm:max-w-none sm:text-[13px]">
               {ROS_EDITOR_SECTIONS[rosSection]?.label ?? ""}
             </span>
           </div>
@@ -2438,20 +2507,16 @@ export function RosAnalysisEditor({
             {rosSection >= ROS_EDITOR_SECTIONS.length - 1 ? (
               <Button
                 type="button"
-                variant="default"
-                size="sm"
-                className="gap-1"
+                className="h-11 min-h-[44px] gap-1.5 px-4 text-[13px] font-semibold shadow-sm sm:h-10 sm:min-h-0"
                 onClick={() => router.push(`/w/${workspaceId}/ros`)}
               >
                 Ferdig
-                <ChevronRight className="size-4" aria-hidden />
+                <ChevronRight className="size-4 shrink-0" aria-hidden />
               </Button>
             ) : (
               <Button
                 type="button"
-                variant="outline"
-                size="sm"
-                className="gap-1"
+                className="h-11 min-h-[44px] gap-1.5 px-4 text-[13px] font-semibold shadow-sm sm:h-10 sm:min-h-0"
                 onClick={() =>
                   setRosSection((s) =>
                     Math.min(ROS_EDITOR_SECTIONS.length - 1, s + 1),
@@ -2459,7 +2524,7 @@ export function RosAnalysisEditor({
                 }
               >
                 Neste
-                <ChevronRight className="size-4" aria-hidden />
+                <ChevronRight className="size-4 shrink-0" aria-hidden />
               </Button>
             )}
           </div>

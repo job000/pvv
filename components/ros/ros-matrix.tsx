@@ -344,51 +344,37 @@ export function RosMatrix({
   return (
     <div className="space-y-4">
       {isEmpty && interactive ? (
-        <div className="space-y-3 rounded-2xl border border-primary/20 bg-primary/[0.03] p-5">
-          <div className="flex items-start gap-3">
-            <Lightbulb className="text-primary mt-0.5 size-5 shrink-0" aria-hidden />
-            <div className="space-y-2">
-              <p className="text-foreground text-sm font-semibold">
-                Kom i gang med risikovurderingen
-              </p>
-              <p className="text-muted-foreground text-sm leading-relaxed">
-                Tenk på hva som kan gå galt og hvor sannsynlig det er.
-                Klikk i matrisen der risikoen hører hjemme — f.eks. en trussel
-                med <strong>middels sannsynlighet</strong> og{" "}
-                <strong>betydelig konsekvens</strong> klikker du i den cellen.
-              </p>
-              <div className="text-muted-foreground mt-1 grid gap-1.5 text-xs sm:grid-cols-2">
-                <p>
-                  <strong className="text-foreground">↑ Radene</strong> = hvor
-                  sannsynlig er det? (nederst = sjelden, øverst = svært ofte)
-                </p>
-                <p>
-                  <strong className="text-foreground">→ Kolonnene</strong> = hvor
-                  alvorlig er konsekvensen? (venstre = ubetydelig, høyre = kritisk)
-                </p>
-              </div>
-              <p className="text-muted-foreground mt-2 text-xs">
-                <strong className="text-foreground">Tips:</strong> Start med det
-                du er mest bekymret for. Du kan alltid legge til flere risikoer
-                etterpå.
-              </p>
-            </div>
+        <details className="rounded-2xl border border-border/50 bg-muted/20 text-sm ring-1 ring-black/[0.03] dark:ring-white/[0.05]">
+          <summary className="flex cursor-pointer list-none items-center gap-2 rounded-2xl px-4 py-3 font-medium text-foreground marker:content-none [&::-webkit-details-marker]:hidden hover:bg-muted/35">
+            <Lightbulb className="text-primary size-4 shrink-0" aria-hidden />
+            <span>Kort hjelp om matrisen</span>
+            <span className="text-muted-foreground font-normal">— trykk for å utvide</span>
+          </summary>
+          <div className="text-muted-foreground space-y-2 border-t border-border/40 px-4 pb-3 pt-2 text-xs leading-relaxed">
+            <p>
+              Punkter du legger inn <strong className="text-foreground">over matrisen</strong>, vises her
+              automatisk. Du kan også klikke i en celle for å legge til eller flytte risiko.
+            </p>
+            <p>
+              <strong className="text-foreground">↑ Rader</strong> = sannsynlighet (ofte øverst).{" "}
+              <strong className="text-foreground">→ Kolonner</strong> = konsekvens (alvorlig høyre).
+            </p>
           </div>
-        </div>
+        </details>
       ) : null}
 
-      <div className="relative overflow-x-auto rounded-2xl border border-border/70 bg-card/50 shadow-sm">
+      <div className="relative overflow-x-auto rounded-2xl border border-border/45 bg-card shadow-[0_1px_3px_rgba(0,0,0,0.05)] ring-1 ring-black/[0.03] dark:shadow-[0_1px_3px_rgba(0,0,0,0.25)] dark:ring-white/[0.06]">
         <table className="w-full min-w-[min(100%,48rem)] table-fixed border-collapse text-left text-sm">
           <thead>
-            <tr className="border-b border-border/60 bg-muted/40">
+            <tr className="border-b border-border/50 bg-gradient-to-b from-muted/50 to-muted/30">
               <th
                 scope="col"
-                className="bg-muted/90 sticky top-0 left-0 z-20 w-[8rem] border-r border-border/50 px-2 py-2 text-xs"
+                className="sticky top-0 left-0 z-20 w-[8rem] border-r border-border/45 bg-muted/95 px-3 py-2.5 text-xs backdrop-blur-sm"
               >
-                <span className="text-muted-foreground flex items-center gap-1 text-[10px] font-normal normal-case">
+                <span className="text-muted-foreground flex items-center gap-1 text-[10px] font-medium normal-case tracking-wide">
                   ↑ {rowAxisTitle}
                 </span>
-                <span className="text-muted-foreground flex items-center gap-1 text-[10px] font-normal normal-case">
+                <span className="text-muted-foreground flex items-center gap-1 text-[10px] font-medium normal-case tracking-wide">
                   → {colAxisTitle}
                 </span>
               </th>
@@ -396,7 +382,7 @@ export function RosMatrix({
                 <th
                   key={j}
                   scope="col"
-                  className="bg-muted/90 sticky top-0 z-10 border-b border-border/50 px-2 py-2 text-center text-xs font-medium leading-snug"
+                  className="sticky top-0 z-10 border-b border-border/45 bg-muted/95 px-2 py-2.5 text-center text-[11px] font-semibold leading-snug text-foreground/90 backdrop-blur-sm"
                 >
                   {label}
                 </th>
@@ -411,7 +397,7 @@ export function RosMatrix({
               <tr key={i} className="border-b border-border/40 last:border-0">
                 <th
                   scope="row"
-                  className="bg-card/95 sticky left-0 z-10 w-[8rem] overflow-hidden border-r border-border/50 px-2 py-2 text-left text-xs font-medium leading-snug"
+                  className="sticky left-0 z-10 w-[8rem] overflow-hidden border-r border-border/45 bg-card/98 px-3 py-2 text-left text-[11px] font-semibold leading-snug text-foreground/90 backdrop-blur-sm"
                 >
                   <span className="line-clamp-2">{rowLabel}</span>
                 </th>
@@ -564,10 +550,10 @@ export function RosMatrix({
 
       {matrixStats.filledCells > 0 ? (
         <div className={cn(
-          "flex flex-wrap items-center gap-x-4 gap-y-1 rounded-xl border px-3 py-2 text-xs",
+          "flex flex-wrap items-center gap-x-4 gap-y-1 rounded-2xl border px-4 py-2.5 text-xs shadow-sm",
           matrixStats.highRisk > 0
-            ? "border-red-500/25 bg-red-500/[0.05]"
-            : "border-border/50 bg-muted/10",
+            ? "border-red-500/20 bg-red-500/[0.04] ring-1 ring-red-500/10"
+            : "border-border/45 bg-muted/15 ring-1 ring-black/[0.03] dark:ring-white/[0.05]",
         )}>
           <span className="text-muted-foreground font-medium">
             {matrixStats.filledCells} celle{matrixStats.filledCells !== 1 ? "r" : ""} med risiko
@@ -1124,8 +1110,11 @@ export function RosMatrix({
         </DialogContent>
       </Dialog>
 
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1" role="list">
-        <span className="text-muted-foreground text-[10px] font-medium uppercase tracking-wider">
+      <div
+        className="flex flex-wrap items-center gap-x-2 gap-y-2 rounded-2xl border border-border/40 bg-muted/15 px-3 py-2.5"
+        role="list"
+      >
+        <span className="text-muted-foreground mr-1 text-[10px] font-semibold uppercase tracking-[0.12em]">
           Nivå
         </span>
         {riskLegend.slice(1).map(({ level, label }) => (
@@ -1134,7 +1123,7 @@ export function RosMatrix({
             role="listitem"
             className={cn(
               cnCell(level, false),
-              "inline-flex min-h-0 items-center rounded-md px-1.5 py-0.5 text-[10px] font-medium",
+              "inline-flex min-h-0 items-center rounded-full px-2.5 py-1 text-[10px] font-semibold shadow-sm ring-1 ring-black/5 dark:ring-white/10",
             )}
           >
             {level} {label}

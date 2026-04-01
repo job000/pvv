@@ -124,6 +124,30 @@ export async function requireAssessmentRead(
   return { assessment, userId };
 }
 
+/**
+ * For spørringer som skal tåle slettede dokumenter uten å kaste (klienten får null).
+ * Returnerer null når bruker ikke er innlogget eller raden mangler.
+ * Kaster når raden finnes men brukeren ikke har lesetilgang.
+ */
+export async function getAssessmentIfReadable(
+  ctx: QueryCtx,
+  assessmentId: Id<"assessments">,
+): Promise<{ assessment: Doc<"assessments">; userId: Id<"users"> } | null> {
+  const userId = await getAuthUserId(ctx);
+  if (!userId) {
+    return null;
+  }
+  const assessment = await ctx.db.get(assessmentId);
+  if (!assessment) {
+    return null;
+  }
+  const ok = await canReadAssessment(ctx, assessment, userId);
+  if (!ok) {
+    throw new Error("Ingen tilgang til denne vurderingen.");
+  }
+  return { assessment, userId };
+}
+
 export async function requireAssessmentEdit(
   ctx: QueryCtx | MutationCtx,
   assessmentId: Id<"assessments">,

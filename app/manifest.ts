@@ -6,7 +6,7 @@ export default function manifest(): MetadataRoute.Manifest {
     name: "FRO — prioriter og utfør",
     short_name: "FRO",
     description:
-      "Prioriter oppgaver, prosessvurderinger, ROS og leveranse — samarbeid i arbeidsområder.",
+      "Prioriter oppgaver, prosessvurderinger og ROS — samarbeid i arbeidsområder.",
     start_url: "/",
     scope: "/",
     display: "standalone",

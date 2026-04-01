@@ -17,11 +17,9 @@ import type * as candidates from "../candidates.js";
 import type * as crons from "../crons.js";
 import type * as githubCandidateProject from "../githubCandidateProject.js";
 import type * as githubIssueImport from "../githubIssueImport.js";
-import type * as githubLeveranseSync from "../githubLeveranseSync.js";
 import type * as githubProjectColumnItems from "../githubProjectColumnItems.js";
 import type * as githubTasks from "../githubTasks.js";
 import type * as http from "../http.js";
-import type * as leveransePrefs from "../leveransePrefs.js";
 import type * as lib_access from "../lib/access.js";
 import type * as lib_github from "../lib/github.js";
 import type * as lib_githubCandidateSync from "../lib/githubCandidateSync.js";
@@ -36,7 +34,7 @@ import type * as reviewSchedule from "../reviewSchedule.js";
 import type * as ros from "../ros.js";
 import type * as rosAxisLists from "../rosAxisLists.js";
 import type * as rosLibrary from "../rosLibrary.js";
-import type * as sprints from "../sprints.js";
+import type * as users from "../users.js";
 import type * as workspaces from "../workspaces.js";
 
 import type {
@@ -55,11 +53,9 @@ declare const fullApi: ApiFromModules<{
   crons: typeof crons;
   githubCandidateProject: typeof githubCandidateProject;
   githubIssueImport: typeof githubIssueImport;
-  githubLeveranseSync: typeof githubLeveranseSync;
   githubProjectColumnItems: typeof githubProjectColumnItems;
   githubTasks: typeof githubTasks;
   http: typeof http;
-  leveransePrefs: typeof leveransePrefs;
   "lib/access": typeof lib_access;
   "lib/github": typeof lib_github;
   "lib/githubCandidateSync": typeof lib_githubCandidateSync;
@@ -74,7 +70,7 @@ declare const fullApi: ApiFromModules<{
   ros: typeof ros;
   rosAxisLists: typeof rosAxisLists;
   rosLibrary: typeof rosLibrary;
-  sprints: typeof sprints;
+  users: typeof users;
   workspaces: typeof workspaces;
 }>;
 

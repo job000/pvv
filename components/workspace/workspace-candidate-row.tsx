@@ -17,6 +17,7 @@ import {
   Download,
   GitBranch,
   Hash,
+  Ticket,
   Loader2,
   Settings2,
   StickyNote,
@@ -91,6 +92,11 @@ export function WorkspaceCandidateRow({
     statusFieldName: string | null;
     onReload: () => void;
     register: (
+      candidateId: Id<"candidates">,
+      statusOptionId: string,
+    ) => Promise<unknown>;
+    /** Ekte issue i standard-repo + prosjekt (krever repo under innstillinger). */
+    createRepoIssue?: (
       candidateId: Id<"candidates">,
       statusOptionId: string,
     ) => Promise<unknown>;
@@ -782,36 +788,81 @@ export function WorkspaceCandidateRow({
                   </Button>
                 </>
               ) : (
-                <Button
-                  type="button"
-                  size="sm"
-                  className="gap-2"
-                  disabled={githubBusy || !selectedProjectStatus}
-                  onClick={() => {
-                    setGithubBusy(true);
-                    void githubProject
-                      .register(c._id, selectedProjectStatus)
-                      .then(() =>
-                        toast.success("Prosess registrert i GitHub-prosjekt."),
-                      )
-                      .catch((e) =>
-                        toast.error(
-                          e instanceof Error
-                            ? e.message
-                            : "Kunne ikke registrere i prosjekt.",
-                        ),
-                      )
-                      .finally(() => setGithubBusy(false));
-                  }}
-                >
-                  {githubBusy ? (
-                    <Loader2
-                      className="size-4 shrink-0 animate-spin"
-                      aria-hidden
-                    />
+                <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="secondary"
+                    className="gap-2"
+                    disabled={githubBusy || !selectedProjectStatus}
+                    title="Prosjektkort (utkast) i GitHub Projects"
+                    onClick={() => {
+                      setGithubBusy(true);
+                      void githubProject
+                        .register(c._id, selectedProjectStatus)
+                        .then(() =>
+                          toast.success("Prosess registrert som utkast i tavle."),
+                        )
+                        .catch((e) =>
+                          toast.error(
+                            e instanceof Error
+                              ? e.message
+                              : "Kunne ikke registrere i prosjekt.",
+                          ),
+                        )
+                        .finally(() => setGithubBusy(false));
+                    }}
+                  >
+                    {githubBusy ? (
+                      <Loader2
+                        className="size-4 shrink-0 animate-spin"
+                        aria-hidden
+                      />
+                    ) : (
+                      <GitBranch className="size-4 shrink-0" aria-hidden />
+                    )}
+                    Utkast i tavle
+                  </Button>
+                  {githubProject.createRepoIssue ? (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="gap-2"
+                      disabled={githubBusy || !selectedProjectStatus}
+                      title="Oppretter issue i standard-repo, legger det i tavle og synker fra PVV"
+                      onClick={() => {
+                        const createIssue = githubProject.createRepoIssue;
+                        if (!createIssue) return;
+                        setGithubBusy(true);
+                        void createIssue(c._id, selectedProjectStatus)
+                          .then(() =>
+                            toast.success(
+                              "GitHub-issue opprettet og koblet — synket fra PVV.",
+                            ),
+                          )
+                          .catch((e) =>
+                            toast.error(
+                              e instanceof Error
+                                ? e.message
+                                : "Kunne ikke opprette issue i repo.",
+                            ),
+                          )
+                          .finally(() => setGithubBusy(false));
+                      }}
+                    >
+                      {githubBusy ? (
+                        <Loader2
+                          className="size-4 shrink-0 animate-spin"
+                          aria-hidden
+                        />
+                      ) : (
+                        <Ticket className="size-4 shrink-0" aria-hidden />
+                      )}
+                      Issue i repo
+                    </Button>
                   ) : null}
-                  Legg til i tavle
-                </Button>
+                </div>
               )}
             </div>
           ) : canEdit ? (

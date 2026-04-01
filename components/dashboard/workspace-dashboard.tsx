@@ -86,18 +86,21 @@ export function WorkspaceDashboardGrid({
     <>
       <section
         id="arbeidsområder"
-        className="space-y-5 scroll-mt-24"
+        className="scroll-mt-24 space-y-6"
         aria-labelledby="dash-workspaces-heading"
       >
         <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
           <div>
+            <p className="text-muted-foreground text-[11px] font-semibold uppercase tracking-[0.12em]">
+              Arbeidsområder
+            </p>
             <h2
               id="dash-workspaces-heading"
-              className="font-heading text-xl font-semibold tracking-tight sm:text-2xl"
+              className="font-heading mt-1 text-xl font-semibold tracking-tight text-foreground sm:text-2xl"
             >
               Dine arbeidsområder
             </h2>
-            <p className="text-muted-foreground mt-1 max-w-2xl text-sm leading-relaxed">
+            <p className="text-muted-foreground mt-2 max-w-2xl text-[13px] leading-relaxed sm:text-sm">
               Alt arbeid skjer på tvers av områder — åpne et eksisterende eller
               opprett et nytt for team eller prosjekt.
             </p>
@@ -113,9 +116,9 @@ export function WorkspaceDashboardGrid({
               <Card
                 key={workspace._id}
                 className={cn(
-                  "group relative flex flex-col overflow-hidden border-border/80 bg-card/80 shadow-sm backdrop-blur-sm transition-all duration-300 motion-safe:hover:-translate-y-0.5 motion-safe:hover:shadow-lg",
+                  "group relative flex flex-col overflow-hidden rounded-2xl border-border/50 bg-card shadow-[0_1px_3px_rgba(0,0,0,0.04)] ring-1 ring-black/[0.03] backdrop-blur-sm transition-all duration-300 motion-safe:hover:-translate-y-0.5 motion-safe:hover:shadow-lg dark:ring-white/[0.05]",
                   isDefault &&
-                    "ring-primary/25 border-primary/30 bg-gradient-to-br from-primary/[0.06] to-transparent ring-1",
+                    "border-primary/25 bg-gradient-to-br from-primary/[0.06] to-transparent ring-primary/20",
                 )}
               >
                 <div
@@ -127,7 +130,7 @@ export function WorkspaceDashboardGrid({
                 />
                 <CardHeader className="space-y-3 pb-2">
                   <div className="flex items-start justify-between gap-3">
-                    <div className="bg-primary/10 text-primary flex size-11 shrink-0 items-center justify-center rounded-xl">
+                    <div className="bg-primary/12 text-primary flex size-11 shrink-0 items-center justify-center rounded-2xl ring-1 ring-primary/15">
                       <FolderOpen className="size-5" aria-hidden />
                     </div>
                     <div className="flex flex-wrap items-center justify-end gap-1.5">
@@ -151,13 +154,13 @@ export function WorkspaceDashboardGrid({
                       : "Du har tilgang til vurderinger og innhold i dette området."}
                   </CardDescription>
                 </CardHeader>
-                <CardFooter className="mt-auto flex flex-col gap-2 border-t border-border/50 bg-muted/20 pt-4">
+                <CardFooter className="mt-auto flex flex-col gap-2 border-t border-border/45 bg-muted/15 pt-4">
                   <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
                     <Link
                       href={`/w/${workspace._id}`}
                       className={cn(
-                        buttonVariants({ size: "sm" }),
-                        "group/btn flex-1 gap-1.5 font-semibold shadow-sm",
+                        buttonVariants({ size: "default" }),
+                        "group/btn flex h-11 min-h-[44px] flex-1 items-center justify-center gap-2 text-[13px] font-semibold shadow-sm sm:h-10 sm:min-h-0",
                       )}
                     >
                       Åpne
@@ -169,8 +172,7 @@ export function WorkspaceDashboardGrid({
                     <Button
                       type="button"
                       variant="outline"
-                      size="sm"
-                      className="whitespace-nowrap"
+                      className="h-11 min-h-[44px] whitespace-nowrap text-[13px] font-medium sm:h-10 sm:min-h-0"
                       onClick={() =>
                         void setDefaultWorkspace({
                           workspaceId:
@@ -188,22 +190,21 @@ export function WorkspaceDashboardGrid({
                       <Link
                         href={`/w/${workspace._id}/innstillinger`}
                         className={cn(
-                          buttonVariants({ variant: "secondary", size: "sm" }),
-                          "gap-1.5",
+                          buttonVariants({ variant: "secondary", size: "default" }),
+                          "h-10 gap-1.5 px-3 text-[13px] font-medium",
                         )}
                       >
-                        <Settings className="size-4" aria-hidden />
+                        <Settings className="size-4 shrink-0" aria-hidden />
                         Innstillinger
                       </Link>
                       {isOwner ? (
                         <Button
                           type="button"
                           variant="outline"
-                          size="sm"
-                          className="text-destructive hover:text-destructive gap-1.5"
+                          className="h-10 gap-1.5 text-[13px] text-destructive hover:text-destructive"
                           onClick={() => setDeleteTarget(workspace)}
                         >
-                          <Trash2 className="size-4" aria-hidden />
+                          <Trash2 className="size-4 shrink-0" aria-hidden />
                           Slett
                         </Button>
                       ) : null}
@@ -214,13 +215,18 @@ export function WorkspaceDashboardGrid({
             );
           })}
 
-          <Card className="border-dashed border-primary/25 bg-muted/10 transition-colors hover:bg-muted/20">
+          <Card className="rounded-2xl border border-dashed border-primary/20 bg-gradient-to-b from-primary/[0.03] to-muted/10 transition-colors ring-1 ring-primary/10 hover:bg-muted/20">
             <CardHeader>
-              <div className="bg-muted text-muted-foreground mb-2 inline-flex size-11 items-center justify-center rounded-xl">
+              <div className="bg-primary/10 text-primary mb-2 inline-flex size-12 items-center justify-center rounded-2xl ring-1 ring-primary/15">
                 <Sparkles className="size-5" aria-hidden />
               </div>
-              <CardTitle className="font-heading text-lg">Nytt arbeidsområde</CardTitle>
-              <CardDescription>
+              <p className="text-muted-foreground text-[11px] font-semibold uppercase tracking-[0.12em]">
+                Nytt
+              </p>
+              <CardTitle className="font-heading text-lg font-semibold tracking-tight">
+                Nytt arbeidsområde
+              </CardTitle>
+              <CardDescription className="text-[13px] leading-relaxed sm:text-sm">
                 Flere områder for ulike team eller prosjekter. Navn og notater
                 endrer du under Innstillinger.
               </CardDescription>
@@ -233,6 +239,7 @@ export function WorkspaceDashboardGrid({
                   value={newName}
                   onChange={(e) => setNewName(e.target.value)}
                   placeholder="F.eks. Digitalisering Vest"
+                  className="h-11 min-h-[44px] text-[16px] sm:h-10 sm:min-h-0 sm:text-sm"
                   onKeyDown={(e) => {
                     if (e.key === "Enter") void handleCreate();
                   }}
@@ -247,7 +254,7 @@ export function WorkspaceDashboardGrid({
             <CardFooter>
               <Button
                 type="button"
-                className="w-full gap-2 font-semibold"
+                className="h-11 min-h-[44px] w-full gap-2 text-[13px] font-semibold shadow-sm sm:h-10 sm:min-h-0"
                 disabled={creating}
                 onClick={() => void handleCreate()}
               >
@@ -255,7 +262,7 @@ export function WorkspaceDashboardGrid({
                   "Oppretter …"
                 ) : (
                   <>
-                    <Plus className="size-4" aria-hidden />
+                    <Plus className="size-4 shrink-0" aria-hidden />
                     Opprett arbeidsområde
                   </>
                 )}

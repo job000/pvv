@@ -15,6 +15,21 @@ export type RosPdfJournalLine = {
   matrixPhase?: "before" | "after";
 };
 
+export type RosPdfPvvLinkDetail = {
+  title: string;
+  pddLabel: string;
+  linkNote?: string;
+  pvvLinkNote?: string;
+  flagsText?: string;
+  highlightForPvv: boolean;
+};
+
+export type RosPdfTaskLine = {
+  line: string;
+  /** Kort status, f.eks. «Åpen» / «Fullført» */
+  statusLabel: string;
+};
+
 export type RosPdfInput = {
   title: string;
   workspaceName: string | null;
@@ -37,6 +52,8 @@ export type RosPdfInput = {
   afterColAxisTitle: string;
   afterSeparateLayout: boolean;
   analysisNotes: string | null;
+  /** Automatisk oppsummering (før/etter tiltak) + valgfrie flagglinjer */
+  summaryLines?: string[];
   /** Livssyklus / ISO — valgfritt */
   methodologyStatement?: string | null;
   contextSummary?: string | null;
@@ -45,11 +62,20 @@ export type RosPdfInput = {
   axisScaleNotes?: string | null;
   complianceScopeTagIds?: string[];
   requirementRefLines?: string[];
-  /** Åpne oppfølgingsoppgaver (én linje per oppgave) */
+  /** Neste revisjon og rutine (fanen Innstillinger) */
+  reviewSchedule?: {
+    nextReview?: string;
+    routine?: string;
+  };
+  /** Alle oppgaver med status — foretrekkes fremfor kun åpne */
+  taskLinesAll?: RosPdfTaskLine[];
+  /** Åpne oppfølgingsoppgaver (én linje per oppgave) — brukes hvis taskLinesAll ikke er satt */
   openTaskLines?: string[];
   /** Alle risiko-punkter fra matrisen med full tekst og tiltak/følg (egen seksjon i PDF) */
   identifiedRisks?: RosIdentifiedRiskPdfRow[];
   linkedPvvTitles: string[];
+  /** Full tekst per PVV-kobling (fanen PVV-koblinger) */
+  pvvLinksDetailed?: RosPdfPvvLinkDetail[];
   journalEntries: RosPdfJournalLine[];
   generatedAt: Date;
 };
@@ -140,10 +166,49 @@ export function downloadRosAnalysisPdf(data: RosPdfInput): void {
     addRow("Koblede PVV-vurderinger", data.linkedPvvTitles.join("; "));
   }
 
+  if (data.summaryLines && data.summaryLines.length > 0) {
+    y += 4;
+    addHeading("Oppsummering (før/etter tiltak)", 12);
+    addPara(
+      "Automatisk sammendrag fra matrisene — tilsvarer fanen Oppsummering.",
+      8,
+    );
+    for (const line of data.summaryLines) {
+      addPara(`• ${line}`, 9);
+    }
+  }
+
   if (data.analysisNotes?.trim()) {
     y += 4;
     addHeading("Notat (analyse)", 12);
     addPara(data.analysisNotes.trim());
+  }
+
+  if (data.pvvLinksDetailed && data.pvvLinksDetailed.length > 0) {
+    y += 4;
+    addHeading("PVV-koblinger (detaljer)", 12);
+    for (const p of data.pvvLinksDetailed) {
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(10);
+      ensureSpace(8);
+      doc.text(p.title, margin, y);
+      y += 5;
+      doc.setFont("helvetica", "normal");
+      addRow("PDD-status (PVV)", p.pddLabel);
+      if (p.highlightForPvv) {
+        addRow("Merkes for PVV", "Ja");
+      }
+      if (p.flagsText?.trim()) {
+        addRow("Flagg", p.flagsText.trim());
+      }
+      if (p.linkNote?.trim()) {
+        addRow("Notat (kobling)", p.linkNote.trim());
+      }
+      if (p.pvvLinkNote?.trim()) {
+        addRow("PVV-notat", p.pvvLinkNote.trim());
+      }
+      y += 2;
+    }
   }
 
   const scopeLabels =
@@ -197,11 +262,41 @@ export function downloadRosAnalysisPdf(data: RosPdfInput): void {
     }
   }
 
-  if (data.openTaskLines && data.openTaskLines.length > 0) {
+  const reviewSched = data.reviewSchedule;
+  if (
+    reviewSched &&
+    ((reviewSched.nextReview?.trim() ?? "") !== "" ||
+      (reviewSched.routine?.trim() ?? "") !== "")
+  ) {
     y += 4;
-    addHeading("Åpne oppfølgingsoppgaver", 12);
-    for (const line of data.openTaskLines) {
-      addPara(`• ${line}`, 9);
+    addHeading("Revisjon og rutine", 12);
+    if (reviewSched.nextReview?.trim()) {
+      addRow("Neste revisjon", reviewSched.nextReview.trim());
+    }
+    if (reviewSched.routine?.trim()) {
+      addRow("Rutine", reviewSched.routine.trim());
+    }
+  }
+
+  const taskLinesResolved: RosPdfTaskLine[] =
+    data.taskLinesAll ??
+    (data.openTaskLines?.map((line) => ({
+      line,
+      statusLabel: "Åpen",
+    })) ??
+      []);
+
+  if (taskLinesResolved.length > 0) {
+    y += 4;
+    addHeading("Oppfølgingsoppgaver", 12);
+    addPara(
+      data.taskLinesAll
+        ? "Alle oppgaver fra fanen Oppgaver (åpne og fullførte)."
+        : "Åpne oppgaver.",
+      8,
+    );
+    for (const t of taskLinesResolved) {
+      addPara(`• [${t.statusLabel}] ${t.line}`, 9);
     }
   }
 

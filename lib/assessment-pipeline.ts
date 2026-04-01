@@ -1,5 +1,5 @@
 /**
- * RPA-leveranse: statuser og hint for CoE / rask leveranse (kortere syklus enn klassisk utvikling).
+ * RPA-pipeline: statuser og hint for CoE / porteføljeflyt (kortere syklus enn klassisk utvikling).
  * Synkroniseres med Convex `pipelineStatusValidator` i `convex/schema.ts`.
  */
 

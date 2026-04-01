@@ -6,6 +6,7 @@ import {
   CheckSquare,
   FolderOpen,
   LayoutDashboard,
+  Settings,
   TrendingUp,
 } from "lucide-react";
 import Link from "next/link";
@@ -17,7 +18,7 @@ type WorkspaceRow = {
 };
 
 const navItem =
-  "flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors";
+  "flex min-h-[44px] items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium transition-colors sm:min-h-0 sm:py-2.5";
 
 export function DashboardLayout({
   workspaces,
@@ -52,6 +53,18 @@ export function DashboardLayout({
           >
             <LayoutDashboard className="size-4 shrink-0 opacity-80" aria-hidden />
             Oversikt
+          </Link>
+          <Link
+            href="/bruker/innstillinger"
+            className={cn(
+              navItem,
+              pathname?.startsWith("/bruker/")
+                ? "bg-background text-foreground shadow-sm ring-1 ring-border/80"
+                : "text-muted-foreground hover:bg-background/80 hover:text-foreground",
+            )}
+          >
+            <Settings className="size-4 shrink-0 opacity-80" aria-hidden />
+            Brukerinnstillinger
           </Link>
           <a
             href="#arbeidsområder"
@@ -88,7 +101,7 @@ export function DashboardLayout({
             Dine områder
           </p>
           <div className="flex max-h-[min(40vh,320px)] flex-col gap-0.5 overflow-y-auto pr-1 [-ms-overflow-style:none] [scrollbar-width:thin] [&::-webkit-scrollbar]:w-1.5">
-            {workspaces.map(({ workspace, role }) => {
+            {workspaces.map(({ workspace }) => {
               const isDefault = defaultWorkspaceId === workspace._id;
               return (
                 <Link

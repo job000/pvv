@@ -69,30 +69,30 @@ function StatTile({
   return (
     <div
       className={cn(
-        "relative flex min-w-0 items-center gap-3 overflow-hidden rounded-xl border px-4 py-3 shadow-sm",
-        tone === "default" && "border-border/60 bg-card",
-        tone === "warn" && "border-amber-500/35 bg-amber-500/[0.06]",
-        tone === "muted" && "border-border/40 bg-muted/20",
-        tone === "success" && "border-emerald-500/30 bg-emerald-500/[0.05]",
+        "relative flex min-w-0 items-center gap-3 overflow-hidden rounded-2xl border px-4 py-3.5 shadow-[0_1px_2px_rgba(0,0,0,0.04)] transition-shadow hover:shadow-md",
+        tone === "default" && "border-border/50 bg-card ring-1 ring-black/[0.03] dark:ring-white/[0.05]",
+        tone === "warn" && "border-amber-500/30 bg-amber-500/[0.06] ring-1 ring-amber-500/15",
+        tone === "muted" && "border-border/40 bg-muted/25 ring-1 ring-black/[0.02] dark:ring-white/[0.04]",
+        tone === "success" && "border-emerald-500/25 bg-emerald-500/[0.05] ring-1 ring-emerald-500/12",
       )}
     >
       <div
         className={cn(
-          "flex size-10 shrink-0 items-center justify-center rounded-lg",
+          "flex size-11 shrink-0 items-center justify-center rounded-xl",
           tone === "warn"
-            ? "bg-amber-500/15 text-amber-700 dark:text-amber-300"
+            ? "bg-amber-500/15 text-amber-700 ring-1 ring-amber-500/20 dark:text-amber-300"
             : tone === "success"
-              ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300"
-              : "bg-primary/10 text-primary",
+              ? "bg-emerald-500/12 text-emerald-700 ring-1 ring-emerald-500/15 dark:text-emerald-300"
+              : "bg-primary/10 text-primary ring-1 ring-primary/12",
         )}
       >
         <Icon className="size-5" aria-hidden />
       </div>
       <div className="min-w-0">
-        <p className="font-heading text-2xl font-bold tabular-nums tracking-tight leading-none">
+        <p className="font-heading text-[1.65rem] font-semibold tabular-nums tracking-tight leading-none text-foreground">
           {value}
         </p>
-        <p className="text-muted-foreground mt-0.5 text-[11px] font-medium uppercase tracking-wide">
+        <p className="text-muted-foreground mt-1 text-[10px] font-semibold uppercase tracking-[0.12em]">
           {label}
         </p>
       </div>

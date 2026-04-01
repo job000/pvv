@@ -1,5 +1,6 @@
 "use client";
 
+import { PipelineStatusSelect } from "@/components/assessment/pipeline-status-select";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button-variants";
 import type { Id } from "@/convex/_generated/dataModel";
@@ -13,19 +14,24 @@ import Link from "next/link";
 
 export function AssessmentObjectHeader({
   workspaceId,
+  assessmentId,
   pipelineStatus,
   ownerName,
   hasRosAnalysisLink,
   nextStepLabel,
   firstRosAnalysisId,
+  canEditPipeline = false,
   className,
 }: {
   workspaceId: Id<"workspaces">;
+  assessmentId?: Id<"assessments">;
   pipelineStatus: PipelineStatus;
   ownerName: string | null;
   hasRosAnalysisLink: boolean;
   nextStepLabel: string;
   firstRosAnalysisId: Id<"rosAnalyses"> | null;
+  /** Når true og assessmentId er satt: nedtrekk for pipeline-status */
+  canEditPipeline?: boolean;
   className?: string;
 }) {
   const wid = String(workspaceId);
@@ -46,9 +52,16 @@ export function AssessmentObjectHeader({
             RPA-vurdering
           </p>
           <div className="flex flex-wrap items-center gap-2">
-            <Badge variant="secondary" className="font-medium">
-              {PIPELINE_STATUS_LABELS[pipelineStatus]}
-            </Badge>
+            {canEditPipeline && assessmentId ? (
+              <PipelineStatusSelect
+                assessmentId={assessmentId}
+                value={pipelineStatus}
+              />
+            ) : (
+              <Badge variant="secondary" className="font-medium">
+                {PIPELINE_STATUS_LABELS[pipelineStatus]}
+              </Badge>
+            )}
             {hasRosAnalysisLink ? (
               <Badge
                 variant="outline"

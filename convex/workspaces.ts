@@ -223,7 +223,6 @@ export const update = mutation({
     githubProjectSingleSelectFieldId: v.optional(
       v.union(v.string(), v.null()),
     ),
-    githubProjectIterationFieldId: v.optional(v.union(v.string(), v.null())),
   },
   handler: async (ctx, args) => {
     const userId = await requireUserId(ctx);
@@ -243,11 +242,8 @@ export const update = mutation({
       githubAutoRegisterProcessOnCreate?: boolean;
       githubAutoRegisterProcessStatusOptionId?: string;
       githubProjectSingleSelectFieldId?: string;
-      githubProjectIterationFieldId?: string;
       githubProjectStatusFieldCacheAt?: undefined;
       githubProjectStatusFieldCache?: undefined;
-      githubProjectIterationFieldCacheAt?: undefined;
-      githubProjectIterationFieldCache?: undefined;
     } = {};
     if (args.name !== undefined) {
       patch.name = args.name.trim() || "Uten navn";
@@ -304,8 +300,6 @@ export const update = mutation({
       if (oldP !== newP) {
         patch.githubProjectStatusFieldCacheAt = undefined;
         patch.githubProjectStatusFieldCache = undefined;
-        patch.githubProjectIterationFieldCacheAt = undefined;
-        patch.githubProjectIterationFieldCache = undefined;
       }
     }
     if (args.githubAutoRegisterProcessOnCreate !== undefined) {
@@ -332,24 +326,13 @@ export const update = mutation({
         patch.githubProjectStatusFieldCache = undefined;
       }
     }
-    if (args.githubProjectIterationFieldId !== undefined) {
-      const raw = args.githubProjectIterationFieldId;
-      patch.githubProjectIterationFieldId =
-        raw === null || raw.trim() === "" ? undefined : raw.trim();
-      const oldIt = existing.githubProjectIterationFieldId?.trim() ?? "";
-      const newIt = patch.githubProjectIterationFieldId ?? "";
-      if (oldIt !== newIt) {
-        patch.githubProjectIterationFieldCacheAt = undefined;
-        patch.githubProjectIterationFieldCache = undefined;
-      }
-    }
     await ctx.db.patch(args.workspaceId, patch);
     return null;
   },
 });
 
 /**
- * Sletter arbeidsområde og all tilhørende data (vurderinger, kandidater, org., sprint, invitasjoner).
+ * Sletter arbeidsområde og all tilhørende data (vurderinger, kandidater, org., invitasjoner).
  * Kun eier. Krever at `confirmName` matcher navnet nøyaktig (trimmet).
  */
 export const remove = mutation({
@@ -389,16 +372,6 @@ export const remove = mutation({
       .collect();
     for (const c of candidateRows) {
       await ctx.db.delete(c._id);
-    }
-
-    const sprintRows = await ctx.db
-      .query("sprints")
-      .withIndex("by_workspace", (q) =>
-        q.eq("workspaceId", args.workspaceId),
-      )
-      .collect();
-    for (const s of sprintRows) {
-      await ctx.db.delete(s._id);
     }
 
     const orgContacts = await ctx.db
@@ -700,6 +673,57 @@ export const setDefaultWorkspace = mutation({
       await ctx.db.insert("userSettings", {
         userId,
         defaultWorkspaceId: args.workspaceId,
+      });
+    }
+    return null;
+  },
+});
+
+/** «Ikke vis mer» på prosessregister-veiledning — lagres per bruker. */
+export const dismissProsessregisterTutorial = mutation({
+  args: {},
+  handler: async (ctx) => {
+    const userId = await requireUserId(ctx);
+    const existing = await ctx.db
+      .query("userSettings")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .unique();
+    if (existing) {
+      await ctx.db.patch(existing._id, {
+        prosessregisterTutorialDismissed: true,
+      });
+    } else {
+      await ctx.db.insert("userSettings", {
+        userId,
+        prosessregisterTutorialDismissed: true,
+      });
+    }
+    return null;
+  },
+});
+
+/**
+ * Slår av/på veiledning for prosessregister (dashboard).
+ * Når enabled=true, nullstilles «ikke vis mer» slik at veiledning kan vises igjen.
+ */
+export const setProsessregisterTutorialEnabled = mutation({
+  args: { enabled: v.boolean() },
+  handler: async (ctx, args) => {
+    const userId = await requireUserId(ctx);
+    const existing = await ctx.db
+      .query("userSettings")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .unique();
+    if (existing) {
+      await ctx.db.patch(existing._id, {
+        prosessregisterTutorialEnabled: args.enabled,
+        ...(args.enabled ? { prosessregisterTutorialDismissed: false } : {}),
+      });
+    } else {
+      await ctx.db.insert("userSettings", {
+        userId,
+        prosessregisterTutorialEnabled: args.enabled,
+        ...(args.enabled ? { prosessregisterTutorialDismissed: false } : {}),
       });
     }
     return null;

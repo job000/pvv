@@ -94,7 +94,7 @@ function levelBadge(level: number) {
   return (
     <span
       className={cn(
-        "inline-flex h-6 min-w-6 items-center justify-center rounded-md border px-1.5 text-xs font-bold tabular-nums",
+        "inline-flex h-8 min-w-8 shrink-0 items-center justify-center rounded-lg border px-2 text-xs font-bold tabular-nums shadow-sm",
         cellRiskClass(level),
       )}
     >
@@ -305,36 +305,46 @@ export function RosRiskList({
   if (!rowLabels.length || !colLabels.length) return null;
 
   return (
-    <div className="space-y-3">
-      <div className="flex items-center justify-between gap-3">
-        <div>
-          <h3 className="text-sm font-semibold">Identifiserte risikoer</h3>
-          <p className="text-muted-foreground text-xs">
-            Legg til risiko, velg sannsynlighet og konsekvens — matrisen oppdateres automatisk.
+    <div
+      className="space-y-4"
+      role="region"
+      aria-labelledby="ros-risk-list-heading"
+    >
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between sm:gap-6">
+        <div className="min-w-0 space-y-1.5">
+          <p className="text-muted-foreground text-[11px] font-semibold uppercase tracking-[0.12em]">
+            Register
+          </p>
+          <h3
+            id="ros-risk-list-heading"
+            className="font-heading text-base font-semibold tracking-tight text-foreground"
+          >
+            Identifiserte risikoer
+          </h3>
+          <p className="text-muted-foreground max-w-prose text-[13px] leading-relaxed">
+            Punkter først — matrisen oppdateres automatisk.
           </p>
         </div>
         {!readOnly && (
-          <div className="flex flex-wrap gap-2">
+          /* Primær til venstre på mobil (tommel-sone), sekundær under; skrivebord: sekundær | primær */
+          <div className="flex w-full flex-col-reverse gap-2 sm:w-auto sm:flex-row sm:items-center sm:justify-end sm:gap-2">
             {workspaceId ? (
               <Button
                 type="button"
-                size="sm"
-                variant="secondary"
-                className="gap-1.5"
+                variant="outline"
+                className="h-11 min-h-[44px] w-full gap-2 px-4 text-[13px] font-medium sm:h-10 sm:min-h-0 sm:w-auto"
                 onClick={() => setLibraryOpen(true)}
               >
-                <Library className="size-3.5" />
+                <Library className="size-4 shrink-0" aria-hidden />
                 Fra bibliotek
               </Button>
             ) : null}
             <Button
               type="button"
-              size="sm"
-              variant="outline"
-              className="gap-1.5"
+              className="h-11 min-h-[44px] w-full gap-2 px-4 text-[13px] font-semibold shadow-sm sm:h-10 sm:min-h-0 sm:w-auto"
               onClick={handleAdd}
             >
-              <Plus className="size-3.5" />
+              <Plus className="size-4 shrink-0" aria-hidden />
               Legg til risiko
             </Button>
           </div>
@@ -342,34 +352,31 @@ export function RosRiskList({
       </div>
 
       {sortedRisks.length === 0 ? (
-        <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed border-primary/25 bg-primary/[0.02] p-8 text-center">
-          <div className="bg-primary/10 flex size-12 items-center justify-center rounded-full">
-            <Plus className="text-primary size-6" />
+        <div className="flex flex-col items-center gap-4 rounded-2xl border border-dashed border-primary/20 bg-gradient-to-b from-primary/[0.03] to-transparent p-10 text-center ring-1 ring-primary/10">
+          <div className="bg-primary/12 flex size-14 items-center justify-center rounded-2xl ring-1 ring-primary/15">
+            <Plus className="text-primary size-7" strokeWidth={1.5} />
           </div>
           <div>
             <p className="text-foreground text-sm font-medium">
               Ingen risikoer ennå
             </p>
             <p className="text-muted-foreground mt-1 text-xs leading-relaxed">
-              Klikk «Legg til risiko» for å identifisere din første risiko.
-              <br />
-              Velg sannsynlighet og konsekvens — matrisen fylles ut automatisk.
+              Bruk «Legg til risiko» for å komme i gang.
             </p>
           </div>
           {!readOnly && (
             <Button
               type="button"
-              size="sm"
               onClick={handleAdd}
-              className="mt-1 gap-1.5"
+              className="mt-1 h-11 min-h-[44px] gap-2 px-6 text-[13px] font-semibold shadow-sm sm:h-10 sm:min-h-0"
             >
-              <Plus className="size-3.5" />
+              <Plus className="size-4 shrink-0" aria-hidden />
               Legg til første risiko
             </Button>
           )}
         </div>
       ) : (
-        <div className="space-y-2">
+        <ul className="space-y-3" aria-label="Liste over risikoer">
           {sortedRisks.map((risk) => {
             const bLvl = beforeLevel(risk.beforeRow, risk.beforeCol);
             const aLvl = afterLevel(risk.afterRow, risk.afterCol);
@@ -380,22 +387,25 @@ export function RosRiskList({
               rosTasks?.filter((t) => t.linkedCellItemId === risk.id) ?? [];
 
             return (
-              <div
+              <li
                 key={risk.id}
                 data-risk-id={risk.id}
                 className={cn(
-                  "rounded-xl border bg-card transition-all",
-                  highlighted && "ring-2 ring-primary/40",
-                  expanded && "shadow-md",
+                  "list-none rounded-2xl border border-border/45 bg-card shadow-sm transition-[box-shadow,ring] duration-200 ring-1 ring-black/[0.02] hover:shadow-md dark:ring-white/[0.04]",
+                  highlighted && "ring-2 ring-primary/35 shadow-md",
+                  expanded && "shadow-md ring-1 ring-black/[0.05] dark:ring-white/[0.08]",
                 )}
               >
-                {/* Compact header row */}
+                {/* Kompakt rad: min. 44px touch-mål (WCAG 2.5.5 / M3 / Fluent) */}
                 <button
                   type="button"
-                  className="flex w-full items-start gap-3 px-4 py-3 text-left"
+                  aria-expanded={expanded}
+                  aria-controls={`ros-risk-expand-${risk.id}`}
+                  id={`ros-risk-trigger-${risk.id}`}
+                  className="flex min-h-[48px] w-full items-center gap-3 px-4 py-3 text-left sm:min-h-[44px] sm:items-start sm:py-3.5"
                   onClick={() => setExpandedId(expanded ? null : risk.id)}
                 >
-                  <div className="flex shrink-0 items-center gap-1.5 pt-0.5">
+                  <div className="flex shrink-0 items-center gap-1.5 self-center sm:pt-0.5">
                     {levelBadge(bLvl)}
                     {(afterOpen || risk.afterRow !== risk.beforeRow || risk.afterCol !== risk.beforeCol) && (
                       <>
@@ -434,18 +444,26 @@ export function RosRiskList({
                       )}
                     </div>
                   </div>
-                  <div className="shrink-0 pt-1">
+                  <span
+                    className="text-muted-foreground flex size-11 shrink-0 items-center justify-center rounded-lg sm:size-10"
+                    aria-hidden
+                  >
                     {expanded ? (
-                      <ChevronUp className="text-muted-foreground size-4" />
+                      <ChevronUp className="size-5" />
                     ) : (
-                      <ChevronDown className="text-muted-foreground size-4" />
+                      <ChevronDown className="size-5" />
                     )}
-                  </div>
+                  </span>
                 </button>
 
                 {/* Expanded editor */}
                 {expanded && !readOnly && (
-                  <div className="space-y-4 border-t px-4 pb-4 pt-3">
+                  <div
+                    id={`ros-risk-expand-${risk.id}`}
+                    role="region"
+                    aria-labelledby={`ros-risk-trigger-${risk.id}`}
+                    className="space-y-4 border-t border-border/50 px-4 pb-4 pt-4"
+                  >
                     {/* Description */}
                     <div className="space-y-1.5">
                       <label className="text-xs font-medium">Beskrivelse</label>
@@ -726,10 +744,10 @@ export function RosRiskList({
                     </div>
                   </div>
                 )}
-              </div>
+              </li>
             );
           })}
-        </div>
+        </ul>
       )}
 
       {workspaceId ? (

@@ -116,23 +116,26 @@ export function RosDashboardPanel({
 
   return (
     <div className="space-y-8">
-      <div className="border-border/50 bg-muted/15 rounded-2xl border p-4 sm:p-5">
-        <div className="flex items-start gap-3">
-          <div className="bg-primary/12 text-primary flex size-10 shrink-0 items-center justify-center rounded-xl">
-            <BookOpen className="size-4" aria-hidden />
+      <div className="rounded-3xl border border-border/40 bg-card p-5 shadow-[0_1px_3px_rgba(0,0,0,0.04)] ring-1 ring-black/[0.03] sm:p-6 dark:ring-white/[0.05]">
+        <div className="flex items-start gap-4">
+          <div className="bg-primary/12 text-primary flex size-11 shrink-0 items-center justify-center rounded-2xl ring-1 ring-primary/15">
+            <BookOpen className="size-5" aria-hidden />
           </div>
           <div className="min-w-0 space-y-2">
-            <h2 className="font-heading text-base font-semibold sm:text-lg">
+            <p className="text-muted-foreground text-[11px] font-semibold uppercase tracking-[0.12em]">
+              Dashboard
+            </p>
+            <h2 className="font-heading text-lg font-semibold tracking-tight sm:text-xl">
               Oversikt
             </h2>
-            <p className="text-muted-foreground text-sm leading-relaxed">
-              Her ser du <strong className="text-foreground">samlet risiko</strong> på
-              tvers av ROS-analyser (celleverdier <strong className="text-foreground">0–5</strong>
-              ). <strong className="text-foreground">ROS kan brukes alene</strong> — kobling
+            <p className="text-muted-foreground text-[15px] leading-relaxed">
+              Her ser du <strong className="text-foreground font-medium">samlet risiko</strong> på
+              tvers av ROS-analyser (celleverdier <strong className="text-foreground font-medium">0–5</strong>
+              ). <strong className="text-foreground font-medium">ROS kan brukes alene</strong> — kobling
               til PVV eller prosess er valgfritt.
             </p>
             <p className="text-muted-foreground text-xs leading-relaxed">
-              Forklaring av nivå <strong className="text-foreground">1–5</strong> på
+              Forklaring av nivå <strong className="text-foreground font-medium">1–5</strong> på
               sannsynlighet og konsekvens ligger i boksen{" "}
               <strong className="text-foreground">«Hva betyr tallene …»</strong> over fanene
               (åpen som standard).
@@ -142,9 +145,9 @@ export function RosDashboardPanel({
       </div>
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]">
-        <Card className="border-primary/15 overflow-hidden">
-          <CardHeader className="border-b border-border/50 bg-muted/15">
-            <CardTitle className="flex items-center gap-2 text-base">
+        <Card className="overflow-hidden border-border/40 shadow-[0_1px_3px_rgba(0,0,0,0.04)] ring-1 ring-black/[0.03] dark:ring-white/[0.05]">
+          <CardHeader className="border-b border-border/45 bg-gradient-to-b from-muted/35 to-transparent">
+            <CardTitle className="flex items-center gap-2 text-base font-semibold tracking-tight">
               <BarChart3 className="size-4" aria-hidden />
               Totalt i arbeidsområdet
             </CardTitle>

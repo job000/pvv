@@ -86,7 +86,7 @@ export function downloadAssessmentPdf(data: AssessmentPdfInput): void {
   }
   addRow("Prosessnavn", data.processName || "—");
   addRow("Referanse", data.candidateId || "—");
-  addRow("Leveransestatus", data.pipelineLabel);
+  addRow("Pipelinestatus", data.pipelineLabel);
   addRow("Risiko (ROS)", data.rosLabel);
   addRow("Personvern (PDD)", data.pddLabel);
 

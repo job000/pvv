@@ -153,3 +153,8 @@
     transform: translate3d(-5%, 4%, 0) scale(1);
   }
 }
+
+/* Brukerinnstillinger — kompakt visningsmåte */
+html[data-ui-density="compact"] {
+  font-size: 0.9375rem;
+}

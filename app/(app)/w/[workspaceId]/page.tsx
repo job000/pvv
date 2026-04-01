@@ -14,7 +14,6 @@ import {
   Bell,
   Building2,
   ClipboardList,
-  LayoutGrid,
   Settings2,
   Share2,
   Shield,
@@ -60,12 +59,6 @@ export default function WorkspaceOverviewPage() {
       icon: ClipboardList,
     },
     {
-      href: `/w/${wid}/leveranse`,
-      title: "Leveranse",
-      desc: "Pipeline, sprint og prioritering",
-      icon: LayoutGrid,
-    },
-    {
       href: `/w/${wid}/vurderinger?fane=prosesser`,
       title: "Prosessregister",
       desc: "Prosesser med ID før ny vurdering",
@@ -104,54 +97,80 @@ export default function WorkspaceOverviewPage() {
   ];
 
   return (
-    <div className="space-y-10">
-      <header className="space-y-2 border-b border-border/50 pb-6">
-        <p className="text-muted-foreground text-[0.65rem] font-semibold uppercase tracking-[0.14em]">
-          Oversikt
-        </p>
-        <h1 className="font-heading text-2xl font-semibold tracking-tight sm:text-3xl">
-          {workspace.name}
-        </h1>
-        <p className="text-muted-foreground max-w-prose text-sm leading-relaxed">
-          Rolle:{" "}
-          <span className="text-foreground font-medium">
-            {membership?.role
-              ? WORKSPACE_ROLE_LABEL_NB[membership.role] ?? membership.role
-              : "—"}
-          </span>
-          . Nøkkeltall, ROS-koblinger og siste aktivitet for arbeidsområdet.
-        </p>
-        {workspace.notes ? (
-          <p className="mt-3 rounded-xl border border-border/60 bg-muted/25 px-4 py-3 text-sm leading-relaxed">
-            {workspace.notes}
+    <div className="space-y-10 pb-4">
+      <header className="relative overflow-hidden rounded-3xl border border-border/40 bg-card px-5 py-7 shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_-4px_rgba(0,0,0,0.06)] ring-1 ring-black/[0.03] dark:ring-white/[0.06] sm:px-8 sm:py-8">
+        <div
+          className="pointer-events-none absolute inset-0 opacity-[0.4] dark:opacity-[0.22]"
+          style={{
+            backgroundImage: `radial-gradient(circle at 1px 1px, oklch(0.55 0 0 / 0.08) 1px, transparent 0)`,
+            backgroundSize: "24px 24px",
+          }}
+          aria-hidden
+        />
+        <div
+          className="pointer-events-none absolute -right-20 -top-16 h-64 w-64 rounded-full bg-gradient-to-br from-primary/[0.12] to-transparent blur-3xl"
+          aria-hidden
+        />
+        <div className="relative space-y-3">
+          <p className="text-muted-foreground text-[11px] font-semibold uppercase tracking-[0.14em]">
+            Arbeidsområde
           </p>
-        ) : null}
+          <h1 className="font-heading text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
+            {workspace.name}
+          </h1>
+          <p className="text-muted-foreground max-w-prose text-[15px] leading-relaxed">
+            Rolle:{" "}
+            <span className="text-foreground font-medium">
+              {membership?.role
+                ? WORKSPACE_ROLE_LABEL_NB[membership.role] ?? membership.role
+                : "—"}
+            </span>
+            . Nøkkeltall, ROS-koblinger og siste aktivitet for arbeidsområdet.
+          </p>
+          {workspace.notes ? (
+            <p className="mt-4 rounded-2xl border border-border/45 bg-muted/25 px-4 py-3 text-sm leading-relaxed ring-1 ring-black/[0.03] dark:ring-white/[0.05]">
+              {workspace.notes}
+            </p>
+          ) : null}
+        </div>
       </header>
 
       <section aria-labelledby="dash-metrics-heading" className="space-y-4">
-        <h2
-          id="dash-metrics-heading"
-          className="font-heading text-base font-semibold tracking-tight"
-        >
-          Nøkkeltall
-        </h2>
+        <div>
+          <p className="text-muted-foreground text-[11px] font-semibold uppercase tracking-[0.12em]">
+            Oversikt
+          </p>
+          <h2
+            id="dash-metrics-heading"
+            className="font-heading mt-1 text-base font-semibold tracking-tight text-foreground sm:text-lg"
+          >
+            Nøkkeltall
+          </h2>
+        </div>
         <WorkspaceOperationalDashboard workspaceId={workspaceId} />
       </section>
 
-      <section className="space-y-3">
-        <h2 className="font-heading text-base font-semibold tracking-tight">
-          Snarveier
-        </h2>
+      <section className="space-y-4">
+        <div>
+          <p className="text-muted-foreground text-[11px] font-semibold uppercase tracking-[0.12em]">
+            Navigasjon
+          </p>
+          <h2 className="font-heading mt-1 text-base font-semibold tracking-tight text-foreground sm:text-lg">
+            Snarveier
+          </h2>
+        </div>
         <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {shortcuts.map(({ href, title, desc, icon: Icon }) => (
             <li key={href}>
               <Link
                 href={href}
-                className="hover:border-primary/35 flex gap-3 rounded-xl border border-border/60 bg-card p-4 shadow-sm transition-all hover:bg-muted/40 hover:shadow-md"
+                className="hover:border-primary/30 flex min-h-[52px] gap-3 rounded-2xl border border-border/45 bg-card p-4 shadow-[0_1px_3px_rgba(0,0,0,0.04)] ring-1 ring-black/[0.03] transition-all hover:bg-muted/35 hover:shadow-md dark:ring-white/[0.05]"
               >
-                <Icon className="text-muted-foreground mt-0.5 size-5 shrink-0" />
+                <div className="bg-primary/10 text-primary flex size-10 shrink-0 items-center justify-center rounded-xl ring-1 ring-primary/12">
+                  <Icon className="size-5" aria-hidden />
+                </div>
                 <div className="min-w-0">
-                  <p className="font-medium leading-snug">{title}</p>
+                  <p className="font-semibold leading-snug">{title}</p>
                   <p className="text-muted-foreground mt-0.5 text-xs leading-snug">
                     {desc}
                   </p>
@@ -162,20 +181,27 @@ export default function WorkspaceOverviewPage() {
         </ul>
       </section>
 
-      <section className="space-y-3">
-        <h2 className="font-heading text-base font-semibold tracking-tight">
-          Begreper
-        </h2>
-        <Card className="border-border/60 bg-muted/10">
+      <section className="space-y-4">
+        <div>
+          <p className="text-muted-foreground text-[11px] font-semibold uppercase tracking-[0.12em]">
+            Hjelp
+          </p>
+          <h2 className="font-heading mt-1 text-base font-semibold tracking-tight text-foreground sm:text-lg">
+            Begreper
+          </h2>
+        </div>
+        <Card className="rounded-2xl border-border/40 bg-muted/15 shadow-[0_1px_3px_rgba(0,0,0,0.03)] ring-1 ring-black/[0.03] dark:ring-white/[0.05]">
           <CardHeader className="pb-2">
-            <CardTitle className="text-base">Prosess, vurdering og ROS</CardTitle>
+            <CardTitle className="text-base font-semibold">
+              Prosess, vurdering og ROS
+            </CardTitle>
             <CardDescription className="text-sm leading-relaxed">
               <strong className="text-foreground">Prosessregisteret</strong> (
               {candidates.length}{" "}
               {candidates.length === 1 ? "prosess" : "prosesser"}) lister
               prosesser med ID. En{" "}
               <strong className="text-foreground">vurdering</strong> er én
-              automatiseringssak (skjema, prioritet, leveranse).{" "}
+              automatiseringssak (skjema, prioritet, pipeline-status).{" "}
               <strong className="text-foreground">ROS</strong> er
               risikoanalyse og kobles til vurderinger ved behov — uavhengig av
               registeret.

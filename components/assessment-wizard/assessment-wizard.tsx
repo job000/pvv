@@ -62,7 +62,7 @@ import {
   Share2,
   Trash2,
 } from "lucide-react";
-import { useRouter } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 const SAMARBEID_SLIDE_INDEX =
@@ -113,6 +113,8 @@ function parseKpiNumber(
 type Props = { assessmentId: Id<"assessments"> };
 
 export function AssessmentWizard({ assessmentId }: Props) {
+  const params = useParams();
+  const workspaceIdParam = params.workspaceId as Id<"workspaces"> | undefined;
   const data = useQuery(api.assessments.getDraft, { assessmentId });
   const access = useQuery(api.assessments.getMyAccess, { assessmentId });
   const collaborators = useQuery(api.assessments.listCollaborators, {
@@ -146,17 +148,36 @@ export function AssessmentWizard({ assessmentId }: Props) {
   } | null>(null);
   const [leaveWizardOpen, setLeaveWizardOpen] = useState(false);
   const router = useRouter();
+
+  const goneFromServer =
+    data !== undefined &&
+    access !== undefined &&
+    data === null &&
+    access === null;
+
+  useEffect(() => {
+    if (goneFromServer && workspaceIdParam) {
+      router.replace(`/w/${workspaceIdParam}/vurderinger`);
+    }
+  }, [goneFromServer, router, workspaceIdParam]);
   const payloadRef = useRef<AssessmentPayload | null>(null);
   const draftRevisionRef = useRef<number | null>(null);
   /** Seriell kø — hindrer to auto-lagre med samme revisjon (falsk «konflikt» mot seg selv) */
   const saveQueueTailRef = useRef(Promise.resolve());
   const canEditRef = useRef(false);
+  /** Begrenser hvor ofte musehjul/trackpad kan bytte steg (unngår «hopping»). */
+  const lastWheelStepAtRef = useRef(0);
   if (payload) payloadRef.current = payload;
   const [emblaRef, emblaApi] = useEmblaCarousel({
     align: "center",
     loop: false,
     containScroll: "trimSnaps",
     dragFree: false,
+    watchDrag: true,
+    /** Høyere = roligere animasjon ved stegbytte (standard 25 er veldig kvikk). */
+    duration: 68,
+    /** Mer horisontal bevegelse før klikk undertrykkes etter drag (mindre uhell). */
+    dragThreshold: 22,
   });
   const [slide, setSlide] = useState(0);
 
@@ -398,6 +419,49 @@ export function AssessmentWizard({ assessmentId }: Props) {
     emblaApi.on("select", () => setSlide(emblaApi.selectedScrollSnap()));
   }, [emblaApi]);
 
+  /** Horisontalt hjul / trackpad (Shift+hjul vertikalt) — tregere og med cooldown. */
+  useEffect(() => {
+    if (!emblaApi) return;
+    const root = emblaApi.rootNode();
+    const COOLDOWN_MS = 520;
+    const MIN_DELTA = 32;
+    const VERT_RATIO = 1.45;
+    const onWheel = (e: WheelEvent) => {
+      const el = e.target;
+      if (
+        el instanceof Element &&
+        el.closest(
+          "input, textarea, select, [contenteditable=true], [data-wizard-no-step-wheel]",
+        )
+      ) {
+        return;
+      }
+      const now = performance.now();
+      if (now - lastWheelStepAtRef.current < COOLDOWN_MS) {
+        return;
+      }
+      const horizontal = e.shiftKey ? e.deltaY : e.deltaX;
+      const vertical = e.shiftKey ? e.deltaX : e.deltaY;
+      if (Math.abs(horizontal) < MIN_DELTA) return;
+      if (!e.shiftKey && Math.abs(horizontal) < Math.abs(vertical) * VERT_RATIO) {
+        return;
+      }
+      if (horizontal > 0) {
+        if (!emblaApi.canScrollNext()) return;
+        e.preventDefault();
+        lastWheelStepAtRef.current = now;
+        emblaApi.scrollNext();
+      } else {
+        if (!emblaApi.canScrollPrev()) return;
+        e.preventDefault();
+        lastWheelStepAtRef.current = now;
+        emblaApi.scrollPrev();
+      }
+    };
+    root.addEventListener("wheel", onWheel, { passive: false });
+    return () => root.removeEventListener("wheel", onWheel);
+  }, [emblaApi]);
+
   useEffect(() => {
     if (!emblaApi) return;
     const go = () => {
@@ -430,6 +494,17 @@ export function AssessmentWizard({ assessmentId }: Props) {
     return (
       <div className="flex min-h-[40vh] items-center justify-center">
         <div className="size-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+      </div>
+    );
+  }
+
+  if (goneFromServer) {
+    return (
+      <div className="flex min-h-[40vh] flex-col items-center justify-center gap-3 text-center">
+        <div className="size-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+        <p className="text-muted-foreground text-sm">
+          Vurderingen finnes ikke lenger (slettet). Du sendes til oversikten …
+        </p>
       </div>
     );
   }
@@ -495,11 +570,13 @@ export function AssessmentWizard({ assessmentId }: Props) {
       {rosContext !== undefined ? (
         <AssessmentObjectHeader
           workspaceId={assessment.workspaceId}
+          assessmentId={assessment._id}
           pipelineStatus={pipelineStatusNorm}
           ownerName={ownerDisplayName}
           hasRosAnalysisLink={hasRosAnalysisLink}
           nextStepLabel={nextStepHint(pipelineStatusNorm)}
           firstRosAnalysisId={firstRosAnalysisId}
+          canEditPipeline={canEdit}
         />
       ) : (
         <div className="bg-muted/30 h-24 animate-pulse rounded-xl border border-border/50" />
@@ -577,7 +654,7 @@ export function AssessmentWizard({ assessmentId }: Props) {
                   )
                 ) {
                   void deleteAssessment({ assessmentId }).then(() => {
-                    router.push(`/w/${assessment.workspaceId}/vurderinger`);
+                    router.replace(`/w/${assessment.workspaceId}/vurderinger`);
                   });
                 }
               }}
@@ -653,8 +730,24 @@ export function AssessmentWizard({ assessmentId }: Props) {
         </div>
       </div>
 
+      <p id="wizard-gesture-hint" className="sr-only">
+        Sveip horisontalt med finger, eller dra med mus på steget, for å gå til
+        neste eller forrige hovedsteg. På desktop kan du bruke horisontalt
+        musehjul eller holde Shift og bruke hjulet vertikalt.
+      </p>
+      <p
+        className="text-muted-foreground px-1 text-center text-[11px] leading-snug sm:hidden"
+        aria-hidden
+      >
+        Sveip ← → mellom steg · eller bruk knappene under
+      </p>
+
       <div className="overflow-hidden rounded-2xl border border-border/70 bg-card/50 shadow-md backdrop-blur-[2px]">
-        <div ref={emblaRef} className="touch-pan-y">
+        <div
+          ref={emblaRef}
+          className="cursor-grab touch-manipulation active:cursor-grabbing"
+          aria-describedby="wizard-gesture-hint"
+        >
           <div className="flex">
             <Slide>
               <CardHeader className="space-y-2 pb-2">
