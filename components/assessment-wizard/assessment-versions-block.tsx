@@ -15,12 +15,14 @@ import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import type { AssessmentPayload } from "@/lib/assessment-types";
 import { labelAssessmentPayloadField } from "@/lib/assessment-payload-field-labels";
+import { toast } from "@/lib/app-toast";
 import { formatUserFacingError } from "@/lib/user-facing-error";
 import { useMutation, useQuery } from "convex/react";
 import {
   Eye,
   GitCompare,
   History,
+  Layers,
   RotateCcw,
   Trash2,
   X,
@@ -106,6 +108,59 @@ export function AssessmentVersionsBlock({
     setCompareOpen(true);
   }, [versionOptions]);
 
+  const setViewFromSelect = useCallback((raw: string) => {
+    setActionError(null);
+    if (raw === "draft" || raw === "") {
+      setPreviewVersion(null);
+      return;
+    }
+    const n = Number(raw);
+    if (Number.isFinite(n) && n > 0) {
+      setPreviewVersion(n);
+    }
+  }, []);
+
+  const runRestore = useCallback(
+    (version: number) => {
+      setActionError(null);
+      setPreviewVersion(null);
+      return restoreDraftFromVersion({
+        assessmentId,
+        version,
+      })
+        .then((result) => {
+          if (result?.payload && onDraftRestored) {
+            onDraftRestored(result.payload, {
+              revision: result.revision,
+            });
+          }
+          toast.success(`Utkastet er satt til innhold fra v${version}.`);
+        })
+        .catch((e: unknown) => {
+          setActionError(formatUserFacingError(e));
+        });
+    },
+    [assessmentId, onDraftRestored, restoreDraftFromVersion],
+  );
+
+  const runDelete = useCallback(
+    (version: number) => {
+      setActionError(null);
+      return deleteAssessmentVersion({
+        assessmentId,
+        version,
+      })
+        .then(() => {
+          setPreviewVersion((prev) => (prev === version ? null : prev));
+          toast.success(`Milepæl v${version} er slettet.`);
+        })
+        .catch((e: unknown) => {
+          setActionError(formatUserFacingError(e));
+        });
+    },
+    [assessmentId, deleteAssessmentVersion],
+  );
+
   useEffect(() => {
     if (
       previewRequestVersion == null ||
@@ -125,7 +180,7 @@ export function AssessmentVersionsBlock({
 
   return (
     <div id="versjoner" className="scroll-mt-28 space-y-4">
-      <div className="flex flex-wrap items-start justify-between gap-3">
+      <div className="flex flex-wrap items-start gap-3">
         <div className="flex items-start gap-2">
           <History className="text-primary mt-0.5 size-5 shrink-0" aria-hidden />
           <div>
@@ -141,19 +196,62 @@ export function AssessmentVersionsBlock({
             </p>
           </div>
         </div>
-        {versionOptions.length >= 2 ? (
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="shrink-0 gap-1.5"
-            onClick={openCompare}
-          >
-            <GitCompare className="size-3.5" aria-hidden />
-            Sammenlign
-          </Button>
-        ) : null}
       </div>
+
+      {versionOptions.length > 0 ? (
+        <div className="rounded-2xl border border-primary/20 bg-gradient-to-br from-primary/[0.05] to-muted/25 p-4 shadow-sm ring-1 ring-primary/10">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+            <div className="min-w-0 flex-1 space-y-2">
+              <div className="flex items-center gap-2">
+                <Layers className="text-primary size-4 shrink-0" aria-hidden />
+                <Label
+                  htmlFor="version-quick-switch"
+                  className="text-foreground text-sm font-semibold"
+                >
+                  Bytt visning (utkast eller milepæl)
+                </Label>
+              </div>
+              <p className="text-muted-foreground text-xs leading-relaxed">
+                <strong className="text-foreground">Utkast</strong> er det aktive
+                skjemaet. Velg en <strong className="text-foreground">milepæl</strong>{" "}
+                for å se et fryst tidspunkt — derfra kan du gjenopprette eller slette.
+              </p>
+              <select
+                id="version-quick-switch"
+                className="border-input bg-background focus-visible:ring-primary/30 h-11 w-full max-w-2xl rounded-xl border px-3 text-sm font-medium shadow-sm outline-none focus-visible:ring-2"
+                value={previewVersion === null ? "draft" : String(previewVersion)}
+                onChange={(e) => setViewFromSelect(e.target.value)}
+              >
+                <option value="draft">Utkast (gjeldende redigering)</option>
+                {versionOptions.map((v) => (
+                  <option key={v._id} value={String(v.version)}>
+                    v{v.version} ·{" "}
+                    {new Date(v.createdAt).toLocaleString("nb-NO", {
+                      dateStyle: "short",
+                      timeStyle: "short",
+                    })}
+                    {v.note
+                      ? ` — ${v.note.length > 56 ? `${v.note.slice(0, 54)}…` : v.note}`
+                      : ""}
+                  </option>
+                ))}
+              </select>
+            </div>
+            {versionOptions.length >= 2 ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-10 shrink-0 gap-1.5 self-start lg:self-end"
+                onClick={openCompare}
+              >
+                <GitCompare className="size-3.5" aria-hidden />
+                Sammenlign to milepæler
+              </Button>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
 
       {actionError ? (
         <Alert variant="destructive" className="border-destructive/40 py-2">
@@ -188,7 +286,10 @@ export function AssessmentVersionsBlock({
               assessmentId,
               note: versionNote || undefined,
             })
-              .then(() => setVersionNote(""))
+              .then(() => {
+                setVersionNote("");
+                toast.success("Ny milepæl er lagret.");
+              })
               .catch((e: unknown) =>
                 setActionError(formatUserFacingError(e)),
               );
@@ -220,11 +321,11 @@ export function AssessmentVersionsBlock({
             versionOptions.map((ver) => (
               <li
                 key={ver._id}
-                className="hover:bg-muted/20 flex flex-col gap-2 px-3 py-3 sm:flex-row sm:items-center sm:justify-between"
+                className="border-border/50 bg-card/50 hover:bg-muted/15 flex flex-col gap-3 border-b px-3 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-4"
               >
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-                    <span className="font-mono text-sm font-semibold tabular-nums">
+                    <span className="bg-primary/10 text-primary font-mono rounded-md px-1.5 py-0.5 text-sm font-bold tabular-nums">
                       v{ver.version}
                     </span>
                     <span className="text-muted-foreground text-xs">
@@ -242,12 +343,12 @@ export function AssessmentVersionsBlock({
                     </p>
                   ) : null}
                 </div>
-                <div className="flex shrink-0 flex-wrap gap-1">
+                <div className="flex shrink-0 flex-wrap items-center gap-2">
                   <Button
                     type="button"
                     size="sm"
-                    variant="ghost"
-                    className="h-8 px-2"
+                    variant="secondary"
+                    className="h-9 gap-1.5"
                     onClick={() => {
                       setActionError(null);
                       setPreviewVersion(ver.version);
@@ -259,8 +360,8 @@ export function AssessmentVersionsBlock({
                   <Button
                     type="button"
                     size="sm"
-                    variant="ghost"
-                    className="h-8 px-2"
+                    variant="outline"
+                    className="h-9 gap-1.5"
                     disabled={!canEdit}
                     onClick={() => {
                       if (
@@ -269,31 +370,18 @@ export function AssessmentVersionsBlock({
                           `Gjenopprette aktivt utkast fra v${ver.version}? Ulagrede endringer i skjemaet erstattes.`,
                         )
                       ) {
-                        void restoreDraftFromVersion({
-                          assessmentId,
-                          version: ver.version,
-                        })
-                          .then((result) => {
-                            if (result?.payload && onDraftRestored) {
-                              onDraftRestored(result.payload, {
-                                revision: result.revision,
-                              });
-                            }
-                          })
-                          .catch((e: unknown) =>
-                            setActionError(formatUserFacingError(e)),
-                          );
+                        void runRestore(ver.version);
                       }
                     }}
                   >
                     <RotateCcw className="size-3.5" aria-hidden />
-                    Gjenopprett
+                    Bruk som utkast
                   </Button>
                   <Button
                     type="button"
                     size="sm"
-                    variant="ghost"
-                    className="text-destructive hover:text-destructive h-8 px-2"
+                    variant="outline"
+                    className="text-destructive hover:bg-destructive/10 border-destructive/30 hover:text-destructive h-9 gap-1.5"
                     disabled={!canEdit}
                     onClick={() => {
                       if (
@@ -302,12 +390,7 @@ export function AssessmentVersionsBlock({
                           `Slette v${ver.version} permanent? Kan ikke angres.`,
                         )
                       ) {
-                        void deleteAssessmentVersion({
-                          assessmentId,
-                          version: ver.version,
-                        }).catch((e: unknown) =>
-                          setActionError(formatUserFacingError(e)),
-                        );
+                        void runDelete(ver.version);
                       }
                     }}
                   >
@@ -329,18 +412,50 @@ export function AssessmentVersionsBlock({
         }}
       >
         <DialogContent size="lg" titleId="ver-preview-title">
-          <DialogHeader className="relative pr-10">
-            <p id="ver-preview-title" className="font-heading text-lg font-semibold">
-              Versjon {previewData?.version ?? previewVersion}
-            </p>
-            <p className="text-muted-foreground text-sm">
-              {previewData
-                ? new Date(previewData.createdAt).toLocaleString("nb-NO")
-                : null}
-              {previewData?.creatorName
-                ? ` · ${previewData.creatorName}`
-                : ""}
-            </p>
+          <DialogHeader className="relative space-y-4 pr-10">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between lg:gap-6">
+              <div className="min-w-0">
+                <p
+                  id="ver-preview-title"
+                  className="font-heading text-lg font-semibold"
+                >
+                  Milepæl v{previewData?.version ?? previewVersion}
+                </p>
+                <p className="text-muted-foreground text-sm">
+                  {previewData
+                    ? new Date(previewData.createdAt).toLocaleString("nb-NO")
+                    : null}
+                  {previewData?.creatorName
+                    ? ` · ${previewData.creatorName}`
+                    : ""}
+                </p>
+              </div>
+              {previewVersion !== null && versionOptions.length > 1 ? (
+                <div className="flex w-full min-w-0 flex-col gap-1.5 lg:max-w-[16rem]">
+                  <Label
+                    htmlFor="ver-preview-switch"
+                    className="text-muted-foreground text-xs font-medium"
+                  >
+                    Bytt til annen milepæl
+                  </Label>
+                  <select
+                    id="ver-preview-switch"
+                    className="border-input bg-background h-9 w-full rounded-lg border px-2 text-sm"
+                    value={String(previewVersion)}
+                    onChange={(e) => setViewFromSelect(e.target.value)}
+                  >
+                    {versionOptions.map((v) => (
+                      <option key={v._id} value={String(v.version)}>
+                        v{v.version}
+                        {v.note
+                          ? ` — ${v.note.length > 32 ? `${v.note.slice(0, 30)}…` : v.note}`
+                          : ""}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              ) : null}
+            </div>
             <Button
               type="button"
               variant="ghost"
@@ -403,14 +518,69 @@ export function AssessmentVersionsBlock({
               <p className="text-muted-foreground text-sm">Laster …</p>
             )}
           </DialogBody>
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={() => setPreviewVersion(null)}
-            >
-              Lukk
-            </Button>
+          <DialogFooter className="flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-2">
+            <div className="flex w-full flex-wrap gap-2 sm:w-auto">
+              {canEdit && previewVersion !== null ? (
+                <>
+                  <Button
+                    type="button"
+                    variant="default"
+                    className="gap-1.5"
+                    onClick={() => {
+                      if (!previewVersion) return;
+                      if (
+                        typeof window !== "undefined" &&
+                        !window.confirm(
+                          `Gjenopprette aktivt utkast fra v${previewVersion}? Ulagrede endringer i skjemaet erstattes.`,
+                        )
+                      ) {
+                        return;
+                      }
+                      void runRestore(previewVersion);
+                    }}
+                  >
+                    <RotateCcw className="size-3.5" aria-hidden />
+                    Bruk som aktivt utkast
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    className="gap-1.5"
+                    onClick={() => {
+                      if (!previewVersion) return;
+                      if (
+                        typeof window !== "undefined" &&
+                        !window.confirm(
+                          `Slette v${previewVersion} permanent? Kan ikke angres.`,
+                        )
+                      ) {
+                        return;
+                      }
+                      void runDelete(previewVersion);
+                    }}
+                  >
+                    <Trash2 className="size-3.5" aria-hidden />
+                    Slett milepæl
+                  </Button>
+                </>
+              ) : null}
+            </div>
+            <div className="flex w-full flex-wrap justify-end gap-2 sm:w-auto">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setViewFromSelect("draft")}
+              >
+                Tilbake til utkast
+              </Button>
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => setPreviewVersion(null)}
+              >
+                Lukk
+              </Button>
+            </div>
           </DialogFooter>
         </DialogContent>
       </Dialog>

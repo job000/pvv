@@ -141,7 +141,7 @@ export function AssessmentWizardMeta({
             htmlFor="meta-milepick"
             className="text-muted-foreground text-[10px] font-semibold uppercase tracking-wide"
           >
-            Velg milepæl
+            Forhåndsvis milepæl
           </Label>
           <select
             id="meta-milepick"
