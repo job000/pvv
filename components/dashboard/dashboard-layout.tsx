@@ -17,9 +17,6 @@ type WorkspaceRow = {
   role: string;
 };
 
-const navItem =
-  "flex min-h-[44px] items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium transition-colors sm:min-h-0 sm:py-2.5";
-
 export function DashboardLayout({
   workspaces,
   defaultWorkspaceId,
@@ -33,106 +30,104 @@ export function DashboardLayout({
 
   return (
     <div className="mx-auto flex w-full max-w-[100rem] flex-col lg:flex-row lg:items-start">
-      {/* Sidemeny — skjules på mobil; innhold har egen horisontal snarvei */}
       <aside
-        className="border-border/60 bg-muted/25 supports-[backdrop-filter]:bg-muted/20 sticky top-14 z-30 hidden h-[calc(100dvh-3.5rem)] w-60 shrink-0 flex-col border-b backdrop-blur-md lg:flex lg:border-b-0 lg:border-r xl:w-64"
+        className="border-border/40 bg-background/80 supports-[backdrop-filter]:bg-background/60 sticky top-14 z-30 hidden h-[calc(100dvh-3.5rem)] w-56 shrink-0 flex-col backdrop-blur-xl lg:flex lg:border-r"
         aria-label="Dashboard-meny"
       >
-        <nav className="flex flex-col gap-0.5 p-3 pt-5">
-          <p className="text-muted-foreground px-3 pb-2 text-[11px] font-semibold uppercase tracking-wider">
-            Navigasjon
-          </p>
-          <Link
+        <nav className="flex flex-col gap-0.5 px-2 pt-4">
+          <NavLink
             href="/dashboard?oversikt=1"
-            className={cn(
-              navItem,
-              pathname === "/dashboard"
-                ? "bg-background text-foreground shadow-sm ring-1 ring-border/80"
-                : "text-muted-foreground hover:bg-background/80 hover:text-foreground",
-            )}
+            active={pathname === "/dashboard"}
+            icon={LayoutDashboard}
           >
-            <LayoutDashboard className="size-4 shrink-0 opacity-80" aria-hidden />
             Oversikt
-          </Link>
-          <Link
+          </NavLink>
+          <NavLink
             href="/bruker/innstillinger"
-            className={cn(
-              navItem,
-              pathname?.startsWith("/bruker/")
-                ? "bg-background text-foreground shadow-sm ring-1 ring-border/80"
-                : "text-muted-foreground hover:bg-background/80 hover:text-foreground",
-            )}
+            active={pathname?.startsWith("/bruker/") ?? false}
+            icon={Settings}
           >
-            <Settings className="size-4 shrink-0 opacity-80" aria-hidden />
-            Brukerinnstillinger
-          </Link>
-          <a
-            href="#arbeidsområder"
-            className={cn(
-              navItem,
-              "text-muted-foreground hover:bg-background/80 hover:text-foreground",
-            )}
-          >
-            <FolderOpen className="size-4 shrink-0 opacity-80" aria-hidden />
-            Arbeidsområder
-          </a>
-          <a
-            href="#oppgaver"
-            className={cn(
-              navItem,
-              "text-muted-foreground hover:bg-background/80 hover:text-foreground",
-            )}
-          >
-            <CheckSquare className="size-4 shrink-0 opacity-80" aria-hidden />
-            Oppgaver
-          </a>
-          <a
-            href="#prioriteringer"
-            className={cn(
-              navItem,
-              "text-muted-foreground hover:bg-background/80 hover:text-foreground",
-            )}
-          >
-            <TrendingUp className="size-4 shrink-0 opacity-80" aria-hidden />
-            Prioriteringer
-          </a>
+            Innstillinger
+          </NavLink>
 
-          <p className="text-muted-foreground mt-6 px-3 pb-2 text-[11px] font-semibold uppercase tracking-wider">
-            Dine områder
-          </p>
-          <div className="flex max-h-[min(40vh,320px)] flex-col gap-0.5 overflow-y-auto pr-1 [-ms-overflow-style:none] [scrollbar-width:thin] [&::-webkit-scrollbar]:w-1.5">
-            {workspaces.map(({ workspace }) => {
-              const isDefault = defaultWorkspaceId === workspace._id;
-              return (
-                <Link
-                  key={workspace._id}
-                  href={`/w/${workspace._id}`}
-                  className={cn(
-                    navItem,
-                    "py-2 pl-3 pr-2",
-                    isDefault &&
-                      "border-primary/20 bg-primary/[0.06] text-foreground ring-1 ring-primary/15",
-                    !isDefault &&
-                      "text-muted-foreground hover:bg-background/80 hover:text-foreground",
-                  )}
-                >
-                  <span className="bg-primary/10 text-primary flex size-8 shrink-0 items-center justify-center rounded-lg">
-                    <FolderOpen className="size-3.5" aria-hidden />
-                  </span>
-                  <span className="min-w-0 flex-1 truncate">{workspace.name}</span>
-                  {isDefault ? (
-                    <span className="text-primary shrink-0 text-[10px] font-bold uppercase">
-                      Std
-                    </span>
-                  ) : null}
-                </Link>
-              );
-            })}
-          </div>
+          <div className="my-3 h-px bg-border/40" />
+
+          <NavLink href="#arbeidsområder" active={false} icon={FolderOpen}>
+            Områder
+          </NavLink>
+          <NavLink href="#oppgaver" active={false} icon={CheckSquare}>
+            Oppgaver
+          </NavLink>
+          <NavLink href="#prioriteringer" active={false} icon={TrendingUp}>
+            Prioriteringer
+          </NavLink>
+
+          {workspaces.length > 0 ? (
+            <>
+              <div className="my-3 h-px bg-border/40" />
+              <p className="text-muted-foreground px-2 pb-1 text-[10px] font-semibold uppercase tracking-widest">
+                Områder
+              </p>
+              <div className="flex max-h-[min(40vh,320px)] flex-col gap-px overflow-y-auto [scrollbar-width:thin]">
+                {workspaces.map(({ workspace }) => {
+                  const isDefault = defaultWorkspaceId === workspace._id;
+                  return (
+                    <Link
+                      key={workspace._id}
+                      href={`/w/${workspace._id}`}
+                      className={cn(
+                        "flex items-center gap-2 rounded-md px-2 py-1.5 text-[13px] transition-colors",
+                        isDefault
+                          ? "text-foreground font-medium"
+                          : "text-muted-foreground hover:text-foreground hover:bg-muted/50",
+                      )}
+                    >
+                      <span className="min-w-0 flex-1 truncate">
+                        {workspace.name}
+                      </span>
+                      {isDefault ? (
+                        <span className="text-primary text-[10px] font-bold">
+                          STD
+                        </span>
+                      ) : null}
+                    </Link>
+                  );
+                })}
+              </div>
+            </>
+          ) : null}
         </nav>
       </aside>
 
       <div className="min-w-0 flex-1">{children}</div>
     </div>
+  );
+}
+
+function NavLink({
+  href,
+  active,
+  icon: Icon,
+  children,
+}: {
+  href: string;
+  active: boolean;
+  icon: React.ComponentType<{ className?: string }>;
+  children: React.ReactNode;
+}) {
+  const Comp = href.startsWith("#") ? "a" : Link;
+  return (
+    <Comp
+      href={href}
+      className={cn(
+        "flex items-center gap-2.5 rounded-md px-2 py-1.5 text-[13px] font-medium transition-colors",
+        active
+          ? "bg-muted/80 text-foreground"
+          : "text-muted-foreground hover:bg-muted/50 hover:text-foreground",
+      )}
+    >
+      <Icon className="size-3.5 shrink-0 opacity-70" aria-hidden />
+      {children}
+    </Comp>
   );
 }

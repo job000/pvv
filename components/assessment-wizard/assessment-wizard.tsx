@@ -13,13 +13,6 @@ import { AssessmentWizardMeta } from "@/components/assessment-wizard/assessment-
 import { LikertField } from "@/components/rpa-assessment/likert-field";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
   Dialog,
@@ -799,11 +792,34 @@ export function AssessmentWizard({ assessmentId }: Props) {
         canEdit={canEdit}
       />
 
-      <div className="flex flex-col gap-3 rounded-2xl border border-border/60 bg-gradient-to-r from-muted/40 via-card to-muted/30 p-3 shadow-sm sm:flex-row sm:items-center sm:justify-between sm:gap-4">
-        <nav
-          className="flex flex-1 flex-wrap items-center justify-center gap-2 sm:justify-start"
-          aria-label="Hovedsteg i veiviseren"
-        >
+      {/* ── Stepper ── */}
+      <div className="rounded-2xl bg-muted/20 p-4">
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <p className="text-foreground text-sm font-semibold">
+            <span className="text-muted-foreground font-normal">
+              Steg {slide + 1}/{ASSESSMENT_WIZARD_STEP_LABELS.length}
+            </span>
+            {" · "}
+            {ASSESSMENT_WIZARD_STEP_LABELS[slide]}
+          </p>
+          <div className="flex items-center gap-2">
+            <AssessmentWizardSchemaHelp />
+            <select
+              id="wizard-step-jump"
+              className="border-input bg-background h-8 rounded-lg border px-2 text-xs shadow-sm"
+              value={slide}
+              onChange={(e) => emblaApi?.scrollTo(Number(e.target.value))}
+              aria-label="Hopp til steg"
+            >
+              {ASSESSMENT_WIZARD_STEP_LABELS.map((label, i) => (
+                <option key={label} value={i}>
+                  {i + 1}. {label}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+        <div className="flex gap-1" aria-label="Fremdrift" role="navigation">
           {ASSESSMENT_WIZARD_STEP_LABELS.map((label, i) => (
             <button
               key={label}
@@ -812,57 +828,24 @@ export function AssessmentWizard({ assessmentId }: Props) {
               aria-current={slide === i ? "step" : undefined}
               onClick={() => emblaApi?.scrollTo(i)}
               className={cn(
-                "size-2.5 rounded-full transition-all",
-                slide === i
-                  ? "bg-primary ring-primary ring-offset-background scale-125 ring-2 ring-offset-2"
-                  : i < slide
-                    ? "bg-primary/45 hover:bg-primary/60"
-                    : "bg-muted-foreground/25 hover:bg-muted-foreground/40",
+                "h-1.5 min-w-0 flex-1 rounded-full transition-all duration-200",
+                i < slide
+                  ? "bg-primary"
+                  : i === slide
+                    ? "bg-primary scale-y-[1.4]"
+                    : "bg-muted-foreground/20 hover:bg-muted-foreground/30",
               )}
             />
           ))}
-        </nav>
-        <div className="flex min-w-0 flex-col items-stretch gap-2 sm:flex-row sm:items-center sm:gap-2">
-          <p className="text-foreground text-center text-sm font-medium sm:min-w-0 sm:flex-1 sm:text-left">
-            <span className="text-muted-foreground font-normal">
-              Steg {slide + 1} av {ASSESSMENT_WIZARD_STEP_LABELS.length} ·{" "}
-            </span>
-            <span className="break-words">
-              {ASSESSMENT_WIZARD_STEP_LABELS[slide]}
-            </span>
-          </p>
-          <AssessmentWizardSchemaHelp />
-          <label htmlFor="wizard-step-jump" className="sr-only">
-            Hopp til steg
-          </label>
-          <select
-            id="wizard-step-jump"
-            className="border-input bg-background h-9 w-full min-w-0 shrink-0 rounded-lg border px-2 text-sm shadow-xs sm:w-[min(100%,14rem)]"
-            value={slide}
-            onChange={(e) => emblaApi?.scrollTo(Number(e.target.value))}
-          >
-            {ASSESSMENT_WIZARD_STEP_LABELS.map((label, i) => (
-              <option key={label} value={i}>
-                {i + 1}. {label}
-              </option>
-            ))}
-          </select>
         </div>
       </div>
 
       <p id="wizard-gesture-hint" className="sr-only">
         Sveip horisontalt med finger, eller dra med mus på steget, for å gå til
-        neste eller forrige hovedsteg. På desktop kan du bruke horisontalt
-        musehjul eller holde Shift og bruke hjulet vertikalt.
-      </p>
-      <p
-        className="text-muted-foreground px-1 text-center text-[11px] leading-snug sm:hidden"
-        aria-hidden
-      >
-        Sveip ← → mellom steg · eller bruk knappene under
+        neste eller forrige hovedsteg.
       </p>
 
-      <div className="overflow-hidden rounded-2xl border border-border/70 bg-card/50 shadow-md backdrop-blur-[2px]">
+      <div className="overflow-hidden rounded-2xl bg-card shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.06]">
         <div
           ref={emblaRef}
           className="cursor-grab touch-manipulation active:cursor-grabbing"
@@ -870,25 +853,24 @@ export function AssessmentWizard({ assessmentId }: Props) {
         >
           <div className="flex">
             <Slide>
-              <CardHeader className="space-y-2 pb-2">
-                <CardTitle className="text-xl sm:text-2xl">Prosess</CardTitle>
-                <CardDescription className="text-sm leading-relaxed">
-                  Grunnlag, beskrivelse og valgfrie kravtekster i faner — mindre
-                  scrolling. Deretter: organisasjon og ROS/PDD.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="pt-0">
-                <AssessmentProcessSlide
-                  payload={payload}
-                  canEdit={canEdit}
-                  update={update}
-                  candidates={candidates}
-                  candidatePickerKey={candidatePickerKey}
-                  bumpCandidatePickerKey={() =>
-                    setCandidatePickerKey((k) => k + 1)
-                  }
-                />
-              </CardContent>
+              <div className="space-y-1">
+                <h2 className="text-foreground text-xl font-semibold sm:text-2xl">
+                  Prosess
+                </h2>
+                <p className="text-muted-foreground text-sm">
+                  Beskriv prosessen som skal vurderes.
+                </p>
+              </div>
+              <AssessmentProcessSlide
+                payload={payload}
+                canEdit={canEdit}
+                update={update}
+                candidates={candidates}
+                candidatePickerKey={candidatePickerKey}
+                bumpCandidatePickerKey={() =>
+                  setCandidatePickerKey((k) => k + 1)
+                }
+              />
             </Slide>
 
             <Slide bare>
@@ -902,210 +884,185 @@ export function AssessmentWizard({ assessmentId }: Props) {
             </Slide>
 
             <Slide>
-              <CardHeader className="space-y-3 px-4 pb-2 pt-6 sm:px-8">
-                <CardTitle>Hvor viktig er dette for virksomheten?</CardTitle>
-                <CardDescription className="text-muted-foreground max-w-prose text-sm leading-relaxed">
-                  Konsekvens for virksomheten — ikke teknisk detalj. Brukes til
-                  prioritering. Timer regnes inn under «Tall og kost».
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="px-0 pb-4">
-                <div className="border-border/50 border-b px-6 py-5 sm:px-8 last:border-b-0">
-                  <LikertField
-                    id="cbi"
-                    label="Hvor stort er konsekvensen om denne prosessen svikter eller stopper?"
-                    hint="Tenk på tap av inntekt, pasientsikkerhet, kundetillit, omdømme og driftsstans. Høy konsekvens = viktigere å automatisere bort menneskelig feil."
-                    value={clampLikert5(payload.criticalityBusinessImpact)}
-                    onChange={(v) => update("criticalityBusinessImpact", v)}
-                    left="Minimal konsekvens"
-                    right="Svært alvorlig"
-                    scaleLabels={["Ubetydelig", "Liten", "Moderat", "Stor", "Kritisk"]}
-                    disabled={readOnly}
-                  />
-                </div>
-                <div className="border-border/50 border-b px-6 py-5 sm:px-8 last:border-b-0">
-                  <LikertField
-                    id="crr"
-                    label="Hvor strenge er regulatoriske og dokumentasjonskrav?"
-                    hint="GDPR, helselovgivning, arkivplikt, tilsyn, sertifiseringskrav. Strenge krav = høyere verdi av feilfri, sporbar automatisering."
-                    value={clampLikert5(payload.criticalityRegulatoryRisk)}
-                    onChange={(v) => update("criticalityRegulatoryRisk", v)}
-                    left="Få krav"
-                    right="Svært strenge"
-                    scaleLabels={["Minimalt", "Noe", "Moderate", "Strenge", "Svært strenge"]}
-                    disabled={readOnly}
-                  />
-                </div>
-              </CardContent>
+              <div className="space-y-1">
+                <h2 className="text-foreground text-xl font-semibold sm:text-2xl">
+                  Hvor viktig er dette for virksomheten?
+                </h2>
+                <p className="text-muted-foreground text-sm">
+                  Konsekvens for virksomheten — brukes til prioritering.
+                </p>
+              </div>
+              <div className="space-y-8">
+                <LikertField
+                  id="cbi"
+                  label="Hvor stort er konsekvensen om prosessen svikter?"
+                  hint="Tenk på tap av inntekt, pasientsikkerhet, kundetillit, omdømme og driftsstans."
+                  value={clampLikert5(payload.criticalityBusinessImpact)}
+                  onChange={(v) => update("criticalityBusinessImpact", v)}
+                  left="Minimal"
+                  right="Svært alvorlig"
+                  scaleLabels={["Ubetydelig", "Liten", "Moderat", "Stor", "Kritisk"]}
+                  disabled={readOnly}
+                />
+                <LikertField
+                  id="crr"
+                  label="Hvor strenge er regulatoriske krav?"
+                  hint="GDPR, helselovgivning, arkivplikt, tilsyn, sertifiseringskrav."
+                  value={clampLikert5(payload.criticalityRegulatoryRisk)}
+                  onChange={(v) => update("criticalityRegulatoryRisk", v)}
+                  left="Få krav"
+                  right="Svært strenge"
+                  scaleLabels={["Minimalt", "Noe", "Moderate", "Strenge", "Svært strenge"]}
+                  disabled={readOnly}
+                />
+              </div>
             </Slide>
 
             <Slide>
-              <CardHeader className="space-y-3 px-4 pb-2 pt-6 sm:px-8">
-                <CardTitle>Er prosessen og systemene forutsigbare?</CardTitle>
-                <CardDescription className="text-muted-foreground max-w-prose text-sm leading-relaxed">
-                  Robot trenger at reglene er stabile og at systemene oppfører
-                  seg likt fra uke til uke.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="px-0 pb-4">
-                <div className="border-border/50 border-b px-6 py-5 sm:px-8 last:border-b-0">
-                  <LikertField
-                    id="ps"
-                    label="Hvor stabil er selve arbeidsmåten — endres reglene og rutinene ofte?"
-                    hint="Robot trenger faste regler. Hyppige endringer i skjema, policy eller unntaksregler betyr mer vedlikehold og større risiko for at roboten gjør feil."
-                    value={clampLikert5(payload.processStability)}
-                    onChange={(v) => update("processStability", v)}
-                    left="Endrer seg ofte"
-                    right="Svært stabil"
-                    scaleLabels={["Ukentlig", "Månedlig", "Kvartalsvis", "Halvårlig", "Sjelden/aldri"]}
-                    disabled={readOnly}
-                  />
-                </div>
-                <div className="border-border/50 border-b px-6 py-5 sm:px-8 last:border-b-0">
-                  <LikertField
-                    id="as"
-                    label="Er IT-systemene stabile og forutsigbare?"
-                    hint="Robot navigerer via faste knapper, felt og menyer. Hyppige oppgraderinger, popup-vinduer, endrede skjermbilder eller treghet gjør at roboten feiler."
-                    value={clampLikert5(payload.applicationStability)}
-                    onChange={(v) => update("applicationStability", v)}
-                    left="Uforutsigbart"
-                    right="Svært stabilt"
-                    scaleLabels={["Ofte feil", "Noe ustabilt", "OK", "Forutsigbart", "Solid og stabilt"]}
-                    disabled={readOnly}
-                  />
-                </div>
-              </CardContent>
+              <div className="space-y-1">
+                <h2 className="text-foreground text-xl font-semibold sm:text-2xl">
+                  Er prosessen og systemene forutsigbare?
+                </h2>
+                <p className="text-muted-foreground text-sm">
+                  Robot trenger stabile regler og forutsigbare systemer.
+                </p>
+              </div>
+              <div className="space-y-8">
+                <LikertField
+                  id="ps"
+                  label="Hvor stabil er arbeidsmåten?"
+                  hint="Hyppige endringer i skjema, policy eller unntak betyr mer vedlikehold."
+                  value={clampLikert5(payload.processStability)}
+                  onChange={(v) => update("processStability", v)}
+                  left="Endrer seg ofte"
+                  right="Svært stabil"
+                  scaleLabels={["Ukentlig", "Månedlig", "Kvartalsvis", "Halvårlig", "Sjelden/aldri"]}
+                  disabled={readOnly}
+                />
+                <LikertField
+                  id="as"
+                  label="Er IT-systemene stabile?"
+                  hint="Hyppige oppgraderinger, popup-vinduer eller treghet gjør at roboten feiler."
+                  value={clampLikert5(payload.applicationStability)}
+                  onChange={(v) => update("applicationStability", v)}
+                  left="Uforutsigbart"
+                  right="Svært stabilt"
+                  scaleLabels={["Ofte feil", "Noe ustabilt", "OK", "Forutsigbart", "Solid og stabilt"]}
+                  disabled={readOnly}
+                />
+              </div>
             </Slide>
 
             <Slide>
-              <CardHeader className="space-y-3 px-4 pb-2 pt-6 sm:px-8">
-                <CardTitle>Automatiseringspotensial — hvor mye kan automatiseres?</CardTitle>
-                <CardDescription className="text-muted-foreground max-w-prose text-sm leading-relaxed">
-                  Tre nøkkelfaktorer avgjør hvor stor andel av prosessen en robot
-                  realistisk kan ta over: datastruktur, saksvariasjon og
-                  digitaliseringsgrad. Sammen gir de et estimat på
-                  automatiseringspotensialet i prosent.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="px-0 pb-4">
-                <div className="border-border/50 border-b px-6 py-5 sm:px-8 last:border-b-0">
-                  <LikertField
-                    id="si"
-                    label="Hvor strukturert er input-dataene?"
-                    hint="Robot håndterer faste felt, dropdown-lister og tall godt. Fritekst, e-postvedlegg, skannede PDF-er og ustrukturerte dokumenter krever AI/OCR og øker feilraten."
-                    value={clampLikert5(payload.structuredInput)}
-                    onChange={(v) => update("structuredInput", v)}
-                    left="Ustrukturert"
-                    right="Fullt strukturert"
-                    scaleLabels={["Fritekst/PDF", "Mest fritekst", "Blanding", "Mest felt", "Kun faste felt"]}
-                    disabled={readOnly}
-                  />
-                </div>
-                <div className="border-border/50 border-b px-6 py-5 sm:px-8 last:border-b-0">
-                  <LikertField
-                    id="pv"
-                    label="Hvor mye varierer sakene fra gang til gang?"
-                    hint="Robot følger faste steg. Høy variasjon (mange unntak, skjønn, spesialtilfeller) betyr at større del må håndteres manuelt."
-                    value={clampLikert5(payload.processVariability)}
-                    onChange={(v) => update("processVariability", v)}
-                    left="Nesten identiske"
-                    right="Svært ulike"
-                    scaleLabels={["< 5 % unntak", "5–15 %", "15–30 %", "30–50 %", "> 50 % unntak"]}
-                    disabled={readOnly}
-                  />
-                </div>
-                <div className="border-border/50 border-b px-6 py-5 sm:px-8 last:border-b-0">
-                  <LikertField
-                    id="dg"
-                    label="Hvor digitalisert er prosessen allerede?"
-                    hint="Robot jobber i digitale systemer. Papirskjema, fysiske signaturer, manuell sortering av post osv. må digitaliseres først — det øker kost og tid."
-                    value={clampLikert5(payload.digitization)}
-                    onChange={(v) => update("digitization", v)}
-                    left="Mye papir"
-                    right="Heldigitalt"
-                    scaleLabels={["Papirbasert", "Mest papir", "Halvt/halvt", "Mest digitalt", "100 % digitalt"]}
-                    disabled={readOnly}
-                  />
-                </div>
-              </CardContent>
+              <div className="space-y-1">
+                <h2 className="text-foreground text-xl font-semibold sm:text-2xl">
+                  Hvor mye kan automatiseres?
+                </h2>
+                <p className="text-muted-foreground text-sm">
+                  Datastruktur, variasjon og digitaliseringsgrad.
+                </p>
+              </div>
+              <div className="space-y-8">
+                <LikertField
+                  id="si"
+                  label="Hvor strukturert er input-dataene?"
+                  hint="Faste felt og tall er enkle. Fritekst og skannede dokumenter krever AI/OCR."
+                  value={clampLikert5(payload.structuredInput)}
+                  onChange={(v) => update("structuredInput", v)}
+                  left="Ustrukturert"
+                  right="Fullt strukturert"
+                  scaleLabels={["Fritekst/PDF", "Mest fritekst", "Blanding", "Mest felt", "Kun faste felt"]}
+                  disabled={readOnly}
+                />
+                <LikertField
+                  id="pv"
+                  label="Hvor mye varierer sakene?"
+                  hint="Mange unntak og spesialtilfeller betyr mer manuelt arbeid."
+                  value={clampLikert5(payload.processVariability)}
+                  onChange={(v) => update("processVariability", v)}
+                  left="Nesten identiske"
+                  right="Svært ulike"
+                  scaleLabels={["< 5 % unntak", "5–15 %", "15–30 %", "30–50 %", "> 50 % unntak"]}
+                  disabled={readOnly}
+                />
+                <LikertField
+                  id="dg"
+                  label="Hvor digitalisert er prosessen?"
+                  hint="Papir og fysiske signaturer må digitaliseres først."
+                  value={clampLikert5(payload.digitization)}
+                  onChange={(v) => update("digitization", v)}
+                  left="Mye papir"
+                  right="Heldigitalt"
+                  scaleLabels={["Papirbasert", "Mest papir", "Halvt/halvt", "Mest digitalt", "100 % digitalt"]}
+                  disabled={readOnly}
+                />
+              </div>
             </Slide>
 
             <Slide>
-              <CardHeader className="space-y-3 px-4 pb-2 pt-6 sm:px-8">
-                <CardTitle>Hvor omfattende er prosessen — og arbeidsmiljøet?</CardTitle>
-                <CardDescription className="text-muted-foreground max-w-prose text-sm leading-relaxed">
-                  Lengde på flyt, antall systemer, skanning og fjernskrivebord —
-                  påvirker hvor krevende det er å bygge.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="px-0 pb-4">
-                <div className="border-border/50 border-b px-6 py-5 sm:px-8 last:border-b-0">
-                  <LikertField
-                    id="processLength"
-                    label="Hvor lang og sammensatt er arbeidsflyten?"
-                    hint="Tell alt: klikk, tastetrykk, navigeringer, kopier/lim, menyvalg — fra du starter til du er ferdig. En kort flyt har få feilkilder; en lang flyt krever mer kartlegging."
-                    value={clampLikert5(payload.processLength)}
-                    onChange={(v) => update("processLength", v)}
-                    left="Svært kort"
-                    right="Svært lang"
-                    scaleLabels={["1–5 steg", "6–15", "16–30", "31–60", "60+"]}
-                    disabled={readOnly}
-                  />
-                </div>
-                <div className="border-border/50 border-b px-6 py-5 sm:px-8 last:border-b-0">
-                  <LikertField
-                    id="applicationCount"
-                    label="Hvor mange ulike systemer og verktøy brukes i prosessen?"
-                    hint="Inkluder alt som åpnes: fagapplikasjoner, e-post, Excel, intranett, skannerprogram, fjernskrivebord osv. Flere vinduer og pålogginger øker kompleksiteten."
-                    value={clampLikert5(payload.applicationCount)}
-                    onChange={(v) => update("applicationCount", v)}
-                    left="1 system"
-                    right="Mange systemer"
-                    scaleLabels={["1", "2", "3–4", "5–6", "7+"]}
-                    disabled={readOnly}
-                  />
-                </div>
-                <div className="space-y-6 px-6 py-5 sm:px-8">
-                  <div className="space-y-3">
-                    <div className="flex items-start gap-3">
-                      <Checkbox
-                        id="ocr"
-                        checked={payload.ocrRequired}
-                        onCheckedChange={(c) =>
-                          canEdit && update("ocrRequired", c === true)
-                        }
-                        disabled={!canEdit}
-                        className="mt-1"
-                      />
-                      <div className="space-y-2">
-                        <Label htmlFor="ocr" className="text-base leading-snug">
-                          Må dere lese tekst ut fra skannede dokumenter eller
-                          bilder?
-                        </Label>
-                        <p className="text-muted-foreground max-w-prose text-sm leading-relaxed">
-                          Huk av ved skanning, foto av papir eller PDF uten
-                          maskinlesbar tekst — krever OCR og øker ofte kost.
-                        </p>
-                      </div>
+              <div className="space-y-1">
+                <h2 className="text-foreground text-xl font-semibold sm:text-2xl">
+                  Omfang og arbeidsmiljø
+                </h2>
+                <p className="text-muted-foreground text-sm">
+                  Flytlengde, antall systemer og teknisk miljø.
+                </p>
+              </div>
+              <div className="space-y-8">
+                <LikertField
+                  id="processLength"
+                  label="Hvor lang er arbeidsflyten?"
+                  hint="Tell alle steg fra start til slutt: klikk, navigeringer, kopier/lim."
+                  value={clampLikert5(payload.processLength)}
+                  onChange={(v) => update("processLength", v)}
+                  left="Svært kort"
+                  right="Svært lang"
+                  scaleLabels={["1–5 steg", "6–15", "16–30", "31–60", "60+"]}
+                  disabled={readOnly}
+                />
+                <LikertField
+                  id="applicationCount"
+                  label="Hvor mange systemer brukes?"
+                  hint="Alt som åpnes: fagapplikasjoner, e-post, Excel, intranett osv."
+                  value={clampLikert5(payload.applicationCount)}
+                  onChange={(v) => update("applicationCount", v)}
+                  left="1 system"
+                  right="Mange systemer"
+                  scaleLabels={["1", "2", "3–4", "5–6", "7+"]}
+                  disabled={readOnly}
+                />
+                <div className="space-y-5 rounded-2xl bg-muted/15 p-4 sm:p-5">
+                  <div className="flex items-start gap-3">
+                    <Checkbox
+                      id="ocr"
+                      checked={payload.ocrRequired}
+                      onCheckedChange={(c) =>
+                        canEdit && update("ocrRequired", c === true)
+                      }
+                      disabled={!canEdit}
+                      className="mt-0.5"
+                    />
+                    <div>
+                      <Label htmlFor="ocr" className="text-sm font-medium">
+                        Kreves skanning/OCR?
+                      </Label>
+                      <p className="text-muted-foreground text-xs mt-0.5">
+                        Bilder, papir eller PDF uten maskinlesbar tekst.
+                      </p>
                     </div>
                   </div>
-                  <div className="space-y-4">
-                    <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between gap-3">
                       <Label
                         htmlFor="thin-client"
-                        className="max-w-md text-base leading-snug"
+                        className="text-sm font-medium"
                       >
-                        Hvor stor del av jobben skjer i tynnklient (Citrix,
-                        fjernskrivebord)?
+                        Andel tynnklient (Citrix/fjernskrivebord)
                       </Label>
-                      <Badge variant="outline" className="shrink-0">
-                        {payload.thinClientPercent}%
+                      <Badge variant="outline" className="shrink-0 tabular-nums">
+                        {payload.thinClientPercent} %
                       </Badge>
                     </div>
-                    <p className="text-muted-foreground max-w-prose text-sm leading-relaxed">
-                      Mye tynnklient gjør ofte robot vanskeligere — høyere risiko
-                      og kost.
-                    </p>
                     <Slider
                       id="thin-client"
                       min={0}
@@ -1120,33 +1077,28 @@ export function AssessmentWizard({ assessmentId }: Props) {
                         );
                       }}
                       disabled={!canEdit}
-                      className="pt-1"
                     />
-                    <p className="text-muted-foreground text-xs leading-relaxed">
-                      0 % = nettleser / lokale programmer. 100 % = alt i
-                      tynnklient.
+                    <p className="text-muted-foreground text-[11px]">
+                      0 % = nettleser / lokalt · 100 % = alt i tynnklient
                     </p>
                   </div>
                 </div>
-              </CardContent>
+              </div>
             </Slide>
 
             <Slide>
-              <CardHeader className="space-y-3 px-4 pb-2 pt-6 sm:px-8">
-                <div className="flex flex-wrap items-center gap-2">
-                  <CardTitle>Tall for ett år — grunnlag for beregning</CardTitle>
-                  <Badge className="bg-amber-600 text-[10px] text-white hover:bg-amber-600/90 dark:bg-amber-700">
-                    Merkantilt
-                  </Badge>
-                </div>
-                <CardDescription className="text-muted-foreground max-w-prose text-sm leading-relaxed">
-                  Konkrete tall for tidsbruk og kost. Manuelle timer påvirker
-                  både automatiseringspotensial (volum) og estimert besparelse.
-                  Kosttall brukes til å beregne kroner spart. Anslag er nok —
-                  dere kan justere senere.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="grid gap-7 sm:grid-cols-2 sm:px-8">
+              <div className="flex items-center gap-2">
+                <h2 className="text-foreground text-xl font-semibold sm:text-2xl">
+                  Tall og kostnader
+                </h2>
+                <Badge className="bg-amber-600 text-[10px] text-white hover:bg-amber-600/90 dark:bg-amber-700">
+                  Merkantilt
+                </Badge>
+              </div>
+              <p className="text-muted-foreground text-sm">
+                Tidsbruk og kostnader per år. Anslag er nok.
+              </p>
+              <div className="grid gap-5 sm:grid-cols-2">
                 {(
                   [
                     [
@@ -1186,11 +1138,11 @@ export function AssessmentWizard({ assessmentId }: Props) {
                     ],
                   ] as const
                 ).map(([key, title, hint]) => (
-                  <div key={key} className="space-y-2.5">
-                    <Label htmlFor={`kpi-${key}`} className="text-base">
+                  <div key={key} className="space-y-1.5 rounded-xl bg-muted/15 p-4">
+                    <Label htmlFor={`kpi-${key}`} className="text-sm font-medium">
                       {title}
                     </Label>
-                    <p className="text-muted-foreground text-sm leading-relaxed">
+                    <p className="text-muted-foreground text-xs">
                       {hint}
                     </p>
                     <Input
@@ -1209,21 +1161,23 @@ export function AssessmentWizard({ assessmentId }: Props) {
                         );
                       }}
                       disabled={!canEdit}
+                      className="h-10 rounded-xl bg-background shadow-sm"
                     />
                   </div>
                 ))}
-              </CardContent>
+              </div>
             </Slide>
 
             <Slide>
-              <CardHeader>
-                <CardTitle>Samarbeid</CardTitle>
-                <CardDescription>
-                  Team, oppgaver med tildeling og frist, notater og
-                  versjonspunkter — samlet slik at alle ser hvem som gjør hva.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-6">
+              <div className="space-y-1">
+                <h2 className="text-foreground text-xl font-semibold sm:text-2xl">
+                  Samarbeid
+                </h2>
+                <p className="text-muted-foreground text-sm">
+                  Team, oppgaver og versjoner.
+                </p>
+              </div>
+              <div className="space-y-6">
                 <AssessmentCollaborationPanel
                   assessmentId={assessmentId}
                   workspaceId={assessment.workspaceId}
@@ -1240,30 +1194,19 @@ export function AssessmentWizard({ assessmentId }: Props) {
                     }
                   }}
                 />
-              </CardContent>
+              </div>
             </Slide>
 
             <Slide>
-              <CardHeader>
-                <CardTitle>Oppsummering</CardTitle>
-                <CardDescription className="leading-relaxed">
-                  Dette er siste steg — det finnes ikke flere sider etter denne.
-                  Skjemaet lagres fortløpende som utkast. Bruk «Forrige» for å
-                  endre svar, eller «Ferdig» nederst for å gå tilbake til
-                  vurderingsoversikten.
-                </CardDescription>
-                <p className="text-muted-foreground mt-3 max-w-prose text-sm leading-relaxed">
-                  <strong className="text-foreground">Versjonsoversikten</strong>{" "}
-                  (navngitte milepæler, liste, lagre og sammenligne) ligger under{" "}
-                  <strong className="text-foreground">
-                    steg {SAMARBEID_STEP_NUMBER} · Samarbeid
-                  </strong>
-                  . Øverst på siden finner du også{" "}
-                  <strong className="text-foreground">«Velg milepæl»</strong>{" "}
-                  (forhåndsvisning) når du har minst én lagret milepæl.
+              <div className="space-y-1">
+                <h2 className="text-foreground text-xl font-semibold sm:text-2xl">
+                  Oppsummering
+                </h2>
+                <p className="text-muted-foreground text-sm">
+                  Siste steg — alt lagres fortløpende. Trykk «Ferdig» for å avslutte.
                 </p>
-              </CardHeader>
-              <CardContent className="space-y-6">
+              </div>
+              <div className="space-y-6">
                 {canEdit ? (
                   <Alert className="border-primary/25 bg-primary/[0.04]">
                     <AlertTitle className="flex flex-wrap items-center gap-2">
@@ -1468,7 +1411,7 @@ export function AssessmentWizard({ assessmentId }: Props) {
                     </dl>
                   </>
                 ) : null}
-              </CardContent>
+              </div>
             </Slide>
           </div>
         </div>
@@ -1590,57 +1533,44 @@ export function AssessmentWizard({ assessmentId }: Props) {
         </DialogContent>
       </Dialog>
 
-      <div className="fixed bottom-0 left-0 right-0 z-30 border-t bg-background/95 p-3 backdrop-blur supports-[backdrop-filter]:bg-background/80">
-        <div className="mx-auto grid max-w-6xl grid-cols-[1fr_minmax(0,auto)_1fr] items-center gap-3 px-4">
-          <div className="flex justify-start">
+      <div className="fixed bottom-0 left-0 right-0 z-30 border-t border-border/40 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
+        <div className="mx-auto flex max-w-3xl items-center justify-between gap-4 px-5 py-3">
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="gap-1.5 text-muted-foreground"
+            onClick={() => emblaApi?.scrollPrev()}
+            disabled={slide <= 0}
+          >
+            <ChevronLeft className="size-4" />
+            Forrige
+          </Button>
+          <span className="text-muted-foreground text-xs tabular-nums">
+            {slide + 1} / {ASSESSMENT_WIZARD_STEP_LABELS.length}
+          </span>
+          {slide >= ASSESSMENT_WIZARD_STEP_LABELS.length - 1 ? (
             <Button
               type="button"
-              variant="outline"
+              className="gap-1.5 rounded-xl px-5 shadow-sm"
               size="sm"
-              className="gap-1"
-              onClick={() => emblaApi?.scrollPrev()}
-              disabled={slide <= 0}
+              disabled={leavingBusy}
+              onClick={() => void saveDraftAndMaybeOpenLeaveDialog()}
             >
-              <ChevronLeft className="size-4" />
-              Forrige
+              {leavingBusy ? "Lagrer …" : "Ferdig"}
+              <ChevronRight className="size-4" aria-hidden />
             </Button>
-          </div>
-          <div className="flex min-w-0 flex-col items-center justify-center gap-0.5 text-center">
-            <span className="text-muted-foreground text-xs tabular-nums">
-              Steg {slide + 1} av {ASSESSMENT_WIZARD_STEP_LABELS.length}
-            </span>
-            {slide >= ASSESSMENT_WIZARD_STEP_LABELS.length - 1 ? (
-              <span className="text-muted-foreground text-[11px] font-medium">
-                Siste steg
-              </span>
-            ) : null}
-          </div>
-          <div className="flex justify-end">
-            {slide >= ASSESSMENT_WIZARD_STEP_LABELS.length - 1 ? (
-              <Button
-                type="button"
-                variant="default"
-                size="sm"
-                className="gap-1"
-                disabled={leavingBusy}
-                onClick={() => void saveDraftAndMaybeOpenLeaveDialog()}
-              >
-                {leavingBusy ? "Lagrer …" : "Ferdig"}
-                <ChevronRight className="size-4" aria-hidden />
-              </Button>
-            ) : (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="gap-1"
-                onClick={() => emblaApi?.scrollNext()}
-              >
-                Neste
-                <ChevronRight className="size-4" />
-              </Button>
-            )}
-          </div>
+          ) : (
+            <Button
+              type="button"
+              className="gap-1.5 rounded-xl px-5 shadow-sm"
+              size="sm"
+              onClick={() => emblaApi?.scrollNext()}
+            >
+              Neste
+              <ChevronRight className="size-4" />
+            </Button>
+          )}
         </div>
       </div>
     </div>
@@ -1693,17 +1623,16 @@ function Slide({
   bare,
 }: {
   children: React.ReactNode;
-  /** Eget kortinnhold (f.eks. organisasjonskort) */
   bare?: boolean;
 }) {
   return (
-    <div className="min-w-0 shrink-0 grow-0 basis-[100%] px-2 pb-12 sm:px-3">
+    <div className="min-w-0 shrink-0 grow-0 basis-[100%] px-2 pb-12 sm:px-4">
       {bare ? (
         children
       ) : (
-        <Card className="gap-6 border-0 py-5 shadow-none sm:border sm:shadow-sm sm:py-6">
+        <div className="mx-auto max-w-3xl space-y-6 py-6 sm:py-8">
           {children}
-        </Card>
+        </div>
       )}
     </div>
   );

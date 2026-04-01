@@ -2,7 +2,6 @@
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { buttonVariants } from "@/components/ui/button-variants";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -943,26 +942,35 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
             <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
               {filteredSortedAnalyses.map((a) => {
                 const versionCount = (a as { versionCount?: number }).versionCount ?? 0;
-                const maxLvl = Math.max(0, ...a.matrixValues.flat().map((v) => Math.min(5, Math.max(0, Math.round(v)))));
+                const flat = a.matrixValues.flat().map((v) => Math.min(5, Math.max(0, Math.round(v))));
+                const maxLvl = Math.max(0, ...flat);
+                const highCount = flat.filter((v) => v >= 4).length;
+                const riskLabel = maxLvl >= 5 ? "Kritisk" : maxLvl >= 4 ? "Høy" : maxLvl >= 3 ? "Middels" : maxLvl >= 2 ? "Lav" : "Ingen";
                 return (
-                  <div
+                  <Link
                     key={a._id}
-                    className="group/card relative flex flex-col overflow-hidden rounded-xl border border-border/50 bg-card shadow-sm transition-all hover:border-primary/25 hover:shadow-md"
+                    href={`/w/${workspaceId}/ros/a/${a._id}`}
+                    className="group/card relative flex flex-col overflow-hidden rounded-2xl bg-card shadow-sm ring-1 ring-black/[0.04] transition-all duration-200 hover:shadow-md hover:ring-black/[0.08] active:scale-[0.995] dark:ring-white/[0.06] dark:hover:ring-white/[0.1]"
                   >
-                    <Link
-                      href={`/w/${workspaceId}/ros/a/${a._id}`}
-                      className="flex flex-1 items-start gap-3 p-4"
-                    >
-                      <span
-                        className={cn(
-                          "flex size-10 shrink-0 items-center justify-center rounded-xl text-base font-bold tabular-nums",
-                          cellRiskClass(maxLvl),
-                        )}
-                      >
-                        {maxLvl}
-                      </span>
+                    <div className="flex flex-1 gap-4 p-5">
+                      <div className="flex shrink-0 flex-col items-center gap-1">
+                        <span
+                          className={cn(
+                            "flex size-12 items-center justify-center rounded-xl text-lg font-bold tabular-nums shadow-sm",
+                            cellRiskClass(maxLvl),
+                          )}
+                        >
+                          {maxLvl}
+                        </span>
+                        <span className={cn(
+                          "text-[10px] font-semibold",
+                          maxLvl >= 4 ? "text-red-600 dark:text-red-400" : maxLvl >= 3 ? "text-amber-600 dark:text-amber-400" : "text-emerald-600 dark:text-emerald-400",
+                        )}>
+                          {riskLabel}
+                        </span>
+                      </div>
                       <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-semibold group-hover/card:text-primary">
+                        <p className="truncate text-sm font-semibold text-foreground group-hover/card:text-primary">
                           {a.title}
                         </p>
                         <p className="text-muted-foreground mt-0.5 text-xs">
@@ -972,12 +980,12 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
                               <span className="font-mono text-[10px]">({a.candidateCode})</span>
                             </>
                           ) : (
-                            <span className="italic">Ingen prosess</span>
+                            <span className="italic">Frittstående</span>
                           )}
                         </p>
-                        <div className="mt-2 flex h-1.5 w-full overflow-hidden rounded-full bg-muted/50">
+
+                        <div className="mt-3 flex h-2 w-full overflow-hidden rounded-full bg-muted/40">
                           {(() => {
-                            const flat = a.matrixValues.flat().map((v) => Math.min(5, Math.max(0, Math.round(v))));
                             const counts = [0, 0, 0, 0, 0, 0];
                             for (const v of flat) counts[v]++;
                             const total = flat.length || 1;
@@ -985,47 +993,55 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
                               counts[lvl] > 0 ? (
                                 <div
                                   key={lvl}
-                                  className={cn("min-w-[2px]", cellRiskClass(lvl))}
+                                  className={cn("min-w-[3px] transition-all", cellRiskClass(lvl))}
                                   style={{ width: `${(counts[lvl] / total) * 100}%` }}
                                 />
                               ) : null,
                             );
                           })()}
                         </div>
-                        <div className="text-muted-foreground mt-2 flex flex-wrap gap-x-3 gap-y-0.5 text-[10px]">
+
+                        <div className="text-muted-foreground mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px]">
                           <span>{a.rowLabels.length}×{a.colLabels.length}</span>
+                          {highCount > 0 && (
+                            <span className="font-semibold text-red-600 dark:text-red-400">
+                              {highCount} høy/kritisk
+                            </span>
+                          )}
                           <span>{formatRelative(a.updatedAt)}</span>
                         </div>
                       </div>
-                    </Link>
-                    <div className="flex items-center gap-1.5 border-t border-border/40 bg-muted/10 px-3 py-2">
+                    </div>
+                    <div className="pointer-events-none flex items-center gap-1.5 border-t border-border/30 bg-muted/5 px-4 py-2">
                       <button
                         type="button"
-                        onClick={() => setVersionsQuickDialog({ analysisId: a._id, title: a.title })}
-                        className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] transition-colors hover:bg-muted/60"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          setVersionsQuickDialog({ analysisId: a._id, title: a.title });
+                        }}
+                        className="pointer-events-auto text-muted-foreground hover:text-foreground inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] transition-colors hover:bg-muted/60"
                       >
                         <History className="size-3" aria-hidden />
                         {versionCount} vers.
                       </button>
                       <span className="flex-1" />
-                      <Link
-                        href={`/w/${workspaceId}/ros/a/${a._id}`}
-                        className={cn(buttonVariants({ variant: "ghost", size: "sm" }), "h-7 text-xs")}
-                      >
-                        Åpne
-                      </Link>
                       <Button
                         type="button"
                         variant="ghost"
                         size="icon"
-                        className="size-7 text-muted-foreground/60 hover:bg-destructive/10 hover:text-destructive"
+                        className="pointer-events-auto size-7 text-muted-foreground/50 opacity-0 transition-opacity group-hover/card:opacity-100 hover:bg-destructive/10 hover:text-destructive"
                         title="Slett"
-                        onClick={() => requestRemoveAnalysis(a)}
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          requestRemoveAnalysis(a);
+                        }}
                       >
                         <Trash2 className="size-3.5" aria-hidden />
                       </Button>
                     </div>
-                  </div>
+                  </Link>
                 );
               })}
             </div>

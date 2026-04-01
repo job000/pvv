@@ -11,18 +11,10 @@ import { RosRiskList, type FlatRisk } from "@/components/ros/ros-risk-list";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
@@ -51,6 +43,7 @@ import {
 import { ROS_PDD_ALIGNMENT_HINT_NB } from "@/lib/ros-compliance";
 import { toast } from "@/lib/app-toast";
 import { toastDeleteWithUndo } from "@/lib/toast-delete-undo";
+import { cellRiskClass } from "@/lib/ros-risk-colors";
 import { cn } from "@/lib/utils";
 import type { RosRequirementRef } from "@/lib/ros-requirement-catalog";
 import { downloadRosAnalysisPdf } from "@/lib/ros-pdf";
@@ -61,6 +54,8 @@ import {
   ROS_RISK_TREATMENT_OPTIONS,
 } from "@/lib/ros-task-ui";
 import {
+  AlertTriangle,
+  ArrowRight,
   ChevronLeft,
   ChevronRight,
   CircleHelp,
@@ -68,6 +63,9 @@ import {
   Link2,
   ListTodo,
   Plus,
+  Shield,
+  ShieldAlert,
+  ShieldCheck,
   Sparkles,
   Trash2,
   X,
@@ -83,12 +81,154 @@ function tsToDatetimeLocal(ms: number): string {
 }
 
 const ROS_EDITOR_SECTIONS = [
-  { id: "risikoer", label: "Risikovurdering", hint: "Punkter først, matrise viser" },
-  { id: "oppgaver", label: "Oppgaver", hint: "Tiltak og oppfølging" },
-  { id: "oppsummering", label: "Oppsummering", hint: "Før/etter oversikt" },
-  { id: "pvv", label: "PVV-koblinger", hint: "Koble vurderinger" },
-  { id: "innstillinger", label: "Innstillinger", hint: "Detaljer, akser, versjon" },
+  { id: "risikoer", label: "Risikoer", icon: Shield },
+  { id: "oppgaver", label: "Tiltak", icon: ListTodo },
+  { id: "oppsummering", label: "Oversikt", icon: ArrowRight },
+  { id: "pvv", label: "PVV", icon: Link2 },
+  { id: "innstillinger", label: "Innstillinger", icon: CircleHelp },
 ] as const;
+
+function RiskSummaryBar({
+  cellItemsMatrix,
+  matrixValues,
+  matrixAfter,
+  cellItemsAfterMatrix,
+  rowLabels,
+  colLabels,
+  afterRowLabels,
+  afterColLabels,
+}: {
+  cellItemsMatrix: RosCellItemMatrix;
+  matrixValues: number[][];
+  matrixAfter: number[][];
+  cellItemsAfterMatrix: RosCellItemMatrix;
+  rowLabels: string[];
+  colLabels: string[];
+  afterRowLabels: string[];
+  afterColLabels: string[];
+}) {
+  const stats = useMemo(() => {
+    let total = 0;
+    let highBefore = 0;
+    let criticalBefore = 0;
+    let needsAction = 0;
+    let highAfter = 0;
+
+    for (let r = 0; r < cellItemsMatrix.length; r++) {
+      const row = cellItemsMatrix[r];
+      if (!row) continue;
+      for (let c = 0; c < row.length; c++) {
+        const cell = row[c];
+        if (!cell) continue;
+        for (const it of cell) {
+          if (!it.text.trim()) continue;
+          total++;
+          const bLvl = positionRiskLevel(r, c, rowLabels.length, colLabels.length);
+          if (bLvl >= 4) highBefore++;
+          if (bLvl >= 5) criticalBefore++;
+          const hasFlag = it.flags?.includes("requires_action");
+          if (bLvl >= 4 && !hasFlag) needsAction++;
+          const aR = it.afterRow ?? r;
+          const aC = it.afterCol ?? c;
+          const aLvl = positionRiskLevel(aR, aC, afterRowLabels.length, afterColLabels.length);
+          if (aLvl >= 4) highAfter++;
+        }
+      }
+    }
+
+    const maxBefore = Math.max(0, ...matrixValues.flat());
+    const maxAfter = Math.max(0, ...matrixAfter.flat());
+    const overallLevel = maxBefore >= 5 ? "Kritisk" : maxBefore >= 4 ? "Høy" : maxBefore >= 3 ? "Middels" : maxBefore >= 2 ? "Lav" : "Ingen";
+    const overallColor = maxBefore >= 5 ? "text-red-600 dark:text-red-400" : maxBefore >= 4 ? "text-orange-600 dark:text-orange-400" : maxBefore >= 3 ? "text-amber-600 dark:text-amber-400" : "text-emerald-600 dark:text-emerald-400";
+
+    return { total, highBefore, criticalBefore, needsAction, highAfter, maxBefore, maxAfter, overallLevel, overallColor };
+  }, [cellItemsMatrix, matrixValues, matrixAfter, rowLabels, colLabels, afterRowLabels, afterColLabels]);
+
+  if (stats.total === 0) return null;
+
+  const improved = stats.highBefore > stats.highAfter;
+
+  return (
+    <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+      <div className="flex items-center gap-3 rounded-2xl bg-muted/20 px-4 py-3 ring-1 ring-black/[0.04] dark:ring-white/[0.06]">
+        <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10">
+          <Shield className="size-5 text-primary" />
+        </div>
+        <div>
+          <p className="text-2xl font-bold tabular-nums leading-none">{stats.total}</p>
+          <p className="text-muted-foreground mt-0.5 text-[11px]">Risikoer</p>
+        </div>
+      </div>
+
+      <div className={cn(
+        "flex items-center gap-3 rounded-2xl px-4 py-3 ring-1",
+        stats.highBefore > 0
+          ? "bg-red-500/[0.06] ring-red-500/15"
+          : "bg-emerald-500/[0.06] ring-emerald-500/15",
+      )}>
+        <div className={cn(
+          "flex size-10 shrink-0 items-center justify-center rounded-xl",
+          stats.highBefore > 0 ? "bg-red-500/15" : "bg-emerald-500/15",
+        )}>
+          {stats.highBefore > 0
+            ? <ShieldAlert className="size-5 text-red-600 dark:text-red-400" />
+            : <ShieldCheck className="size-5 text-emerald-600 dark:text-emerald-400" />
+          }
+        </div>
+        <div>
+          <p className="text-2xl font-bold tabular-nums leading-none">{stats.highBefore}</p>
+          <p className="text-muted-foreground mt-0.5 text-[11px]">Høy/kritisk</p>
+        </div>
+      </div>
+
+      <div className={cn(
+        "flex items-center gap-3 rounded-2xl px-4 py-3 ring-1",
+        stats.needsAction > 0
+          ? "bg-amber-500/[0.06] ring-amber-500/15"
+          : "bg-muted/20 ring-black/[0.04] dark:ring-white/[0.06]",
+      )}>
+        <div className={cn(
+          "flex size-10 shrink-0 items-center justify-center rounded-xl",
+          stats.needsAction > 0 ? "bg-amber-500/15" : "bg-muted/30",
+        )}>
+          <AlertTriangle className={cn(
+            "size-5",
+            stats.needsAction > 0 ? "text-amber-600 dark:text-amber-400" : "text-muted-foreground",
+          )} />
+        </div>
+        <div>
+          <p className="text-2xl font-bold tabular-nums leading-none">{stats.needsAction}</p>
+          <p className="text-muted-foreground mt-0.5 text-[11px]">Trenger tiltak</p>
+        </div>
+      </div>
+
+      <div className={cn(
+        "flex items-center gap-3 rounded-2xl px-4 py-3 ring-1 ring-black/[0.04] dark:ring-white/[0.06]",
+        improved ? "bg-emerald-500/[0.06]" : "bg-muted/20",
+      )}>
+        <div className={cn(
+          "flex size-10 shrink-0 items-center justify-center rounded-xl text-sm font-bold tabular-nums",
+          cellRiskClass(stats.maxBefore),
+        )}>
+          {stats.maxBefore}
+        </div>
+        <div>
+          <p className={cn("text-sm font-bold leading-tight", stats.overallColor)}>
+            {stats.overallLevel}
+          </p>
+          {improved ? (
+            <p className="mt-0.5 flex items-center gap-1 text-[11px] font-medium text-emerald-600 dark:text-emerald-400">
+              <ArrowRight className="size-3" />
+              Max {stats.maxAfter} etter
+            </p>
+          ) : (
+            <p className="text-muted-foreground mt-0.5 text-[11px]">Risikonivå</p>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 const ROS_MATRISE_SECTION_INDEX = 0;
 const ROS_INNSTILLINGER_SECTION_INDEX = ROS_EDITOR_SECTIONS.findIndex(
@@ -125,7 +265,7 @@ function RosPvvLinkFields({
   }, [linkId, flags, highlightForPvv, pvvLinkNote]);
 
   return (
-    <div className="bg-muted/20 space-y-3 rounded-lg border p-3 text-sm">
+    <div className="space-y-3 text-sm">
       <div className="flex flex-wrap items-center gap-2">
         <Checkbox
           id={`pvv-hi-${linkId}`}
@@ -136,65 +276,62 @@ function RosPvvLinkFields({
             void onSave({ highlightForPvv: v });
           }}
         />
-        <Label htmlFor={`pvv-hi-${linkId}`} className="cursor-pointer font-normal">
-          Viktig for PVV (synlig på vurderingen)
+        <Label htmlFor={`pvv-hi-${linkId}`} className="cursor-pointer text-xs font-normal">
+          Viktig for PVV
         </Label>
       </div>
-      <div className="space-y-1.5">
-        <Label htmlFor={`pvv-flags-${linkId}`}>Flagg (kommaseparert)</Label>
-        <Input
-          id={`pvv-flags-${linkId}`}
-          value={flagsText}
-          onChange={(e) => setFlagsText(e.target.value)}
-          onBlur={(e) => {
-            const v = e.currentTarget.value;
-            void onSave({
-              flags: v
-                .split(",")
-                .map((s) => s.trim())
-                .filter(Boolean),
-            });
-          }}
-          placeholder="f.eks. rest_risk_elevated, residual_high_or_critical"
-        />
-        {suggestedFlags.length > 0 ? (
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="mt-1"
-            onClick={() => {
-              const merged = [
-                ...new Set([
-                  ...flagsText
-                    .split(",")
-                    .map((s) => s.trim())
-                    .filter(Boolean),
-                  ...suggestedFlags,
-                ]),
-              ];
-              setFlagsText(merged.join(", "));
-              void onSave({ flags: merged });
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div className="space-y-1.5">
+          <Label htmlFor={`pvv-flags-${linkId}`} className="text-[10px]">Flagg</Label>
+          <div className="flex gap-2">
+            <Input
+              id={`pvv-flags-${linkId}`}
+              value={flagsText}
+              onChange={(e) => setFlagsText(e.target.value)}
+              onBlur={(e) => {
+                const v = e.currentTarget.value;
+                void onSave({
+                  flags: v.split(",").map((s) => s.trim()).filter(Boolean),
+                });
+              }}
+              placeholder="rest_risk_elevated, …"
+              className="rounded-lg text-xs"
+            />
+            {suggestedFlags.length > 0 && (
+              <button
+                type="button"
+                className="shrink-0 rounded-lg p-2 text-amber-600 transition-colors hover:bg-amber-500/10 dark:text-amber-400"
+                onClick={() => {
+                  const merged = [
+                    ...new Set([
+                      ...flagsText.split(",").map((s) => s.trim()).filter(Boolean),
+                      ...suggestedFlags,
+                    ]),
+                  ];
+                  setFlagsText(merged.join(", "));
+                  void onSave({ flags: merged });
+                }}
+                title="Slå inn forslag"
+              >
+                <Sparkles className="size-4" />
+              </button>
+            )}
+          </div>
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor={`pvv-note-${linkId}`} className="text-[10px]">Notat til PVV</Label>
+          <Textarea
+            id={`pvv-note-${linkId}`}
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            onBlur={(e) => {
+              const v = e.currentTarget.value.trim();
+              void onSave({ pvvLinkNote: v === "" ? null : v });
             }}
-          >
-            <Sparkles className="mr-2 size-3.5" />
-            Slå inn forslag fra oppsummering
-          </Button>
-        ) : null}
-      </div>
-      <div className="space-y-1.5">
-        <Label htmlFor={`pvv-note-${linkId}`}>Notat til PVV (ROS → personvern)</Label>
-        <Textarea
-          id={`pvv-note-${linkId}`}
-          value={note}
-          onChange={(e) => setNote(e.target.value)}
-          onBlur={(e) => {
-            const v = e.currentTarget.value.trim();
-            void onSave({ pvvLinkNote: v === "" ? null : v });
-          }}
-          rows={2}
-          className="min-h-0"
-        />
+            rows={2}
+            className="min-h-0 rounded-lg text-xs"
+          />
+        </div>
       </div>
     </div>
   );
@@ -1443,12 +1580,13 @@ export function RosAnalysisEditor({
   }
 
   return (
-    <div className="space-y-4 pb-28">
-      <div className="sticky top-0 z-20 -mx-1 border-b border-border/50 bg-background/95 px-1 pb-3 pt-2 backdrop-blur-md supports-[backdrop-filter]:bg-background/85">
+    <div className="space-y-5 pb-24">
+      {/* Sticky header */}
+      <div className="sticky top-0 z-20 -mx-1 bg-background/95 px-1 pb-2 pt-2 backdrop-blur-md supports-[backdrop-filter]:bg-background/85">
         <div className="flex items-center gap-3">
           <Link
             href={`/w/${workspaceId}/ros`}
-            className="text-muted-foreground hover:text-foreground flex size-9 shrink-0 items-center justify-center rounded-lg transition-colors hover:bg-muted/60"
+            className="text-muted-foreground hover:text-foreground flex size-9 shrink-0 items-center justify-center rounded-xl transition-colors hover:bg-muted/60"
             title="Tilbake til ROS"
           >
             <ChevronLeft className="size-5" aria-hidden />
@@ -1457,23 +1595,23 @@ export function RosAnalysisEditor({
             <h1 className="font-heading truncate text-base font-semibold tracking-tight text-foreground sm:text-lg">
               {data.title}
             </h1>
-            <div className="text-muted-foreground flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs">
+            <div className="text-muted-foreground flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px]">
               {data.candidateName ? (
                 <span>
                   {data.candidateName}{" "}
                   <span className="font-mono text-[10px]">({data.candidateCode})</span>
                 </span>
               ) : (
-                <span className="italic">Ingen prosess</span>
+                <span className="italic">Frittstående analyse</span>
               )}
-              {data.linkedAssessments.length > 0 ? (
+              {data.linkedAssessments.length > 0 && (
                 <>
                   <span className="text-border">·</span>
                   <span className="flex items-center gap-1">
                     <Link2 className="size-3" aria-hidden />
-                    {data.linkedAssessments.map((l, i) => (
+                    {data.linkedAssessments.map((l, li) => (
                       <span key={l.linkId}>
-                        {i > 0 ? ", " : ""}
+                        {li > 0 ? ", " : ""}
                         <Link href={`/w/${workspaceId}/a/${l.assessmentId}`} className="text-primary hover:underline">
                           {l.title}
                         </Link>
@@ -1481,27 +1619,27 @@ export function RosAnalysisEditor({
                     ))}
                   </span>
                 </>
-              ) : null}
+              )}
             </div>
           </div>
-          <div className="flex shrink-0 items-center gap-1.5">
+          <div className="flex shrink-0 items-center gap-1">
             <Button
               type="button"
               size="sm"
               onClick={() => void save()}
               disabled={saving}
-              className="gap-1.5 font-semibold shadow-sm"
+              className="gap-1.5 rounded-xl font-semibold shadow-sm"
             >
               {saving ? "Lagrer …" : dirty ? "Lagre" : "Versjon"}
             </Button>
-            <Button type="button" variant="ghost" size="icon" className="size-8" title="Eksporter PDF" onClick={exportPdf}>
+            <Button type="button" variant="ghost" size="icon" className="size-8 rounded-xl" title="Eksporter PDF" onClick={exportPdf}>
               <FileDown className="size-4" aria-hidden />
             </Button>
             <Button
               type="button"
               variant="ghost"
               size="icon"
-              className="size-8 text-muted-foreground hover:text-destructive"
+              className="size-8 rounded-xl text-muted-foreground hover:text-destructive"
               title="Slett analyse"
               disabled={isDeleting}
               onClick={() => {
@@ -1522,6 +1660,35 @@ export function RosAnalysisEditor({
             </Button>
           </div>
         </div>
+
+        {/* Section tabs */}
+        <nav
+          className="mt-3 flex gap-0 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+          aria-label="ROS-seksjoner"
+        >
+          <div className="flex w-full gap-1 rounded-2xl bg-muted/25 p-1">
+            {ROS_EDITOR_SECTIONS.map((sec, i) => {
+              const active = rosSection === i;
+              const Icon = sec.icon;
+              return (
+                <button
+                  key={sec.id}
+                  type="button"
+                  onClick={() => setRosSection(i)}
+                  className={cn(
+                    "relative flex flex-1 shrink-0 items-center justify-center gap-1.5 rounded-xl px-3 py-2.5 text-[13px] font-medium transition-all duration-200",
+                    active
+                      ? "bg-card text-foreground shadow-md ring-1 ring-black/[0.06] dark:ring-white/[0.08]"
+                      : "text-muted-foreground hover:text-foreground hover:bg-card/40",
+                  )}
+                >
+                  <Icon className={cn("size-4 shrink-0", active ? "text-primary" : "")} aria-hidden />
+                  <span className="hidden sm:inline">{sec.label}</span>
+                </button>
+              );
+            })}
+          </div>
+        </nav>
       </div>
 
       <p className="sr-only">
@@ -1530,39 +1697,22 @@ export function RosAnalysisEditor({
         Neste nederst.
       </p>
 
-      <nav
-        className="relative flex gap-0 overflow-x-auto border-b border-border/50 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-        aria-label="ROS-seksjoner"
-      >
-        {ROS_EDITOR_SECTIONS.map((sec, i) => {
-          const active = rosSection === i;
-          return (
-            <button
-              key={sec.id}
-              type="button"
-              onClick={() => setRosSection(i)}
-              className={cn(
-                "relative shrink-0 px-4 pb-2.5 pt-2 text-sm font-medium transition-colors duration-150",
-                active
-                  ? "text-foreground"
-                  : "text-muted-foreground hover:text-foreground/80",
-              )}
-            >
-              <span className="leading-tight">{sec.label}</span>
-              {active ? (
-                <span className="bg-primary absolute inset-x-0 -bottom-px h-0.5 rounded-full" />
-              ) : null}
-            </button>
-          );
-        })}
-      </nav>
-
       {/* === Section 0: Risikovurdering — punkter først, matrise som visning === */}
       {rosSection === 0 && (
         <div className="space-y-6">
-          {/* Identifiserte risikoer først (anbefalt flyt); matrisen fylles ut automatisk */}
-          <Card className="overflow-hidden border-border/40 shadow-[0_1px_3px_rgba(0,0,0,0.04)] ring-1 ring-black/[0.03] dark:ring-white/[0.05]">
-            <CardContent className="pt-6">
+          <RiskSummaryBar
+            cellItemsMatrix={cellItemsMatrix}
+            matrixValues={matrix}
+            matrixAfter={matrixAfter}
+            cellItemsAfterMatrix={cellItemsAfterMatrix}
+            rowLabels={data.rowLabels}
+            colLabels={data.colLabels}
+            afterRowLabels={effectiveAfterRowLabels}
+            afterColLabels={effectiveAfterColLabels}
+          />
+
+          <div className="rounded-2xl bg-card shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.06]">
+            <div className="p-5 sm:p-6">
               <RosRiskList
                 workspaceId={workspaceId}
                 rowLabels={data.rowLabels}
@@ -1582,86 +1732,89 @@ export function RosAnalysisEditor({
                 rosTasks={tasks ?? undefined}
                 onGoToTasks={() => setRosSection(1)}
               />
-            </CardContent>
-          </Card>
+            </div>
+          </div>
 
           {matrix.length > 0 ? (
             <>
-            <Card className="overflow-hidden border-border/40 shadow-[0_1px_3px_rgba(0,0,0,0.04)] ring-1 ring-black/[0.03] dark:ring-white/[0.05]">
-              <CardHeader className="border-b border-border/45 bg-gradient-to-b from-muted/40 to-muted/15 pb-4">
-                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                  <div>
-                    <CardTitle className="text-base font-semibold tracking-tight">
-                      Risikomatrise
-                    </CardTitle>
-                    <CardDescription className="max-w-prose text-[13px] leading-relaxed">
-                      {data.rowAxisTitle} × {data.colAxisTitle} — synkroniseres med listen over;
-                      klikk celler for å redigere.
-                    </CardDescription>
-                  </div>
-                  <div className="flex flex-wrap gap-2 text-xs">
-                    <Badge variant="outline" className="font-normal">
-                      Før: max <span className="text-foreground font-semibold tabular-nums">{beforeStats.max}</span>
-                    </Badge>
-                    <Badge variant="outline" className="font-normal">
-                      Etter: max <span className="text-foreground font-semibold tabular-nums">{afterStats.max}</span>
-                    </Badge>
-                    {beforeStats.highOrCritical > 0 && (
-                      <Badge variant="outline" className="border-orange-500/40 bg-orange-500/10 font-normal">
-                        {beforeStats.highOrCritical} celle{beforeStats.highOrCritical !== 1 ? "r" : ""} nivå 4–5
-                      </Badge>
-                    )}
-                  </div>
+            <div className="rounded-2xl bg-card shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.06]">
+              <div className="flex flex-col gap-3 p-5 pb-3 sm:flex-row sm:items-center sm:justify-between sm:p-6 sm:pb-4">
+                <div>
+                  <h3 className="text-base font-semibold tracking-tight">
+                    Risikomatrise
+                  </h3>
+                  <p className="text-muted-foreground mt-0.5 text-[13px]">
+                    {data.rowAxisTitle} × {data.colAxisTitle} — klikk celler for å redigere
+                  </p>
                 </div>
-                <div className="mt-4 flex flex-col gap-3 sm:mt-3 sm:flex-row sm:flex-wrap sm:items-center sm:gap-2">
-                  <div
-                    className="flex w-full min-w-0 rounded-xl border border-border/45 bg-muted/30 p-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] sm:inline-flex sm:w-auto"
-                    role="tablist"
-                    aria-label="Vis matrise før eller etter tiltak"
-                  >
-                    <Button
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className={cn(
+                    "inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-semibold",
+                    cellRiskClass(beforeStats.max),
+                  )}>
+                    Før: {beforeStats.max}
+                  </span>
+                  <ArrowRight className="text-muted-foreground size-3" />
+                  <span className={cn(
+                    "inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-semibold",
+                    cellRiskClass(afterStats.max),
+                  )}>
+                    Etter: {afterStats.max}
+                  </span>
+                  {beforeStats.max > afterStats.max && (
+                    <span className="text-[11px] font-medium text-emerald-600 dark:text-emerald-400">
+                      ↓ Redusert
+                    </span>
+                  )}
+                </div>
+              </div>
+              <div className="flex flex-col gap-3 px-5 pb-4 sm:flex-row sm:flex-wrap sm:items-center sm:gap-2 sm:px-6">
+                <div
+                  className="flex w-full min-w-0 rounded-xl bg-muted/30 p-1 sm:inline-flex sm:w-auto"
+                  role="tablist"
+                  aria-label="Vis matrise før eller etter tiltak"
+                >
+                    <button
                       type="button"
                       role="tab"
                       aria-selected={matrixView === "before"}
-                      variant={matrixView === "before" ? "default" : "ghost"}
                       className={cn(
-                        "h-11 min-h-[44px] flex-1 rounded-lg px-4 text-[13px] font-semibold shadow-sm sm:h-10 sm:min-h-0 sm:flex-initial",
-                        matrixView !== "before" && "text-muted-foreground hover:text-foreground",
+                        "flex-1 rounded-lg px-4 py-2 text-[13px] font-semibold transition-all sm:flex-initial",
+                        matrixView === "before"
+                          ? "bg-card text-foreground shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.06]"
+                          : "text-muted-foreground hover:text-foreground",
                       )}
                       onClick={() => setMatrixView("before")}
                     >
                       Før tiltak
-                    </Button>
-                    <Button
+                    </button>
+                    <button
                       type="button"
                       role="tab"
                       aria-selected={matrixView === "after"}
-                      variant={matrixView === "after" ? "default" : "ghost"}
                       className={cn(
-                        "h-11 min-h-[44px] flex-1 rounded-lg px-4 text-[13px] font-semibold shadow-sm sm:h-10 sm:min-h-0 sm:flex-initial",
-                        matrixView !== "after" && "text-muted-foreground hover:text-foreground",
+                        "flex-1 rounded-lg px-4 py-2 text-[13px] font-semibold transition-all sm:flex-initial",
+                        matrixView === "after"
+                          ? "bg-card text-foreground shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.06]"
+                          : "text-muted-foreground hover:text-foreground",
                       )}
                       onClick={() => setMatrixView("after")}
                     >
                       Etter tiltak
-                    </Button>
+                    </button>
                   </div>
-                  <Button
+                  <button
                     type="button"
-                    variant="ghost"
-                    className="h-11 min-h-[44px] shrink-0 gap-2 px-3 text-[13px] font-medium text-primary hover:bg-primary/10 hover:text-primary sm:h-10 sm:min-h-0"
+                    className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[13px] font-medium text-primary transition-colors hover:bg-primary/10"
                     onClick={() => setMatrixScaleHelpOpen(true)}
                     aria-expanded={matrixScaleHelpOpen}
                     aria-controls="ros-matrix-scale-help"
                   >
                     <CircleHelp className="size-4 shrink-0" aria-hidden />
-                    <span className="underline-offset-4 hover:underline">
-                      Hjelp med skala
-                    </span>
-                  </Button>
+                    Skala
+                  </button>
                 </div>
-              </CardHeader>
-              <CardContent className="pt-4">
+              <div className="px-5 pb-5 sm:px-6 sm:pb-6">
                 {afterMatrixInvalid ? (
                   <Alert>
                     <AlertTitle>Ugyldig etter-matrise</AlertTitle>
@@ -1700,8 +1853,8 @@ export function RosAnalysisEditor({
                     onAssignBeforeItem={matrixView === "after" ? onAssignBeforeItem : undefined}
                   />
                 )}
-              </CardContent>
-            </Card>
+              </div>
+            </div>
 
             <Sheet open={matrixScaleHelpOpen} onOpenChange={setMatrixScaleHelpOpen}>
               <SheetContent
@@ -1755,201 +1908,78 @@ export function RosAnalysisEditor({
 
       {/* === Section 1: Oppgaver === */}
       {rosSection === 1 && (
-      <Card className="border-border/60 overflow-hidden shadow-sm">
-        <CardHeader className="border-b border-border/50 bg-gradient-to-br from-muted/40 to-background pb-4">
-          <CardTitle className="flex items-center gap-2 text-lg font-semibold tracking-tight">
-            <span className="bg-primary/12 text-primary flex size-9 items-center justify-center rounded-xl">
-              <ListTodo className="size-4" aria-hidden />
-            </span>
-            Oppgaver og tiltak
-          </CardTitle>
-          <CardDescription className="text-sm leading-relaxed">
-            Koble hver oppgave til det risiko- eller tiltakspunktet du har skrevet under
-            risikovurdering (samme tekst som i listen over matrisen). Velg risikohåndtering
-            etter ISO 31000. Oppgaver ligger før oppsummering slik at oppfølging planlegges før
-            den samlede før/etter-oversikten.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-8 pt-6">
-          <form
-            onSubmit={(e) => void onCreateTask(e)}
-            className="space-y-5 rounded-2xl border border-border/60 bg-muted/15 p-4 sm:p-5"
-          >
+      <div className="space-y-5">
+        {/* Task stats */}
+        {tasks && tasks.length > 0 && (() => {
+          const open = tasks.filter(t => t.status !== "done").length;
+          const done = tasks.filter(t => t.status === "done").length;
+          const overdue = tasks.filter(t => t.status !== "done" && t.dueAt && t.dueAt < Date.now()).length;
+          return (
+            <div className="grid grid-cols-3 gap-2 sm:gap-3">
+              <div className="flex items-center gap-3 rounded-2xl bg-muted/20 px-4 py-3.5 ring-1 ring-black/[0.04] dark:ring-white/[0.06]">
+                <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-blue-500/10">
+                  <ListTodo className="size-5 text-blue-600 dark:text-blue-400" />
+                </div>
+                <div>
+                  <p className="text-2xl font-bold tabular-nums leading-none">{open}</p>
+                  <p className="text-muted-foreground mt-0.5 text-[11px]">Åpne</p>
+                </div>
+              </div>
+              <div className={cn(
+                "flex items-center gap-3 rounded-2xl px-4 py-3.5 ring-1",
+                done > 0 ? "bg-emerald-500/[0.06] ring-emerald-500/15" : "bg-muted/20 ring-black/[0.04] dark:ring-white/[0.06]",
+              )}>
+                <div className={cn("flex size-10 shrink-0 items-center justify-center rounded-xl", done > 0 ? "bg-emerald-500/15" : "bg-muted/30")}>
+                  <ShieldCheck className={cn("size-5", done > 0 ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground")} />
+                </div>
+                <div>
+                  <p className="text-2xl font-bold tabular-nums leading-none">{done}</p>
+                  <p className="text-muted-foreground mt-0.5 text-[11px]">Fullført</p>
+                </div>
+              </div>
+              <div className={cn(
+                "flex items-center gap-3 rounded-2xl px-4 py-3.5 ring-1",
+                overdue > 0 ? "bg-red-500/[0.06] ring-red-500/15" : "bg-muted/20 ring-black/[0.04] dark:ring-white/[0.06]",
+              )}>
+                <div className={cn("flex size-10 shrink-0 items-center justify-center rounded-xl", overdue > 0 ? "bg-red-500/15" : "bg-muted/30")}>
+                  <AlertTriangle className={cn("size-5", overdue > 0 ? "text-red-600 dark:text-red-400" : "text-muted-foreground")} />
+                </div>
+                <div>
+                  <p className="text-2xl font-bold tabular-nums leading-none">{overdue}</p>
+                  <p className="text-muted-foreground mt-0.5 text-[11px]">Forfalt</p>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
+
+        {/* Task list */}
+        {tasks === undefined ? (
+          <p className="text-muted-foreground text-sm">Henter oppgaver …</p>
+        ) : tasks.length === 0 ? (
+          <div className="flex flex-col items-center gap-3 rounded-2xl bg-muted/10 px-6 py-12 text-center ring-1 ring-black/[0.04] dark:ring-white/[0.06]">
+            <div className="flex size-14 items-center justify-center rounded-2xl bg-primary/10">
+              <ListTodo className="size-7 text-primary" />
+            </div>
             <div>
-              <p className="text-foreground text-sm font-semibold">Ny oppgave</p>
-              <p className="text-muted-foreground mt-0.5 text-xs">
-                Koble til et konkret risiko-/tiltakspunkt og strategi — eller la oppgaven være generell.
+              <p className="text-sm font-semibold">Ingen oppgaver ennå</p>
+              <p className="text-muted-foreground mt-1 max-w-xs text-xs">
+                Opprett en oppgave for å holde oversikt over tiltak, ansvar og frister.
               </p>
             </div>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-1.5 sm:col-span-2">
-                <Label htmlFor="rt-title">Tittel</Label>
-                <Input
-                  id="rt-title"
-                  value={taskTitle}
-                  onChange={(e) => setTaskTitle(e.target.value)}
-                  placeholder="F.eks. Iverksett tiltak X …"
-                />
-              </div>
-              <div className="space-y-1.5 sm:col-span-2">
-                <Label htmlFor="rt-desc">Beskrivelse (valgfritt)</Label>
-                <Textarea
-                  id="rt-desc"
-                  value={taskDesc}
-                  onChange={(e) => setTaskDesc(e.target.value)}
-                  rows={2}
-                  className="min-h-0"
-                  placeholder="Detaljer, ansvar, forutsetninger …"
-                />
-              </div>
-              <div className="space-y-1.5 sm:col-span-2">
-                <Label
-                  htmlFor="rt-risk"
-                  className="inline-flex items-center gap-1.5"
-                >
-                  <Link2 className="text-muted-foreground size-3.5" aria-hidden />
-                  Kobling til risiko / tiltak
-                </Label>
-                <select
-                  id="rt-risk"
-                  className="border-input bg-background flex h-10 w-full rounded-lg border px-2 text-sm"
-                  value={taskRiskLink}
-                  onChange={(e) => setTaskRiskLink(e.target.value)}
-                >
-                  {taskRiskLinkOptions.map((o) => (
-                    <option key={o.value || "opt-none"} value={o.value}>
-                      {o.label}
-                    </option>
-                  ))}
-                </select>
-                <p className="text-muted-foreground text-[11px] leading-snug">
-                  Listen bygges fra punktene du har lagt inn under «Identifiserte risikoer» (før og etter tiltak).
-                </p>
-              </div>
-              <div className="space-y-1.5 sm:col-span-2">
-                <Label htmlFor="rt-treatment">Risikohåndtering (valgfritt)</Label>
-                <select
-                  id="rt-treatment"
-                  className="border-input bg-background flex h-10 w-full rounded-lg border px-2 text-sm"
-                  value={taskRiskTreatment}
-                  onChange={(e) =>
-                    setTaskRiskTreatment(
-                      e.target.value === ""
-                        ? ""
-                        : (e.target.value as
-                            | "mitigate"
-                            | "accept"
-                            | "transfer"
-                            | "avoid"),
-                    )
-                  }
-                >
-                  {ROS_RISK_TREATMENT_OPTIONS.map((o) => (
-                    <option key={o.value || "none"} value={o.value}>
-                      {o.label}
-                    </option>
-                  ))}
-                </select>
-                {taskRiskTreatment ? (
-                  <p className="text-muted-foreground text-[11px] leading-snug">
-                    {
-                      ROS_RISK_TREATMENT_OPTIONS.find(
-                        (o) => o.value === taskRiskTreatment,
-                      )?.description
-                    }
-                  </p>
-                ) : null}
-              </div>
-              {taskRiskTreatment === "accept" ? (
-                <div className="space-y-1.5 sm:col-span-2">
-                  <Label htmlFor="rt-accept-note">Grunnlag for aksept (valgfritt)</Label>
-                  <Textarea
-                    id="rt-accept-note"
-                    value={taskResidualNote}
-                    onChange={(e) => setTaskResidualNote(e.target.value)}
-                    rows={2}
-                    className="min-h-0"
-                    placeholder="Kort begrunnelse for rest risiko …"
-                  />
-                </div>
-              ) : null}
-              <div className="space-y-1.5">
-                <Label htmlFor="rt-assign">Tildelt</Label>
-                <select
-                  id="rt-assign"
-                  className="border-input bg-background flex h-10 w-full rounded-lg border px-2 text-sm"
-                  value={taskAssignee}
-                  onChange={(e) =>
-                    setTaskAssignee(
-                      e.target.value === ""
-                        ? ""
-                        : (e.target.value as Id<"users">),
-                    )
-                  }
-                >
-                  <option value="">— Ikke tildelt —</option>
-                  {(members ?? []).map((m) => (
-                    <option key={m.userId} value={m.userId}>
-                      {m.name ?? m.email ?? m.userId}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="rt-prio">Prioritet (1–5)</Label>
-                <Input
-                  id="rt-prio"
-                  type="number"
-                  min={1}
-                  max={5}
-                  value={taskPriority}
-                  onChange={(e) =>
-                    setTaskPriority(
-                      Math.min(
-                        5,
-                        Math.max(1, Number(e.target.value) || 3),
-                      ),
-                    )
-                  }
-                />
-              </div>
-              <div className="space-y-1.5 sm:col-span-2">
-                <Label htmlFor="rt-due">Frist (valgfritt)</Label>
-                <Input
-                  id="rt-due"
-                  type="datetime-local"
-                  value={taskDueAt}
-                  onChange={(e) => setTaskDueAt(e.target.value)}
-                />
-              </div>
-            </div>
-            <Button type="submit" disabled={taskBusy || !taskTitle.trim()}>
-              {taskBusy ? "Oppretter …" : "Opprett oppgave"}
-            </Button>
-          </form>
-
-          <Separator />
-
-          {tasks === undefined ? (
-            <p className="text-muted-foreground text-sm">Henter oppgaver …</p>
-          ) : tasks.length === 0 ? (
-            <div className="border-border/40 text-muted-foreground rounded-xl border border-dashed px-4 py-8 text-center text-sm">
-              Ingen oppgaver ennå. Opprett én over, eller gå tilbake til
-              risikovurdering og legg inn risikoer først.
-            </div>
-          ) : (
-            <ul className="space-y-3">
-              {tasks.map((t) => (
-                <li
-                  key={t._id}
-                  className={cn(
-                    "rounded-xl border bg-card p-4 shadow-sm transition-shadow hover:shadow-md",
-                    (t.linkedCellItemId ||
-                      t.matrixRow !== undefined) &&
-                      "border-l-primary border-l-4",
-                  )}
-                >
-                  {editingTaskId === t._id ? (
+          </div>
+        ) : (
+          <ul className="space-y-2">
+            {tasks.map((t) => (
+              <li
+                key={t._id}
+                className={cn(
+                  "group/task overflow-hidden rounded-2xl bg-card shadow-sm ring-1 ring-black/[0.04] transition-all duration-200 hover:shadow-md dark:ring-white/[0.06]",
+                  t.status === "done" && "opacity-60",
+                )}
+              >
+                {editingTaskId === t._id ? (
+                  <div className="p-4 sm:p-5">
                     <TaskEditForm
                       task={t}
                       members={members ?? []}
@@ -1960,216 +1990,337 @@ export function RosAnalysisEditor({
                         setEditingTaskId(null);
                       }}
                     />
-                  ) : (
-                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                      <div className="min-w-0 space-y-2">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <p className="font-medium">{t.title}</p>
-                          <Badge variant={t.status === "done" ? "secondary" : "default"}>
-                            {t.status === "done" ? "Fullført" : "Åpen"}
-                          </Badge>
-                          <span className="text-muted-foreground text-xs tabular-nums">
-                            P{t.priority ?? 3}
+                  </div>
+                ) : (
+                  <div className="flex items-start gap-3 px-4 py-3.5 sm:gap-4">
+                    {/* Status toggle */}
+                    <button
+                      type="button"
+                      className={cn(
+                        "mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full border-2 transition-all",
+                        t.status === "done"
+                          ? "border-emerald-500 bg-emerald-500 text-white"
+                          : "border-border hover:border-emerald-400 hover:bg-emerald-500/10",
+                      )}
+                      onClick={() =>
+                        void setRosTaskStatus({
+                          taskId: t._id,
+                          status: t.status === "done" ? "open" : "done",
+                        })
+                      }
+                      aria-label={t.status === "done" ? "Gjenåpne" : "Fullfør"}
+                    >
+                      {t.status === "done" && <ShieldCheck className="size-3.5" />}
+                    </button>
+
+                    {/* Content */}
+                    <div className="min-w-0 flex-1 space-y-1.5">
+                      <p className={cn(
+                        "text-sm font-medium leading-snug",
+                        t.status === "done" && "line-through",
+                      )}>{t.title}</p>
+
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        {riskTreatmentLabel(t.riskTreatmentKind) ? (
+                          <span className="inline-flex items-center rounded-md bg-primary/10 px-1.5 py-0.5 text-[10px] font-semibold text-primary">
+                            {riskTreatmentLabel(t.riskTreatmentKind)}
                           </span>
-                          {riskTreatmentLabel(t.riskTreatmentKind) ? (
-                            <Badge variant="outline" className="font-normal">
-                              {riskTreatmentLabel(t.riskTreatmentKind)}
-                            </Badge>
-                          ) : null}
-                        </div>
-                        {(t as { linkedRiskSummary?: string | null }).linkedRiskSummary ? (
-                          <p className="text-muted-foreground flex flex-wrap items-center gap-1.5 text-xs">
-                            <Link2 className="text-primary size-3.5 shrink-0" aria-hidden />
-                            <span>
-                              {(t as { linkedRiskSummary?: string | null }).linkedRiskSummary}
-                            </span>
-                          </p>
                         ) : null}
-                        {t.description ? (
-                          <p className="text-muted-foreground text-sm whitespace-pre-wrap">{t.description}</p>
-                        ) : null}
-                        <p className="text-muted-foreground text-xs">
-                          {t.assigneeName ? `Tildelt: ${t.assigneeName}` : "Ikke tildelt"}
-                          {t.dueAt ? ` · Frist ${formatTs(t.dueAt)}` : ""}
-                        </p>
+                        <span className={cn(
+                          "inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-semibold",
+                          (t.priority ?? 3) <= 2 ? "bg-blue-500/10 text-blue-600 dark:text-blue-400"
+                            : (t.priority ?? 3) >= 4 ? "bg-red-500/10 text-red-600 dark:text-red-400"
+                            : "bg-muted text-muted-foreground",
+                        )}>
+                          P{t.priority ?? 3}
+                        </span>
+                        {(t as { linkedRiskSummary?: string | null }).linkedRiskSummary && (
+                          <span className="text-muted-foreground flex items-center gap-1 text-[10px]">
+                            <Link2 className="size-2.5" />
+                            {(t as { linkedRiskSummary?: string | null }).linkedRiskSummary}
+                          </span>
+                        )}
                       </div>
-                      <div className="flex flex-wrap gap-2">
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          onClick={() =>
-                            void setRosTaskStatus({
-                              taskId: t._id,
-                              status: t.status === "done" ? "open" : "done",
-                            })
-                          }
-                        >
-                          {t.status === "done" ? "Gjenåpne" : "Fullfør"}
-                        </Button>
-                        <Button type="button" size="sm" variant="secondary" onClick={() => setEditingTaskId(t._id)}>
-                          Rediger
-                        </Button>
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="ghost"
-                          className="text-destructive"
-                          onClick={() => {
-                            if (window.confirm("Slette denne oppgaven?")) {
-                              void removeRosTask({ taskId: t._id });
-                            }
-                          }}
-                        >
-                          Slett
-                        </Button>
+
+                      {t.description && (
+                        <p className="text-muted-foreground text-xs leading-relaxed">{t.description}</p>
+                      )}
+
+                      <div className="text-muted-foreground flex flex-wrap items-center gap-2 text-[10px]">
+                        {t.assigneeName && <span>{t.assigneeName}</span>}
+                        {t.dueAt && (
+                          <span className={cn(
+                            t.status !== "done" && t.dueAt < Date.now() && "font-semibold text-red-600 dark:text-red-400",
+                          )}>
+                            Frist {formatTs(t.dueAt)}
+                          </span>
+                        )}
                       </div>
                     </div>
-                  )}
-                </li>
-              ))}
-            </ul>
+
+                    {/* Actions */}
+                    <div className="flex shrink-0 gap-1 opacity-0 transition-opacity group-hover/task:opacity-100">
+                      <button
+                        type="button"
+                        className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                        onClick={() => setEditingTaskId(t._id)}
+                        aria-label="Rediger"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="size-3.5"><path d="M13.488 2.513a1.75 1.75 0 0 0-2.475 0L3.22 10.306a1 1 0 0 0-.26.443l-.884 3.182a.25.25 0 0 0 .306.306l3.182-.884a1 1 0 0 0 .443-.26l7.793-7.793a1.75 1.75 0 0 0 0-2.475l-.312-.312Z" /></svg>
+                      </button>
+                      <button
+                        type="button"
+                        className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-red-500/10 hover:text-red-600"
+                        onClick={() => {
+                          if (window.confirm("Slette denne oppgaven?")) {
+                            void removeRosTask({ taskId: t._id });
+                          }
+                        }}
+                        aria-label="Slett"
+                      >
+                        <Trash2 className="size-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+
+        {/* Quick-add form */}
+        <form
+          onSubmit={(e) => void onCreateTask(e)}
+          className="space-y-4 rounded-2xl bg-card p-4 shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.06] sm:p-5"
+        >
+          <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Ny oppgave</p>
+          <div className="flex gap-2">
+            <Input
+              value={taskTitle}
+              onChange={(e) => setTaskTitle(e.target.value)}
+              placeholder="Hva må gjøres?"
+              className="flex-1 rounded-xl"
+            />
+            <Button type="submit" disabled={taskBusy || !taskTitle.trim()} className="shrink-0 rounded-xl">
+              <Plus className="size-4" />
+              <span className="hidden sm:inline">Opprett</span>
+            </Button>
+          </div>
+
+          {/* Collapsed advanced fields */}
+          {taskTitle.trim() && (
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Textarea
+                value={taskDesc}
+                onChange={(e) => setTaskDesc(e.target.value)}
+                rows={2}
+                className="min-h-0 rounded-xl text-sm sm:col-span-2"
+                placeholder="Beskrivelse (valgfritt)"
+              />
+              <select
+                className="border-input bg-background flex h-9 w-full rounded-xl border px-2 text-xs"
+                value={taskRiskLink}
+                onChange={(e) => setTaskRiskLink(e.target.value)}
+              >
+                {taskRiskLinkOptions.map((o) => (
+                  <option key={o.value || "opt-none"} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+              <select
+                className="border-input bg-background flex h-9 w-full rounded-xl border px-2 text-xs"
+                value={taskRiskTreatment}
+                onChange={(e) =>
+                  setTaskRiskTreatment(
+                    e.target.value === ""
+                      ? ""
+                      : (e.target.value as "mitigate" | "accept" | "transfer" | "avoid"),
+                  )
+                }
+              >
+                {ROS_RISK_TREATMENT_OPTIONS.map((o) => (
+                  <option key={o.value || "none"} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+              {taskRiskTreatment === "accept" && (
+                <Textarea
+                  value={taskResidualNote}
+                  onChange={(e) => setTaskResidualNote(e.target.value)}
+                  rows={2}
+                  className="min-h-0 rounded-xl text-sm sm:col-span-2"
+                  placeholder="Grunnlag for aksept …"
+                />
+              )}
+              <select
+                className="border-input bg-background flex h-9 w-full rounded-xl border px-2 text-xs"
+                value={taskAssignee}
+                onChange={(e) =>
+                  setTaskAssignee(e.target.value === "" ? "" : (e.target.value as Id<"users">))
+                }
+              >
+                <option value="">— Tildel ansvarlig —</option>
+                {(members ?? []).map((m) => (
+                  <option key={m.userId} value={m.userId}>
+                    {m.name ?? m.email ?? m.userId}
+                  </option>
+                ))}
+              </select>
+              <div className="flex gap-2">
+                <Input
+                  type="number"
+                  min={1}
+                  max={5}
+                  value={taskPriority}
+                  onChange={(e) =>
+                    setTaskPriority(Math.min(5, Math.max(1, Number(e.target.value) || 3)))
+                  }
+                  className="w-20 rounded-xl text-xs"
+                  placeholder="Prio"
+                />
+                <Input
+                  type="datetime-local"
+                  value={taskDueAt}
+                  onChange={(e) => setTaskDueAt(e.target.value)}
+                  className="flex-1 rounded-xl text-xs"
+                />
+              </div>
+            </div>
           )}
-        </CardContent>
-      </Card>
+        </form>
+      </div>
       )}
 
       {/* === Section 2: Oppsummering === */}
       {rosSection === 2 && (
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Oppsummering og risikoreduksjon</CardTitle>
-          <CardDescription>
-            Register før/etter tiltak — sammenlign celler og trender.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-5">
-          <div id="ros-risk-register" className="space-y-3 scroll-mt-24">
-            {riskRegisterSnapshot ? (
-              <RosRiskRegisterTable
-                sameLayout={data.rosSummary.sameLayout}
-                before={riskRegisterSnapshot.before}
-                after={riskRegisterSnapshot.after}
-              />
-            ) : null}
-          </div>
-          {data.rosSummary.suggestedLinkFlags.length > 0 ? (
-            <p className="text-muted-foreground text-xs leading-relaxed">
-              <span className="text-foreground font-medium">PVV-flagg:</span>{" "}
+      <div className="space-y-5">
+        <RiskSummaryBar
+          cellItemsMatrix={cellItemsMatrix}
+          matrixValues={matrix}
+          matrixAfter={matrixAfter}
+          cellItemsAfterMatrix={cellItemsAfterMatrix}
+          rowLabels={data.rowLabels}
+          colLabels={data.colLabels}
+          afterRowLabels={effectiveAfterRowLabels}
+          afterColLabels={effectiveAfterColLabels}
+        />
+
+        <div id="ros-risk-register" className="scroll-mt-24">
+          {riskRegisterSnapshot ? (
+            <RosRiskRegisterTable
+              sameLayout={data.rosSummary.sameLayout}
+              before={riskRegisterSnapshot.before}
+              after={riskRegisterSnapshot.after}
+            />
+          ) : null}
+        </div>
+
+        {data.rosSummary.suggestedLinkFlags.length > 0 && (
+          <div className="flex items-center gap-2 rounded-xl bg-amber-500/[0.06] px-4 py-3 ring-1 ring-amber-500/15">
+            <Sparkles className="size-4 shrink-0 text-amber-600 dark:text-amber-400" />
+            <p className="text-xs text-muted-foreground">
+              <span className="font-semibold text-foreground">Foreslåtte PVV-flagg:</span>{" "}
               {data.rosSummary.suggestedLinkFlags.join(", ")}
             </p>
-          ) : null}
-        </CardContent>
-      </Card>
+          </div>
+        )}
+      </div>
       )}
 
       {/* === Section 3: PVV === */}
       {rosSection === 3 && (
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-base">
-            <Link2 className="size-4" />
-            PVV-vurderinger (mange-til-mange)
-          </CardTitle>
-          <CardDescription>
-            Koble PVV-vurderinger og noter hva som er relevant for personvern.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {pddAlignmentHint ? (
-            <Alert className="border-amber-500/35 bg-amber-500/[0.06]">
-              <AlertTitle className="text-sm">Samsvar ROS og PDD</AlertTitle>
-              <AlertDescription className="text-muted-foreground text-sm leading-relaxed">
-                {ROS_PDD_ALIGNMENT_HINT_NB} Status for personvern (PDD) på hver
-                koblet vurdering vises nedenfor — én sannhetskilde i PVV-skjemaet.
-              </AlertDescription>
-            </Alert>
-          ) : null}
-          {data.legacyAssessmentId ? (
-            <div className="bg-muted/40 flex flex-col gap-2 rounded-xl border p-3 text-sm sm:flex-row sm:items-center sm:justify-between">
-              <p>
-                Denne analysen har en <strong>eldre enkeltkobling</strong> til
-                PVV. Du kan flytte den til koblingstabellen eller fjerne feltet.
+      <div className="space-y-5">
+        {pddAlignmentHint && (
+          <div className="flex items-start gap-3 rounded-2xl bg-amber-500/[0.06] px-4 py-3.5 ring-1 ring-amber-500/15">
+            <ShieldAlert className="mt-0.5 size-5 shrink-0 text-amber-600 dark:text-amber-400" />
+            <div>
+              <p className="text-sm font-semibold">Samsvar ROS og PDD</p>
+              <p className="text-muted-foreground mt-0.5 text-xs leading-relaxed">
+                {ROS_PDD_ALIGNMENT_HINT_NB}
               </p>
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="secondary"
-                  onClick={() =>
-                    void migrateLegacyAssessmentToLinks({ analysisId })
-                  }
-                >
-                  Flytt til koblinger
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  onClick={() =>
-                    void clearLegacyAssessment({ analysisId })
-                  }
-                >
-                  Fjern eldre felt
-                </Button>
-              </div>
             </div>
-          ) : null}
+          </div>
+        )}
 
-          {data.linkedAssessments.length === 0 ? (
-            <p className="text-muted-foreground text-sm">
-              Ingen PVV koblet ennå — velg under.
+        {data.legacyAssessmentId && (
+          <div className="flex flex-col gap-3 rounded-2xl bg-muted/20 px-4 py-4 ring-1 ring-black/[0.04] dark:ring-white/[0.06] sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-sm">
+              Denne analysen har en <strong>eldre enkeltkobling</strong>. Migrer eller fjern den.
             </p>
-          ) : (
-            <ul className="space-y-4">
-              {data.linkedAssessments.map((l) => (
-                <li
-                  key={l.linkId}
-                  className="space-y-3 rounded-lg border px-3 py-3"
-                >
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div className="min-w-0 space-y-1">
-                      <Link
-                        href={`/w/${workspaceId}/a/${l.assessmentId}`}
-                        className="text-primary font-medium hover:underline"
-                      >
-                        {l.title}
-                      </Link>
-                      <p className="text-muted-foreground text-xs">
-                        PDD (PVV):{" "}
-                        <span className="text-foreground font-medium">
-                          {COMPLIANCE_STATUS_LABELS[
-                            (l.pddStatus ??
-                              "not_started") as ComplianceStatusKey
-                          ]}
-                        </span>
-                        {l.pddUrl ? (
-                          <>
-                            {" "}
-                            ·{" "}
-                            <a
-                              href={l.pddUrl}
-                              className="text-primary underline-offset-4 hover:underline"
-                              target="_blank"
-                              rel="noopener noreferrer"
-                            >
-                              lenke
-                            </a>
-                          </>
-                        ) : null}
-                      </p>
-                    </div>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="text-destructive"
-                      onClick={() => void onUnlink(l.linkId)}
-                    >
-                      <Trash2 className="size-3.5" />
-                      Fjern
-                    </Button>
+            <div className="flex flex-wrap gap-2">
+              <Button type="button" size="sm" className="rounded-xl" onClick={() => void migrateLegacyAssessmentToLinks({ analysisId })}>
+                Flytt til koblinger
+              </Button>
+              <Button type="button" size="sm" variant="outline" className="rounded-xl" onClick={() => void clearLegacyAssessment({ analysisId })}>
+                Fjern
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {data.linkedAssessments.length === 0 ? (
+          <div className="flex flex-col items-center gap-3 rounded-2xl bg-muted/10 px-6 py-12 text-center ring-1 ring-black/[0.04] dark:ring-white/[0.06]">
+            <div className="flex size-14 items-center justify-center rounded-2xl bg-primary/10">
+              <Link2 className="size-7 text-primary" />
+            </div>
+            <div>
+              <p className="text-sm font-semibold">Ingen PVV-vurderinger koblet</p>
+              <p className="text-muted-foreground mt-1 max-w-xs text-xs">
+                Koble personvernvurderinger for å spore samsvar mellom risikoanalyse og PDD.
+              </p>
+            </div>
+          </div>
+        ) : (
+          <ul className="space-y-2">
+            {data.linkedAssessments.map((l) => (
+              <li
+                key={l.linkId}
+                className="group/pvv overflow-hidden rounded-2xl bg-card shadow-sm ring-1 ring-black/[0.04] transition-all duration-200 hover:shadow-md dark:ring-white/[0.06]"
+              >
+                <div className="flex items-start gap-3 px-4 py-3.5 sm:gap-4">
+                  <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10">
+                    <Link2 className="size-5 text-primary" />
                   </div>
+                  <div className="min-w-0 flex-1 space-y-1">
+                    <Link
+                      href={`/w/${workspaceId}/a/${l.assessmentId}`}
+                      className="text-sm font-medium text-primary hover:underline"
+                    >
+                      {l.title}
+                    </Link>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className={cn(
+                        "inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-semibold",
+                        (l.pddStatus ?? "not_started") === "completed" ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
+                          : (l.pddStatus ?? "not_started") === "in_progress" ? "bg-blue-500/10 text-blue-700 dark:text-blue-300"
+                          : "bg-muted text-muted-foreground",
+                      )}>
+                        PDD: {COMPLIANCE_STATUS_LABELS[(l.pddStatus ?? "not_started") as ComplianceStatusKey]}
+                      </span>
+                      {l.highlightForPvv && (
+                        <span className="inline-flex items-center rounded-md bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700 dark:text-amber-300">
+                          Viktig for PVV
+                        </span>
+                      )}
+                      {l.pddUrl && (
+                        <a href={l.pddUrl} className="text-primary text-[10px] underline-offset-4 hover:underline" target="_blank" rel="noopener noreferrer">
+                          PDD-lenke
+                        </a>
+                      )}
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    className="rounded-lg p-1.5 text-muted-foreground opacity-0 transition-all hover:bg-red-500/10 hover:text-red-600 group-hover/pvv:opacity-100"
+                    onClick={() => void onUnlink(l.linkId)}
+                    aria-label="Fjern kobling"
+                  >
+                    <Trash2 className="size-3.5" />
+                  </button>
+                </div>
+                <div className="border-t border-border/30 px-4 py-3">
                   <RosPvvLinkFields
                     linkId={l.linkId}
                     flags={l.flags}
@@ -2183,98 +2334,85 @@ export function RosAnalysisEditor({
                       });
                     }}
                   />
-                </li>
-              ))}
-            </ul>
-          )}
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
 
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
-            <div className="min-w-0 flex-1 space-y-1.5">
-              <Label htmlFor="ros-add-pv">Legg til PVV</Label>
-              <select
-                id="ros-add-pv"
-                className="border-input bg-background flex h-10 w-full rounded-lg border px-2 text-sm"
-                value={addPvId}
-                onChange={(e) =>
-                  setAddPvId(
-                    e.target.value === ""
-                      ? ""
-                      : (e.target.value as Id<"assessments">),
-                  )
-                }
-              >
-                <option value="">— Velg vurdering —</option>
-                {addableAssessments.map((a) => (
-                  <option key={a._id} value={a._id}>
-                    {a.title}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <Button
-              type="button"
-              disabled={addPvId === ""}
-              onClick={() => void onAddPv()}
-            >
-              <Plus className="size-4" />
-              Koble
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+        {/* Add link */}
+        <div className="flex gap-2 rounded-2xl bg-card p-4 shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.06]">
+          <select
+            className="border-input bg-background flex h-9 min-w-0 flex-1 rounded-xl border px-2 text-xs"
+            value={addPvId}
+            onChange={(e) =>
+              setAddPvId(e.target.value === "" ? "" : (e.target.value as Id<"assessments">))
+            }
+          >
+            <option value="">— Koble ny PVV-vurdering —</option>
+            {addableAssessments.map((a) => (
+              <option key={a._id} value={a._id}>{a.title}</option>
+            ))}
+          </select>
+          <Button type="button" disabled={addPvId === ""} onClick={() => void onAddPv()} className="shrink-0 rounded-xl">
+            <Plus className="size-4" />
+            Koble
+          </Button>
+        </div>
+      </div>
       )}
 
       {/* === Section 4: Innstillinger (consolidated) === */}
       {rosSection === 4 && (
-      <div className="space-y-4">
+      <div className="space-y-5">
         {/* Detaljer */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Detaljer</CardTitle>
-          </CardHeader>
-          <CardContent className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-2 sm:col-span-2">
-              <Label htmlFor="ros-title">Tittel</Label>
+        <div className="space-y-4 rounded-2xl bg-card p-5 shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.06] sm:p-6">
+          <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Detaljer</p>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-1.5 sm:col-span-2">
+              <Label htmlFor="ros-title" className="text-xs">Tittel</Label>
               <Input
                 id="ros-title"
                 value={title}
                 onChange={(e) => { setTitle(e.target.value); setDirty(true); }}
+                className="rounded-xl"
               />
             </div>
-            <div className="space-y-2 sm:col-span-2">
-              <Label htmlFor="ros-notes">Notat</Label>
+            <div className="space-y-1.5 sm:col-span-2">
+              <Label htmlFor="ros-notes" className="text-xs">Notat</Label>
               <Textarea
                 id="ros-notes"
                 value={notes}
                 onChange={(e) => { setNotes(e.target.value); setDirty(true); }}
                 rows={3}
-                className="min-h-[4rem]"
+                className="min-h-[4rem] rounded-xl"
               />
             </div>
-            <div className="space-y-2 sm:col-span-2">
-              <Label htmlFor="ros-next-review">Neste revisjon</Label>
+            <div className="space-y-1.5">
+              <Label htmlFor="ros-next-review" className="text-xs">Neste revisjon</Label>
               <Input
                 id="ros-next-review"
                 type="datetime-local"
                 value={nextReviewLocal}
                 onChange={(e) => { setNextReviewLocal(e.target.value); setDirty(true); }}
                 onBlur={() => void flushReviewSchedule()}
+                className="rounded-xl"
               />
             </div>
-            <div className="space-y-2 sm:col-span-2">
-              <Label htmlFor="ros-review-routine">Rutine</Label>
+            <div className="space-y-1.5">
+              <Label htmlFor="ros-review-routine" className="text-xs">Rutine</Label>
               <Textarea
                 id="ros-review-routine"
                 value={reviewRoutineNotes}
                 onChange={(e) => { setReviewRoutineNotes(e.target.value); setDirty(true); }}
                 onBlur={() => void flushReviewSchedule()}
                 rows={2}
-                className="min-h-[3rem]"
+                className="min-h-[3rem] rounded-xl"
                 placeholder="F.eks. årlig gjennomgang …"
               />
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </div>
 
         {/* Livssyklus og krav */}
         <RosLifecycleCompliancePanel
@@ -2298,57 +2436,50 @@ export function RosAnalysisEditor({
         />
 
         {/* Etter tiltak — egne akser */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Etter tiltak — egne akser</CardTitle>
-            <CardDescription>
-              Valgfritt eget rutenett for restrisiko.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex items-start gap-3">
-              <Checkbox
-                id="ros-separate-after"
-                checked={useSeparateAfterAxes}
-                onCheckedChange={(c) => {
-                  const checked = Boolean(c);
-                  if (checked && data) {
-                    setRowLabelsAfterText(data.rowLabels.join("\n"));
-                    setColLabelsAfterText(data.colLabels.join("\n"));
-                    setRowAxisTitleAfter(data.rowAxisTitle);
-                    setColAxisTitleAfter(data.colAxisTitle);
-                    setMatrixAfter(matrix.map((r) => [...r]));
-                    setCellItemsAfterMatrix(cellItemsMatrix.map((r) => r.map((c2) => c2.map((it) => ({ ...it })))));
-                  }
-                  setUseSeparateAfterAxes(checked);
-                  setDirty(true);
-                }}
-              />
-              <Label htmlFor="ros-separate-after" className="cursor-pointer text-sm">
-                Bruk eget rutenett for etter tiltak
-              </Label>
-            </div>
-            {useSeparateAfterAxes ? (
-              <div className="space-y-6">
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label htmlFor="ros-after-row-axis">Radakse</Label>
-                    <Input id="ros-after-row-axis" value={rowAxisTitleAfter} onChange={(e) => { setRowAxisTitleAfter(e.target.value); setDirty(true); }} />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="ros-after-col-axis">Kolonneakse</Label>
-                    <Input id="ros-after-col-axis" value={colAxisTitleAfter} onChange={(e) => { setColAxisTitleAfter(e.target.value); setDirty(true); }} />
-                  </div>
+        <div className="space-y-4 rounded-2xl bg-card p-5 shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.06] sm:p-6">
+          <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Etter tiltak — egne akser</p>
+          <div className="flex items-start gap-3">
+            <Checkbox
+              id="ros-separate-after"
+              checked={useSeparateAfterAxes}
+              onCheckedChange={(c) => {
+                const checked = Boolean(c);
+                if (checked && data) {
+                  setRowLabelsAfterText(data.rowLabels.join("\n"));
+                  setColLabelsAfterText(data.colLabels.join("\n"));
+                  setRowAxisTitleAfter(data.rowAxisTitle);
+                  setColAxisTitleAfter(data.colAxisTitle);
+                  setMatrixAfter(matrix.map((r) => [...r]));
+                  setCellItemsAfterMatrix(cellItemsMatrix.map((r) => r.map((c2) => c2.map((it) => ({ ...it })))));
+                }
+                setUseSeparateAfterAxes(checked);
+                setDirty(true);
+              }}
+            />
+            <Label htmlFor="ros-separate-after" className="cursor-pointer text-sm">
+              Bruk eget rutenett for etter tiltak
+            </Label>
+          </div>
+          {useSeparateAfterAxes && (
+            <div className="space-y-5 border-t border-border/30 pt-4">
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="space-y-1.5">
+                  <Label htmlFor="ros-after-row-axis" className="text-xs">Radakse</Label>
+                  <Input id="ros-after-row-axis" value={rowAxisTitleAfter} onChange={(e) => { setRowAxisTitleAfter(e.target.value); setDirty(true); }} className="rounded-xl" />
                 </div>
-                <Button type="button" variant="secondary" size="sm" onClick={() => copyBeforeAxesToAfter()}>
-                  Kopier fra før-matrise
-                </Button>
-                <RosLabelLevelsEditor variant="matrixAxes" id="ros-after-rows" title="Rader" intro="Hvert nummer er ett nivå." value={rowLabelsAfterText} onChange={onRowLabelsAfterChange} defaultLabels={DEFAULT_ROS_ROW_LABELS} lowEndHint="lav" highEndHint="høy" />
-                <RosLabelLevelsEditor variant="matrixAxes" id="ros-after-cols" title="Kolonner" intro="Hvert nummer er ett nivå." value={colLabelsAfterText} onChange={onColLabelsAfterChange} defaultLabels={DEFAULT_ROS_COL_LABELS} lowEndHint="lav" highEndHint="høy" />
+                <div className="space-y-1.5">
+                  <Label htmlFor="ros-after-col-axis" className="text-xs">Kolonneakse</Label>
+                  <Input id="ros-after-col-axis" value={colAxisTitleAfter} onChange={(e) => { setColAxisTitleAfter(e.target.value); setDirty(true); }} className="rounded-xl" />
+                </div>
               </div>
-            ) : null}
-          </CardContent>
-        </Card>
+              <Button type="button" variant="secondary" size="sm" className="rounded-xl" onClick={() => copyBeforeAxesToAfter()}>
+                Kopier fra før-matrise
+              </Button>
+              <RosLabelLevelsEditor variant="matrixAxes" id="ros-after-rows" title="Rader" intro="Hvert nummer er ett nivå." value={rowLabelsAfterText} onChange={onRowLabelsAfterChange} defaultLabels={DEFAULT_ROS_ROW_LABELS} lowEndHint="lav" highEndHint="høy" />
+              <RosLabelLevelsEditor variant="matrixAxes" id="ros-after-cols" title="Kolonner" intro="Hvert nummer er ett nivå." value={colLabelsAfterText} onChange={onColLabelsAfterChange} defaultLabels={DEFAULT_ROS_COL_LABELS} lowEndHint="lav" highEndHint="høy" />
+            </div>
+          )}
+        </div>
 
         <RosVersionsPanel
           analysisId={analysisId}
@@ -2356,7 +2487,6 @@ export function RosAnalysisEditor({
           onRestored={() => setDirty(false)}
         />
 
-        {/* Journal */}
         <RosJournalPanel
           analysisId={analysisId}
           expectedRevision={data.revision ?? 0}
@@ -2375,42 +2505,37 @@ export function RosAnalysisEditor({
       </div>
       )}
 
-      {/* Dead old sections removed — bottom nav follows */}
-
-      <div className="fixed bottom-0 left-0 right-0 z-30 border-t border-border/50 bg-background/95 pb-[max(0.375rem,env(safe-area-inset-bottom))] pt-1.5 shadow-[0_-2px_8px_rgba(0,0,0,0.06)] backdrop-blur-md supports-[backdrop-filter]:bg-background/85">
-        <div className="mx-auto flex max-w-6xl items-center gap-2 px-3 sm:px-4">
+      {/* Bottom navigation */}
+      <div className="fixed bottom-0 left-0 right-0 z-30 bg-background/95 backdrop-blur-md supports-[backdrop-filter]:bg-background/85">
+        <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:px-5">
           <Button
             type="button"
             variant="ghost"
-            size="sm"
-            className="h-9 gap-1 px-2.5 text-xs font-medium"
+            className="h-10 gap-1.5 rounded-xl px-4 text-sm font-medium"
             onClick={() => setRosSection((s) => Math.max(0, s - 1))}
             disabled={rosSection <= 0}
           >
             <ChevronLeft className="size-4" aria-hidden />
-            <span className="hidden sm:inline">Forrige</span>
+            Forrige
           </Button>
-          <div className="flex flex-1 items-center justify-center gap-1.5">
+          <div className="flex items-center gap-1.5">
             {ROS_EDITOR_SECTIONS.map((_, i) => (
               <button
                 key={i}
                 type="button"
                 onClick={() => setRosSection(i)}
                 className={cn(
-                  "rounded-full transition-all",
-                  i === rosSection
-                    ? "bg-primary h-2 w-6"
-                    : "bg-muted-foreground/25 hover:bg-muted-foreground/40 size-2",
+                  "size-2 rounded-full transition-all duration-200",
+                  rosSection === i ? "bg-primary scale-125" : "bg-border hover:bg-muted-foreground/50",
                 )}
-                aria-label={`Steg ${i + 1}: ${ROS_EDITOR_SECTIONS[i]?.label}`}
+                aria-label={`Gå til del ${i + 1}`}
               />
             ))}
           </div>
           {rosSection >= ROS_EDITOR_SECTIONS.length - 1 ? (
             <Button
               type="button"
-              size="sm"
-              className="h-9 gap-1 px-3 text-xs font-semibold shadow-sm"
+              className="h-10 gap-1.5 rounded-xl px-5 text-sm font-semibold shadow-md"
               disabled={saving}
               onClick={async () => {
                 const ok = await save();
@@ -2424,13 +2549,11 @@ export function RosAnalysisEditor({
           ) : (
             <Button
               type="button"
-              size="sm"
-              className="h-9 gap-1 px-3 text-xs font-semibold shadow-sm"
+              className="h-10 gap-1.5 rounded-xl px-5 text-sm font-semibold shadow-md"
               onClick={() => setRosSection((s) => Math.min(ROS_EDITOR_SECTIONS.length - 1, s + 1))}
             >
-              <span className="hidden sm:inline">Neste</span>
-              <span className="sm:hidden">→</span>
-              <ChevronRight className="hidden size-4 sm:block" aria-hidden />
+              Neste
+              <ChevronRight className="size-4" aria-hidden />
             </Button>
           )}
         </div>
@@ -2503,145 +2626,105 @@ function TaskEditForm({
 
   return (
     <div className="space-y-3">
-      <div className="space-y-1.5">
-        <Label>Tittel</Label>
-        <Input
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-        />
-      </div>
-      <div className="space-y-1.5">
-        <Label>Beskrivelse</Label>
-        <Textarea
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-          rows={3}
-        />
-      </div>
-      <div className="space-y-1.5">
-        <Label>Kobling til risiko / tiltak</Label>
+      <Input
+        value={title}
+        onChange={(e) => setTitle(e.target.value)}
+        placeholder="Tittel"
+        className="rounded-xl font-medium"
+      />
+      <Textarea
+        value={description}
+        onChange={(e) => setDescription(e.target.value)}
+        rows={2}
+        className="min-h-0 rounded-xl text-sm"
+        placeholder="Beskrivelse (valgfritt)"
+      />
+      <div className="grid gap-2 sm:grid-cols-2">
         <select
-          className="border-input bg-background flex h-10 w-full rounded-lg border px-2 text-sm"
+          className="border-input bg-background flex h-9 w-full rounded-xl border px-2 text-xs"
           value={riskLink}
           onChange={(e) => setRiskLink(e.target.value)}
         >
           {riskLinkOptions.map((o) => (
-            <option key={o.value || "opt-none"} value={o.value}>
-              {o.label}
-            </option>
+            <option key={o.value || "opt-none"} value={o.value}>{o.label}</option>
           ))}
         </select>
-      </div>
-      <div className="space-y-1.5">
-        <Label>Risikohåndtering</Label>
         <select
-          className="border-input bg-background flex h-10 w-full rounded-lg border px-2 text-sm"
+          className="border-input bg-background flex h-9 w-full rounded-xl border px-2 text-xs"
           value={treatment}
           onChange={(e) =>
             setTreatment(
-              e.target.value === ""
-                ? ""
-                : (e.target.value as
-                    | "mitigate"
-                    | "accept"
-                    | "transfer"
-                    | "avoid"),
+              e.target.value === "" ? "" : (e.target.value as "mitigate" | "accept" | "transfer" | "avoid"),
             )
           }
         >
           {ROS_RISK_TREATMENT_OPTIONS.map((o) => (
-            <option key={o.value || "none"} value={o.value}>
-              {o.label}
-            </option>
+            <option key={o.value || "none"} value={o.value}>{o.label}</option>
           ))}
         </select>
       </div>
-      {treatment === "accept" ? (
-        <div className="space-y-1.5">
-          <Label>Grunnlag for aksept (valgfritt)</Label>
-          <Textarea
-            value={acceptNote}
-            onChange={(e) => setAcceptNote(e.target.value)}
-            rows={2}
-          />
-        </div>
-      ) : null}
-      <div className="grid gap-3 sm:grid-cols-2">
-        <div className="space-y-1.5">
-          <Label>Tildelt</Label>
-          <select
-            className="border-input bg-background flex h-10 w-full rounded-lg border px-2 text-sm"
-            value={assigneeUserId}
-            onChange={(e) =>
-              setAssigneeUserId(
-                e.target.value === ""
-                  ? ""
-                  : (e.target.value as Id<"users">),
-              )
-            }
-          >
-            <option value="">— Ikke tildelt —</option>
-            {members.map((m) => (
-              <option key={m.userId} value={m.userId}>
-                {m.name ?? m.email ?? m.userId}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="space-y-1.5">
-          <Label>Prioritet (1–5)</Label>
-          <Input
-            type="number"
-            min={1}
-            max={5}
-            value={priority}
-            onChange={(e) =>
-              setPriority(
-                Math.min(5, Math.max(1, Number(e.target.value) || 3)),
-              )
-            }
-          />
-        </div>
-      </div>
-      <div className="space-y-1.5">
-        <Label>Frist (valgfritt)</Label>
+      {treatment === "accept" && (
+        <Textarea
+          value={acceptNote}
+          onChange={(e) => setAcceptNote(e.target.value)}
+          rows={2}
+          className="min-h-0 rounded-xl text-sm"
+          placeholder="Grunnlag for aksept …"
+        />
+      )}
+      <div className="grid gap-2 sm:grid-cols-3">
+        <select
+          className="border-input bg-background flex h-9 w-full rounded-xl border px-2 text-xs"
+          value={assigneeUserId}
+          onChange={(e) => setAssigneeUserId(e.target.value === "" ? "" : (e.target.value as Id<"users">))}
+        >
+          <option value="">— Tildel —</option>
+          {members.map((m) => (
+            <option key={m.userId} value={m.userId}>{m.name ?? m.email ?? m.userId}</option>
+          ))}
+        </select>
+        <Input
+          type="number"
+          min={1}
+          max={5}
+          value={priority}
+          onChange={(e) => setPriority(Math.min(5, Math.max(1, Number(e.target.value) || 3)))}
+          className="rounded-xl text-xs"
+          placeholder="Prioritet"
+        />
         <Input
           type="datetime-local"
           value={dueAt}
           onChange={(e) => setDueAt(e.target.value)}
+          className="rounded-xl text-xs"
         />
       </div>
-      <div className="flex flex-wrap gap-2">
+      <div className="flex gap-2">
         <Button
           type="button"
+          size="sm"
+          className="rounded-xl"
           disabled={busy || !title.trim()}
           onClick={() => {
             setBusy(true);
-            const dueMs =
-              dueAt === ""
-                ? null
-                : new Date(dueAt).getTime();
+            const dueMs = dueAt === "" ? null : new Date(dueAt).getTime();
             const risk = parseRosTaskRiskLink(riskLink);
             void onSave({
               title: title.trim(),
               description: description.trim() || null,
-              assigneeUserId:
-                assigneeUserId === "" ? null : assigneeUserId,
+              assigneeUserId: assigneeUserId === "" ? null : assigneeUserId,
               priority,
               dueAt: dueMs,
               linkedCellItemId: risk ? risk.linkedCellItemId : null,
               linkedCellItemPhase: risk ? risk.linkedCellItemPhase : null,
               riskTreatmentKind: treatment === "" ? null : treatment,
-              residualRiskAcceptedNote:
-                treatment === "accept"
-                  ? acceptNote.trim() || null
-                  : null,
+              residualRiskAcceptedNote: treatment === "accept" ? acceptNote.trim() || null : null,
             }).finally(() => setBusy(false));
           }}
         >
           Lagre
         </Button>
-        <Button type="button" variant="outline" onClick={onCancel}>
+        <Button type="button" size="sm" variant="ghost" className="rounded-xl" onClick={onCancel}>
           Avbryt
         </Button>
       </div>

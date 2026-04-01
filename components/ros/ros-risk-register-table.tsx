@@ -9,11 +9,12 @@ import {
 } from "@/lib/ros-risk-register";
 import type { RosCellItemMatrix } from "@/lib/ros-cell-items";
 import { ROS_CELL_FLAG_REQUIRES_ACTION } from "@/lib/ros-cell-items";
-import { legendItems } from "@/lib/ros-risk-colors";
 import { cn } from "@/lib/utils";
 import {
   ArrowDown,
+  ArrowRight,
   ArrowUp,
+  ChevronDown,
   Equal,
   Minus,
   Plus,
@@ -23,6 +24,7 @@ import {
   ShieldAlert,
   AlertTriangle,
 } from "lucide-react";
+import { useState } from "react";
 
 type Props = {
   sameLayout: boolean;
@@ -40,12 +42,6 @@ type Props = {
   };
   className?: string;
 };
-
-const riskLegend = legendItems();
-
-function levelLabel(level: number): string {
-  return riskLegend.find((l) => l.level === level)?.label ?? `${level}`;
-}
 
 function levelBadgeClass(level: number): string {
   switch (level) {
@@ -105,308 +101,193 @@ function SummaryCards({ rows }: { rows: PairedRiskRegisterRow[] }) {
   if (s.total === 0) return null;
 
   return (
-    <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-      <div className="rounded-lg border p-3">
-        <p className="text-muted-foreground text-xs font-medium">Totalt identifisert</p>
-        <p className="text-foreground mt-1 text-2xl font-bold tabular-nums">{s.total}</p>
+    <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <div className="flex items-center gap-3 rounded-2xl bg-muted/20 px-4 py-3.5 ring-1 ring-black/[0.04] dark:ring-white/[0.06]">
+        <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10">
+          <ShieldCheck className="size-5 text-primary" />
+        </div>
+        <div>
+          <p className="text-2xl font-bold tabular-nums leading-none">{s.total}</p>
+          <p className="text-muted-foreground mt-0.5 text-[11px]">Identifisert</p>
+        </div>
       </div>
 
-      {s.improved > 0 ? (
-        <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/[0.04] p-3">
-          <p className="flex items-center gap-1 text-xs font-medium text-emerald-700 dark:text-emerald-400">
-            <TrendingDown className="size-3.5" />
-            Redusert
-          </p>
-          <p className="mt-1 text-2xl font-bold tabular-nums text-emerald-700 dark:text-emerald-300">
-            {s.improved}
-          </p>
+      <div className={cn(
+        "flex items-center gap-3 rounded-2xl px-4 py-3.5 ring-1",
+        s.improved > 0
+          ? "bg-emerald-500/[0.06] ring-emerald-500/15"
+          : "bg-muted/20 ring-black/[0.04] dark:ring-white/[0.06]",
+      )}>
+        <div className={cn(
+          "flex size-10 shrink-0 items-center justify-center rounded-xl",
+          s.improved > 0 ? "bg-emerald-500/15" : "bg-muted/30",
+        )}>
+          <TrendingDown className={cn("size-5", s.improved > 0 ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground")} />
         </div>
-      ) : (
-        <div className="rounded-lg border p-3">
-          <p className="text-muted-foreground flex items-center gap-1 text-xs font-medium">
-            <TrendingDown className="size-3.5" />
-            Redusert
-          </p>
-          <p className="text-muted-foreground mt-1 text-2xl font-bold tabular-nums">0</p>
+        <div>
+          <p className="text-2xl font-bold tabular-nums leading-none">{s.improved}</p>
+          <p className="text-muted-foreground mt-0.5 text-[11px]">Redusert</p>
         </div>
-      )}
+      </div>
 
-      {s.worse > 0 ? (
-        <div className="rounded-lg border border-red-500/20 bg-red-500/[0.04] p-3">
-          <p className="flex items-center gap-1 text-xs font-medium text-red-700 dark:text-red-400">
-            <TrendingUp className="size-3.5" />
-            Økt risiko
-          </p>
-          <p className="mt-1 text-2xl font-bold tabular-nums text-red-700 dark:text-red-300">
-            {s.worse}
-          </p>
+      <div className={cn(
+        "flex items-center gap-3 rounded-2xl px-4 py-3.5 ring-1",
+        s.worse > 0
+          ? "bg-red-500/[0.06] ring-red-500/15"
+          : "bg-emerald-500/[0.06] ring-emerald-500/15",
+      )}>
+        <div className={cn(
+          "flex size-10 shrink-0 items-center justify-center rounded-xl",
+          s.worse > 0 ? "bg-red-500/15" : "bg-emerald-500/15",
+        )}>
+          {s.worse > 0
+            ? <TrendingUp className="size-5 text-red-600 dark:text-red-400" />
+            : <ShieldCheck className="size-5 text-emerald-600 dark:text-emerald-400" />
+          }
         </div>
-      ) : (
-        <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/[0.04] p-3">
-          <p className="flex items-center gap-1 text-xs font-medium text-emerald-700 dark:text-emerald-400">
-            <ShieldCheck className="size-3.5" />
-            Økt risiko
-          </p>
-          <p className="mt-1 text-2xl font-bold tabular-nums text-emerald-700 dark:text-emerald-300">0</p>
+        <div>
+          <p className="text-2xl font-bold tabular-nums leading-none">{s.worse}</p>
+          <p className="text-muted-foreground mt-0.5 text-[11px]">Økt risiko</p>
         </div>
-      )}
+      </div>
 
-      {s.highAfter > 0 ? (
-        <div className="rounded-lg border border-orange-500/20 bg-orange-500/[0.04] p-3">
-          <p className="flex items-center gap-1 text-xs font-medium text-orange-700 dark:text-orange-400">
-            <ShieldAlert className="size-3.5" />
-            Høy etter tiltak
-          </p>
-          <p className="mt-1 text-2xl font-bold tabular-nums text-orange-700 dark:text-orange-300">
+      <div className={cn(
+        "flex items-center gap-3 rounded-2xl px-4 py-3.5 ring-1",
+        s.highAfter > 0
+          ? "bg-orange-500/[0.06] ring-orange-500/15"
+          : "bg-emerald-500/[0.06] ring-emerald-500/15",
+      )}>
+        <div className={cn(
+          "flex size-10 shrink-0 items-center justify-center rounded-xl",
+          s.highAfter > 0 ? "bg-orange-500/15" : "bg-emerald-500/15",
+        )}>
+          {s.highAfter > 0
+            ? <ShieldAlert className="size-5 text-orange-600 dark:text-orange-400" />
+            : <ShieldCheck className="size-5 text-emerald-600 dark:text-emerald-400" />
+          }
+        </div>
+        <div>
+          <p className="text-2xl font-bold tabular-nums leading-none">
             {s.highAfter}
-            {s.highBefore > 0 ? (
-              <span className="text-muted-foreground ml-1 text-sm font-normal">
-                (var {s.highBefore})
-              </span>
+            {s.highBefore > 0 && s.highBefore !== s.highAfter ? (
+              <span className="text-muted-foreground ml-1 text-sm font-normal">(var {s.highBefore})</span>
             ) : null}
           </p>
+          <p className="text-muted-foreground mt-0.5 text-[11px]">Høy etter</p>
         </div>
-      ) : (
-        <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/[0.04] p-3">
-          <p className="flex items-center gap-1 text-xs font-medium text-emerald-700 dark:text-emerald-400">
-            <ShieldCheck className="size-3.5" />
-            Høy etter tiltak
-          </p>
-          <p className="mt-1 text-2xl font-bold tabular-nums text-emerald-700 dark:text-emerald-300">
-            0
-            {s.highBefore > 0 ? (
-              <span className="ml-1 text-sm font-normal text-emerald-600 dark:text-emerald-400">
-                (var {s.highBefore})
-              </span>
-            ) : null}
-          </p>
-        </div>
-      )}
+      </div>
     </div>
   );
 }
 
-function arraysEqual(a: string[], b: string[]): boolean {
-  if (a.length !== b.length) return false;
-  return a.every((v, i) => v === b[i]);
-}
+function RiskCard({ row }: { row: PairedRiskRegisterRow }) {
+  const [expanded, setExpanded] = useState(false);
+  const hasActionFlag = [
+    ...row.beforeItems,
+    ...row.afterItems,
+  ].some((it) => it.flags?.includes(ROS_CELL_FLAG_REQUIRES_ACTION));
+  const isHighAfter = row.afterLevel >= 4;
+  const hasTexts = row.beforeTexts.length > 0 || row.afterTexts.length > 0;
 
-function CellDescription({ row: r }: { row: PairedRiskRegisterRow }) {
-  const hasBefore = r.beforeTexts.length > 0;
-  const hasAfter = r.afterTexts.length > 0;
-
-  if (!hasBefore && !hasAfter) {
-    return (
-      <span className="text-muted-foreground/60 italic">Kun nivå</span>
-    );
-  }
-
-  const textsIdentical = hasBefore && hasAfter && arraysEqual(r.beforeTexts, r.afterTexts);
-  const deltaLabel =
-    r.deltaKind === "improved"
-      ? `Risiko redusert fra ${r.beforeLevel} → ${r.afterLevel}`
-      : r.deltaKind === "worse"
-        ? `Risiko økt fra ${r.beforeLevel} → ${r.afterLevel}`
-        : r.deltaKind === "new"
-          ? "Ny risiko etter tiltak"
-          : r.deltaKind === "removed"
-            ? "Fjernet etter tiltak"
-            : null;
-
-  if (textsIdentical) {
-    return (
-      <div className="space-y-1">
-        <ul className="list-inside list-disc">
-          {r.beforeTexts.map((t, i) => (
-            <li key={i} className="truncate">{t}</li>
-          ))}
-        </ul>
-        {deltaLabel ? (
-          <p className={cn(
-            "text-[10px] font-medium",
-            r.deltaKind === "improved" ? "text-emerald-600 dark:text-emerald-400" :
-            r.deltaKind === "worse" ? "text-red-600 dark:text-red-400" :
-            "text-muted-foreground",
-          )}>
-            {deltaLabel}
-          </p>
-        ) : (
-          <p className="text-muted-foreground/60 text-[10px]">
-            Samme beskrivelse og nivå
-          </p>
-        )}
-      </div>
-    );
-  }
-
-  const addedTexts = hasAfter
-    ? r.afterTexts.filter((t) => !r.beforeTexts.includes(t))
-    : [];
-  const removedTexts = hasBefore
-    ? r.beforeTexts.filter((t) => !r.afterTexts.includes(t))
-    : [];
-  const keptTexts = hasBefore && hasAfter
-    ? r.beforeTexts.filter((t) => r.afterTexts.includes(t))
-    : [];
+  const borderClass =
+    row.deltaKind === "improved" ? "border-l-emerald-500"
+    : row.deltaKind === "worse" ? "border-l-red-500"
+    : isHighAfter && !hasActionFlag ? "border-l-orange-500"
+    : "border-l-transparent";
 
   return (
-    <div className="space-y-1.5">
-      {keptTexts.length > 0 ? (
-        <ul className="list-inside list-disc">
-          {keptTexts.map((t, i) => (
-            <li key={i} className="truncate">{t}</li>
-          ))}
-        </ul>
-      ) : null}
-      {removedTexts.length > 0 ? (
-        <div>
-          <span className="text-red-600/80 dark:text-red-400/80 text-[10px] font-semibold">
-            Fjernet:
+    <div className={cn(
+      "overflow-hidden rounded-2xl border-l-[3px] bg-card shadow-sm ring-1 ring-black/[0.04] transition-all duration-200 hover:shadow-md dark:ring-white/[0.06]",
+      borderClass,
+    )}>
+      <button
+        type="button"
+        className="flex w-full items-center gap-3 px-4 py-3.5 text-left sm:gap-4"
+        onClick={() => setExpanded(!expanded)}
+      >
+        {/* Before level */}
+        <div className="flex shrink-0 items-center gap-2">
+          <span className={cn(
+            "inline-flex size-9 items-center justify-center rounded-xl text-sm font-bold tabular-nums",
+            levelBadgeClass(row.beforeLevel),
+          )}>
+            {row.beforeLevel || "–"}
           </span>
-          <ul className="mt-0.5 list-inside list-disc text-red-600/70 line-through dark:text-red-400/70">
-            {removedTexts.map((t, i) => (
-              <li key={i} className="truncate">{t}</li>
-            ))}
-          </ul>
-        </div>
-      ) : null}
-      {addedTexts.length > 0 ? (
-        <div>
-          <span className="text-emerald-600/80 dark:text-emerald-400/80 text-[10px] font-semibold">
-            Lagt til etter tiltak:
+          <ArrowRight className={cn(
+            "size-4 shrink-0",
+            row.deltaKind === "improved" ? "text-emerald-500" : row.deltaKind === "worse" ? "text-red-500" : "text-muted-foreground/30",
+          )} />
+          <span className={cn(
+            "inline-flex size-9 items-center justify-center rounded-xl text-sm font-bold tabular-nums",
+            levelBadgeClass(row.afterLevel),
+          )}>
+            {row.afterLevel || "–"}
           </span>
-          <ul className="mt-0.5 list-inside list-disc text-emerald-700/80 dark:text-emerald-300/80">
-            {addedTexts.map((t, i) => (
-              <li key={i} className="truncate">{t}</li>
-            ))}
-          </ul>
         </div>
-      ) : null}
-      {!hasBefore && hasAfter ? (
-        r.afterTexts.map((t, i) => (
-          <span key={i} className="block truncate">{t}</span>
-        ))
-      ) : null}
-      {hasBefore && !hasAfter ? (
-        <div>
-          <span className="text-[10px] font-semibold text-muted-foreground">Kun før:</span>
-          <ul className="mt-0.5 list-inside list-disc">
-            {r.beforeTexts.map((t, i) => (
-              <li key={i} className="truncate">{t}</li>
-            ))}
-          </ul>
+
+        {/* Risk info */}
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-medium">
+            {row.rowLabel} × {row.colLabel}
+          </p>
+          <div className="mt-1 flex flex-wrap items-center gap-1.5">
+            <DeltaIndicator row={row} />
+            {isHighAfter && !hasActionFlag && (
+              <span className="inline-flex items-center gap-0.5 rounded-md bg-orange-500/10 px-1.5 py-0.5 text-[9px] font-semibold text-orange-600 dark:text-orange-400">
+                <AlertTriangle className="size-2.5" />
+                Mangler handling
+              </span>
+            )}
+          </div>
         </div>
-      ) : null}
-      {deltaLabel ? (
-        <p className={cn(
-          "text-[10px] font-medium",
-          r.deltaKind === "improved" ? "text-emerald-600 dark:text-emerald-400" :
-          r.deltaKind === "worse" ? "text-red-600 dark:text-red-400" :
-          r.deltaKind === "new" ? "text-blue-600 dark:text-blue-400" :
-          "text-muted-foreground",
-        )}>
-          {deltaLabel}
-        </p>
-      ) : null}
+
+        {hasTexts && (
+          <ChevronDown className={cn(
+            "size-4 shrink-0 text-muted-foreground/50 transition-transform duration-200",
+            expanded && "rotate-180",
+          )} />
+        )}
+      </button>
+
+      {expanded && hasTexts && (
+        <div className="space-y-3 border-t border-border/30 px-4 py-3.5">
+          {row.beforeTexts.length > 0 && (
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Før tiltak</p>
+              <ul className="mt-1 space-y-0.5">
+                {row.beforeTexts.map((t, i) => (
+                  <li key={i} className="text-sm text-muted-foreground">• {t}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {row.afterTexts.length > 0 && (
+            <div>
+              <p className={cn(
+                "text-[10px] font-bold uppercase tracking-wider",
+                row.deltaKind === "improved" ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground",
+              )}>Etter tiltak</p>
+              <ul className="mt-1 space-y-0.5">
+                {row.afterTexts.map((t, i) => (
+                  <li key={i} className="text-sm text-muted-foreground">• {t}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
 
-function PairedTable({
-  rows,
-  className,
-}: {
-  rows: PairedRiskRegisterRow[];
-  className?: string;
-}) {
+function PairedCards({ rows }: { rows: PairedRiskRegisterRow[] }) {
   if (rows.length === 0) return null;
 
   return (
-    <div className={cn("overflow-x-auto rounded-lg border", className)}>
-      <table className="w-full min-w-[36rem] border-collapse text-left text-sm">
-        <thead>
-          <tr className="bg-muted/50 border-b text-xs font-medium uppercase tracking-wide">
-            <th className="px-3 py-2">Risiko (celle)</th>
-            <th className="px-3 py-2 text-center">Før</th>
-            <th className="px-3 py-2 text-center">→</th>
-            <th className="px-3 py-2 text-center">Etter</th>
-            <th className="px-3 py-2 text-center">Endring</th>
-            <th className="px-3 py-2">Beskrivelse</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((r, idx) => {
-            const hasActionFlag = [
-              ...r.beforeItems,
-              ...r.afterItems,
-            ].some((it) => it.flags?.includes(ROS_CELL_FLAG_REQUIRES_ACTION));
-            const isHighAfter = r.afterLevel >= 4;
-
-            return (
-              <tr
-                key={`${r.row}-${r.col}-${idx}`}
-                className={cn(
-                  "border-border/60 border-b last:border-b-0",
-                  isHighAfter && !hasActionFlag && "bg-red-500/[0.03]",
-                )}
-              >
-                <td className="px-3 py-2.5 align-top">
-                  <span className="text-foreground text-sm font-medium">
-                    {r.rowLabel}
-                  </span>
-                  <span className="text-muted-foreground"> × </span>
-                  <span className="text-foreground text-sm font-medium">
-                    {r.colLabel}
-                  </span>
-                </td>
-                <td className="px-3 py-2.5 text-center align-top">
-                  {r.beforeLevel > 0 ? (
-                    <span
-                      className={cn(
-                        "inline-flex min-w-[2rem] items-center justify-center rounded-md px-1.5 py-0.5 text-xs font-bold tabular-nums",
-                        levelBadgeClass(r.beforeLevel),
-                      )}
-                    >
-                      {r.beforeLevel}
-                    </span>
-                  ) : (
-                    <span className="text-muted-foreground/50 text-xs">–</span>
-                  )}
-                </td>
-                <td className="text-muted-foreground px-1 py-2.5 text-center align-top text-xs">
-                  →
-                </td>
-                <td className="px-3 py-2.5 text-center align-top">
-                  {r.afterLevel > 0 ? (
-                    <span
-                      className={cn(
-                        "inline-flex min-w-[2rem] items-center justify-center rounded-md px-1.5 py-0.5 text-xs font-bold tabular-nums",
-                        levelBadgeClass(r.afterLevel),
-                      )}
-                    >
-                      {r.afterLevel}
-                    </span>
-                  ) : (
-                    <span className="text-muted-foreground/50 text-xs">–</span>
-                  )}
-                </td>
-                <td className="px-3 py-2.5 text-center align-top">
-                  <DeltaIndicator row={r} />
-                </td>
-                <td className="text-muted-foreground max-w-[24rem] px-3 py-2.5 align-top text-xs">
-                  <CellDescription row={r} />
-                  {isHighAfter && !hasActionFlag ? (
-                    <span className="mt-1 flex items-center gap-1 text-[10px] font-medium text-orange-600 dark:text-orange-400">
-                      <AlertTriangle className="size-3" />
-                      Mangler «krever handling»
-                    </span>
-                  ) : null}
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
+    <div className="space-y-2">
+      {rows.map((r, idx) => (
+        <RiskCard key={`${r.row}-${r.col}-${idx}`} row={r} />
+      ))}
     </div>
   );
 }
@@ -433,50 +314,29 @@ function FlatTable({
   if (all.length === 0) return null;
 
   return (
-    <div className={cn("overflow-x-auto rounded-lg border", className)}>
-      <table className="w-full min-w-[32rem] border-collapse text-left text-sm">
-        <thead>
-          <tr className="bg-muted/50 border-b text-xs font-medium uppercase tracking-wide">
-            <th className="px-3 py-2">Fase</th>
-            <th className="px-3 py-2">Celle (rad × kol)</th>
-            <th className="px-3 py-2 tabular-nums">Nivå</th>
-            <th className="px-3 py-2">Trusler / punkter</th>
-          </tr>
-        </thead>
-        <tbody>
-          {all.map((r, idx) => (
-            <tr
-              key={`${r.phase}-${r.row}-${r.col}-${idx}`}
-              className="border-border/60 border-b last:border-b-0"
-            >
-              <td className="text-muted-foreground whitespace-nowrap px-3 py-2 align-top text-xs">
-                {phaseLabelNb(r.phase)}
-              </td>
-              <td className="px-3 py-2 align-top">
-                <span className="text-foreground font-medium">{r.rowLabel}</span>
-                <span className="text-muted-foreground"> × </span>
-                <span className="text-foreground font-medium">{r.colLabel}</span>
-              </td>
-              <td className="px-3 py-2 align-top tabular-nums font-semibold">
-                {r.level}
-              </td>
-              <td className="text-muted-foreground px-3 py-2 align-top">
-                {r.itemTexts.length > 0 ? (
-                  <ul className="list-inside list-disc space-y-1">
-                    {r.itemTexts.map((t, i) => (
-                      <li key={i}>{t}</li>
-                    ))}
-                  </ul>
-                ) : (
-                  <span className="text-muted-foreground/80 italic">
-                    Kun nivå
-                  </span>
-                )}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+    <div className={cn("space-y-2", className)}>
+      {all.map((r, idx) => (
+        <div
+          key={`${r.phase}-${r.row}-${r.col}-${idx}`}
+          className="flex items-center gap-3 rounded-xl bg-card px-4 py-3 shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.06]"
+        >
+          <span className={cn(
+            "inline-flex size-9 items-center justify-center rounded-xl text-sm font-bold tabular-nums",
+            levelBadgeClass(r.level),
+          )}>
+            {r.level}
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-medium">
+              {r.rowLabel} × {r.colLabel}
+            </p>
+            <p className="text-muted-foreground text-xs">
+              {phaseLabelNb(r.phase)}
+              {r.itemTexts.length > 0 ? ` · ${r.itemTexts.join(", ")}` : ""}
+            </p>
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
@@ -506,17 +366,17 @@ export function RosRiskRegisterTable({
   if (!hasAnyContent) {
     return (
       <p className="text-muted-foreground text-sm leading-relaxed">
-        Ingen celler med nivå eller tekstpunkter ennå. Legg inn risiko i matrisen —
-        registeret oppdateres automatisk.
+        Ingen risikoer registrert ennå. Legg inn risiko under &laquo;Risikoer&raquo; &mdash;
+        oversikten oppdateres automatisk.
       </p>
     );
   }
 
   if (sameLayout && pairedRows.length > 0) {
     return (
-      <div className={cn("space-y-4", className)}>
+      <div className={cn("space-y-5", className)}>
         <SummaryCards rows={pairedRows} />
-        <PairedTable rows={pairedRows} />
+        <PairedCards rows={pairedRows} />
       </div>
     );
   }

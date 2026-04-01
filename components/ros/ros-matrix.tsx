@@ -363,18 +363,18 @@ export function RosMatrix({
         </details>
       ) : null}
 
-      <div className="relative overflow-x-auto rounded-2xl border border-border/45 bg-card shadow-[0_1px_3px_rgba(0,0,0,0.05)] ring-1 ring-black/[0.03] dark:shadow-[0_1px_3px_rgba(0,0,0,0.25)] dark:ring-white/[0.06]">
-        <table className="w-full min-w-[min(100%,48rem)] table-fixed border-collapse text-left text-sm">
+      <div className="relative overflow-x-auto rounded-2xl bg-card shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.06]">
+        <table className="w-full min-w-[min(100%,56rem)] table-fixed border-collapse text-left text-sm">
           <thead>
-            <tr className="border-b border-border/50 bg-gradient-to-b from-muted/50 to-muted/30">
+            <tr className="border-b border-border/20">
               <th
                 scope="col"
-                className="sticky top-0 left-0 z-20 w-[8rem] border-r border-border/45 bg-muted/95 px-3 py-2.5 text-xs backdrop-blur-sm"
+                className="sticky top-0 left-0 z-20 w-[9rem] border-r border-border/20 bg-card/95 px-3 py-3.5 text-xs backdrop-blur-md"
               >
-                <span className="text-muted-foreground flex items-center gap-1 text-[10px] font-medium normal-case tracking-wide">
+                <span className="text-muted-foreground flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider">
                   ↑ {rowAxisTitle}
                 </span>
-                <span className="text-muted-foreground flex items-center gap-1 text-[10px] font-medium normal-case tracking-wide">
+                <span className="text-muted-foreground flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider">
                   → {colAxisTitle}
                 </span>
               </th>
@@ -382,7 +382,7 @@ export function RosMatrix({
                 <th
                   key={j}
                   scope="col"
-                  className="sticky top-0 z-10 border-b border-border/45 bg-muted/95 px-2 py-2.5 text-center text-[11px] font-semibold leading-snug text-foreground/90 backdrop-blur-sm"
+                  className="sticky top-0 z-10 bg-card/95 px-2 py-3.5 text-center text-[11px] font-bold leading-snug text-foreground/80 backdrop-blur-md"
                 >
                   {label}
                 </th>
@@ -394,10 +394,10 @@ export function RosMatrix({
               const i = rowLabels.length - 1 - _ri;
               const rowLabel = rowLabels[i] ?? `Rad ${i + 1}`;
               return (
-              <tr key={i} className="border-b border-border/40 last:border-0">
+              <tr key={i} className="border-b border-border/10 last:border-0">
                 <th
                   scope="row"
-                  className="sticky left-0 z-10 w-[8rem] overflow-hidden border-r border-border/45 bg-card/98 px-3 py-2 text-left text-[11px] font-semibold leading-snug text-foreground/90 backdrop-blur-sm"
+                  className="sticky left-0 z-10 w-[9rem] overflow-hidden border-r border-border/20 bg-card/95 px-3 py-3 text-left text-[11px] font-bold leading-snug text-foreground/80 backdrop-blur-md"
                 >
                   <span className="line-clamp-2">{rowLabel}</span>
                 </th>
@@ -424,7 +424,7 @@ export function RosMatrix({
                   const otherLevel = otherPhaseValues?.[i]?.[j] ?? 0;
                   const showCrossRef = hasContent && otherLevel > 0 && otherLevel !== displayLevel;
                   return (
-                    <td key={j} className="overflow-hidden p-1 align-top">
+                    <td key={j} className="overflow-hidden p-1 align-top sm:p-1.5">
                       <button
                         id={`ros-mx-cell-${i}-${j}`}
                         type="button"
@@ -439,16 +439,16 @@ export function RosMatrix({
                           hasContent
                             ? cnCell(displayLevel, interactive)
                             : cn(
-                                "min-h-[3rem] min-w-[3.5rem] border px-1 py-1.5 text-center text-sm font-semibold tabular-nums transition-colors",
+                                "min-h-[4rem] min-w-[4.5rem] border px-1 py-2.5 text-center text-sm font-semibold tabular-nums transition-colors",
                                 cellRiskGhostClass(autoLevel),
                                 interactive && "cursor-pointer focus-visible:ring-ring focus-visible:ring-2 focus-visible:outline-none",
                               ),
                           "group/cell relative flex w-full flex-col overflow-hidden rounded-xl transition-[transform,box-shadow] duration-150",
                           hasContent
-                            ? "min-h-[4.5rem] items-stretch gap-0 p-0 shadow-sm"
-                            : "min-h-[3.5rem] items-center justify-center gap-0.5",
+                            ? "min-h-[5.5rem] items-stretch gap-0 p-0 shadow-sm"
+                            : "min-h-[4.5rem] items-center justify-center gap-0.5",
                           interactive &&
-                            "hover:scale-[1.01] hover:shadow-md active:scale-[0.99]",
+                            "hover:scale-[1.02] hover:shadow-lg active:scale-[0.98]",
                           !interactive && "cursor-default",
                           isPicked &&
                             "ring-primary ring-offset-background ring-2 ring-offset-2",
@@ -549,33 +549,40 @@ export function RosMatrix({
       </div>
 
       {matrixStats.filledCells > 0 ? (
-        <div className={cn(
-          "flex flex-wrap items-center gap-x-4 gap-y-1 rounded-2xl border px-4 py-2.5 text-xs shadow-sm",
-          matrixStats.highRisk > 0
-            ? "border-red-500/20 bg-red-500/[0.04] ring-1 ring-red-500/10"
-            : "border-border/45 bg-muted/15 ring-1 ring-black/[0.03] dark:ring-white/[0.05]",
-        )}>
-          <span className="text-muted-foreground font-medium">
-            {matrixStats.filledCells} celle{matrixStats.filledCells !== 1 ? "r" : ""} med risiko
-          </span>
+        <div className="flex flex-wrap items-center gap-3 rounded-2xl bg-muted/15 px-4 py-3 ring-1 ring-black/[0.04] dark:ring-white/[0.06]">
+          <div className="flex items-center gap-2">
+            <span className="flex size-7 items-center justify-center rounded-lg bg-muted text-xs font-bold tabular-nums text-foreground">
+              {matrixStats.filledCells}
+            </span>
+            <span className="text-muted-foreground text-xs font-medium">
+              celle{matrixStats.filledCells !== 1 ? "r" : ""} med risiko
+            </span>
+          </div>
+          <span className="h-4 w-px bg-border/60" />
           {matrixStats.highRisk > 0 ? (
-            <span className="flex items-center gap-1 font-semibold text-red-700 dark:text-red-400">
-              <AlertTriangle className="size-3.5" aria-hidden />
-              {matrixStats.highRisk} høy/kritisk
-            </span>
+            <div className="flex items-center gap-1.5">
+              <AlertTriangle className="size-4 text-red-500" aria-hidden />
+              <span className="text-xs font-semibold text-red-700 dark:text-red-400">
+                {matrixStats.highRisk} høy/kritisk
+              </span>
+            </div>
           ) : (
-            <span className="text-emerald-700 font-medium dark:text-emerald-400">
-              Ingen høy risiko
-            </span>
+            <div className="flex items-center gap-1.5">
+              <span className="flex size-5 items-center justify-center rounded-full bg-emerald-500/15">
+                <span className="size-2 rounded-full bg-emerald-500" />
+              </span>
+              <span className="text-xs font-medium text-emerald-700 dark:text-emerald-400">
+                Ingen høy risiko
+              </span>
+            </div>
           )}
           {matrixStats.needsAction > 0 ? (
-            <span className="text-amber-700 dark:text-amber-400">
-              {matrixStats.needsAction} uten «krever handling»-flagg
-            </span>
-          ) : matrixStats.highRisk > 0 ? (
-            <span className="text-emerald-700 dark:text-emerald-400">
-              Alle høyrisiko-celler er flagget
-            </span>
+            <>
+              <span className="h-4 w-px bg-border/60" />
+              <span className="text-xs font-medium text-amber-700 dark:text-amber-400">
+                {matrixStats.needsAction} uten handling
+              </span>
+            </>
           ) : null}
         </div>
       ) : null}
@@ -1111,11 +1118,11 @@ export function RosMatrix({
       </Dialog>
 
       <div
-        className="flex flex-wrap items-center gap-x-2 gap-y-2 rounded-2xl border border-border/40 bg-muted/15 px-3 py-2.5"
+        className="flex flex-wrap items-center gap-1.5"
         role="list"
       >
-        <span className="text-muted-foreground mr-1 text-[10px] font-semibold uppercase tracking-[0.12em]">
-          Nivå
+        <span className="text-muted-foreground mr-1 text-[10px] font-medium">
+          Nivå:
         </span>
         {riskLegend.slice(1).map(({ level, label }) => (
           <span
@@ -1123,7 +1130,7 @@ export function RosMatrix({
             role="listitem"
             className={cn(
               cnCell(level, false),
-              "inline-flex min-h-0 items-center rounded-full px-2.5 py-1 text-[10px] font-semibold shadow-sm ring-1 ring-black/5 dark:ring-white/10",
+              "inline-flex min-h-0 items-center rounded-lg px-2 py-1 text-[10px] font-semibold",
             )}
           >
             {level} {label}

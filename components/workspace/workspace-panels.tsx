@@ -792,6 +792,8 @@ export function WorkspaceCandidatesPanel({
   const [issueImportCode, setIssueImportCode] = useState("");
   const [issueImportBusy, setIssueImportBusy] = useState(false);
 
+  const [createTab, setCreateTab] = useState<"github" | "manual">("github");
+
   /** Én synlig importflyt om gangen: issue-URL eller prosjektkolonne */
   const [githubImportTab, setGithubImportTab] = useState<"issue" | "column">(
     "issue",
@@ -1400,53 +1402,51 @@ export function WorkspaceCandidatesPanel({
 
   return (
     <Card
-      className={
-        hubMode
-          ? "overflow-hidden border-emerald-500/25 shadow-[0_1px_3px_rgba(0,0,0,0.04)] ring-1 ring-black/[0.03] dark:ring-white/[0.05]"
-          : undefined
-      }
+      className={cn(
+        "overflow-hidden rounded-2xl border-0 shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.06]",
+        hubMode && "ring-emerald-500/15",
+      )}
     >
       <CardHeader
         data-tutorial-anchor={
           hubMode ? "prosess-oversikt-header" : undefined
         }
-        className={hubMode ? "border-b border-border/50 pb-4" : "pb-4"}
+        className="pb-5 pt-6 px-6"
       >
         <div className="flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2.5">
-            <div className="bg-emerald-500/10 flex size-9 items-center justify-center rounded-xl">
-              <Users className="text-emerald-600 dark:text-emerald-400 size-4.5" aria-hidden />
+          <div className="flex items-center gap-3">
+            <div className="bg-emerald-500/10 flex size-10 items-center justify-center rounded-xl">
+              <Users className="text-emerald-600 dark:text-emerald-400 size-5" aria-hidden />
             </div>
             <div>
-              <CardTitle className="text-lg">Prosessregister</CardTitle>
-              {!canEditCandidates ? (
-                <p className="text-muted-foreground text-xs">Lesertilgang</p>
-              ) : null}
+              <CardTitle className="text-lg font-semibold tracking-tight">
+                Prosessregister
+              </CardTitle>
+              <p className="text-muted-foreground text-xs mt-0.5">
+                {!canEditCandidates
+                  ? "Lesertilgang"
+                  : candidates.length > 0
+                    ? `${candidates.length} prosess${candidates.length !== 1 ? "er" : ""} registrert`
+                    : "Kom i gang ved å opprette eller importere en prosess"
+                }
+              </p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            {hubMode ? (
-              <span className="bg-emerald-500/15 text-emerald-900 dark:text-emerald-100 inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-semibold tabular-nums">
-                {candidates.length}{" "}
-                {candidates.length === 1 ? "prosess" : "prosesser"}
-              </span>
-            ) : null}
-            {!hubMode ? (
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="text-muted-foreground hover:text-foreground size-8"
-                title="Hjelp"
-                onClick={() => setProcessRegHelpOpen(true)}
-              >
-                <HelpCircle className="size-4" aria-hidden />
-              </Button>
-            ) : null}
+          <div className="flex items-center gap-1.5">
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="text-muted-foreground hover:text-foreground size-8"
+              title="Hjelp"
+              onClick={() => setProcessRegHelpOpen(true)}
+            >
+              <HelpCircle className="size-4" aria-hidden />
+            </Button>
           </div>
         </div>
       </CardHeader>
-      <CardContent className={hubMode ? "space-y-5 pt-4" : "space-y-5 pt-4"}>
+      <CardContent className="space-y-6 px-6 pb-6">
         {hubMode ? (
           <ProsessregisterHubLead
             canEdit={Boolean(canEditCandidates)}
@@ -1460,115 +1460,148 @@ export function WorkspaceCandidatesPanel({
             aria-hidden
           />
         ) : null}
-        {!w.githubProjectNodeId?.trim() ? (
-          <div
-            data-tutorial-anchor="github-varsling"
-            className="flex items-center gap-3 rounded-lg border border-amber-500/30 bg-amber-500/[0.06] px-3 py-2"
-            role="status"
-          >
-            <AlertTriangle className="text-amber-500 size-4 shrink-0" aria-hidden />
-            <p className="text-foreground min-w-0 flex-1 text-xs">
-              GitHub-prosjekt ikke koblet.{" "}
-              {isAdmin ? (
-                <Link
-                  href={`/w/${workspaceId}/innstillinger#github-arbeidsomrade`}
-                  className="text-primary font-medium underline-offset-2 hover:underline"
-                >
-                  Konfigurer
-                </Link>
-              ) : (
-                <span className="text-muted-foreground">
-                  Be administrator koble prosjekt.
-                </span>
-              )}
-            </p>
-          </div>
-        ) : null}
+
+        {/* ── Create / Import ── */}
         {canEditCandidates ? (
           <div
             data-tutorial-anchor="github-prosess"
-            className="rounded-lg border border-border/50 bg-muted/5 p-3"
+            className="rounded-2xl bg-muted/20 p-4"
           >
-            <div className="mb-2.5 flex items-center gap-2">
-              <GitBranch className="text-muted-foreground size-3.5" aria-hidden />
-              <h2 className="text-foreground text-sm font-semibold">
+            {/* Top-level tabs: GitHub vs Manual */}
+            <div
+              className="mb-4 flex gap-0.5 rounded-xl bg-muted/50 p-1"
+              role="tablist"
+              aria-label="Opprett prosess"
+            >
+              <button
+                type="button"
+                role="tab"
+                aria-selected={createTab === "github"}
+                className={cn(
+                  "flex flex-1 items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-all duration-150",
+                  createTab === "github"
+                    ? "bg-card text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground",
+                )}
+                onClick={() => setCreateTab("github")}
+              >
+                <GitBranch className="size-4" aria-hidden />
                 Importer fra GitHub
-              </h2>
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={createTab === "manual"}
+                className={cn(
+                  "flex flex-1 items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-all duration-150",
+                  createTab === "manual"
+                    ? "bg-card text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground",
+                )}
+                onClick={() => setCreateTab("manual")}
+              >
+                <Plus className="size-4" aria-hidden />
+                Opprett manuelt
+              </button>
             </div>
 
-            {w.githubProjectNodeId?.trim() ? (
-              <div
-                className="mb-2.5 flex gap-0.5 rounded-md border border-border/50 bg-muted/30 p-0.5"
-                role="tablist"
-                aria-label="Importkilde"
-              >
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={githubImportTab === "issue"}
-                  className={cn(
-                    "flex-1 rounded px-2.5 py-1.5 text-center text-xs font-medium transition-colors",
-                    githubImportTab === "issue"
-                      ? "bg-card text-foreground shadow-sm ring-1 ring-black/[0.06] dark:ring-white/[0.08]"
-                      : "text-muted-foreground hover:text-foreground",
-                  )}
-                  onClick={() => setGithubImportTab("issue")}
-                >
-                  Issue-lenke
-                </button>
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={githubImportTab === "column"}
-                  className={cn(
-                    "flex-1 rounded px-2.5 py-1.5 text-center text-xs font-medium transition-colors",
-                    githubImportTab === "column"
-                      ? "bg-card text-foreground shadow-sm ring-1 ring-black/[0.06] dark:ring-white/[0.08]"
-                      : "text-muted-foreground hover:text-foreground",
-                  )}
-                  onClick={() => setGithubImportTab("column")}
-                >
-                  Prosjektkolonne
-                </button>
-              </div>
-            ) : null}
-
-            {(!w.githubProjectNodeId?.trim() || githubImportTab === "issue") ? (
-              <section aria-label="Importer fra GitHub-issue">
-                <div className="flex gap-2">
-                  <Input
-                    id="gh-issue-url"
-                    type="url"
-                    value={issueGithubUrlInput}
-                    onChange={(e) => setIssueGithubUrlInput(e.target.value)}
-                    placeholder="github.com/org/repo/issues/42"
-                    className="h-9 min-w-0 flex-1 font-mono text-xs"
-                    autoComplete="off"
-                    aria-label="Issue-URL"
-                  />
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    size="sm"
-                    className="h-9 shrink-0 gap-1.5"
-                    disabled={issueUrlFetchBusy || !issueGithubUrlInput.trim()}
-                    onClick={() => void fetchGithubIssueForImport()}
+            {/* GitHub import panel */}
+            {createTab === "github" ? (
+              <div className="space-y-3">
+                {w.githubProjectNodeId?.trim() ? (
+                  <div
+                    className="flex gap-0.5 rounded-lg bg-muted/40 p-0.5"
+                    role="tablist"
+                    aria-label="Importkilde"
                   >
-                    {issueUrlFetchBusy ? (
-                      <Loader2 className="size-3.5 animate-spin" aria-hidden />
-                    ) : (
-                      <ExternalLink className="size-3.5" aria-hidden />
-                    )}
-                    Hent
-                  </Button>
-                </div>
-                {issueUrlFetchError ? (
-                  <p className="text-destructive mt-1.5 text-xs" role="alert">
-                    {issueUrlFetchError}
-                  </p>
+                    <button
+                      type="button"
+                      role="tab"
+                      aria-selected={githubImportTab === "issue"}
+                      className={cn(
+                        "flex-1 rounded-md px-3 py-1.5 text-center text-xs font-medium transition-all duration-150",
+                        githubImportTab === "issue"
+                          ? "bg-card text-foreground shadow-sm"
+                          : "text-muted-foreground hover:text-foreground",
+                      )}
+                      onClick={() => setGithubImportTab("issue")}
+                    >
+                      Issue-lenke
+                    </button>
+                    <button
+                      type="button"
+                      role="tab"
+                      aria-selected={githubImportTab === "column"}
+                      className={cn(
+                        "flex-1 rounded-md px-3 py-1.5 text-center text-xs font-medium transition-all duration-150",
+                        githubImportTab === "column"
+                          ? "bg-card text-foreground shadow-sm"
+                          : "text-muted-foreground hover:text-foreground",
+                      )}
+                      onClick={() => setGithubImportTab("column")}
+                    >
+                      Prosjektkolonne
+                    </button>
+                  </div>
+                ) : !w.githubProjectNodeId?.trim() ? (
+                  <div
+                    data-tutorial-anchor="github-varsling"
+                    className="flex items-center gap-2 rounded-lg bg-amber-500/[0.08] px-3 py-2"
+                    role="status"
+                  >
+                    <AlertTriangle className="text-amber-500 size-3.5 shrink-0" aria-hidden />
+                    <p className="text-foreground text-[11px]">
+                      Prosjekt ikke koblet.{" "}
+                      {isAdmin ? (
+                        <Link
+                          href={`/w/${workspaceId}/innstillinger#github-arbeidsomrade`}
+                          className="text-primary font-medium hover:underline"
+                        >
+                          Konfigurer
+                        </Link>
+                      ) : (
+                        <span className="text-muted-foreground">
+                          Be admin koble prosjekt.
+                        </span>
+                      )}
+                    </p>
+                  </div>
                 ) : null}
-              </section>
-            ) : null}
+
+                {(!w.githubProjectNodeId?.trim() || githubImportTab === "issue") ? (
+                  <section aria-label="Importer fra GitHub-issue">
+                    <div className="flex gap-2">
+                      <Input
+                        id="gh-issue-url"
+                        type="url"
+                        value={issueGithubUrlInput}
+                        onChange={(e) => setIssueGithubUrlInput(e.target.value)}
+                        placeholder="github.com/org/repo/issues/42"
+                        className="h-10 min-w-0 flex-1 rounded-xl bg-background font-mono text-xs shadow-sm"
+                        autoComplete="off"
+                        aria-label="Issue-URL"
+                      />
+                      <Button
+                        type="button"
+                        className="h-10 shrink-0 gap-1.5 rounded-xl shadow-sm"
+                        disabled={issueUrlFetchBusy || !issueGithubUrlInput.trim()}
+                        onClick={() => void fetchGithubIssueForImport()}
+                      >
+                        {issueUrlFetchBusy ? (
+                          <Loader2 className="size-4 animate-spin" aria-hidden />
+                        ) : (
+                          <ExternalLink className="size-4" aria-hidden />
+                        )}
+                        Hent
+                      </Button>
+                    </div>
+                    {issueUrlFetchError ? (
+                      <p className="text-destructive mt-2 text-xs" role="alert">
+                        {issueUrlFetchError}
+                      </p>
+                    ) : null}
+                  </section>
+                ) : null}
 
             {w.githubProjectNodeId?.trim() && githubImportTab === "column" ? (
               <section
@@ -1588,18 +1621,18 @@ export function WorkspaceCandidatesPanel({
                 prosessrad.
               </p>
             ) : (
-              <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-end">
-                <div className="min-w-[12rem] flex-1">
+              <div className="flex gap-2">
+                <div className="min-w-0 flex-1">
                   <Label htmlFor="gh-column-pick" className="sr-only">
                     Statuskolonne i GitHub-prosjekt
                   </Label>
                   <select
                     id="gh-column-pick"
-                    className="border-input bg-background h-10 w-full max-w-md rounded-lg border border-border/80 px-3 text-sm shadow-xs outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    className="border-input bg-background h-10 w-full rounded-xl border px-3 text-sm shadow-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     value={columnPickId}
                     onChange={(e) => setColumnPickId(e.target.value)}
                   >
-                    <option value="">— Velg kolonne —</option>
+                    <option value="">Velg kolonne …</option>
                     {githubProjectStatus.options?.map((o) => (
                       <option key={o.id} value={o.id}>
                         {o.name}
@@ -1609,8 +1642,7 @@ export function WorkspaceCandidatesPanel({
                 </div>
                 <Button
                   type="button"
-                  variant="secondary"
-                  className="h-10 gap-2"
+                  className="h-10 shrink-0 gap-2 rounded-xl shadow-sm"
                   disabled={
                     columnItemsLoading || !columnPickId.trim()
                   }
@@ -1631,12 +1663,17 @@ export function WorkspaceCandidatesPanel({
               </p>
             ) : null}
             {columnItemsResult && columnItemsResult.items.length > 0 ? (
-              <div className="space-y-2">
-                <p className="text-muted-foreground text-xs">
-                  <strong className="text-foreground">{columnItemsResult.optionName}</strong>{" "}
-                  · {columnItemsResult.items.length} kort
-                </p>
-                <div className="max-h-[min(32rem,60vh)] space-y-1.5 overflow-y-auto">
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <p className="text-foreground text-sm font-medium">
+                    {columnItemsResult.optionName}
+                  </p>
+                  <span className="text-muted-foreground rounded-full bg-muted/50 px-2 py-0.5 text-[11px] font-medium tabular-nums">
+                    {columnItemsResult.items.length} kort
+                  </span>
+                </div>
+                <div className="max-h-[min(32rem,60vh)] overflow-y-auto pr-0.5">
+                  <div className="grid gap-2 sm:grid-cols-2">
                   {columnItemsResult.items.map((row) => {
                     const linked = projectItemIdsLinkedInPvv.has(
                       row.projectItemId,
@@ -1658,17 +1695,32 @@ export function WorkspaceCandidatesPanel({
                       row.issueNumber != null &&
                       row.issueNumber > 0;
 
+                    const kindIcon =
+                      row.contentKind === "issue" ? (
+                        <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-emerald-500/10">
+                          <Ticket className="size-3.5 text-emerald-600 dark:text-emerald-400" aria-hidden />
+                        </div>
+                      ) : row.contentKind === "pull_request" ? (
+                        <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-blue-500/10">
+                          <GitBranch className="size-3.5 text-blue-600 dark:text-blue-400" aria-hidden />
+                        </div>
+                      ) : (
+                        <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-muted/60">
+                          <ExternalLink className="text-muted-foreground size-3.5" aria-hidden />
+                        </div>
+                      );
+
                     return (
                       <div
                         key={row.projectItemId}
                         role={canPreview ? "button" : undefined}
                         tabIndex={canPreview ? 0 : undefined}
                         className={cn(
-                          "group flex items-center gap-3 rounded-lg border px-3 py-2.5 transition-colors",
+                          "group relative flex items-start gap-3 rounded-xl p-3 transition-all duration-150",
                           canPreview && "cursor-pointer",
                           linked
-                            ? "border-border/30 bg-muted/20"
-                            : "border-border/50 bg-card hover:border-border",
+                            ? "bg-muted/25"
+                            : "bg-card shadow-sm ring-1 ring-black/[0.05] hover:shadow-md hover:ring-black/[0.1] dark:ring-white/[0.06] dark:hover:ring-white/[0.12]",
                         )}
                         onClick={
                           canPreview
@@ -1680,19 +1732,20 @@ export function WorkspaceCandidatesPanel({
                             : undefined
                         }
                       >
+                        {kindIcon}
                         <div className="min-w-0 flex-1">
-                          <p className="text-foreground text-sm font-medium leading-snug">
+                          <p className="text-foreground text-[13px] font-medium leading-snug">
                             {row.title}
                           </p>
-                          <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
+                          <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
                             <span
                               className={cn(
-                                "text-[10px] font-medium uppercase tracking-wide",
+                                "rounded-md px-1.5 py-0.5 text-[10px] font-medium",
                                 row.contentKind === "issue"
-                                  ? "text-emerald-600 dark:text-emerald-400"
+                                  ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
                                   : row.contentKind === "pull_request"
-                                    ? "text-blue-600 dark:text-blue-400"
-                                    : "text-muted-foreground",
+                                    ? "bg-blue-500/10 text-blue-700 dark:text-blue-300"
+                                    : "bg-muted/60 text-muted-foreground",
                               )}
                             >
                               {githubColumnContentKindLabel(row.contentKind)}
@@ -1705,7 +1758,7 @@ export function WorkspaceCandidatesPanel({
                             {linked ? (
                               <Badge
                                 variant="secondary"
-                                className="h-4 border-emerald-500/30 bg-emerald-500/10 px-1.5 text-[10px] text-emerald-900 dark:text-emerald-100"
+                                className="h-[18px] border-0 bg-emerald-500/10 px-1.5 text-[10px] font-medium text-emerald-800 dark:text-emerald-200"
                               >
                                 I PVV
                               </Badge>
@@ -1713,7 +1766,7 @@ export function WorkspaceCandidatesPanel({
                             {hasRos ? (
                               <Badge
                                 variant="secondary"
-                                className="h-4 border-sky-500/30 bg-sky-500/10 px-1.5 text-[10px] text-sky-950 dark:text-sky-100"
+                                className="h-[18px] border-0 bg-sky-500/10 px-1.5 text-[10px] font-medium text-sky-800 dark:text-sky-200"
                               >
                                 ROS
                               </Badge>
@@ -1723,9 +1776,8 @@ export function WorkspaceCandidatesPanel({
                         {!linked ? (
                           <Button
                             type="button"
-                            variant="outline"
                             size="sm"
-                            className="h-7 shrink-0 gap-1 px-2 text-xs opacity-80 group-hover:opacity-100"
+                            className="absolute right-2 bottom-2 h-7 shrink-0 gap-1 rounded-lg px-2.5 text-[11px] opacity-0 shadow-sm transition-all group-hover:opacity-100"
                             disabled={
                               row.contentKind === "unknown" ||
                               ((row.contentKind === "issue" ||
@@ -1745,205 +1797,161 @@ export function WorkspaceCandidatesPanel({
                       </div>
                     );
                   })}
+                  </div>
                 </div>
               </div>
             ) : columnItemsResult && columnItemsResult.items.length === 0 ? (
-              <p className="text-muted-foreground text-xs">
-                Ingen kort i denne kolonnen.
-              </p>
+              <div className="flex flex-col items-center gap-2 py-6 text-center">
+                <div className="flex size-10 items-center justify-center rounded-xl bg-muted/50">
+                  <Search className="text-muted-foreground size-4" aria-hidden />
+                </div>
+                <p className="text-muted-foreground text-sm">
+                  Ingen kort i denne kolonnen
+                </p>
+              </div>
             ) : null}
               </section>
             ) : null}
+              </div>
+            ) : null}
+
+            {/* Manual creation panel */}
+            {createTab === "manual" ? (
+              <div className="flex flex-col items-center gap-3 py-4 text-center">
+                <p className="text-muted-foreground text-sm">
+                  Opprett en ny prosess med egendefinert navn og detaljer.
+                </p>
+                <Button
+                  type="button"
+                  className="h-10 gap-2 rounded-xl px-6 shadow-sm"
+                  onClick={() => setNewProcessOpen(true)}
+                >
+                  <Plus className="size-4" aria-hidden />
+                  Ny prosess
+                </Button>
+              </div>
+            ) : null}
           </div>
         ) : null}
+
+        {/* ── Process list ── */}
         {candidates.length > 0 ? (
           <section
             data-tutorial-anchor="prosess-oversikt-liste"
             className="space-y-3"
             aria-labelledby="process-overview-heading"
           >
-            <div className="flex items-center justify-between gap-3">
-              <h2
-                id="process-overview-heading"
-                className="text-foreground font-heading text-base font-semibold tracking-tight"
-              >
-                {candidates.length} prosess{candidates.length !== 1 ? "er" : ""}
-              </h2>
-              {canEditCandidates ? (
-                <Button
-                  type="button"
-                  size="sm"
-                  className="gap-1.5 shadow-sm"
-                  onClick={() => setNewProcessOpen(true)}
-                >
-                  <Plus className="size-4" aria-hidden />
-                  Ny prosess
-                </Button>
-              ) : null}
-            </div>
-            <div className="border-border/80 overflow-x-auto rounded-xl border bg-card shadow-sm">
-              <table className="w-full min-w-[32rem] text-left text-sm">
-                <thead>
-                  <tr className="bg-muted/50 border-border/60 border-b text-xs uppercase tracking-wide">
-                    <th className="text-foreground px-3 py-2.5 font-semibold">
-                      Prosess-ID
-                    </th>
-                    <th className="text-foreground px-3 py-2.5 font-semibold">
-                      Navn
-                    </th>
-                    <th className="text-foreground hidden px-3 py-2.5 font-semibold sm:table-cell">
-                      Organisasjon
-                    </th>
-                    <th className="text-foreground px-3 py-2.5 font-semibold">
-                      GitHub
-                    </th>
-                    {canEditCandidates ? (
-                      <th className="text-foreground w-14 px-2 py-2.5 text-right font-semibold">
-                        <span className="sr-only">Slett</span>
-                      </th>
-                    ) : null}
-                  </tr>
-                </thead>
-                <tbody>
-                  {candidatesSorted.map((c) => (
-                    <tr
-                      key={c._id}
-                      className="border-border/40 hover:bg-muted/40 cursor-pointer border-b transition-colors"
-                      onClick={() => setEditCandidateId(c._id)}
-                    >
-                      <td className="text-foreground px-3 py-2.5 font-mono text-xs font-semibold">
-                        {c.code}
-                      </td>
-                      <td className="text-foreground max-w-[14rem] truncate px-3 py-2.5">
-                        {c.name}
-                      </td>
-                      <td className="text-muted-foreground hidden max-w-[12rem] truncate px-3 py-2.5 text-xs sm:table-cell">
-                        {candidateOrgUnitLabel(c, orgUnits)}
-                      </td>
-                      <td className="px-3 py-2.5">
-                        {c.githubProjectItemNodeId ? (
-                          c.githubRepoFullName &&
-                          c.githubIssueNumber != null &&
-                          c.githubIssueNumber > 0 ? (
-                            <Badge
-                              variant="secondary"
-                              className="border-emerald-500/30 bg-emerald-500/10 text-emerald-900 cursor-pointer hover:bg-emerald-500/20 dark:text-emerald-100"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                void openGhPreview(
-                                  c.githubRepoFullName!,
-                                  c.githubIssueNumber!,
-                                );
-                              }}
-                            >
-                              I prosjekt
-                            </Badge>
-                          ) : (
-                            <Badge
-                              variant="secondary"
-                              className="border-emerald-500/30 bg-emerald-500/10 text-emerald-900 dark:text-emerald-100"
-                            >
-                              I prosjekt
-                            </Badge>
-                          )
-                        ) : (
-                          <div className="flex flex-wrap items-center gap-2">
-                            <Badge
-                              variant="outline"
-                              className="text-muted-foreground"
-                            >
-                              Ikke i prosjekt
-                            </Badge>
-                            {canEditCandidates && canQuickAddGithubCard ? (
-                              <div
-                                className="flex max-w-[min(100%,15rem)] flex-col gap-1.5 sm:max-w-none sm:flex-row sm:flex-wrap sm:items-center"
-                                onClick={(e) => e.stopPropagation()}
-                              >
-                                <Button
-                                  type="button"
-                                  variant="secondary"
-                                  size="sm"
-                                  className="h-8 gap-1.5 px-2.5 text-xs"
-                                  disabled={rowGithubBusyId === c._id}
-                                  aria-label={`Legg til ${c.code} som utkast i GitHub-tavle`}
-                                  title="Prosjektkort (utkast) i GitHub Projects"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    void registerOneFromOverviewTable(c._id);
-                                  }}
-                                >
-                                  {rowGithubBusyId === c._id ? (
-                                    <Loader2
-                                      className="size-3.5 shrink-0 animate-spin"
-                                      aria-hidden
-                                    />
-                                  ) : (
-                                    <GitBranch className="size-3.5" aria-hidden />
-                                  )}
-                                  Utkast i tavle
-                                </Button>
-                                {canCreateGithubRepoIssue ? (
-                                  <Button
-                                    type="button"
-                                    variant="outline"
-                                    size="sm"
-                                    className="h-8 gap-1.5 px-2.5 text-xs"
-                                    disabled={rowGithubBusyId === c._id}
-                                    aria-label={`Opprett GitHub-issue for ${c.code}`}
-                                    title="Ekte issue i standard-repo, lagt i tavle og synket fra PVV"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      void registerRepoIssueFromOverviewTable(
-                                        c._id,
-                                      );
-                                    }}
-                                  >
-                                    {rowGithubBusyId === c._id ? (
-                                      <Loader2
-                                        className="size-3.5 shrink-0 animate-spin"
-                                        aria-hidden
-                                      />
-                                    ) : (
-                                      <Ticket className="size-3.5" aria-hidden />
-                                    )}
-                                    Issue i repo
-                                  </Button>
-                                ) : null}
-                              </div>
-                            ) : null}
-                          </div>
-                        )}
-                      </td>
-                      {canEditCandidates ? (
-                        <td className="px-2 py-2 text-right align-middle">
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            className="text-muted-foreground hover:text-destructive size-9 shrink-0"
-                            disabled={overviewDeleteBusyId === c._id}
-                            aria-label={`Slett prosess ${c.code}`}
-                            title="Slett prosess"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              void deleteCandidateFromOverview(c._id, c);
-                            }}
-                          >
-                            {overviewDeleteBusyId === c._id ? (
-                              <Loader2
-                                className="size-4 animate-spin"
-                                aria-hidden
-                              />
-                            ) : (
-                              <Trash2 className="size-4" aria-hidden />
+            <h2
+              id="process-overview-heading"
+              className="text-foreground text-base font-semibold"
+            >
+              {candidates.length} prosess{candidates.length !== 1 ? "er" : ""}
+            </h2>
+            <div className="space-y-2">
+              {candidatesSorted.map((c) => {
+                const hasGithub = Boolean(c.githubProjectItemNodeId);
+                const canPreviewGh =
+                  c.githubRepoFullName &&
+                  c.githubIssueNumber != null &&
+                  c.githubIssueNumber > 0;
+                return (
+                  <div
+                    key={c._id}
+                    className="group flex cursor-pointer items-center gap-4 rounded-2xl bg-card p-4 shadow-sm ring-1 ring-black/[0.04] transition-all duration-200 hover:shadow-md hover:ring-black/[0.08] active:scale-[0.995] dark:ring-white/[0.06] dark:hover:ring-white/[0.12]"
+                    onClick={() => setEditCandidateId(c._id)}
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <p className="text-foreground truncate text-sm font-semibold">
+                          {c.name}
+                        </p>
+                        <span className="text-muted-foreground shrink-0 font-mono text-[10px]">
+                          {c.code}
+                        </span>
+                      </div>
+                      <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                        {candidateOrgUnitLabel(c, orgUnits) !== "—" ? (
+                          <span className="text-muted-foreground text-xs">
+                            {candidateOrgUnitLabel(c, orgUnits)}
+                          </span>
+                        ) : null}
+                        {hasGithub ? (
+                          <Badge
+                            variant="secondary"
+                            className={cn(
+                              "h-5 border-emerald-500/30 bg-emerald-500/10 px-1.5 text-[10px] text-emerald-900 dark:text-emerald-100",
+                              canPreviewGh && "cursor-pointer hover:bg-emerald-500/20",
                             )}
-                          </Button>
-                        </td>
+                            onClick={
+                              canPreviewGh
+                                ? (e) => {
+                                    e.stopPropagation();
+                                    void openGhPreview(
+                                      c.githubRepoFullName!,
+                                      c.githubIssueNumber!,
+                                    );
+                                  }
+                                : undefined
+                            }
+                          >
+                            GitHub
+                          </Badge>
+                        ) : null}
+                      </div>
+                    </div>
+
+                    <div className="flex shrink-0 items-center gap-1">
+                      {!hasGithub && canEditCandidates && canQuickAddGithubCard ? (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="text-muted-foreground hover:text-foreground h-8 gap-1 px-2 text-xs opacity-0 transition-all group-hover:opacity-100"
+                          disabled={rowGithubBusyId === c._id}
+                          title="Legg til i GitHub-prosjekt"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            void registerOneFromOverviewTable(c._id);
+                          }}
+                        >
+                          {rowGithubBusyId === c._id ? (
+                            <Loader2 className="size-3.5 animate-spin" aria-hidden />
+                          ) : (
+                            <GitBranch className="size-3.5" aria-hidden />
+                          )}
+                        </Button>
                       ) : null}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+
+                      {canEditCandidates ? (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="text-muted-foreground hover:text-destructive size-8 opacity-0 transition-all group-hover:opacity-100"
+                          disabled={overviewDeleteBusyId === c._id}
+                          aria-label={`Slett prosess ${c.code}`}
+                          title="Slett prosess"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            void deleteCandidateFromOverview(c._id, c);
+                          }}
+                        >
+                          {overviewDeleteBusyId === c._id ? (
+                            <Loader2 className="size-3.5 animate-spin" aria-hidden />
+                          ) : (
+                            <Trash2 className="size-3.5" aria-hidden />
+                          )}
+                        </Button>
+                      ) : null}
+
+                      <ChevronRight
+                        className="text-muted-foreground/30 size-4 transition-all duration-200 group-hover:text-foreground group-hover:translate-x-0.5"
+                        aria-hidden
+                      />
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </section>
         ) : null}
@@ -1955,12 +1963,14 @@ export function WorkspaceCandidatesPanel({
         githubProjectStatus.options &&
         githubProjectStatus.options.length > 0 ? (
           <section
-            className="rounded-xl border border-border/50 bg-muted/10 p-4"
+            className="rounded-2xl bg-muted/15 p-5"
             aria-labelledby="auto-github-heading"
           >
             <div className="flex items-center justify-between gap-2">
-              <div className="flex items-center gap-2">
-                <GitBranch className="text-muted-foreground size-4" aria-hidden />
+              <div className="flex items-center gap-2.5">
+                <div className="flex size-8 items-center justify-center rounded-lg bg-card shadow-sm ring-1 ring-black/[0.06] dark:ring-white/[0.08]">
+                  <Zap className="text-foreground size-3.5" aria-hidden />
+                </div>
                 <h2
                   id="auto-github-heading"
                   className="text-foreground text-sm font-semibold"
@@ -1973,7 +1983,7 @@ export function WorkspaceCandidatesPanel({
                 variant="ghost"
                 size="icon"
                 className="text-muted-foreground hover:text-foreground size-7"
-                title="Nye prosesser registreres automatisk som utkast i GitHub-prosjekt. Velg standardstatus og lagre."
+                title="Nye prosesser registreres automatisk som utkast i GitHub-prosjekt."
                 onClick={() => setAutoGhHelpOpen(true)}
               >
                 <HelpCircle className="size-3.5" aria-hidden />
@@ -2771,39 +2781,38 @@ export function WorkspaceCandidatesPanel({
         {candidates.length === 0 ? (
           <div
             data-tutorial-anchor="prosess-oversikt-liste"
-            className="rounded-2xl border border-dashed border-emerald-500/25 bg-emerald-500/[0.03] px-6 py-12 text-center"
+            className="flex flex-col items-center rounded-2xl bg-muted/15 px-6 py-14 text-center"
           >
-            <div className="bg-muted/80 mx-auto mb-3 flex size-12 items-center justify-center rounded-2xl">
-              <Users className="text-muted-foreground size-6" aria-hidden />
+            <div className="mb-4 flex size-14 items-center justify-center rounded-2xl bg-emerald-500/10">
+              <Users className="text-emerald-600 dark:text-emerald-400 size-6" aria-hidden />
             </div>
-            <p className="text-foreground text-sm font-medium">
+            <p className="text-foreground text-base font-semibold">
               Ingen prosesser ennå
             </p>
-            <p className="text-muted-foreground mx-auto mt-2 max-w-sm text-sm leading-relaxed">
-              Trykk «Ny prosess» for å åpne skjemaet, eller gå til vurderinger og
-              start en sak — der velger du prosess-ID i veiviseren.
+            <p className="text-muted-foreground mt-1.5 max-w-xs text-sm">
+              Opprett din første prosess manuelt eller importer fra GitHub.
             </p>
-            <div className="mt-6 flex flex-col-reverse flex-wrap items-stretch justify-center gap-3 sm:flex-row sm:items-center">
-              {hubMode ? (
-                <Link
-                  href={`/w/${workspaceId}/vurderinger`}
-                  className={cn(
-                    buttonVariants({ variant: "outline", size: "default" }),
-                    "inline-flex h-11 min-h-[44px] w-full justify-center px-4 text-[13px] font-medium sm:h-10 sm:min-h-0 sm:w-auto",
-                  )}
-                >
-                  Gå til vurderinger
-                </Link>
-              ) : null}
+            <div className="mt-6 flex gap-3">
               {canEditCandidates ? (
                 <Button
                   type="button"
-                  className="h-11 min-h-[44px] w-full gap-2 px-4 text-[13px] font-semibold shadow-sm sm:h-10 sm:min-h-0 sm:w-auto"
+                  className="h-10 gap-2 rounded-xl px-5 shadow-sm"
                   onClick={() => setNewProcessOpen(true)}
                 >
                   <Plus className="size-4 shrink-0" aria-hidden />
                   Ny prosess
                 </Button>
+              ) : null}
+              {hubMode ? (
+                <Link
+                  href={`/w/${workspaceId}/vurderinger`}
+                  className={cn(
+                    buttonVariants({ variant: "outline", size: "default" }),
+                    "h-10 rounded-xl px-5",
+                  )}
+                >
+                  Gå til vurderinger
+                </Link>
               ) : null}
             </div>
           </div>
@@ -2825,7 +2834,6 @@ export function WorkspaceAssessmentsPanel({
   const assessments = useQuery(api.assessments.listByWorkspace, {
     workspaceId,
   });
-  const createAssessment = useMutation(api.assessments.create);
   const deleteAssessment = useMutation(api.assessments.deleteAssessment);
 
   const canEditPipeline =
@@ -2833,8 +2841,6 @@ export function WorkspaceAssessmentsPanel({
     membership !== null &&
     membership.role !== "viewer";
 
-  const [title, setTitle] = useState("");
-  const [busy, setBusy] = useState(false);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<PipelineStatus | "all">(
     "all",
@@ -2916,284 +2922,124 @@ export function WorkspaceAssessmentsPanel({
     );
   }
 
-  async function handleCreate() {
-    setBusy(true);
-    try {
-      const aid = await createAssessment({
-        workspaceId,
-        title: title.trim() || "Ny vurdering",
-        shareWithWorkspace: true,
-      });
-      window.location.href = `/w/${workspaceId}/a/${aid}`;
-    } finally {
-      setBusy(false);
-    }
-  }
-
   return (
-    <div className="space-y-6">
-      {hubMode ? (
-        <div className="rounded-2xl border border-border/40 bg-muted/20 px-4 py-3.5 text-[14px] leading-relaxed shadow-[0_1px_2px_rgba(0,0,0,0.03)] ring-1 ring-black/[0.03] dark:ring-white/[0.05] sm:px-5">
-          <p className="text-muted-foreground">
-            <span className="text-foreground font-semibold">
-              Ny prosess i registeret?
-            </span>{" "}
-            Legg den inn under{" "}
-            <Link
-              href={`/w/${workspaceId}/vurderinger?fane=prosesser`}
-              className="font-medium text-primary underline-offset-4 hover:underline"
-            >
-              Prosessregister
-            </Link>
-            , så kan du velge prosess-ID i steg 1 i veiviseren.
-          </p>
-        </div>
-      ) : null}
+    <div className="space-y-8">
+      {/* ── Creation area ── */}
       <GithubIssueStartCard workspaceId={workspaceId} variant="assessment" />
-      <Card className="overflow-hidden border-border/40 shadow-[0_1px_3px_rgba(0,0,0,0.04)] ring-1 ring-black/[0.03] dark:ring-white/[0.05]">
-        <CardHeader className="border-b border-border/40 bg-gradient-to-b from-muted/35 to-transparent pb-4 pt-5 sm:flex sm:flex-row sm:items-center sm:justify-between sm:gap-4">
-          <div className="flex min-w-0 items-start gap-3">
-            <div className="bg-primary/12 text-primary flex size-11 shrink-0 items-center justify-center rounded-2xl ring-1 ring-primary/15">
-              <Sparkles className="size-5" aria-hidden />
-            </div>
-            <div className="min-w-0 space-y-1">
-              <p className="text-muted-foreground text-[11px] font-semibold uppercase tracking-[0.12em]">
-                Ny sak
-              </p>
-              <CardTitle className="text-lg font-semibold tracking-tight">
-                Ny vurdering
-              </CardTitle>
-              <CardDescription className="text-[13px] leading-relaxed sm:text-sm">
-                Gi saken et navn og gå rett til veiviseren. Utkast lagres
-                fortløpende.
-              </CardDescription>
-            </div>
-          </div>
-        </CardHeader>
-        <CardFooter className="flex flex-col gap-3 border-t border-border/45 bg-muted/10 pt-4 sm:flex-row sm:items-end">
-          <div className="min-w-0 flex-1 space-y-1.5">
-            <Label
-              className="text-muted-foreground text-xs font-medium"
-              htmlFor="new-assessment-title"
-            >
-              Tittel på vurderingen
-            </Label>
-            <Input
-              id="new-assessment-title"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder="F.eks. Fakturamottak fra leverandører"
-              className="h-11 min-h-[44px] bg-background text-[16px] sm:h-10 sm:min-h-0 sm:text-sm"
-              autoComplete="off"
-            />
-          </div>
-          <Button
-            className="h-11 min-h-[44px] w-full shrink-0 gap-2 px-5 text-[13px] font-semibold shadow-sm sm:h-10 sm:min-h-0 sm:w-auto"
-            onClick={() => void handleCreate()}
-            disabled={busy}
-          >
-            {busy ? "Oppretter …" : "Start vurdering"}
-            <ChevronRight className="size-4 opacity-90" aria-hidden />
-          </Button>
-        </CardFooter>
-      </Card>
 
+      {/* ── Evaluations list ── */}
       <section
-        className="space-y-5"
+        className="space-y-4"
         role="region"
         aria-labelledby="vurderinger-liste-heading"
       >
-        <div className="space-y-4">
+        <div className="flex items-center justify-between gap-3">
           <div>
-            <p className="text-muted-foreground text-[11px] font-semibold uppercase tracking-[0.12em]">
-              Register
-            </p>
             <h2
               id="vurderinger-liste-heading"
-              className="font-heading text-lg font-semibold tracking-tight text-foreground sm:text-xl"
+              className="text-foreground text-lg font-semibold tracking-tight"
             >
               Alle vurderinger
             </h2>
-            <p className="text-muted-foreground mt-1 max-w-2xl text-[13px] leading-relaxed sm:text-sm">
+            <p className="text-muted-foreground mt-0.5 text-xs">
               {assessments.length === 0
-                ? "Ingen saker i listen — opprett med kortet over."
-                : `${assessments.length} ${assessments.length === 1 ? "vurdering" : "vurderinger"} på tvers av arbeidsområdet. Hver sak viser én samlet prioritering (0–100) og tre tydelige målinger som forklarer den.`}
+                ? "Ingen vurderinger ennå — opprett over."
+                : `${assessments.length} ${assessments.length === 1 ? "vurdering" : "vurderinger"}`}
             </p>
           </div>
-
-          {assessments.length > 0 ? (
-            <div className="rounded-2xl border border-border/50 bg-gradient-to-br from-muted/35 via-muted/15 to-transparent p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] ring-1 ring-black/[0.03] dark:from-muted/25 dark:via-muted/10 dark:ring-white/[0.05] sm:p-5">
-              <p className="text-foreground text-[13px] font-semibold leading-snug">
-                Slik leser du listen
-              </p>
-              <ul className="text-muted-foreground mt-3 grid gap-3 text-[12px] leading-relaxed sm:grid-cols-3">
-                <li className="flex gap-2.5">
-                  <span className="bg-sky-500/18 text-sky-800 dark:text-sky-100 flex size-8 shrink-0 items-center justify-center rounded-xl text-[11px] font-bold ring-1 ring-sky-500/25">
-                    AP
-                  </span>
-                  <span>
-                    <strong className="text-foreground">Gevinst</strong> — hvor
-                    stort automatiseringspotensialet er.
-                  </span>
-                </li>
-                <li className="flex gap-2.5">
-                  <span className="bg-rose-500/18 text-rose-900 dark:text-rose-100 flex size-8 shrink-0 items-center justify-center rounded-xl text-[11px] font-bold ring-1 ring-rose-500/25">
-                    VK
-                  </span>
-                  <span>
-                    <strong className="text-foreground">Alvor</strong> — hvor
-                    viktig saken er for personvern og konsekvenser.
-                  </span>
-                </li>
-                <li className="flex gap-2.5">
-                  <span className="bg-violet-500/18 text-violet-900 dark:text-violet-100 flex size-8 shrink-0 items-center justify-center rounded-xl text-[11px] font-bold ring-1 ring-violet-500/25">
-                    IM
-                  </span>
-                  <span>
-                    <strong className="text-foreground">Gjennomføring</strong>{" "}
-                    — hvor enkelt tiltaket er å få på plass.
-                  </span>
-                </li>
-              </ul>
-            </div>
-          ) : null}
         </div>
 
         {assessments.length > 0 ? (
-          <div className="flex flex-col gap-3 lg:flex-row lg:flex-wrap lg:items-end">
-            <div className="relative min-w-0 flex-1 lg:min-w-[min(100%,18rem)]">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+            <div className="relative min-w-0 flex-1">
               <Search className="text-muted-foreground pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2" />
               <Input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Søk i tittel …"
-                className="border-border/60 bg-background h-11 min-h-[44px] rounded-2xl pl-9 text-[16px] shadow-sm sm:h-10 sm:min-h-0 sm:text-sm"
+                className="bg-background h-10 rounded-xl pl-9 text-sm shadow-sm"
                 aria-label="Søk i vurderinger"
               />
             </div>
-            <div className="grid w-full min-w-0 items-center gap-2 sm:grid-cols-2 lg:flex lg:w-auto lg:max-w-none lg:grid-cols-none">
-              <div className="min-w-0 space-y-1">
-                <Label
-                  htmlFor="assessment-sort"
-                  className="text-muted-foreground text-[10px] font-semibold uppercase tracking-wide"
-                >
-                  Sorter
-                </Label>
-                <select
-                  id="assessment-sort"
-                  className="border-border/60 bg-background h-11 min-h-[44px] w-full rounded-2xl border px-3 text-[13px] shadow-sm sm:h-10 sm:min-h-0 sm:text-sm"
-                  value={sortBy}
-                  onChange={(e) =>
-                    setSortBy(
-                      e.target.value as
-                        | "priority"
-                        | "updated"
-                        | "ap"
-                        | "criticality"
-                        | "ease",
-                    )
-                  }
-                >
-                  <option value="priority">
-                    Prioritet (portefølje, høy → lav)
+            <div className="flex gap-2">
+              <select
+                id="assessment-sort"
+                className="border-input bg-background h-10 min-w-0 flex-1 rounded-xl border px-3 text-xs shadow-sm sm:flex-none sm:text-sm"
+                value={sortBy}
+                onChange={(e) =>
+                  setSortBy(
+                    e.target.value as
+                      | "priority"
+                      | "updated"
+                      | "ap"
+                      | "criticality"
+                      | "ease",
+                  )
+                }
+              >
+                <option value="priority">Prioritet</option>
+                <option value="ap">Gevinst (AP)</option>
+                <option value="criticality">Viktighet</option>
+                <option value="ease">Implementering</option>
+                <option value="updated">Sist oppdatert</option>
+              </select>
+              <select
+                id="assessment-status-filter"
+                className="border-input bg-background h-10 min-w-0 flex-1 rounded-xl border px-3 text-xs shadow-sm sm:flex-none sm:text-sm"
+                value={statusFilter}
+                onChange={(e) =>
+                  setStatusFilter(e.target.value as PipelineStatus | "all")
+                }
+              >
+                <option value="all">Alle statuser</option>
+                {PIPELINE_KANBAN_ORDER.map((s) => (
+                  <option key={s} value={s}>
+                    {PIPELINE_STATUS_LABELS[s]}
                   </option>
-                  <option value="ap">
-                    Automatiseringspotensial (AP, høy → lav)
-                  </option>
-                  <option value="criticality">
-                    Viktighet / konsekvens (høy → lav)
-                  </option>
-                  <option value="ease">
-                    Implementering (enklest først)
-                  </option>
-                  <option value="updated">Sist oppdatert</option>
-                </select>
-              </div>
-              <div className="min-w-0 space-y-1">
-                <Label
-                  htmlFor="assessment-status-filter"
-                  className="text-muted-foreground text-[10px] font-semibold uppercase tracking-wide"
-                >
-                  Status
-                </Label>
-                <select
-                  id="assessment-status-filter"
-                  className="border-border/60 bg-background h-11 min-h-[44px] w-full rounded-2xl border px-3 text-[13px] shadow-sm sm:h-10 sm:min-h-0 sm:text-sm"
-                  value={statusFilter}
-                  onChange={(e) =>
-                    setStatusFilter(e.target.value as PipelineStatus | "all")
-                  }
-                >
-                  <option value="all">Alle statuser</option>
-                  {PIPELINE_KANBAN_ORDER.map((s) => (
-                    <option key={s} value={s}>
-                      {PIPELINE_STATUS_LABELS[s]}
-                    </option>
-                  ))}
-                </select>
-              </div>
+                ))}
+              </select>
             </div>
           </div>
         ) : null}
 
         {assessments.length > 0 && filteredAssessments.length > 0 ? (
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-2xl border border-border/45 bg-card/40 px-3 py-2.5 text-[12px] ring-1 ring-black/[0.03] dark:bg-card/25 dark:ring-white/[0.05]">
-            <span className="text-muted-foreground font-medium">Treff</span>
-            <span className="text-foreground font-bold tabular-nums">
-              {filteredAssessments.length}
+          <div className="flex flex-wrap items-center gap-2 text-xs">
+            <span className="text-muted-foreground">
+              {filteredAssessments.length} treff
             </span>
-            <span
-              className="bg-border hidden h-4 w-px sm:inline-block"
-              aria-hidden
-            />
-            <span className="text-muted-foreground font-medium">
-              Fordeling på prioritet
-            </span>
-            <span className="inline-flex items-center gap-1 rounded-full border border-emerald-500/30 bg-emerald-500/12 px-2.5 py-0.5 font-semibold text-emerald-950 dark:text-emerald-100">
+            <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 font-medium text-emerald-800 dark:text-emerald-200">
               Høy {priorityDistribution.high}
             </span>
-            <span className="inline-flex items-center gap-1 rounded-full border border-amber-500/35 bg-amber-500/12 px-2.5 py-0.5 font-semibold text-amber-950 dark:text-amber-100">
+            <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/10 px-2 py-0.5 font-medium text-amber-800 dark:text-amber-200">
               Middels {priorityDistribution.mid}
             </span>
-            <span className="inline-flex items-center gap-1 rounded-full border border-slate-400/35 bg-slate-500/10 px-2.5 py-0.5 font-semibold text-slate-800 dark:text-slate-200">
+            <span className="inline-flex items-center gap-1 rounded-full bg-muted/60 px-2 py-0.5 font-medium text-muted-foreground">
               Lavere {priorityDistribution.low}
             </span>
           </div>
         ) : null}
 
         {assessments.length === 0 ? (
-          <div className="rounded-2xl border border-dashed border-emerald-500/20 bg-gradient-to-b from-primary/[0.03] to-transparent px-4 py-10 text-center ring-1 ring-primary/10 sm:px-6">
-            <p className="text-foreground mx-auto max-w-md text-sm font-semibold">
+          <div className="flex flex-col items-center rounded-2xl bg-muted/15 px-6 py-14 text-center">
+            <div className="mb-4 flex size-14 items-center justify-center rounded-2xl bg-primary/10">
+              <Sparkles className="text-primary size-6" aria-hidden />
+            </div>
+            <p className="text-foreground text-base font-semibold">
               Ingen vurderinger ennå
             </p>
-            <p className="text-muted-foreground mx-auto mt-3 max-w-lg text-[13px] leading-relaxed sm:text-sm">
-              <strong className="text-foreground font-medium">Vurdering</strong> er én sak om
-              automatisering: skjema, pipeline-status og prioritering.{" "}
-              <strong className="text-foreground font-medium">Prosessregisteret</strong> er den
-              felles listen over prosesser med ID — valgfritt før du oppretter
-              saken, men nyttig når flere saker skal bruke samme prosesskode.
+            <p className="text-muted-foreground mt-1.5 max-w-xs text-sm">
+              Velg en metode over for å opprette din første vurdering.
             </p>
-            <p className="text-muted-foreground mx-auto mt-3 max-w-md text-[13px] leading-relaxed sm:text-sm">
-              <span className="text-foreground font-semibold">Neste steg:</span> fyll
-              inn tittel i kortet over og velg{" "}
-              <span className="text-foreground font-semibold">Start vurdering</span>.
-            </p>
-            <Link
-              href={`/w/${workspaceId}/vurderinger?fane=prosesser`}
-              className={cn(
-                buttonVariants({ variant: "outline", size: "default" }),
-                "mt-6 inline-flex h-11 min-h-[44px] w-full max-w-sm justify-center px-4 text-[13px] font-medium sm:h-10 sm:min-h-0 sm:w-auto",
-              )}
-            >
-              Legg inn prosesser først (prosessregister)
-            </Link>
           </div>
         ) : filteredAssessments.length === 0 ? (
-          <p className="text-muted-foreground rounded-xl border border-dashed px-4 py-8 text-center text-sm">
-            Ingen treff — prøv annet søk eller fjern filter.
-          </p>
+          <div className="flex flex-col items-center rounded-2xl bg-muted/10 px-6 py-10 text-center">
+            <Search className="text-muted-foreground mb-2 size-5" aria-hidden />
+            <p className="text-muted-foreground text-sm">
+              Ingen treff — prøv et annet søk eller fjern filter.
+            </p>
+          </div>
         ) : (
-          <ul className="grid gap-4 sm:grid-cols-2">
+          <ul className="grid gap-3 sm:grid-cols-2">
             {filteredAssessments.map((a) => {
               const pipeline = normalizePipelineStatus(a.pipelineStatus);
               const prio = effectiveAssessmentPriority(a);
@@ -3211,25 +3057,22 @@ export function WorkspaceAssessmentsPanel({
                 <li key={a._id} className="group/card relative">
                   <div
                     className={cn(
-                      "bg-card hover:border-primary/40 relative overflow-hidden rounded-2xl border border-l-[4px] bg-gradient-to-br from-card via-card to-muted/15 p-4 shadow-[0_2px_12px_rgba(0,0,0,0.04)] transition-all hover:shadow-[0_8px_24px_rgba(0,0,0,0.07)] dark:shadow-[0_2px_16px_rgba(0,0,0,0.35)] dark:hover:shadow-[0_8px_28px_rgba(0,0,0,0.45)] sm:p-4",
+                      "relative overflow-hidden rounded-2xl bg-card p-5 shadow-sm ring-1 ring-black/[0.04] transition-all duration-200 hover:shadow-md hover:ring-black/[0.08] active:scale-[0.995] dark:ring-white/[0.06] dark:hover:ring-white/[0.12]",
+                      "border-l-[3px]",
                       priorityBorderAccentClass(prio),
                     )}
                   >
-                    {/*
-                      Bakgrunnslenke: klikk går til vurdering. Innholdet har pointer-events-none
-                      slik at select/badge ikke konkurrerer med lenken; interaktive elementer får pointer-events-auto.
-                    */}
                     <Link
                       href={`/w/${workspaceId}/a/${a._id}`}
                       className="absolute inset-0 z-0 rounded-2xl"
                       aria-label={`Åpne vurdering: ${a.title}`}
                     />
-                    <div className="relative z-10 flex flex-col gap-3 pr-9 pointer-events-none sm:pr-0">
-                      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-2">
-                        <span className="font-heading group-hover/card:text-primary line-clamp-2 min-w-0 text-base font-semibold leading-snug transition-colors sm:text-[0.9375rem]">
+                    <div className="pointer-events-none relative z-10 flex flex-col gap-3">
+                      <div className="flex items-start justify-between gap-2">
+                        <p className="group-hover/card:text-primary min-w-0 text-sm font-semibold leading-snug transition-colors line-clamp-2">
                           {a.title}
-                        </span>
-                        <div className="pointer-events-auto w-full shrink-0 sm:w-auto">
+                        </p>
+                        <div className="pointer-events-auto shrink-0">
                           {canEditPipeline ? (
                             <PipelineStatusSelect
                               assessmentId={a._id}
@@ -3239,55 +3082,39 @@ export function WorkspaceAssessmentsPanel({
                           ) : (
                             <Badge
                               variant="secondary"
-                              className="inline-flex max-w-full truncate text-xs font-medium sm:max-w-[9rem] sm:text-[10px]"
+                              className="text-[10px] font-medium"
                             >
                               {PIPELINE_STATUS_LABELS[pipeline]}
                             </Badge>
                           )}
                         </div>
                       </div>
-                      <div className="text-muted-foreground flex items-start gap-2 text-xs leading-snug">
-                        <Shield
-                          className="mt-0.5 size-3.5 shrink-0 opacity-80"
-                          aria-hidden
-                        />
-                        <span className="line-clamp-2">{compliancePlainLine(a)}</span>
-                      </div>
 
-                      <div className="rounded-xl border border-border/50 bg-gradient-to-b from-muted/30 to-muted/10 p-3.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] dark:from-muted/25 dark:to-muted/5">
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="min-w-0">
-                            <p className="text-muted-foreground text-[10px] font-semibold uppercase tracking-wide">
-                              Porteføljeprioritet
-                            </p>
-                            <p className="text-foreground font-heading text-3xl font-bold tabular-nums leading-none tracking-tight">
-                              {prio.toFixed(1)}
-                              <span className="text-muted-foreground ml-1.5 text-sm font-normal">
-                                / 100
-                              </span>
-                            </p>
-                            <p className="text-muted-foreground mt-1 text-[11px] leading-snug">
-                              {band.label}
-                            </p>
-                          </div>
-                          <Badge
-                            variant="outline"
-                            className={cn(
-                              "shrink-0 border font-semibold",
-                              priorityBandBadgeClass(prio),
-                            )}
-                          >
-                            {band.short}
-                          </Badge>
+                      <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-foreground text-xl font-bold tabular-nums leading-none">
+                            {prio.toFixed(0)}
+                          </span>
+                          <span className="text-muted-foreground text-[10px]">
+                            / 100
+                          </span>
                         </div>
+                        <Badge
+                          variant="outline"
+                          className={cn(
+                            "border font-medium text-[10px]",
+                            priorityBandBadgeClass(prio),
+                          )}
+                        >
+                          {band.short}
+                        </Badge>
                         <div
-                          className="bg-muted/80 mt-3 h-2.5 overflow-hidden rounded-full shadow-inner"
+                          className="bg-muted/70 h-1.5 flex-1 overflow-hidden rounded-full"
                           role="presentation"
-                          aria-label={`${prio.toFixed(0)} av 100 poeng`}
                         >
                           <div
                             className={cn(
-                              "h-full rounded-full shadow-sm ring-1 ring-black/5 dark:ring-white/10",
+                              "h-full rounded-full",
                               priorityFillClass(prio),
                             )}
                             style={{
@@ -3298,18 +3125,15 @@ export function WorkspaceAssessmentsPanel({
                       </div>
 
                       {hasModelScores ? (
-                        <div className="space-y-2.5">
-                          <p className="text-muted-foreground text-[10px] font-semibold uppercase tracking-wide">
-                            Underliggende målinger
-                          </p>
+                        <div className="space-y-1.5">
                           <AssessmentListMetricBar
-                            label="Automatiseringspotensial (AP)"
+                            label="Gevinst"
                             value={ap}
                             icon={Zap}
                             barClass="bg-sky-500"
                           />
                           <AssessmentListMetricBar
-                            label="Viktighet og konsekvens"
+                            label="Viktighet"
                             value={crit}
                             icon={AlertTriangle}
                             barClass="bg-rose-500"
@@ -3317,11 +3141,7 @@ export function WorkspaceAssessmentsPanel({
                           {a.cachedEase != null &&
                           Number.isFinite(a.cachedEase) ? (
                             <AssessmentListMetricBar
-                              label={
-                                a.cachedEaseLabel != null
-                                  ? `Implementering (${a.cachedEaseLabel})`
-                                  : "Implementering"
-                              }
+                              label={a.cachedEaseLabel ?? "Implementering"}
                               value={a.cachedEase}
                               icon={Wrench}
                               barClass="bg-violet-500"
@@ -3329,27 +3149,21 @@ export function WorkspaceAssessmentsPanel({
                           ) : null}
                         </div>
                       ) : (
-                        <div className="text-muted-foreground rounded-xl border border-dashed border-border/70 bg-muted/15 px-3 py-2.5 text-[12px] leading-relaxed">
-                          <p className="text-foreground font-medium">
-                            Mangler PVV-data
-                          </p>
-                          <p className="mt-1">
-                            Fullfør skjemaet i veiviseren for å beregne poeng,
-                            søyler og prioritering.
-                          </p>
-                        </div>
+                        <p className="text-muted-foreground rounded-lg bg-muted/20 px-3 py-2 text-[11px]">
+                          Fullfør veiviseren for å beregne poeng.
+                        </p>
                       )}
 
-                      <div className="text-muted-foreground flex min-w-0 items-center justify-between gap-2 border-t border-border/40 pt-2.5 text-[11px] leading-snug">
+                      <div className="text-muted-foreground flex items-center justify-between text-[11px]">
                         <span
                           title={new Date(a.updatedAt).toLocaleString("nb-NO")}
                         >
                           {formatRelativeUpdatedAt(a.updatedAt)}
                         </span>
-                        <span className="inline-flex shrink-0 items-center gap-0.5 font-medium text-foreground group-hover/card:text-primary">
+                        <span className="group-hover/card:text-primary inline-flex items-center gap-0.5 font-medium transition-colors">
                           Åpne
                           <ChevronRight
-                            className="size-3.5 opacity-80"
+                            className="size-3.5 transition-transform group-hover/card:translate-x-0.5"
                             aria-hidden
                           />
                         </span>
@@ -3358,13 +3172,13 @@ export function WorkspaceAssessmentsPanel({
                   </div>
                   <button
                     type="button"
-                    className="pointer-events-auto absolute right-1.5 top-1.5 z-20 flex min-h-[44px] min-w-[44px] items-center justify-center rounded-lg text-muted-foreground/70 opacity-100 transition-all hover:bg-destructive/10 hover:text-destructive sm:right-2 sm:top-2 sm:size-8 sm:min-h-0 sm:min-w-0 sm:opacity-0 sm:group-hover/card:opacity-100"
+                    className="pointer-events-auto absolute right-2 top-2 z-20 flex size-8 items-center justify-center rounded-lg text-muted-foreground/50 opacity-0 transition-all hover:bg-destructive/10 hover:text-destructive group-hover/card:opacity-100"
                     title="Slett vurdering"
                     onClick={(e) => {
                       e.stopPropagation();
                       if (
                         !window.confirm(
-                          `Slette «${a.title}»?\n\nAlle utkast, versjoner, oppgaver, kommentarer og koblinger fjernes permanent.`,
+                          `Slette «${a.title}»?\n\nAlle data fjernes permanent.`,
                         )
                       ) {
                         return;
@@ -3383,7 +3197,7 @@ export function WorkspaceAssessmentsPanel({
                       })();
                     }}
                   >
-                    <Trash2 className="size-4 sm:size-3.5" />
+                    <Trash2 className="size-3.5" />
                   </button>
                 </li>
               );
