@@ -1633,157 +1633,123 @@ export function WorkspaceCandidatesPanel({
             {columnItemsResult && columnItemsResult.items.length > 0 ? (
               <div className="space-y-2">
                 <p className="text-muted-foreground text-xs">
-                  {columnItemsResult.fieldName}: <strong className="text-foreground">{columnItemsResult.optionName}</strong>{" "}
-                  · {columnItemsResult.items.length}{" "}
-                  {columnItemsResult.items.length === 1 ? "kort" : "kort"}
+                  <strong className="text-foreground">{columnItemsResult.optionName}</strong>{" "}
+                  · {columnItemsResult.items.length} kort
                 </p>
-                <details className="text-muted-foreground text-xs leading-relaxed">
-                  <summary className="cursor-pointer text-foreground font-medium hover:underline">
-                    Hva betyr kolonnene?
-                  </summary>
-                  <p className="mt-2 pl-0.5">
-                    Issue/PR lagrer repo og saksnummer i PVV. Utkast mangler issue til det er
-                    konvertert i GitHub. «I PVV» = prosess registrert her. «ROS» = minst én
-                    ROS-analyse knyttet til prosessen.
-                  </p>
-                </details>
-                <div className="border-border/80 max-h-[min(28rem,55vh)] overflow-auto rounded-lg border">
-                  <table className="w-full min-w-[36rem] text-left text-sm">
-                    <thead>
-                      <tr className="bg-muted/50 border-border/60 border-b text-xs uppercase tracking-wide">
-                        <th className="text-foreground px-3 py-2 font-semibold">
-                          Tittel
-                        </th>
-                        <th className="text-foreground w-24 px-3 py-2 font-semibold">
-                          Type
-                        </th>
-                        <th className="text-foreground w-[7.5rem] px-3 py-2 font-semibold">
-                          GitHub-ref
-                        </th>
-                        <th className="text-foreground w-24 px-3 py-2 font-semibold">
-                          I PVV
-                        </th>
-                        <th className="text-foreground w-24 px-3 py-2 font-semibold">
-                          ROS
-                        </th>
-                        <th className="text-foreground w-40 px-3 py-2 font-semibold">
-                          Handling
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {columnItemsResult.items.map((row) => {
-                        const linked = projectItemIdsLinkedInPvv.has(
-                          row.projectItemId,
-                        );
-                        const linkedCandidateId =
-                          projectItemIdToCandidateId.get(row.projectItemId) ??
-                          null;
-                        const hasRos =
-                          linkedCandidateId !== null &&
-                          rosCandidateIdSet.has(linkedCandidateId);
-                        const ghRef =
-                          row.repoFullName?.trim() &&
-                          row.issueNumber != null &&
-                          row.issueNumber > 0
-                            ? `${row.repoFullName}#${row.issueNumber}`
-                            : null;
-                        return (
-                          <tr
-                            key={row.projectItemId}
-                            className="border-border/40 border-b last:border-b-0"
-                          >
-                            <td className="text-foreground max-w-[16rem] px-3 py-2 align-top">
-                              {row.repoFullName?.trim() &&
-                              row.issueNumber != null &&
-                              row.issueNumber > 0 ? (
-                                <button
-                                  type="button"
-                                  className="text-foreground hover:text-primary line-clamp-2 text-left underline-offset-2 transition-colors hover:underline"
-                                  onClick={() =>
-                                    void openGhPreview(
-                                      row.repoFullName!,
-                                      row.issueNumber!,
-                                    )
-                                  }
-                                >
-                                  {row.title}
-                                </button>
-                              ) : (
-                                <span className="line-clamp-2">{row.title}</span>
+                <div className="max-h-[min(32rem,60vh)] space-y-1.5 overflow-y-auto">
+                  {columnItemsResult.items.map((row) => {
+                    const linked = projectItemIdsLinkedInPvv.has(
+                      row.projectItemId,
+                    );
+                    const linkedCandidateId =
+                      projectItemIdToCandidateId.get(row.projectItemId) ??
+                      null;
+                    const hasRos =
+                      linkedCandidateId !== null &&
+                      rosCandidateIdSet.has(linkedCandidateId);
+                    const ghRef =
+                      row.repoFullName?.trim() &&
+                      row.issueNumber != null &&
+                      row.issueNumber > 0
+                        ? `#${row.issueNumber}`
+                        : null;
+                    const canPreview =
+                      row.repoFullName?.trim() &&
+                      row.issueNumber != null &&
+                      row.issueNumber > 0;
+
+                    return (
+                      <div
+                        key={row.projectItemId}
+                        role={canPreview ? "button" : undefined}
+                        tabIndex={canPreview ? 0 : undefined}
+                        className={cn(
+                          "group flex items-center gap-3 rounded-lg border px-3 py-2.5 transition-colors",
+                          canPreview && "cursor-pointer",
+                          linked
+                            ? "border-border/30 bg-muted/20"
+                            : "border-border/50 bg-card hover:border-border",
+                        )}
+                        onClick={
+                          canPreview
+                            ? () =>
+                                void openGhPreview(
+                                  row.repoFullName!,
+                                  row.issueNumber!,
+                                )
+                            : undefined
+                        }
+                      >
+                        <div className="min-w-0 flex-1">
+                          <p className="text-foreground text-sm font-medium leading-snug">
+                            {row.title}
+                          </p>
+                          <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
+                            <span
+                              className={cn(
+                                "text-[10px] font-medium uppercase tracking-wide",
+                                row.contentKind === "issue"
+                                  ? "text-emerald-600 dark:text-emerald-400"
+                                  : row.contentKind === "pull_request"
+                                    ? "text-blue-600 dark:text-blue-400"
+                                    : "text-muted-foreground",
                               )}
-                            </td>
-                            <td className="text-muted-foreground px-3 py-2 align-top text-xs">
+                            >
                               {githubColumnContentKindLabel(row.contentKind)}
-                            </td>
-                            <td className="text-muted-foreground px-3 py-2 align-top font-mono text-[0.7rem] leading-snug">
-                              {ghRef ? (
-                                <span title="Lagres i PVV når prosessen opprettes fra dette kortet (issue/PR)">
-                                  {ghRef}
-                                </span>
-                              ) : (
-                                <span className="text-muted-foreground/80">—</span>
-                              )}
-                            </td>
-                            <td className="px-3 py-2 align-top">
-                              {linked ? (
-                                <Badge
-                                  variant="secondary"
-                                  className="border-emerald-500/30 bg-emerald-500/10 text-emerald-900 dark:text-emerald-100"
-                                >
-                                  Ja
-                                </Badge>
-                              ) : (
-                                <span className="text-muted-foreground text-xs">Nei</span>
-                              )}
-                            </td>
-                            <td className="px-3 py-2 align-top">
-                              {!linked ? (
-                                <span className="text-muted-foreground text-xs">—</span>
-                              ) : hasRos ? (
-                                <Badge
-                                  variant="secondary"
-                                  className="border-sky-500/30 bg-sky-500/10 text-sky-950 dark:text-sky-100"
-                                >
-                                  Ja
-                                </Badge>
-                              ) : (
-                                <span className="text-muted-foreground text-xs">Nei</span>
-                              )}
-                            </td>
-                            <td className="px-3 py-2 align-top">
-                              {linked ? (
-                                <span className="text-muted-foreground text-xs">—</span>
-                              ) : (
-                                <Button
-                                  type="button"
-                                  variant="outline"
-                                  size="sm"
-                                  className="h-8 gap-1 text-xs"
-                                  disabled={
-                                    row.contentKind === "unknown" ||
-                                    ((row.contentKind === "issue" ||
-                                      row.contentKind === "pull_request") &&
-                                      (!row.repoFullName?.trim() ||
-                                        row.issueNumber == null))
-                                  }
-                                  onClick={() => openImportFromGithubColumn(row)}
-                                >
-                                  <Plus className="size-3.5" aria-hidden />
-                                  Opprett i PVV
-                                </Button>
-                              )}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
+                            </span>
+                            {ghRef ? (
+                              <span className="text-muted-foreground font-mono text-[10px]">
+                                {ghRef}
+                              </span>
+                            ) : null}
+                            {linked ? (
+                              <Badge
+                                variant="secondary"
+                                className="h-4 border-emerald-500/30 bg-emerald-500/10 px-1.5 text-[10px] text-emerald-900 dark:text-emerald-100"
+                              >
+                                I PVV
+                              </Badge>
+                            ) : null}
+                            {hasRos ? (
+                              <Badge
+                                variant="secondary"
+                                className="h-4 border-sky-500/30 bg-sky-500/10 px-1.5 text-[10px] text-sky-950 dark:text-sky-100"
+                              >
+                                ROS
+                              </Badge>
+                            ) : null}
+                          </div>
+                        </div>
+                        {!linked ? (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="h-7 shrink-0 gap-1 px-2 text-xs opacity-80 group-hover:opacity-100"
+                            disabled={
+                              row.contentKind === "unknown" ||
+                              ((row.contentKind === "issue" ||
+                                row.contentKind === "pull_request") &&
+                                (!row.repoFullName?.trim() ||
+                                  row.issueNumber == null))
+                            }
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              openImportFromGithubColumn(row);
+                            }}
+                          >
+                            <Plus className="size-3" aria-hidden />
+                            Opprett
+                          </Button>
+                        ) : null}
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             ) : columnItemsResult && columnItemsResult.items.length === 0 ? (
-              <p className="text-muted-foreground text-sm">
-                Ingen kort i denne kolonnen akkurat nå.
+              <p className="text-muted-foreground text-xs">
+                Ingen kort i denne kolonnen.
               </p>
             ) : null}
               </section>
