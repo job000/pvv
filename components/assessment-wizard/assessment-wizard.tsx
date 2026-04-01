@@ -62,6 +62,7 @@ import {
   ChevronLeft,
   ChevronRight,
   ClipboardCopy,
+  History,
   Share2,
   Trash2,
 } from "lucide-react";
@@ -70,6 +71,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 const SAMARBEID_SLIDE_INDEX =
   ASSESSMENT_WIZARD_STEP_LABELS.indexOf("Samarbeid");
+const SAMARBEID_STEP_NUMBER = SAMARBEID_SLIDE_INDEX + 1;
 
 /** Én kilde til utkast-form — brukes ved første lasting og etter gjenoppretting fra versjon. */
 function normalizeDraftPayload(raw: AssessmentPayload): AssessmentPayload {
@@ -1164,11 +1166,27 @@ export function AssessmentWizard({ assessmentId }: Props) {
                   endre svar, eller «Ferdig» nederst for å gå tilbake til
                   vurderingsoversikten.
                 </CardDescription>
+                <p className="text-muted-foreground mt-3 max-w-prose text-sm leading-relaxed">
+                  <strong className="text-foreground">Versjonsoversikten</strong>{" "}
+                  (navngitte milepæler, liste, lagre og sammenligne) ligger under{" "}
+                  <strong className="text-foreground">
+                    steg {SAMARBEID_STEP_NUMBER} · Samarbeid
+                  </strong>
+                  . Øverst på siden finner du også{" "}
+                  <strong className="text-foreground">«Velg milepæl»</strong>{" "}
+                  (forhåndsvisning) når du har minst én lagret milepæl.
+                </p>
               </CardHeader>
               <CardContent className="space-y-6">
                 {canEdit ? (
                   <Alert className="border-primary/25 bg-primary/[0.04]">
-                    <AlertTitle>Utkast er lagret — milepæler er noe annet</AlertTitle>
+                    <AlertTitle className="flex flex-wrap items-center gap-2">
+                      <History
+                        className="text-primary size-4 shrink-0"
+                        aria-hidden
+                      />
+                      Utkast er lagret — slik bruker du milepæler
+                    </AlertTitle>
                     <AlertDescription className="space-y-3 text-foreground/90">
                       <p className="leading-relaxed">
                         Alt du har fylt inn, lagres automatisk som{" "}
@@ -1177,20 +1195,49 @@ export function AssessmentWizard({ assessmentId }: Props) {
                         <strong className="text-foreground tabular-nums">
                           {milestoneCount}
                         </strong>
-                        ) opprettes bare når du trykker{" "}
+                        ) opprettes når du trykker{" "}
                         <strong className="text-foreground">«Lagre versjon»</strong>{" "}
                         under Samarbeid — valgfritt for sporbarhet, anbefales før
                         revisjon eller viktige beslutninger.
                       </p>
-                      <Button
-                        type="button"
-                        variant="secondary"
-                        size="sm"
-                        className="gap-1.5"
-                        onClick={openTeamAndVersions}
-                      >
-                        Gå til milepæler og «Lagre versjon»
-                      </Button>
+                      <ul className="text-foreground/95 list-inside list-disc space-y-1.5 text-sm leading-relaxed">
+                        <li>
+                          Gå til{" "}
+                          <strong className="text-foreground">
+                            steg {SAMARBEID_STEP_NUMBER} · Samarbeid
+                          </strong>{" "}
+                          (nedtrekket «Hopp til steg» eller knappen under). Der
+                          ligger blokken{" "}
+                          <strong className="text-foreground">
+                            Milepæler (navngitte versjoner)
+                          </strong>
+                          .
+                        </li>
+                        <li>
+                          Øverst på siden:{" "}
+                          <strong className="text-foreground">
+                            Velg milepæl
+                          </strong>{" "}
+                          og{" "}
+                          <strong className="text-foreground">
+                            Team, milepæler, deling
+                          </strong>
+                          .
+                        </li>
+                      </ul>
+                      <div className="pt-1">
+                        <Button
+                          type="button"
+                          variant="default"
+                          size="sm"
+                          className="gap-1.5"
+                          onClick={openTeamAndVersions}
+                        >
+                          <History className="size-3.5" aria-hidden />
+                          Åpne versjonsoversikt (steg {SAMARBEID_STEP_NUMBER}{" "}
+                          · Samarbeid)
+                        </Button>
+                      </div>
                     </AlertDescription>
                   </Alert>
                 ) : null}
