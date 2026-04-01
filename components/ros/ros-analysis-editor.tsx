@@ -91,6 +91,9 @@ const ROS_EDITOR_SECTIONS = [
 ] as const;
 
 const ROS_MATRISE_SECTION_INDEX = 0;
+const ROS_INNSTILLINGER_SECTION_INDEX = ROS_EDITOR_SECTIONS.findIndex(
+  (s) => s.id === "innstillinger",
+);
 
 function RosPvvLinkFields({
   linkId,
@@ -282,9 +285,9 @@ export function RosAnalysisEditor({
   const [addPvId, setAddPvId] = useState<Id<"assessments"> | "">("");
 
   const analysisRevisionRef = useRef<number | null>(null);
-  const rosSaveQueueRef = useRef(Promise.resolve());
+  const rosSaveQueueRef = useRef<Promise<boolean>>(Promise.resolve(true));
   const saveRef = useRef<
-    ((opts?: { silent?: boolean }) => Promise<void>) | null
+    ((opts?: { silent?: boolean }) => Promise<boolean>) | null
   >(null);
   const dirtyRef = useRef(false);
   const canAutosaveRef = useRef(false);
@@ -319,7 +322,7 @@ export function RosAnalysisEditor({
   }, [data?._id, data?.revision]);
 
   useEffect(() => {
-    rosSaveQueueRef.current = Promise.resolve();
+    rosSaveQueueRef.current = Promise.resolve(true);
   }, [analysisId]);
 
   useEffect(() => {
@@ -347,6 +350,25 @@ export function RosAnalysisEditor({
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [rosSection]);
+
+  /** Liste-lenke «Versjoner» (#versjoner) → steget Innstillinger + scroll til panel. */
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const go = () => {
+      if (window.location.hash !== "#versjoner") return;
+      if (ROS_INNSTILLINGER_SECTION_INDEX < 0) return;
+      setRosSection(ROS_INNSTILLINGER_SECTION_INDEX);
+      requestAnimationFrame(() => {
+        document.getElementById("ros-versjoner")?.scrollIntoView({
+          behavior: "smooth",
+          block: "start",
+        });
+      });
+    };
+    go();
+    window.addEventListener("hashchange", go);
+    return () => window.removeEventListener("hashchange", go);
+  }, []);
 
   useEffect(() => {
     if (!data) return;
@@ -1013,8 +1035,8 @@ export function RosAnalysisEditor({
     }
   }
 
-  async function save(opts?: { silent?: boolean }) {
-    if (!data) return;
+  async function save(opts?: { silent?: boolean }): Promise<boolean> {
+    if (!data) return false;
     const targetRows = useSeparateAfterAxes
       ? parseLabelLines(rowLabelsAfterText).length
       : data.rowLabels.length;
@@ -1027,7 +1049,7 @@ export function RosAnalysisEditor({
           "Etter-tiltak med egne akser krever minst to rader og to kolonner (én etikett per linje).",
         );
       }
-      return;
+      return false;
     }
     const matrixAfterToSave = resizeNumberMatrix(
       matrixAfter,
@@ -1043,8 +1065,8 @@ export function RosAnalysisEditor({
     );
     setSaving(true);
     try {
-      const runSave = async () => {
-        if (!data) return;
+      const runSave = async (): Promise<boolean> => {
+        if (!data) return false;
         const rawNext = nextReviewLocal.trim();
         const parsedNextMs =
           rawNext === "" ? null : new Date(rawNext).getTime();
@@ -1055,7 +1077,7 @@ export function RosAnalysisEditor({
           if (!opts?.silent) {
             toast.error("Ugyldig dato/tid for neste revisjon.");
           }
-          return;
+          return false;
         }
         const rev = analysisRevisionRef.current ?? data.revision ?? 0;
         const cleanedRefs = requirementRefs.map((r) => ({
@@ -1096,25 +1118,35 @@ export function RosAnalysisEditor({
           colLabelsAfter: useSeparateAfterAxes
             ? parseLabelLines(colLabelsAfterText)
             : [],
+          /** Eksplisitt «Lagre» — lag versjon; autosave (silent) gjør ikke det. */
+          saveVersionSnapshot: !opts?.silent,
         });
         if (result.ok) {
           analysisRevisionRef.current = result.revision;
           setDirty(false);
           if (!opts?.silent) {
-            toast.success("ROS-analysen er lagret.");
+            const sv = result.snapshotVersion;
+            toast.success(
+              sv !== undefined
+                ? `ROS-analysen er lagret (versjon ${sv}).`
+                : "ROS-analysen er lagret.",
+            );
           }
-        } else {
-          toast.error(
-            "ROS-analysen er allerede oppdatert på serveren (annen bruker, annen fane eller journal). Last siden på nytt og prøv igjen.",
-          );
+          return true;
         }
+        toast.error(
+          "ROS-analysen er allerede oppdatert på serveren (annen bruker, annen fane eller journal). Last siden på nytt og prøv igjen.",
+        );
+        return false;
       };
       rosSaveQueueRef.current = rosSaveQueueRef.current
-        .catch(() => undefined)
-        .then(runSave);
-      await rosSaveQueueRef.current;
+        .catch((): boolean => false)
+        .then(() => runSave());
+      const ok = await rosSaveQueueRef.current;
+      return ok;
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Kunne ikke lagre.");
+      return false;
     } finally {
       setSaving(false);
     }
@@ -1466,10 +1498,19 @@ export function RosAnalysisEditor({
             <Button
               type="button"
               onClick={() => void save()}
-              disabled={saving || !dirty}
+              disabled={saving}
+              title={
+                dirty
+                  ? "Lagre endringer og opprett ny versjon"
+                  : "Alt er synkronisert. Klikk for å lagre en ny versjon (øyeblikksbilde)."
+              }
               className="min-w-[7.5rem] font-semibold shadow-sm"
             >
-              {saving ? "Lagrer …" : dirty ? "Lagre endringer" : "Lagret"}
+              {saving
+                ? "Lagrer …"
+                : dirty
+                  ? "Lagre endringer"
+                  : "Lagre versjon"}
             </Button>
             <Button
               type="button"
@@ -1512,9 +1553,11 @@ export function RosAnalysisEditor({
           </span>
         </summary>
         <p className="mt-2 pl-0.5">
-          Lagring skjer automatisk etter kort pause og ved fanebytte. «Lagre
-          endringer» tvinger lagring med én gang. Nettleseren kan advare ved lukking
-          hvis det fortsatt er ulagrede endringer.
+          Automatisk lagring (uten ny versjon) skjer etter kort pause og ved
+          fanebytte. «Lagre endringer» og «Lagre versjon» lagrer på serveren og
+          oppretter et nytt øyeblikksbilde du kan gjenopprette under
+          Innstillinger. Nettleseren kan advare ved lukking hvis det fortsatt er
+          ulagrede endringer.
         </p>
       </details>
 
@@ -2403,10 +2446,21 @@ export function RosAnalysisEditor({
               <Button
                 type="button"
                 className="h-11 min-h-[44px] gap-1.5 px-4 text-[13px] font-semibold shadow-sm sm:h-10 sm:min-h-0"
-                onClick={() => router.push(`/w/${workspaceId}/ros`)}
+                disabled={saving}
+                onClick={async () => {
+                  const ok = await save();
+                  if (!ok) return;
+                  router.push(`/w/${workspaceId}/ros`);
+                }}
               >
-                Ferdig
-                <ChevronRight className="size-4 shrink-0" aria-hidden />
+                {saving ? (
+                  "Lagrer …"
+                ) : (
+                  <>
+                    Ferdig
+                    <ChevronRight className="size-4 shrink-0" aria-hidden />
+                  </>
+                )}
               </Button>
             ) : (
               <Button

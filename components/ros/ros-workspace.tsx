@@ -34,6 +34,7 @@ import { RosMethodologyGuide } from "@/components/ros/ros-methodology-guide";
 import { RosScaleReference } from "@/components/ros/ros-scale-reference";
 import { RosLibraryPanel } from "@/components/ros/ros-library-panel";
 import { GithubIssueStartCard } from "@/components/github/github-issue-start-card";
+import { RosAnalysisVersionsQuickDialog } from "@/components/ros/ros-analysis-versions-quick-dialog";
 import { RosWorkspaceHub } from "@/components/ros/ros-workspace-hub";
 import {
   RosTemplatePreviewMini,
@@ -56,6 +57,7 @@ import {
   Clock,
   Grid3x3,
   HelpCircle,
+  History,
   Info,
   Plus,
   Search,
@@ -251,6 +253,10 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
   const [templateDialogOpen, setTemplateDialogOpen] = useState(false);
   const [analysisSearch, setAnalysisSearch] = useState("");
   const [analysisSort, setAnalysisSort] = useState<AnalysisSort>("updated");
+  const [versionsQuickDialog, setVersionsQuickDialog] = useState<{
+    analysisId: Id<"rosAnalyses">;
+    title: string;
+  } | null>(null);
 
   const resetTemplateForm = useCallback(() => {
     setTplName("");
@@ -959,9 +965,18 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
                   Alle ROS-analyser
                 </h2>
                 {analysesList.length > 0 ? (
-                  <p className="text-muted-foreground mt-0.5 text-sm tabular-nums">
-                    {analysesList.length} i arbeidsområdet
-                  </p>
+                  <>
+                    <p className="text-muted-foreground mt-0.5 text-sm tabular-nums">
+                      {analysesList.length} i arbeidsområdet
+                    </p>
+                    <p className="text-muted-foreground mt-2 max-w-2xl text-xs leading-relaxed">
+                      Klikk på tallet eller <strong className="text-foreground">Versjoner</strong>{" "}
+                      for å se alle lagrede øyeblikksbilder i et vindu. For å gjenopprette,
+                      slette eller forhåndsvise: åpne{" "}
+                      <strong className="text-foreground">Versjonskontroll</strong> fra popup
+                      eller under Innstillinger i analysen.
+                    </p>
+                  </>
                 ) : null}
               </div>
             </div>
@@ -1027,9 +1042,9 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
             ) : (
               <div className="overflow-hidden rounded-xl border border-border/50 bg-card shadow-sm">
                 <div className="overflow-x-auto">
-                  <table className="hidden w-full min-w-[44rem] caption-bottom border-collapse text-sm sm:table">
+                  <table className="hidden w-full min-w-[52rem] caption-bottom border-collapse text-sm sm:table">
                     <caption className="sr-only">
-                      Alle ROS-analyser i dette arbeidsområdet
+                      Alle ROS-analyser i dette arbeidsområdet med antall lagrede versjoner
                     </caption>
                     <thead>
                       <tr className="border-b border-border/60 bg-muted/25 text-left">
@@ -1045,6 +1060,13 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
                         <th scope="col" className="px-4 py-3 font-semibold">
                           Matrise
                         </th>
+                        <th
+                          scope="col"
+                          className="px-4 py-3 font-semibold tabular-nums"
+                          title="Antall lagrede versjoner (øyeblikksbilder)"
+                        >
+                          Versjoner
+                        </th>
                         <th scope="col" className="px-4 py-3 font-semibold">
                           Oppdatert
                         </th>
@@ -1058,6 +1080,8 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
                         const tplName =
                           (a as { templateName?: string | null }).templateName ??
                           null;
+                        const versionCount =
+                          (a as { versionCount?: number }).versionCount ?? 0;
                         return (
                           <tr
                             key={a._id}
@@ -1092,6 +1116,25 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
                             <td className="px-4 py-3 align-middle tabular-nums text-xs text-muted-foreground">
                               {a.rowLabels.length}×{a.colLabels.length}
                             </td>
+                            <td className="px-4 py-3 align-middle tabular-nums text-xs">
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setVersionsQuickDialog({
+                                    analysisId: a._id,
+                                    title: a.title,
+                                  })
+                                }
+                                className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 rounded-lg px-2 py-1 text-left transition-colors hover:bg-muted/60"
+                                title="Vis lagrede versjoner"
+                              >
+                                <History
+                                  className="size-3.5 shrink-0 opacity-70"
+                                  aria-hidden
+                                />
+                                <span className="tabular-nums">{versionCount}</span>
+                              </button>
+                            </td>
                             <td className="whitespace-nowrap px-4 py-3 align-middle text-xs text-muted-foreground">
                               {formatRelative(a.updatedAt)}
                             </td>
@@ -1109,6 +1152,22 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
                                 >
                                   Åpne
                                 </Link>
+                                <Button
+                                  type="button"
+                                  variant="secondary"
+                                  size="sm"
+                                  className="h-8 gap-1"
+                                  title="Vis lagrede versjoner"
+                                  onClick={() =>
+                                    setVersionsQuickDialog({
+                                      analysisId: a._id,
+                                      title: a.title,
+                                    })
+                                  }
+                                >
+                                  <History className="size-3.5" aria-hidden />
+                                  Versjoner
+                                </Button>
                                 <Button
                                   type="button"
                                   variant="ghost"
@@ -1129,7 +1188,10 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
                 </div>
 
                 <ul className="divide-border/50 space-y-0 divide-y sm:hidden">
-                  {filteredSortedAnalyses.map((a) => (
+                  {filteredSortedAnalyses.map((a) => {
+                    const versionCount =
+                      (a as { versionCount?: number }).versionCount ?? 0;
+                    return (
                     <li key={a._id} className="group/card relative">
                       <Link
                         href={`/w/${workspaceId}/ros/a/${a._id}`}
@@ -1157,10 +1219,42 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
                               <Clock className="size-3" aria-hidden />
                               {formatRelative(a.updatedAt)}
                             </span>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                setVersionsQuickDialog({
+                                  analysisId: a._id,
+                                  title: a.title,
+                                });
+                              }}
+                              className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 rounded-md px-1 py-0.5 underline-offset-4 hover:underline"
+                            >
+                              <History className="size-3" aria-hidden />
+                              {versionCount} vers.
+                            </button>
                           </div>
                         </div>
                         <ArrowRight className="size-4 shrink-0 text-muted-foreground/40 transition-transform group-hover/card:translate-x-0.5 group-hover/card:text-primary" />
                       </Link>
+                      <div className="mt-3 flex flex-wrap gap-2 px-4 pb-2">
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          size="sm"
+                          className="h-8 gap-1"
+                          onClick={() =>
+                            setVersionsQuickDialog({
+                              analysisId: a._id,
+                              title: a.title,
+                            })
+                          }
+                        >
+                          <History className="size-3.5" aria-hidden />
+                          Versjoner
+                        </Button>
+                      </div>
                       <button
                         type="button"
                         className="absolute right-2 top-3 rounded-md p-1.5 text-muted-foreground/50 opacity-0 transition-all hover:bg-destructive/10 hover:text-destructive group-hover/card:opacity-100"
@@ -1170,7 +1264,8 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
                         <Trash2 className="size-3.5" />
                       </button>
                     </li>
-                  ))}
+                  );
+                  })}
                 </ul>
               </div>
             )}
@@ -1292,6 +1387,16 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
         </div>
       </>
       )}
+
+      <RosAnalysisVersionsQuickDialog
+        open={versionsQuickDialog !== null}
+        onOpenChange={(o) => {
+          if (!o) setVersionsQuickDialog(null);
+        }}
+        workspaceId={workspaceId}
+        analysisId={versionsQuickDialog?.analysisId ?? null}
+        analysisTitle={versionsQuickDialog?.title ?? ""}
+      />
     </div>
   );
 }

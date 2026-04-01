@@ -400,6 +400,10 @@ export const listAnalyses = query({
     const out = [];
     for (const r of rows) {
       const cand = r.candidateId ? await ctx.db.get(r.candidateId) : null;
+      const versionRows = await ctx.db
+        .query("rosAnalysisVersions")
+        .withIndex("by_ros_analysis", (q) => q.eq("rosAnalysisId", r._id))
+        .collect();
       out.push({
         ...r,
         candidateName: cand?.name ?? null,
@@ -407,6 +411,7 @@ export const listAnalyses = query({
         templateName: r.templateId
           ? (templateNameById.get(r.templateId) ?? null)
           : null,
+        versionCount: versionRows.length,
       });
     }
     return out;
@@ -1223,6 +1228,9 @@ export const updateAnalysis = mutation({
     requirementRefs: v.optional(
       v.union(v.array(rosRequirementRefValidator), v.null()),
     ),
+    /** Etter vellykket lagring: lag versjonsøyeblikksbilde (brukes ved eksplisitt «Lagre», ikke autosave). */
+    saveVersionSnapshot: v.optional(v.boolean()),
+    versionSnapshotNote: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const userId = await requireUserId(ctx);
@@ -1519,7 +1527,25 @@ export const updateAnalysis = mutation({
     const newRev = serverRev + 1;
     patch.revision = newRev;
     await ctx.db.patch(args.analysisId, patch);
-    return { ok: true as const, revision: newRev };
+    let snapshotVersion: number | undefined;
+    if (args.saveVersionSnapshot) {
+      const updated = await ctx.db.get(args.analysisId);
+      if (!updated) {
+        throw new Error("ROS-analysen finnes ikke.");
+      }
+      const snap = await insertRosAnalysisVersionSnapshot(
+        ctx,
+        updated,
+        userId,
+        args.versionSnapshotNote?.trim() || undefined,
+      );
+      snapshotVersion = snap.version;
+    }
+    return {
+      ok: true as const,
+      revision: newRev,
+      ...(snapshotVersion !== undefined ? { snapshotVersion } : {}),
+    };
   },
 });
 
@@ -1895,6 +1921,76 @@ export const listVersions = query({
   },
 });
 
+/** Øyeblikksbilde av gjeldende analysedokument (øker versjonsnummer automatisk). */
+async function insertRosAnalysisVersionSnapshot(
+  ctx: MutationCtx,
+  analysis: Doc<"rosAnalyses">,
+  userId: Id<"users">,
+  note?: string,
+): Promise<{ version: number }> {
+  const last = await ctx.db
+    .query("rosAnalysisVersions")
+    .withIndex("by_ros_version", (q) =>
+      q.eq("rosAnalysisId", analysis._id),
+    )
+    .order("desc")
+    .first();
+  const next = (last?.version ?? 0) + 1;
+  const now = Date.now();
+  const after = normalizedAfterMatrices(analysis);
+  const cellItemsSnap = normalizeCellItems(
+    analysis.matrixValues,
+    analysis.cellNotes,
+    analysis.cellItems as RosCellItemMatrix | undefined,
+  );
+  await ctx.db.insert("rosAnalysisVersions", {
+    workspaceId: analysis.workspaceId,
+    rosAnalysisId: analysis._id,
+    version: next,
+    note: note || undefined,
+    rowAxisTitle: analysis.rowAxisTitle,
+    colAxisTitle: analysis.colAxisTitle,
+    rowLabels: [...analysis.rowLabels],
+    colLabels: [...analysis.colLabels],
+    matrixValues: analysis.matrixValues.map((r) => [...r]),
+    cellNotes: normalizeCellNotes(
+      analysis.matrixValues,
+      analysis.cellNotes,
+    ).map((r) => [...r]),
+    cellItems: cellItemsSnap.map((r) =>
+      r.map((c) => c.map((x) => ({ ...x }))),
+    ),
+    matrixValuesAfter: after.matrixValuesAfter.map((r) => [...r]),
+    cellNotesAfter: after.cellNotesAfter.map((r) => [...r]),
+    cellItemsAfter: after.cellItemsAfter.map((r) =>
+      r.map((c) => c.map((x) => ({ ...x }))),
+    ),
+    rowAxisTitleAfter: analysis.rowAxisTitleAfter,
+    colAxisTitleAfter: analysis.colAxisTitleAfter,
+    rowLabelsAfter: analysis.rowLabelsAfter
+      ? [...analysis.rowLabelsAfter]
+      : undefined,
+    colLabelsAfter: analysis.colLabelsAfter
+      ? [...analysis.colLabelsAfter]
+      : undefined,
+    notes: analysis.notes,
+    methodologyStatement: analysis.methodologyStatement,
+    contextSummary: analysis.contextSummary,
+    scopeAndCriteria: analysis.scopeAndCriteria,
+    riskCriteriaVersion: analysis.riskCriteriaVersion,
+    axisScaleNotes: analysis.axisScaleNotes,
+    complianceScopeTags: analysis.complianceScopeTags
+      ? [...analysis.complianceScopeTags]
+      : undefined,
+    requirementRefs: analysis.requirementRefs
+      ? analysis.requirementRefs.map((r) => ({ ...r }))
+      : undefined,
+    createdByUserId: userId,
+    createdAt: now,
+  });
+  return { version: next };
+}
+
 export const createVersion = mutation({
   args: {
     analysisId: v.id("rosAnalyses"),
@@ -1903,66 +1999,12 @@ export const createVersion = mutation({
   handler: async (ctx, args) => {
     const userId = await requireUserId(ctx);
     const analysis = await requireRosAnalysisEdit(ctx, args.analysisId, userId);
-    const last = await ctx.db
-      .query("rosAnalysisVersions")
-      .withIndex("by_ros_version", (q) =>
-        q.eq("rosAnalysisId", args.analysisId),
-      )
-      .order("desc")
-      .first();
-    const next = (last?.version ?? 0) + 1;
-    const now = Date.now();
-    const after = normalizedAfterMatrices(analysis);
-    const cellItemsSnap = normalizeCellItems(
-      analysis.matrixValues,
-      analysis.cellNotes,
-      analysis.cellItems as RosCellItemMatrix | undefined,
+    return await insertRosAnalysisVersionSnapshot(
+      ctx,
+      analysis,
+      userId,
+      args.note?.trim() || undefined,
     );
-    return await ctx.db.insert("rosAnalysisVersions", {
-      workspaceId: analysis.workspaceId,
-      rosAnalysisId: args.analysisId,
-      version: next,
-      note: args.note?.trim() || undefined,
-      rowAxisTitle: analysis.rowAxisTitle,
-      colAxisTitle: analysis.colAxisTitle,
-      rowLabels: [...analysis.rowLabels],
-      colLabels: [...analysis.colLabels],
-      matrixValues: analysis.matrixValues.map((r) => [...r]),
-      cellNotes: normalizeCellNotes(
-        analysis.matrixValues,
-        analysis.cellNotes,
-      ).map((r) => [...r]),
-      cellItems: cellItemsSnap.map((r) =>
-        r.map((c) => c.map((x) => ({ ...x }))),
-      ),
-      matrixValuesAfter: after.matrixValuesAfter.map((r) => [...r]),
-      cellNotesAfter: after.cellNotesAfter.map((r) => [...r]),
-      cellItemsAfter: after.cellItemsAfter.map((r) =>
-        r.map((c) => c.map((x) => ({ ...x }))),
-      ),
-      rowAxisTitleAfter: analysis.rowAxisTitleAfter,
-      colAxisTitleAfter: analysis.colAxisTitleAfter,
-      rowLabelsAfter: analysis.rowLabelsAfter
-        ? [...analysis.rowLabelsAfter]
-        : undefined,
-      colLabelsAfter: analysis.colLabelsAfter
-        ? [...analysis.colLabelsAfter]
-        : undefined,
-      notes: analysis.notes,
-      methodologyStatement: analysis.methodologyStatement,
-      contextSummary: analysis.contextSummary,
-      scopeAndCriteria: analysis.scopeAndCriteria,
-      riskCriteriaVersion: analysis.riskCriteriaVersion,
-      axisScaleNotes: analysis.axisScaleNotes,
-      complianceScopeTags: analysis.complianceScopeTags
-        ? [...analysis.complianceScopeTags]
-        : undefined,
-      requirementRefs: analysis.requirementRefs
-        ? analysis.requirementRefs.map((r) => ({ ...r }))
-        : undefined,
-      createdByUserId: userId,
-      createdAt: now,
-    });
   },
 });
 

@@ -134,12 +134,12 @@ export function RosVersionsPanel({
     setSnapshotBusy(true);
     setActionError(null);
     try {
-      await createVersion({
+      const out = await createVersion({
         analysisId,
         note: versionNote.trim() || undefined,
       });
       setVersionNote("");
-      toast.success("Versjon lagret.");
+      toast.success(`Versjon ${out.version} lagret.`);
     } catch (e) {
       toast.error(
         e instanceof Error ? e.message : "Kunne ikke lagre versjon.",
@@ -150,15 +150,17 @@ export function RosVersionsPanel({
   }
 
   return (
-    <Card>
+    <Card id="ros-versjoner" className="scroll-mt-24">
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-base">
           <History className="size-4" aria-hidden />
           Versjonskontroll
         </CardTitle>
         <CardDescription>
-          Lagre øyeblikksbilder av matrisen (før/etter). Bytt visning, åpne
-          forhåndsvisning, gjenopprett eller slett enkeltversjoner.
+          Lagre øyeblikksbilder av matrisen (før/etter). «Lagre endringer» i
+          toppen oppretter også en ny versjon; automatisk lagring gjør ikke
+          det. Bytt visning, åpne forhåndsvisning, gjenopprett eller slett
+          enkeltversjoner.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
