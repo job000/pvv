@@ -4,16 +4,8 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
-import {
-  DEFAULT_ROS_COL_AXIS,
-  DEFAULT_ROS_COL_LABELS,
-  DEFAULT_ROS_ROW_AXIS,
-  DEFAULT_ROS_ROW_LABELS,
-  positionRiskLevel,
-} from "@/lib/ros-defaults";
 import { toast } from "@/lib/app-toast";
 import { toastDeleteWithUndo } from "@/lib/toast-delete-undo";
 import { cellRiskClass } from "@/lib/ros-risk-colors";
@@ -37,8 +29,10 @@ import {
   DialogFooter,
   DialogHeader,
 } from "@/components/ui/dialog";
-import { RosLabelLevelsEditor } from "@/components/ros/ros-label-levels-editor";
-import { ROS_TEMPLATE_PRESETS, presetToFormState } from "@/lib/ros-template-presets";
+import {
+  RosTemplateBuilder,
+  type TemplateBuilderMode,
+} from "@/components/ros/ros-template-builder";
 import {
   BarChart3,
   BookMarked,
@@ -207,16 +201,19 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
 
   const [busy, setBusy] = useState(false);
 
-  const [tplName, setTplName] = useState("");
-  const [tplDesc, setTplDesc] = useState("");
-  const [tplRows, setTplRows] = useState("");
-  const [tplCols, setTplCols] = useState("");
-  const [tplRowAxis, setTplRowAxis] = useState(DEFAULT_ROS_ROW_AXIS);
-  const [tplColAxis, setTplColAxis] = useState(DEFAULT_ROS_COL_AXIS);
-  const [tplRowDescs, setTplRowDescs] = useState<string[]>([]);
-  const [tplColDescs, setTplColDescs] = useState<string[]>([]);
-  const [tplMatrixValues, setTplMatrixValues] = useState<number[][] | null>(null);
-  const [editingId, setEditingId] = useState<Id<"rosTemplates"> | null>(null);
+  const [builderMode, setBuilderMode] = useState<TemplateBuilderMode>("create");
+  const [builderInitialData, setBuilderInitialData] = useState<{
+    id?: Id<"rosTemplates">;
+    name: string;
+    description: string;
+    rowAxis: string;
+    colAxis: string;
+    rowLabels: string[];
+    colLabels: string[];
+    rowDescs: string[];
+    colDescs: string[];
+    matrixValues: number[][] | null;
+  } | undefined>(undefined);
 
   const [anaTitle, setAnaTitle] = useState("");
   const [anaTemplateId, setAnaTemplateId] = useState<Id<"rosTemplates"> | "">("");
@@ -232,20 +229,7 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
     title: string;
   } | null>(null);
 
-  const resetTemplateForm = useCallback(() => {
-    setTplName("");
-    setTplDesc("");
-    setTplRows("");
-    setTplCols("");
-    setTplRowAxis(DEFAULT_ROS_ROW_AXIS);
-    setTplColAxis(DEFAULT_ROS_COL_AXIS);
-    setTplRowDescs([]);
-    setTplColDescs([]);
-    setTplMatrixValues(null);
-    setEditingId(null);
-  }, []);
-
-  const loadTemplateForEdit = useCallback(
+  const openBuilderForEdit = useCallback(
     (t: {
       _id: Id<"rosTemplates">;
       name: string;
@@ -258,37 +242,53 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
       colDescriptions?: string[];
       defaultMatrixValues?: number[][];
     }) => {
-      setEditingId(t._id);
-      setTplName(t.name);
-      setTplDesc(t.description ?? "");
-      setTplRowAxis(t.rowAxisTitle);
-      setTplColAxis(t.colAxisTitle);
-      setTplRows(t.rowLabels.join("\n"));
-      setTplCols(t.colLabels.join("\n"));
-      setTplRowDescs(t.rowDescriptions ?? []);
-      setTplColDescs(t.colDescriptions ?? []);
-      setTplMatrixValues(t.defaultMatrixValues ?? null);
+      setBuilderMode("edit");
+      setBuilderInitialData({
+        id: t._id,
+        name: t.name,
+        description: t.description ?? "",
+        rowAxis: t.rowAxisTitle,
+        colAxis: t.colAxisTitle,
+        rowLabels: t.rowLabels,
+        colLabels: t.colLabels,
+        rowDescs: t.rowDescriptions ?? [],
+        colDescs: t.colDescriptions ?? [],
+        matrixValues: t.defaultMatrixValues ?? null,
+      });
+      setTemplateDialogOpen(true);
     },
     [],
   );
 
-  const previewRowLabels = useMemo(() => {
-    const rowLabels = tplRows
-      .split("\n")
-      .map((s) => s.trim())
-      .filter(Boolean);
-    if (rowLabels.length >= 2) return rowLabels;
-    return [...DEFAULT_ROS_ROW_LABELS];
-  }, [tplRows]);
-
-  const previewColLabels = useMemo(() => {
-    const colLabels = tplCols
-      .split("\n")
-      .map((s) => s.trim())
-      .filter(Boolean);
-    if (colLabels.length >= 2) return colLabels;
-    return [...DEFAULT_ROS_COL_LABELS];
-  }, [tplCols]);
+  const openBuilderForDuplicate = useCallback(
+    (t: {
+      _id: Id<"rosTemplates">;
+      name: string;
+      description?: string;
+      rowAxisTitle: string;
+      colAxisTitle: string;
+      rowLabels: string[];
+      colLabels: string[];
+      rowDescriptions?: string[];
+      colDescriptions?: string[];
+      defaultMatrixValues?: number[][];
+    }) => {
+      setBuilderMode("duplicate");
+      setBuilderInitialData({
+        name: `${t.name} (kopi)`,
+        description: t.description ?? "",
+        rowAxis: t.rowAxisTitle,
+        colAxis: t.colAxisTitle,
+        rowLabels: t.rowLabels,
+        colLabels: t.colLabels,
+        rowDescs: t.rowDescriptions ?? [],
+        colDescs: t.colDescriptions ?? [],
+        matrixValues: t.defaultMatrixValues ?? null,
+      });
+      setTemplateDialogOpen(true);
+    },
+    [],
+  );
 
   const filteredSortedAnalyses = useMemo(() => {
     const list = analyses ?? [];
@@ -345,9 +345,10 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
   );
 
   const openNewTemplateDialog = useCallback(() => {
-    resetTemplateForm();
+    setBuilderMode("create");
+    setBuilderInitialData(undefined);
     setTemplateDialogOpen(true);
-  }, [resetTemplateForm]);
+  }, []);
 
   /** Én mal i arbeidsområdet → forhåndsvelg (mindre friksjon for store organisasjoner). */
   useEffect(() => {
@@ -386,60 +387,60 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
     return () => window.removeEventListener("hashchange", openAndScroll);
   }, [updateRosUiPrefs]);
 
-  async function submitTemplate(e: React.FormEvent) {
-    e.preventDefault();
+  const handleBuilderSubmit = useCallback(async (data: {
+    editingId: Id<"rosTemplates"> | null;
+    name: string;
+    description: string;
+    rowAxis: string;
+    colAxis: string;
+    rowLabelsRaw: string;
+    colLabelsRaw: string;
+    rowDescs: string[];
+    colDescs: string[];
+    matrixValues: number[][] | null;
+  }) => {
     setBusy(true);
     try {
-      const rowLabels = tplRows
-        .split("\n")
-        .map((s) => s.trim())
-        .filter(Boolean);
-      const colLabels = tplCols
-        .split("\n")
-        .map((s) => s.trim())
-        .filter(Boolean);
-      const useDefault =
-        !editingId && rowLabels.length === 0 && colLabels.length === 0;
+      const rowLabels = data.rowLabelsRaw.split("\n").map((s) => s.trim()).filter(Boolean);
+      const colLabels = data.colLabelsRaw.split("\n").map((s) => s.trim()).filter(Boolean);
+      const useDefault = !data.editingId && rowLabels.length === 0 && colLabels.length === 0;
       if (!useDefault) {
         if (rowLabels.length < 2 || colLabels.length < 2) {
-          toast.error(
-            "Minst to etiketter for både rader og kolonner — eller la begge felt stå tomme for standard 5×5 ved ny mal.",
-          );
+          toast.error("Minst to etiketter for både rader og kolonner.");
           return;
         }
       }
-      const rowDescsClean = tplRowDescs.length > 0 ? tplRowDescs : undefined;
-      const colDescsClean = tplColDescs.length > 0 ? tplColDescs : undefined;
-      if (editingId) {
+      const rowDescsClean = data.rowDescs.length > 0 ? data.rowDescs : undefined;
+      const colDescsClean = data.colDescs.length > 0 ? data.colDescs : undefined;
+      if (data.editingId) {
         await updateTemplate({
-          templateId: editingId,
-          name: tplName.trim(),
-          description: tplDesc.trim() || null,
-          rowAxisTitle: tplRowAxis.trim(),
-          colAxisTitle: tplColAxis.trim(),
+          templateId: data.editingId,
+          name: data.name.trim(),
+          description: data.description.trim() || null,
+          rowAxisTitle: data.rowAxis.trim(),
+          colAxisTitle: data.colAxis.trim(),
           rowLabels,
           colLabels,
           rowDescriptions: rowDescsClean ?? null,
           colDescriptions: colDescsClean ?? null,
-          defaultMatrixValues: tplMatrixValues ?? null,
+          defaultMatrixValues: data.matrixValues ?? null,
         });
         toast.success("Mal oppdatert.");
       } else {
         await createTemplate({
           workspaceId,
-          name: tplName.trim(),
-          description: tplDesc.trim() || undefined,
-          rowAxisTitle: tplRowAxis.trim(),
-          colAxisTitle: tplColAxis.trim(),
+          name: data.name.trim(),
+          description: data.description.trim() || undefined,
+          rowAxisTitle: data.rowAxis.trim(),
+          colAxisTitle: data.colAxis.trim(),
           rowLabels: useDefault ? undefined : rowLabels,
           colLabels: useDefault ? undefined : colLabels,
           rowDescriptions: rowDescsClean,
           colDescriptions: colDescsClean,
-          defaultMatrixValues: tplMatrixValues ?? undefined,
+          defaultMatrixValues: data.matrixValues ?? undefined,
         });
-        toast.success("Mal opprettet.");
+        toast.success(builderMode === "duplicate" ? "Kopi opprettet." : "Mal opprettet.");
       }
-      resetTemplateForm();
       setTemplateDialogOpen(false);
     } catch (e) {
       toast.error(
@@ -448,7 +449,7 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
     } finally {
       setBusy(false);
     }
-  }
+  }, [workspaceId, createTemplate, updateTemplate, builderMode]);
 
   async function submitAnalysis(e: React.FormEvent) {
     e.preventDefault();
@@ -529,12 +530,12 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
                 Maler
               </h2>
               <p className="text-muted-foreground mt-0.5 text-sm">
-                Definer rader og kolonner for risikovurderingen. Klikk på en mal for å redigere.
+                En mal definerer rammeverket for risikovurderinger — matrisestørrelse, akser og nivåer. Analyser bruker malen.
               </p>
             </div>
             <Button
               type="button"
-              className="shrink-0 gap-2"
+              className="shrink-0 gap-2 rounded-xl"
               onClick={() => openNewTemplateDialog()}
             >
               <Plus className="size-4" aria-hidden />
@@ -543,19 +544,19 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
           </div>
 
           {templatesList.length === 0 ? (
-            <div className="flex flex-col items-center gap-4 rounded-2xl border border-dashed bg-muted/5 py-16 text-center">
-              <div className="bg-primary/10 flex size-14 items-center justify-center rounded-full">
-                <Grid3x3 className="text-primary size-7" />
+            <div className="flex flex-col items-center gap-5 rounded-2xl border border-dashed bg-muted/5 py-16 text-center">
+              <div className="bg-primary/10 flex size-16 items-center justify-center rounded-2xl">
+                <Grid3x3 className="text-primary size-8" />
               </div>
-              <div>
-                <p className="text-foreground text-sm font-medium">Ingen maler ennå</p>
-                <p className="text-muted-foreground mt-1 max-w-sm text-xs">
-                  En mal definerer rutenettet for risikovurderingen. Opprett din første mal for å komme i gang.
+              <div className="max-w-sm">
+                <p className="text-foreground font-semibold">Ingen maler ennå</p>
+                <p className="text-muted-foreground mt-1.5 text-sm leading-relaxed">
+                  En mal definerer rutenettet for risikovurderingen — velg matrisestørrelse, navngi aksene og definer nivåbetydninger.
                 </p>
               </div>
               <Button
                 type="button"
-                className="gap-2"
+                className="gap-2 rounded-xl"
                 onClick={() => openNewTemplateDialog()}
               >
                 <Plus className="size-4" aria-hidden />
@@ -567,46 +568,42 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
               {templatesList.map((t) => (
                 <div
                   key={t._id}
-                  role="button"
-                  tabIndex={0}
-                  onClick={() => {
-                    loadTemplateForEdit(t);
-                    setTemplateDialogOpen(true);
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ") {
-                      e.preventDefault();
-                      loadTemplateForEdit(t);
-                      setTemplateDialogOpen(true);
-                    }
-                  }}
                   className={cn(
-                    "group flex cursor-pointer flex-col overflow-hidden rounded-xl border border-border/60 bg-card text-left shadow-sm outline-none transition-all",
-                    "hover:border-primary/30 hover:shadow-lg",
-                    "focus-visible:ring-2 focus-visible:ring-primary/40",
-                    "active:scale-[0.99]",
+                    "group relative flex flex-col overflow-hidden rounded-2xl bg-card text-left shadow-sm outline-none transition-all ring-1 ring-black/[0.04] dark:ring-white/[0.06]",
+                    "hover:shadow-lg hover:ring-primary/20",
                   )}
                 >
-                  <div className="flex-1 p-4">
+                  <div
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => openBuilderForEdit(t)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        openBuilderForEdit(t);
+                      }
+                    }}
+                    className="flex-1 cursor-pointer p-4 focus-visible:ring-2 focus-visible:ring-primary/40 outline-none"
+                  >
                     <div className="mb-3 flex items-start gap-3">
-                      <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 transition-colors group-hover:bg-primary/15">
-                        <Grid3x3 className="size-4 text-primary" />
+                      <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 transition-colors group-hover:bg-primary/15">
+                        <Grid3x3 className="size-4.5 text-primary" />
                       </div>
                       <div className="min-w-0 flex-1">
                         <div className="flex items-start justify-between gap-2">
-                          <h3 className="text-foreground truncate text-sm font-semibold">
+                          <h3 className="text-foreground truncate font-semibold">
                             {t.name}
                           </h3>
-                          <span className="shrink-0 rounded-md bg-muted px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-muted-foreground">
+                          <span className="shrink-0 rounded-lg bg-muted px-2 py-0.5 text-[10px] font-bold tabular-nums text-muted-foreground">
                             {t.rowLabels.length}×{t.colLabels.length}
                           </span>
                         </div>
                         {t.description ? (
-                          <p className="text-muted-foreground mt-0.5 line-clamp-1 text-xs">
+                          <p className="text-muted-foreground mt-0.5 line-clamp-2 text-xs leading-relaxed">
                             {t.description}
                           </p>
                         ) : null}
-                        <p className="text-muted-foreground/70 mt-1 text-[10px]">
+                        <p className="text-muted-foreground/60 mt-1.5 text-[10px] font-medium uppercase tracking-wider">
                           {t.rowAxisTitle} × {t.colAxisTitle}
                         </p>
                       </div>
@@ -616,15 +613,31 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
                       colLabels={t.colLabels}
                     />
                   </div>
-                  <div className="flex items-center justify-between border-t border-border/40 bg-muted/10 px-4 py-2">
-                    <span className="text-primary text-xs font-medium opacity-0 transition-opacity group-hover:opacity-100">
-                      Rediger
-                    </span>
+                  <div className="flex items-center gap-1 border-t border-border/30 bg-muted/5 px-3 py-1.5">
                     <Button
                       type="button"
                       variant="ghost"
                       size="sm"
-                      className="text-muted-foreground hover:text-destructive h-7 text-[11px]"
+                      className="h-7 rounded-lg text-[11px] text-muted-foreground hover:text-primary"
+                      onClick={() => openBuilderForEdit(t)}
+                    >
+                      Rediger
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 rounded-lg text-[11px] text-muted-foreground hover:text-primary"
+                      onClick={() => openBuilderForDuplicate(t)}
+                    >
+                      Dupliser
+                    </Button>
+                    <div className="flex-1" />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 rounded-lg text-[11px] text-muted-foreground hover:text-destructive"
                       onClick={(e) => {
                         e.stopPropagation();
                         if (
@@ -657,195 +670,14 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
             </div>
           )}
 
-          <Dialog
+          <RosTemplateBuilder
             open={templateDialogOpen}
-            onOpenChange={(open) => {
-              setTemplateDialogOpen(open);
-              if (!open) resetTemplateForm();
-            }}
-          >
-            <DialogContent
-              size="2xl"
-              titleId="ros-tpl-dialog-title"
-              descriptionId="ros-tpl-dialog-desc"
-            >
-              <DialogHeader>
-                <p
-                  id="ros-tpl-dialog-title"
-                  className="font-heading text-lg font-semibold"
-                >
-                  {editingId ? "Rediger mal" : "Ny ROS-mal"}
-                </p>
-                <p
-                  id="ros-tpl-dialog-desc"
-                  className="text-muted-foreground text-sm leading-relaxed"
-                >
-                  Under finner du forklaring på rader og kolonner. Tomme
-                  etikettfelt betyr innebygd 5×5 (du ser resultatet i
-                  forhåndsvisning). Fargene følger risikonivå 1–5 (grønn → rød).
-                </p>
-              </DialogHeader>
-              <DialogBody>
-                <form
-                  id="ros-template-form"
-                  onSubmit={(e) => void submitTemplate(e)}
-                  className="space-y-4"
-                >
-                  <div className="space-y-2">
-                    <p className="text-muted-foreground text-xs font-medium">
-                      Hurtigstart
-                    </p>
-                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-                      {ROS_TEMPLATE_PRESETS.map((p) => (
-                        <Button
-                          key={p.id}
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          className="h-auto min-h-9 w-full flex-col items-start gap-0.5 whitespace-normal py-2.5 text-left"
-                          onClick={() => {
-                            const s = presetToFormState(p);
-                            setTplRowAxis(s.tplRowAxis);
-                            setTplColAxis(s.tplColAxis);
-                            setTplRows(s.tplRows);
-                            setTplCols(s.tplCols);
-                          }}
-                        >
-                          <span className="font-medium">{p.name}</span>
-                          <span className="text-muted-foreground text-[11px] font-normal leading-snug">
-                            {p.description}
-                          </span>
-                        </Button>
-                      ))}
-                    </div>
-                  </div>
-
-                  <details className="border-border/60 bg-muted/15 rounded-xl border px-3 py-2">
-                    <summary className="flex cursor-pointer list-none items-center gap-2 text-sm font-medium [&::-webkit-details-marker]:hidden">
-                      <HelpCircle className="text-muted-foreground size-4" />
-                      Hva er rader og kolonner?
-                    </summary>
-                    <p className="text-muted-foreground mt-2 text-xs leading-relaxed">
-                      <strong className="text-foreground">Rader</strong> er ofte
-                      sannsynlighet eller sannsynlig utfall.{" "}
-                      <strong className="text-foreground">Kolonner</strong> er
-                      ofte konsekvens eller påvirkning. Du kan bruke egne
-                      betegnelser — det viktige er at teamet forstår skalaen.
-                      Celleverdier 0–5 i analysen angir risiko etter at mal er
-                      lagret.
-                    </p>
-                  </details>
-
-                  <div className="grid gap-4 lg:grid-cols-2">
-                    <div className="space-y-3">
-                      <div className="space-y-1.5">
-                        <Label htmlFor="tpl-name">Navn på mal</Label>
-                        <Input
-                          id="tpl-name"
-                          value={tplName}
-                          onChange={(e) => setTplName(e.target.value)}
-                          placeholder="F.eks. Standard ROS 5×5"
-                          required
-                        />
-                      </div>
-                      <div className="space-y-1.5">
-                        <Label htmlFor="tpl-desc">Beskrivelse (valgfritt)</Label>
-                        <Textarea
-                          id="tpl-desc"
-                          value={tplDesc}
-                          onChange={(e) => setTplDesc(e.target.value)}
-                          rows={2}
-                          className="min-h-0 resize-y"
-                        />
-                      </div>
-                      <div className="grid gap-2 sm:grid-cols-2">
-                        <div className="space-y-1.5">
-                          <Label htmlFor="tpl-row-axis">Akse rader</Label>
-                          <Input
-                            id="tpl-row-axis"
-                            value={tplRowAxis}
-                            onChange={(e) => setTplRowAxis(e.target.value)}
-                          />
-                        </div>
-                        <div className="space-y-1.5">
-                          <Label htmlFor="tpl-col-axis">Akse kolonner</Label>
-                          <Input
-                            id="tpl-col-axis"
-                            value={tplColAxis}
-                            onChange={(e) => setTplColAxis(e.target.value)}
-                          />
-                        </div>
-                      </div>
-                      <RosLabelLevelsEditor
-                        id="tpl-rows"
-                        title="Etiketter rader"
-                        intro="Rader er ofte sannsynlighet eller «hvor sannsynlig er det uønskede utfallet?»"
-                        value={tplRows}
-                        onChange={setTplRows}
-                        defaultLabels={DEFAULT_ROS_ROW_LABELS}
-                        lowEndHint="lavest langs aksen"
-                        highEndHint="høyest langs aksen"
-                        descriptions={tplRowDescs}
-                        onDescriptionsChange={setTplRowDescs}
-                      />
-                      <RosLabelLevelsEditor
-                        id="tpl-cols"
-                        title="Etiketter kolonner"
-                        intro="Kolonner er ofte konsekvens eller «hvor stort er det negative utfallet?»"
-                        value={tplCols}
-                        onChange={setTplCols}
-                        defaultLabels={DEFAULT_ROS_COL_LABELS}
-                        lowEndHint="lavest langs aksen"
-                        highEndHint="høyest langs aksen"
-                        descriptions={tplColDescs}
-                        onDescriptionsChange={setTplColDescs}
-                      />
-                    </div>
-                    <div className="space-y-4">
-                      <div className="space-y-2">
-                        <Label className="text-muted-foreground text-xs uppercase tracking-wide">
-                          Forhåndsvisning
-                        </Label>
-                        <RosTemplatePreviewMini
-                          rowLabels={previewRowLabels}
-                          colLabels={previewColLabels}
-                        />
-                      </div>
-                      <TemplateMatrixEditor
-                        rowLabels={previewRowLabels}
-                        colLabels={previewColLabels}
-                        values={tplMatrixValues}
-                        onChange={setTplMatrixValues}
-                      />
-                    </div>
-                  </div>
-                </form>
-              </DialogBody>
-              <DialogFooter>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => {
-                    resetTemplateForm();
-                    setTemplateDialogOpen(false);
-                  }}
-                >
-                  Avbryt
-                </Button>
-                <Button
-                  type="submit"
-                  form="ros-template-form"
-                  disabled={busy || !tplName.trim()}
-                >
-                  {busy
-                    ? "Lagrer …"
-                    : editingId
-                      ? "Lagre endringer"
-                      : "Opprett mal"}
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
+            onOpenChange={setTemplateDialogOpen}
+            mode={builderMode}
+            initialData={builderInitialData}
+            onSubmit={handleBuilderSubmit}
+            busy={busy}
+          />
         </div>
       ) : (
         <>
@@ -1211,139 +1043,3 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
   );
 }
 
-function TemplateMatrixEditor({
-  rowLabels,
-  colLabels,
-  values,
-  onChange,
-}: {
-  rowLabels: string[];
-  colLabels: string[];
-  values: number[][] | null;
-  onChange: (v: number[][] | null) => void;
-}) {
-  const rows = rowLabels.length;
-  const cols = colLabels.length;
-
-  const matrix = useMemo(() => {
-    if (!values) return null;
-    const m: number[][] = [];
-    for (let r = 0; r < rows; r++) {
-      const row: number[] = [];
-      for (let c = 0; c < cols; c++) {
-        row.push(values[r]?.[c] ?? 0);
-      }
-      m.push(row);
-    }
-    return m;
-  }, [values, rows, cols]);
-
-  const initMatrix = useCallback(() => {
-    const m: number[][] = [];
-    for (let r = 0; r < rows; r++) {
-      const row: number[] = [];
-      for (let c = 0; c < cols; c++) {
-        row.push(positionRiskLevel(r, c, rows, cols));
-      }
-      m.push(row);
-    }
-    onChange(m);
-  }, [rows, cols, onChange]);
-
-  const cycleCell = useCallback(
-    (r: number, c: number) => {
-      if (!matrix) return;
-      const next = matrix.map((row) => [...row]);
-      next[r]![c] = ((next[r]![c]! % 5) + 1);
-      onChange(next);
-    },
-    [matrix, onChange],
-  );
-
-  if (!matrix) {
-    return (
-      <div className="space-y-2">
-        <Label className="text-muted-foreground text-xs uppercase tracking-wide">
-          Egne risikoverdier per celle
-        </Label>
-        <p className="text-muted-foreground text-xs leading-relaxed">
-          Standard: poengene beregnes automatisk ut fra celleposisjon.
-          Klikk under for å definere egne verdier.
-        </p>
-        <Button type="button" variant="outline" size="sm" onClick={initMatrix}>
-          Definer egne verdier
-        </Button>
-      </div>
-    );
-  }
-
-  return (
-    <div className="space-y-2">
-      <div className="flex items-center justify-between gap-2">
-        <Label className="text-muted-foreground text-xs uppercase tracking-wide">
-          Egne risikoverdier (klikk celle for å endre)
-        </Label>
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          className="h-7 text-xs text-muted-foreground"
-          onClick={() => onChange(null)}
-        >
-          Fjern (bruk auto)
-        </Button>
-      </div>
-      <div className="overflow-x-auto">
-        <table className="border-separate border-spacing-0.5 text-center text-xs">
-          <thead>
-            <tr>
-              <th />
-              {colLabels.map((l, c) => (
-                <th
-                  key={c}
-                  className="max-w-[4rem] truncate px-1 pb-0.5 font-medium text-muted-foreground"
-                  title={l}
-                >
-                  {c + 1}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {[...Array(rows)].map((_, displayIdx) => {
-              const r = rows - 1 - displayIdx;
-              return (
-                <tr key={r}>
-                  <td className="pr-1 text-right font-medium text-muted-foreground">
-                    {r + 1}
-                  </td>
-                  {[...Array(cols)].map((_, c) => {
-                    const val = matrix[r]?.[c] ?? 0;
-                    return (
-                      <td key={c}>
-                        <button
-                          type="button"
-                          className={cn(
-                            "flex size-8 items-center justify-center rounded-md border text-xs font-bold transition-all",
-                            cellRiskClass(val),
-                          )}
-                          onClick={() => cycleCell(r, c)}
-                          title={`Rad ${r + 1}, Kol ${c + 1}: Verdi ${val}. Klikk for å endre.`}
-                        >
-                          {val}
-                        </button>
-                      </td>
-                    );
-                  })}
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
-      <p className="text-muted-foreground text-[10px]">
-        Verdier 1–5 (grønn → rød). Klikk for å bla gjennom.
-      </p>
-    </div>
-  );
-}
