@@ -3,6 +3,7 @@ import {
   Bell,
   Building2,
   ClipboardList,
+  FileText,
   Settings2,
   Share2,
   Shield,
@@ -13,6 +14,7 @@ import {
 export const WORKSPACE_OVERVIEW_SHORTCUT_IDS = [
   "vurderinger",
   "prosessregister",
+  "skjemaer",
   "ros",
   "organisasjon",
   "delinger",
@@ -49,6 +51,13 @@ export function buildWorkspaceOverviewShortcuts(
       title: "Prosesser",
       desc: "Se prosesser og opprett ny sak fra riktig grunnlag",
       icon: Users,
+    },
+    {
+      id: "skjemaer",
+      href: `/w/${w}/skjemaer`,
+      title: "Skjemaer",
+      desc: "Bygg enkle intake-skjema og godkjenn innsendte forslag",
+      icon: FileText,
     },
     {
       id: "ros",

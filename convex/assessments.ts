@@ -30,29 +30,15 @@ import {
   requireUserId,
   requireWorkspaceMember,
 } from "./lib/access";
+import {
+  createAssessmentWithPayload,
+  defaultAssessmentPayload,
+  mergeCandidateIntoAssessmentPayload,
+  nextAssessmentKanbanRank,
+} from "./lib/assessmentCreation";
 import { sanitizeAssessmentProcessTextFields } from "../lib/assessment-process-profile";
 import { payloadToSnapshot } from "./lib/payloadSnapshot";
 import { computeAllResults } from "./lib/rpaScoring";
-
-async function nextKanbanRank(
-  ctx: MutationCtx,
-  workspaceId: Id<"workspaces">,
-  status: PipelineStatus,
-): Promise<number> {
-  const rows = await ctx.db
-    .query("assessments")
-    .withIndex("by_workspace", (q) => q.eq("workspaceId", workspaceId))
-    .collect();
-  let max = 0;
-  for (const a of rows) {
-    const s = normalizePipelineStatus(a.pipelineStatus);
-    if (s !== status) {
-      continue;
-    }
-    max = Math.max(max, a.kanbanRank ?? 0);
-  }
-  return max + 1;
-}
 
 async function refreshCachedPriority(
   ctx: MutationCtx,
@@ -86,63 +72,6 @@ async function requireOrgUnitInWorkspace(
   if (!u || u.workspaceId !== workspaceId) {
     throw new Error("Ugyldig organisasjonsenhet.");
   }
-}
-
-function mergeCandidateIntoPayload(
-  payload: AssessmentPayload,
-  cand: Doc<"candidates">,
-): AssessmentPayload {
-  return {
-    ...payload,
-    processName: cand.name,
-    candidateId: cand.code,
-    processDescription: cand.notes?.trim() || payload.processDescription,
-    processActors: cand.linkHintBusinessOwner?.trim() || payload.processActors,
-    processSystems: cand.linkHintSystems?.trim() || payload.processSystems,
-    hfSecurityInformationNotes:
-      cand.linkHintComplianceNotes?.trim() ||
-      payload.hfSecurityInformationNotes,
-  };
-}
-
-function defaultPayload(): AssessmentPayload {
-  return {
-    processName: "",
-    candidateId: "",
-    processDescription: "",
-    processGoal: "",
-    processActors: "",
-    processSystems: "",
-    processFlowSummary: "",
-    processVolumeNotes: "",
-    processConstraints: "",
-    processFollowUp: "",
-    processScope: "unsure",
-    processStability: 3,
-    applicationStability: 3,
-    structuredInput: 3,
-    processVariability: 3,
-    digitization: 3,
-    processLength: 3,
-    applicationCount: 3,
-    ocrRequired: false,
-    thinClientPercent: 30,
-    baselineHours: 800,
-    reworkHours: 50,
-    auditHours: 40,
-    avgCostPerYear: 850000,
-    workingDays: 230,
-    workingHoursPerDay: 7.5,
-    employees: 3,
-    criticalityBusinessImpact: 3,
-    criticalityRegulatoryRisk: 3,
-    hfOperationsSupportLevel: "unsure",
-    hfSecurityInformationNotes: "",
-    hfOrganizationalBreadthNotes: "",
-    hfEconomicRationaleNotes: "",
-    hfCriticalManualGapNotes: "",
-    hfOperationsSupportNotes: "",
-  };
 }
 
 export const listByWorkspace = query({
@@ -345,46 +274,21 @@ export const create = mutation({
   handler: async (ctx, args) => {
     const userId = await requireUserId(ctx);
     await requireWorkspaceMember(ctx, args.workspaceId, userId, "member");
-    const now = Date.now();
-    let payload = defaultPayload();
+    let payload = defaultAssessmentPayload();
     if (args.fromCandidateId) {
       const cand = await ctx.db.get(args.fromCandidateId);
       if (!cand || cand.workspaceId !== args.workspaceId) {
         throw new Error("Fant ikke prosessen i dette arbeidsområdet.");
       }
-      payload = mergeCandidateIntoPayload(payload, cand);
+      payload = mergeCandidateIntoAssessmentPayload(payload, cand);
     }
-    const computed = computeAllResults(
-      payloadToSnapshot(payload as unknown as Record<string, unknown>),
-    );
-    const aid = await ctx.db.insert("assessments", {
+    return await createAssessmentWithPayload(ctx, {
       workspaceId: args.workspaceId,
-      title: args.title.trim() || "Ny vurdering",
-      createdByUserId: userId,
-      updatedAt: now,
-      shareWithWorkspace: args.shareWithWorkspace,
-      pipelineStatus: "not_assessed",
-      cachedPriorityScore: computed.priorityScore,
-      cachedAp: computed.ap,
-      cachedCriticality: computed.criticality,
-      cachedEase: computed.ease,
-      cachedEaseLabel: computed.easeLabel,
-      kanbanRank: now,
-    });
-    await ctx.db.insert("assessmentCollaborators", {
-      assessmentId: aid,
       userId,
-      role: "owner",
-      addedAt: now,
-    });
-    await ctx.db.insert("assessmentDrafts", {
-      assessmentId: aid,
+      title: args.title,
+      shareWithWorkspace: args.shareWithWorkspace,
       payload,
-      updatedAt: now,
-      updatedByUserId: userId,
-      revision: 1,
     });
-    return aid;
   },
 });
 
@@ -654,7 +558,9 @@ export const listPriorityHighlights = query({
           .unique();
         const snapshot = draft
           ? payloadToSnapshot(draft.payload as Record<string, unknown>)
-          : payloadToSnapshot(defaultPayload() as unknown as Record<string, unknown>);
+          : payloadToSnapshot(
+              defaultAssessmentPayload() as unknown as Record<string, unknown>,
+            );
         const computed = computeAllResults(snapshot);
         const status = normalizePipelineStatus(a.pipelineStatus);
         const base = computed.priorityScore;
@@ -687,7 +593,11 @@ export const setPipelineStatus = mutation({
   handler: async (ctx, args) => {
     const { assessment } = await requireAssessmentEdit(ctx, args.assessmentId);
     const status = args.status as PipelineStatus;
-    const rank = await nextKanbanRank(ctx, assessment.workspaceId, status);
+    const rank = await nextAssessmentKanbanRank(
+      ctx,
+      assessment.workspaceId,
+      status,
+    );
     await ctx.db.patch(args.assessmentId, {
       pipelineStatus: args.status,
       kanbanRank: rank,
@@ -827,7 +737,7 @@ export const updateAssessmentCompliance = mutation({
       normalizePipelineStatus(priorAssessment.pipelineStatus) === "not_assessed"
     ) {
       patch.pipelineStatus = "assessed";
-      patch.kanbanRank = await nextKanbanRank(
+      patch.kanbanRank = await nextAssessmentKanbanRank(
         ctx,
         priorAssessment.workspaceId,
         "assessed",

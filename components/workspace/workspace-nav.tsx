@@ -7,6 +7,7 @@ import {
   Bell,
   Building2,
   ClipboardList,
+  FileText,
   LayoutDashboard,
   Settings2,
   Share2,
@@ -64,6 +65,13 @@ function navSections(wid: string): { heading: string; items: NavItem[] }[] {
           icon: ClipboardList,
           exact: false,
           kind: "vurderinger",
+        },
+        {
+          href: `/w/${wid}/skjemaer`,
+          label: "Skjemaer",
+          icon: FileText,
+          exact: false,
+          kind: "default",
         },
         {
           href: `/w/${wid}/ros`,

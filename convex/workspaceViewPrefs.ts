@@ -10,6 +10,7 @@ import {
 const ALLOWED_SHORTCUT_IDS = new Set([
   "vurderinger",
   "prosessregister",
+  "skjemaer",
   "ros",
   "organisasjon",
   "delinger",

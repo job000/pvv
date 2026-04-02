@@ -106,6 +106,165 @@ export const computedSnapshotValidator = v.object({
   priorityScore: v.number(),
 });
 
+export const intakeFormStatusValidator = v.union(
+  v.literal("draft"),
+  v.literal("published"),
+  v.literal("archived"),
+);
+
+export const intakeLayoutModeValidator = v.union(
+  v.literal("one_per_screen"),
+  v.literal("grouped"),
+);
+
+export const intakeQuestionTypeValidator = v.union(
+  v.literal("text"),
+  v.literal("multiple_choice"),
+  v.literal("scale"),
+  v.literal("yes_no"),
+);
+
+export const intakeLinkAccessModeValidator = v.union(
+  v.literal("anonymous"),
+  v.literal("email_required"),
+);
+
+export const intakeConfirmationModeValidator = v.union(
+  v.literal("none"),
+  v.literal("email_copy"),
+);
+
+export const intakeSubmissionStatusValidator = v.union(
+  v.literal("submitted"),
+  v.literal("under_review"),
+  v.literal("approved"),
+  v.literal("rejected"),
+);
+
+export const intakeQuestionOptionValidator = v.object({
+  id: v.string(),
+  label: v.string(),
+});
+
+export const intakeConditionalMatchValidator = v.union(
+  v.object({
+    kind: v.literal("yes_no"),
+    value: v.boolean(),
+  }),
+  v.object({
+    kind: v.literal("multiple_choice"),
+    optionId: v.string(),
+  }),
+  v.object({
+    kind: v.literal("scale"),
+    value: v.number(),
+  }),
+);
+
+export const intakeQuestionVisibilityRuleValidator = v.object({
+  parentQuestionKey: v.string(),
+  match: intakeConditionalMatchValidator,
+});
+
+export const intakeMappingTargetValidator = v.union(
+  v.object({
+    kind: v.literal("assessmentText"),
+    field: v.union(
+      v.literal("processName"),
+      v.literal("processDescription"),
+      v.literal("processGoal"),
+      v.literal("processActors"),
+      v.literal("processSystems"),
+      v.literal("processFlowSummary"),
+      v.literal("processVolumeNotes"),
+      v.literal("processConstraints"),
+      v.literal("processFollowUp"),
+      v.literal("hfSecurityInformationNotes"),
+      v.literal("hfOrganizationalBreadthNotes"),
+      v.literal("hfEconomicRationaleNotes"),
+      v.literal("hfCriticalManualGapNotes"),
+      v.literal("hfOperationsSupportNotes"),
+    ),
+  }),
+  v.object({
+    kind: v.literal("assessmentScale"),
+    field: v.union(
+      v.literal("criticalityBusinessImpact"),
+      v.literal("criticalityRegulatoryRisk"),
+    ),
+  }),
+  v.object({
+    kind: v.literal("derivedFrequency"),
+  }),
+  v.object({
+    kind: v.literal("rosConsequence"),
+  }),
+  v.object({
+    kind: v.literal("rosRiskDescription"),
+  }),
+  v.object({
+    kind: v.literal("pvvPersonalData"),
+  }),
+);
+
+export const intakeAnswerValidator = v.union(
+  v.object({
+    questionId: v.string(),
+    kind: v.literal("text"),
+    value: v.string(),
+  }),
+  v.object({
+    questionId: v.string(),
+    kind: v.literal("multiple_choice"),
+    optionId: v.string(),
+    label: v.string(),
+  }),
+  v.object({
+    questionId: v.string(),
+    kind: v.literal("scale"),
+    value: v.number(),
+  }),
+  v.object({
+    questionId: v.string(),
+    kind: v.literal("yes_no"),
+    value: v.boolean(),
+  }),
+);
+
+export const intakeRiskSuggestionValidator = v.object({
+  id: v.string(),
+  title: v.string(),
+  description: v.string(),
+  severity: v.number(),
+});
+
+export const intakeRosSuggestionValidator = v.object({
+  shouldCreateRos: v.boolean(),
+  summary: v.optional(v.string()),
+  risks: v.array(intakeRiskSuggestionValidator),
+});
+
+export const intakeGeneratedAssessmentValidator = v.object({
+  title: v.string(),
+  payload: assessmentPayloadValidator,
+  autoFilledFields: v.array(v.string()),
+});
+
+export const intakeSubmitterMetaValidator = v.object({
+  name: v.optional(v.string()),
+  email: v.optional(v.string()),
+});
+
+export type IntakeMappingTarget = Infer<typeof intakeMappingTargetValidator>;
+export type IntakeAnswer = Infer<typeof intakeAnswerValidator>;
+export type IntakeQuestionVisibilityRule = Infer<
+  typeof intakeQuestionVisibilityRuleValidator
+>;
+export type IntakeGeneratedAssessment = Infer<
+  typeof intakeGeneratedAssessmentValidator
+>;
+export type IntakeRosSuggestion = Infer<typeof intakeRosSuggestionValidator>;
+
 /** ROS / PDD (risiko og personvern i helse/forvaltning) */
 export const complianceStatusValidator = v.union(
   v.literal("not_started"),
@@ -475,6 +634,84 @@ export default defineSchema({
     fieldKey: v.optional(v.string()),
     createdAt: v.number(),
   }).index("by_assessment", ["assessmentId"]),
+
+  /** Enkle skjema per arbeidsområde for innsendte forslag til vurdering. */
+  intakeForms: defineTable({
+    workspaceId: v.id("workspaces"),
+    title: v.string(),
+    description: v.optional(v.string()),
+    status: intakeFormStatusValidator,
+    layoutMode: intakeLayoutModeValidator,
+    confirmationMode: intakeConfirmationModeValidator,
+    createdByUserId: v.id("users"),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_workspace", ["workspaceId"])
+    .index("by_workspace_and_updated_at", ["workspaceId", "updatedAt"]),
+
+  intakeFormQuestions: defineTable({
+    formId: v.id("intakeForms"),
+    questionKey: v.optional(v.string()),
+    order: v.number(),
+    label: v.string(),
+    helpText: v.optional(v.string()),
+    questionType: intakeQuestionTypeValidator,
+    required: v.boolean(),
+    options: v.optional(v.array(intakeQuestionOptionValidator)),
+    mappingTargets: v.array(intakeMappingTargetValidator),
+    visibilityRule: v.optional(intakeQuestionVisibilityRuleValidator),
+    groupKey: v.optional(v.string()),
+    plainLanguageHint: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_form_and_order", ["formId", "order"]),
+
+  intakeFormLinks: defineTable({
+    formId: v.id("intakeForms"),
+    workspaceId: v.id("workspaces"),
+    token: v.string(),
+    expiresAt: v.number(),
+    maxResponses: v.optional(v.number()),
+    responseCount: v.number(),
+    restrictedAccessMode: intakeLinkAccessModeValidator,
+    createdByUserId: v.id("users"),
+    createdAt: v.number(),
+    pausedAt: v.optional(v.number()),
+    revokedAt: v.optional(v.number()),
+  })
+    .index("by_token", ["token"])
+    .index("by_form_and_created_at", ["formId", "createdAt"])
+    .index("by_workspace_and_created_at", ["workspaceId", "createdAt"]),
+
+  intakeSubmissions: defineTable({
+    workspaceId: v.id("workspaces"),
+    formId: v.id("intakeForms"),
+    linkId: v.id("intakeFormLinks"),
+    submittedAt: v.number(),
+    submitterMeta: intakeSubmitterMetaValidator,
+    answers: v.array(intakeAnswerValidator),
+    status: intakeSubmissionStatusValidator,
+    generatedAssessmentDraft: intakeGeneratedAssessmentValidator,
+    generatedRosSuggestion: intakeRosSuggestionValidator,
+    generatedPvvFlags: v.array(v.string()),
+    riskSignals: v.array(v.string()),
+    personDataSignal: v.boolean(),
+    autoGeneratedAt: v.number(),
+    reviewedAt: v.optional(v.number()),
+    reviewedByUserId: v.optional(v.id("users")),
+    rejectionReason: v.optional(v.string()),
+    approvedAssessmentId: v.optional(v.id("assessments")),
+    approvedRosAnalysisId: v.optional(v.id("rosAnalyses")),
+  })
+    .index("by_form_and_submitted_at", ["formId", "submittedAt"])
+    .index("by_workspace_and_submitted_at", ["workspaceId", "submittedAt"])
+    .index("by_workspace_and_status_and_submitted_at", [
+      "workspaceId",
+      "status",
+      "submittedAt",
+    ])
+    .index("by_link_and_submitted_at", ["linkId", "submittedAt"]),
 
   /**
    * Gjenbrukbar ROS-mal: sannsynlighet × konsekvens (etiketter per rad/kolonne).
