@@ -1,6 +1,7 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
-import { mutation, query } from "./_generated/server";
+import type { Id } from "./_generated/dataModel";
+import { mutation, query, type MutationCtx } from "./_generated/server";
 import {
   intakeConfirmationModeValidator,
   intakeFormStatusValidator,
@@ -87,6 +88,37 @@ function validateConditionalQuestions(
   }
 }
 
+async function cloneFormQuestions(
+  ctx: MutationCtx,
+  sourceFormId: Id<"intakeForms">,
+  targetFormId: Id<"intakeForms">,
+  now: number,
+) {
+  const sourceQuestions = await ctx.db
+    .query("intakeFormQuestions")
+    .withIndex("by_form_and_order", (q) => q.eq("formId", sourceFormId))
+    .take(200);
+
+  for (const question of sourceQuestions) {
+    await ctx.db.insert("intakeFormQuestions", {
+      formId: targetFormId,
+      questionKey: question.questionKey,
+      order: question.order,
+      label: question.label,
+      helpText: question.helpText,
+      questionType: question.questionType,
+      required: question.required,
+      options: question.options,
+      mappingTargets: question.mappingTargets,
+      visibilityRule: question.visibilityRule,
+      groupKey: question.groupKey,
+      plainLanguageHint: question.plainLanguageHint,
+      createdAt: now,
+      updatedAt: now,
+    });
+  }
+}
+
 export const listByWorkspace = query({
   args: { workspaceId: v.id("workspaces") },
   handler: async (ctx, args) => {
@@ -114,11 +146,18 @@ export const listByWorkspace = query({
         .withIndex("by_form_and_created_at", (q) => q.eq("formId", form._id))
         .order("desc")
         .take(100);
+      const activations = await ctx.db
+        .query("intakeFormActivations")
+        .withIndex("by_source_form_and_activated_at", (q) => q.eq("sourceFormId", form._id))
+        .take(100);
       result.push({
         ...form,
+        confirmationMode: form.confirmationMode ?? "none",
+        isTemplate: Boolean(form.isTemplate),
         questionCount: questions.length,
         activeLinkCount: links.filter((link) => !link.revokedAt).length,
         responseCount: links.reduce((sum, link) => sum + link.responseCount, 0),
+        activeActivationCount: activations.filter((activation) => !activation.deactivatedAt).length,
       });
     }
     return result;
@@ -144,8 +183,13 @@ export const getEditor = query({
       .withIndex("by_form_and_order", (q) => q.eq("formId", args.formId))
       .take(100);
     return {
-      form,
+      form: {
+        ...form,
+        confirmationMode: form.confirmationMode ?? "none",
+        isTemplate: Boolean(form.isTemplate),
+      },
       questions,
+      activations: [],
     };
   },
 });
@@ -166,6 +210,10 @@ export const create = mutation({
       status: "draft",
       layoutMode: "one_per_screen",
       confirmationMode: "none",
+      isTemplate: false,
+      sourceTemplateFormId: undefined,
+      templatePublishedAt: undefined,
+      templatePublishedByUserId: undefined,
       createdByUserId: userId,
       createdAt: now,
       updatedAt: now,
@@ -239,6 +287,159 @@ export const save = mutation({
       });
     }
     return args.formId;
+  },
+});
+
+export const publishTemplate = mutation({
+  args: {
+    formId: v.id("intakeForms"),
+    enabled: v.boolean(),
+  },
+  handler: async (ctx, args) => {
+    const userId = await requireUserId(ctx);
+    const form = await ctx.db.get(args.formId);
+    if (!form) {
+      throw new Error("Skjemaet finnes ikke.");
+    }
+    await requireWorkspaceMember(ctx, form.workspaceId, userId, "member");
+    if (args.enabled && form.sourceTemplateFormId) {
+      throw new Error("Kopier fra mal kan ikke deles videre som mal ennå.");
+    }
+    await ctx.db.patch(args.formId, {
+      isTemplate: args.enabled,
+      templatePublishedAt: args.enabled ? Date.now() : undefined,
+      templatePublishedByUserId: args.enabled ? userId : undefined,
+      updatedAt: Date.now(),
+    });
+    return null;
+  },
+});
+
+export const listActivations = query({
+  args: {
+    formId: v.id("intakeForms"),
+  },
+  handler: async (ctx, args) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) {
+      return [];
+    }
+    const form = await ctx.db.get(args.formId);
+    if (!form) {
+      return [];
+    }
+    await requireWorkspaceMember(ctx, form.workspaceId, userId, "viewer");
+    const rows = await ctx.db
+      .query("intakeFormActivations")
+      .withIndex("by_source_form_and_activated_at", (q) => q.eq("sourceFormId", args.formId))
+      .order("desc")
+      .take(100);
+
+    const result = [];
+    for (const row of rows) {
+      const workspace = await ctx.db.get(row.targetWorkspaceId);
+      const activatedForm = await ctx.db.get(row.activatedFormId);
+      result.push({
+        ...row,
+        targetWorkspaceName: workspace?.name ?? "Arbeidsområde",
+        activatedFormTitle: activatedForm?.title ?? "Skjema",
+        isActive: !row.deactivatedAt,
+      });
+    }
+    return result;
+  },
+});
+
+export const activateTemplate = mutation({
+  args: {
+    formId: v.id("intakeForms"),
+    targetWorkspaceId: v.id("workspaces"),
+  },
+  handler: async (
+    ctx,
+    args,
+  ): Promise<{ activatedFormId: Id<"intakeForms">; activationId: Id<"intakeFormActivations"> }> => {
+    const userId = await requireUserId(ctx);
+    const sourceForm = await ctx.db.get(args.formId);
+    if (!sourceForm) {
+      throw new Error("Skjemaet finnes ikke.");
+    }
+    await requireWorkspaceMember(ctx, sourceForm.workspaceId, userId, "member");
+    await requireWorkspaceMember(ctx, args.targetWorkspaceId, userId, "member");
+    if (!sourceForm.isTemplate) {
+      throw new Error("Skjemaet må deles som mal før det kan aktiveres i et annet arbeidsområde.");
+    }
+    if (sourceForm.workspaceId === args.targetWorkspaceId) {
+      throw new Error("Velg et annet arbeidsområde for aktivering.");
+    }
+
+    const existingActivations = await ctx.db
+      .query("intakeFormActivations")
+      .withIndex("by_source_form_and_activated_at", (q) => q.eq("sourceFormId", sourceForm._id))
+      .take(100);
+    const activeForWorkspace = existingActivations.find(
+      (activation) =>
+        activation.targetWorkspaceId === args.targetWorkspaceId && !activation.deactivatedAt,
+    );
+    if (activeForWorkspace) {
+      throw new Error("Skjemaet er allerede aktivert i dette arbeidsområdet.");
+    }
+
+    const now = Date.now();
+    const activatedFormId = await ctx.db.insert("intakeForms", {
+      workspaceId: args.targetWorkspaceId,
+      title: sourceForm.title,
+      description: sourceForm.description,
+      status: "draft",
+      layoutMode: sourceForm.layoutMode,
+      confirmationMode: sourceForm.confirmationMode ?? "none",
+      isTemplate: false,
+      sourceTemplateFormId: sourceForm._id,
+      templatePublishedAt: undefined,
+      templatePublishedByUserId: undefined,
+      createdByUserId: userId,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await cloneFormQuestions(ctx, sourceForm._id, activatedFormId, now);
+    const activationId = await ctx.db.insert("intakeFormActivations", {
+      sourceFormId: sourceForm._id,
+      activatedFormId,
+      sourceWorkspaceId: sourceForm.workspaceId,
+      targetWorkspaceId: args.targetWorkspaceId,
+      activatedByUserId: userId,
+      activatedAt: now,
+      deactivatedAt: undefined,
+      deactivatedByUserId: undefined,
+    });
+    return { activatedFormId, activationId };
+  },
+});
+
+export const deactivateActivation = mutation({
+  args: {
+    activationId: v.id("intakeFormActivations"),
+  },
+  handler: async (ctx, args) => {
+    const userId = await requireUserId(ctx);
+    const activation = await ctx.db.get(args.activationId);
+    if (!activation) {
+      throw new Error("Aktiveringen finnes ikke.");
+    }
+    await requireWorkspaceMember(ctx, activation.sourceWorkspaceId, userId, "member");
+    await requireWorkspaceMember(ctx, activation.targetWorkspaceId, userId, "member");
+    if (activation.deactivatedAt) {
+      return null;
+    }
+    await ctx.db.patch(args.activationId, {
+      deactivatedAt: Date.now(),
+      deactivatedByUserId: userId,
+    });
+    await ctx.db.patch(activation.activatedFormId, {
+      status: "archived",
+      updatedAt: Date.now(),
+    });
+    return null;
   },
 });
 

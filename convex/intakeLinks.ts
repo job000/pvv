@@ -103,7 +103,7 @@ export const getPublicForm = query({
         title: form.title,
         description: form.description,
         layoutMode: form.layoutMode,
-        confirmationMode: form.confirmationMode,
+        confirmationMode: form.confirmationMode ?? "none",
       },
       link: {
         expiresAt: link.expiresAt,

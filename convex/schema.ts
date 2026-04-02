@@ -642,13 +642,18 @@ export default defineSchema({
     description: v.optional(v.string()),
     status: intakeFormStatusValidator,
     layoutMode: intakeLayoutModeValidator,
-    confirmationMode: intakeConfirmationModeValidator,
+    confirmationMode: v.optional(intakeConfirmationModeValidator),
+    isTemplate: v.optional(v.boolean()),
+    sourceTemplateFormId: v.optional(v.id("intakeForms")),
+    templatePublishedAt: v.optional(v.number()),
+    templatePublishedByUserId: v.optional(v.id("users")),
     createdByUserId: v.id("users"),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
     .index("by_workspace", ["workspaceId"])
-    .index("by_workspace_and_updated_at", ["workspaceId", "updatedAt"]),
+    .index("by_workspace_and_updated_at", ["workspaceId", "updatedAt"])
+    .index("by_source_template_form", ["sourceTemplateFormId"]),
 
   intakeFormQuestions: defineTable({
     formId: v.id("intakeForms"),
@@ -712,6 +717,23 @@ export default defineSchema({
       "submittedAt",
     ])
     .index("by_link_and_submitted_at", ["linkId", "submittedAt"]),
+
+  intakeFormActivations: defineTable({
+    sourceFormId: v.id("intakeForms"),
+    activatedFormId: v.id("intakeForms"),
+    sourceWorkspaceId: v.id("workspaces"),
+    targetWorkspaceId: v.id("workspaces"),
+    activatedByUserId: v.id("users"),
+    activatedAt: v.number(),
+    deactivatedAt: v.optional(v.number()),
+    deactivatedByUserId: v.optional(v.id("users")),
+  })
+    .index("by_source_form_and_activated_at", ["sourceFormId", "activatedAt"])
+    .index("by_target_workspace_and_activated_at", [
+      "targetWorkspaceId",
+      "activatedAt",
+    ])
+    .index("by_activated_form", ["activatedFormId"]),
 
   /**
    * Gjenbrukbar ROS-mal: sannsynlighet × konsekvens (etiketter per rad/kolonne).

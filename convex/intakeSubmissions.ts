@@ -207,8 +207,9 @@ export const submitPublic = mutation({
     if (!form || form.status === "archived") {
       throw new Error("Skjemaet finnes ikke lenger.");
     }
+    const confirmationMode = form.confirmationMode ?? "none";
     if (
-      form.confirmationMode === "email_copy" &&
+      confirmationMode === "email_copy" &&
       !args.submitterMeta.email?.trim()
     ) {
       throw new Error(
@@ -270,7 +271,7 @@ export const submitPublic = mutation({
       responseCount: link.responseCount + 1,
     });
     if (
-      form.confirmationMode === "email_copy" &&
+      confirmationMode === "email_copy" &&
       args.submitterMeta.email?.trim()
     ) {
       await ctx.scheduler.runAfter(
@@ -305,7 +306,7 @@ export const submitPublic = mutation({
       submissionId,
       title: suggestion.generatedAssessment.title,
       shouldCreateRos: suggestion.rosSuggestion.shouldCreateRos,
-      confirmationMode: form.confirmationMode,
+      confirmationMode,
     };
   },
 });

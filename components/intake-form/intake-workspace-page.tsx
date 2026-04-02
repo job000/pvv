@@ -81,8 +81,11 @@ type FormSummary = {
   title: string;
   status: "draft" | "published" | "archived";
   confirmationMode: "none" | "email_copy";
+  isTemplate: boolean;
+  sourceTemplateFormId?: Id<"intakeForms">;
   questionCount: number;
   responseCount: number;
+  activeActivationCount: number;
 };
 
 type FormEditorData = {
@@ -93,6 +96,8 @@ type FormEditorData = {
     status: "draft" | "published" | "archived";
     layoutMode: "one_per_screen" | "grouped";
     confirmationMode: "none" | "email_copy";
+    isTemplate?: boolean;
+    sourceTemplateFormId?: Id<"intakeForms">;
   };
   questions: Array<{
     _id: string;
@@ -115,6 +120,25 @@ type LinkRow = {
   pausedAt?: number;
   status: "active" | "paused" | "expired" | "max_responses" | "revoked";
   isActive: boolean;
+};
+
+type ActivationRow = {
+  _id: Id<"intakeFormActivations">;
+  targetWorkspaceId: Id<"workspaces">;
+  targetWorkspaceName: string;
+  activatedFormId: Id<"intakeForms">;
+  activatedFormTitle: string;
+  activatedAt: number;
+  deactivatedAt?: number;
+  isActive: boolean;
+};
+
+type WorkspaceChoice = {
+  workspace: {
+    _id: Id<"workspaces">;
+    name: string;
+  };
+  role: "owner" | "admin" | "member" | "viewer";
 };
 
 type SubmissionSummary = {
@@ -208,6 +232,13 @@ function formatDateTimeLocal(timestamp: number) {
   const date = new Date(timestamp);
   const pad = (value: number) => String(value).padStart(2, "0");
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+function formatDateTime(timestamp: number) {
+  return new Intl.DateTimeFormat("nb-NO", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(new Date(timestamp));
 }
 
 function renderQuestionTypeLabel(kind: EditableQuestion["questionType"]) {
@@ -555,6 +586,7 @@ function AdminFormPreview({
 
 export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspaces"> }) {
   const formsQuery = useQuery(api.intakeForms.listByWorkspace, { workspaceId });
+  const myWorkspacesQuery = useQuery(api.workspaces.listMine, {});
   const submissionsQuery = useQuery(api.intakeSubmissions.listByWorkspace, {
     workspaceId,
   });
@@ -563,6 +595,9 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
   const createForm = useMutation(api.intakeForms.create);
   const saveForm = useMutation(api.intakeForms.save);
   const archiveForm = useMutation(api.intakeForms.archive);
+  const publishTemplate = useMutation(api.intakeForms.publishTemplate);
+  const activateTemplate = useMutation(api.intakeForms.activateTemplate);
+  const deactivateActivation = useMutation(api.intakeForms.deactivateActivation);
   const createLink = useMutation(api.intakeLinks.create);
   const pauseLink = useMutation(api.intakeLinks.pause);
   const resumeLink = useMutation(api.intakeLinks.resume);
@@ -589,6 +624,10 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
     api.intakeLinks.listByForm,
     activeFormId ? { formId: activeFormId } : "skip",
   );
+  const activationsQuery = useQuery(
+    api.intakeForms.listActivations,
+    activeFormId ? { formId: activeFormId } : "skip",
+  );
   const submissionDetailQuery = useQuery(
     api.intakeSubmissions.getDetail,
     selectedSubmissionId ? { submissionId: selectedSubmissionId } : "skip",
@@ -597,6 +636,10 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
   const forms = useMemo(
     () => (formsQuery ?? []) as FormSummary[],
     [formsQuery],
+  );
+  const myWorkspaces = useMemo(
+    () => (myWorkspacesQuery ?? []) as WorkspaceChoice[],
+    [myWorkspacesQuery],
   );
   const submissions = useMemo(
     () => (submissionsQuery ?? []) as SubmissionSummary[],
@@ -608,6 +651,7 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
   );
   const editorData = (editorDataQuery ?? null) as FormEditorData | null;
   const links = (linksQuery ?? []) as LinkRow[];
+  const activations = (activationsQuery ?? []) as ActivationRow[];
   const submissionDetail = (submissionDetailQuery ?? null) as SubmissionDetail | null;
 
   const [title, setTitle] = useState("");
@@ -634,8 +678,29 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
   const [reviewPayload, setReviewPayload] = useState<ReviewPayload | null>(null);
   const [createRos, setCreateRos] = useState<boolean | null>(null);
   const [rejectionReason, setRejectionReason] = useState("");
+  const [selectedTargetWorkspaceId, setSelectedTargetWorkspaceId] = useState<
+    Id<"workspaces"> | null
+  >(null);
 
   const selectedForm = forms.find((form) => form._id === activeFormId) ?? null;
+  const targetWorkspaceOptions = useMemo(
+    () =>
+      myWorkspaces
+        .filter(
+          (item) => item.workspace._id !== workspaceId && item.role !== "viewer",
+        )
+        .map((item) => ({
+          id: item.workspace._id,
+          name: item.workspace.name,
+          role: item.role,
+        })),
+    [myWorkspaces, workspaceId],
+  );
+  const resolvedTargetWorkspaceId = targetWorkspaceOptions.some(
+    (option) => option.id === selectedTargetWorkspaceId,
+  )
+    ? selectedTargetWorkspaceId
+    : (targetWorkspaceOptions[0]?.id ?? null);
   const updateQuestions = (updater: (prev: EditableQuestion[]) => EditableQuestion[]) =>
     setQuestions((prev) => normalizeQuestionVisibility(updater(prev)));
   const updateSingleQuestion = (
@@ -846,6 +911,41 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
     }
   }
 
+  async function handleToggleTemplate(enabled: boolean) {
+    if (!activeFormId) return;
+    try {
+      await publishTemplate({ formId: activeFormId, enabled });
+      toast.success(
+        enabled ? "Skjemaet kan nå brukes som mal." : "Skjemaet er ikke lenger delt som mal.",
+      );
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Kunne ikke oppdatere malstatus.");
+    }
+  }
+
+  async function handleActivateTemplate() {
+    if (!activeFormId || !resolvedTargetWorkspaceId) return;
+    try {
+      await activateTemplate({
+        formId: activeFormId,
+        targetWorkspaceId: resolvedTargetWorkspaceId,
+      });
+      toast.success("Skjemaet er aktivert i valgt arbeidsområde.");
+      window.open(`/w/${resolvedTargetWorkspaceId}/skjemaer`, "_blank", "noopener,noreferrer");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Kunne ikke aktivere skjemaet.");
+    }
+  }
+
+  async function handleDeactivateActivation(activationId: Id<"intakeFormActivations">) {
+    try {
+      await deactivateActivation({ activationId });
+      toast.success("Aktiveringen er slått av.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Kunne ikke deaktivere skjemaet.");
+    }
+  }
+
   async function handleCreateLink() {
     if (!activeFormId) return;
     try {
@@ -1036,6 +1136,19 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
                         <p className="mt-1 text-sm text-muted-foreground">
                           {form.questionCount} spørsmål · {form.responseCount} svar
                         </p>
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          {form.isTemplate ? (
+                            <Badge variant="outline">Mal</Badge>
+                          ) : null}
+                          {form.sourceTemplateFormId ? (
+                            <Badge variant="outline">Aktivert fra mal</Badge>
+                          ) : null}
+                          {form.activeActivationCount > 0 ? (
+                            <Badge variant="outline">
+                              Aktivert i {form.activeActivationCount} arbeidsområder
+                            </Badge>
+                          ) : null}
+                        </div>
                         <p className="mt-1 text-xs text-muted-foreground">
                           {form.confirmationMode === "email_copy"
                             ? "Sender bekreftelse til svarers e-post"
@@ -1084,6 +1197,10 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
                   </Badge>
                   <Badge variant="outline">ROS {mappingSummary.ros}</Badge>
                   <Badge variant="outline">PVV {mappingSummary.pvv}</Badge>
+                  {selectedForm.isTemplate ? <Badge variant="outline">Delt som mal</Badge> : null}
+                  {selectedForm.sourceTemplateFormId ? (
+                    <Badge variant="outline">Kopi fra mal</Badge>
+                  ) : null}
                   <Badge variant="outline">
                     {confirmationMode === "email_copy"
                       ? "E-postbekreftelse på"
@@ -1094,6 +1211,138 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
                       ? "Ett spørsmål per skjerm"
                       : "Gruppert visning"}
                   </Badge>
+                </div>
+                <div className="space-y-3 rounded-2xl border border-border/50 bg-card p-4">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                    <div>
+                      <p className="text-sm font-medium">Mal og deling</p>
+                      <p className="text-xs text-muted-foreground">
+                        Publiser skjemaet som mal og aktiver en kopi i andre arbeidsområder.
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        type="button"
+                        variant={selectedForm.isTemplate ? "secondary" : "outline"}
+                        className="rounded-xl"
+                        disabled={Boolean(selectedForm.sourceTemplateFormId)}
+                        onClick={() => handleToggleTemplate(!selectedForm.isTemplate)}
+                      >
+                        {selectedForm.isTemplate ? "Fjern som mal" : "Del som mal"}
+                      </Button>
+                    </div>
+                  </div>
+                  {selectedForm.sourceTemplateFormId ? (
+                    <p className="text-sm text-muted-foreground">
+                      Dette skjemaet er en aktivert kopi fra en mal. Deling videre som ny mal
+                      kommer senere.
+                    </p>
+                  ) : (
+                    <>
+                      <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto]">
+                        <div className="space-y-2">
+                          <Label>Aktiver i arbeidsområde</Label>
+                          <select
+                            className="h-10 rounded-xl border border-input bg-background px-3 text-sm"
+                            value={resolvedTargetWorkspaceId ?? ""}
+                            onChange={(event) =>
+                              setSelectedTargetWorkspaceId(
+                                event.target.value
+                                  ? (event.target.value as Id<"workspaces">)
+                                  : null,
+                              )
+                            }
+                          >
+                            {targetWorkspaceOptions.length === 0 ? (
+                              <option value="">Ingen andre arbeidsområder tilgjengelig</option>
+                            ) : (
+                              targetWorkspaceOptions.map((option) => (
+                                <option key={option.id} value={option.id}>
+                                  {option.name}
+                                </option>
+                              ))
+                            )}
+                          </select>
+                        </div>
+                        <div className="flex items-end">
+                          <Button
+                            type="button"
+                            className="rounded-xl"
+                            disabled={!selectedForm.isTemplate || !resolvedTargetWorkspaceId}
+                            onClick={handleActivateTemplate}
+                          >
+                            Aktiver kopi
+                          </Button>
+                        </div>
+                      </div>
+                      {!selectedForm.isTemplate ? (
+                        <p className="text-xs text-muted-foreground">
+                          Slå på `Del som mal` først for å gjøre skjemaet tilgjengelig i andre
+                          arbeidsområder.
+                        </p>
+                      ) : null}
+                    </>
+                  )}
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="text-sm font-medium">Aktiveringer</p>
+                      <Badge variant="outline">{activations.length}</Badge>
+                    </div>
+                    {activations.length === 0 ? (
+                      <p className="text-sm text-muted-foreground">
+                        Ingen aktiveringer ennå.
+                      </p>
+                    ) : (
+                      <div className="space-y-2">
+                        {activations.map((activation) => (
+                          <div
+                            key={activation._id}
+                            className="flex flex-col gap-3 rounded-2xl border border-border/50 bg-muted/10 p-3 sm:flex-row sm:items-center sm:justify-between"
+                          >
+                            <div className="space-y-1">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <p className="text-sm font-medium">
+                                  {activation.targetWorkspaceName}
+                                </p>
+                                <Badge variant={activation.isActive ? "secondary" : "outline"}>
+                                  {activation.isActive ? "Aktiv" : "Deaktivert"}
+                                </Badge>
+                              </div>
+                              <p className="text-xs text-muted-foreground">
+                                {activation.activatedFormTitle} ·{" "}
+                                {formatDateTime(activation.activatedAt)}
+                              </p>
+                            </div>
+                            <div className="flex gap-2">
+                              <Button
+                                type="button"
+                                variant="outline"
+                                className="rounded-xl"
+                                onClick={() =>
+                                  window.open(
+                                    `/w/${activation.targetWorkspaceId}/skjemaer`,
+                                    "_blank",
+                                    "noopener,noreferrer",
+                                  )
+                                }
+                              >
+                                Åpne
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                className="rounded-xl"
+                                disabled={!activation.isActive}
+                                onClick={() => handleDeactivateActivation(activation._id)}
+                              >
+                                Deaktiver
+                              </Button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
                 <div className="space-y-1">
                   <p className="text-sm font-medium">Delbar lenke</p>
