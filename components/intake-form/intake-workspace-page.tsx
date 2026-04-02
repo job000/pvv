@@ -35,9 +35,13 @@ import {
   ChevronDown,
   ChevronUp,
   ClipboardCheck,
+  Eye,
+  EyeOff,
   ExternalLink,
   FileText,
+  LayoutGrid,
   Link2,
+  List,
   Plus,
   Settings2,
   ShieldAlert,
@@ -226,6 +230,23 @@ function createEmptyFollowUpQuestion(parent: EditableQuestion): EditableQuestion
     ...emptyQuestion(),
     visibilityRule: createDefaultVisibilityRule(parent),
   };
+}
+
+function toEditableQuestions(
+  questions: FormEditorData["questions"],
+): EditableQuestion[] {
+  return normalizeQuestionVisibility(
+    questions.map((question) => ({
+      id: question.questionKey ?? question._id,
+      label: question.label,
+      helpText: question.helpText ?? "",
+      questionType: question.questionType,
+      required: question.required,
+      options: question.options ?? [],
+      visibilityRule: question.visibilityRule,
+      mappingTargets: question.mappingTargets,
+    })),
+  );
 }
 
 function formatDateTimeLocal(timestamp: number) {
@@ -609,6 +630,7 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
   const [selectedFormId, setSelectedFormId] = useState<Id<"intakeForms"> | null>(null);
   const [editorOpen, setEditorOpen] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [reviewOpen, setReviewOpen] = useState(false);
   const [selectedSubmissionId, setSelectedSubmissionId] =
     useState<Id<"intakeSubmissions"> | null>(null);
@@ -681,8 +703,18 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
   const [selectedTargetWorkspaceId, setSelectedTargetWorkspaceId] = useState<
     Id<"workspaces"> | null
   >(null);
+  const [formsView, setFormsView] = useState<"cards" | "compact">("cards");
+  const [showFormOverview, setShowFormOverview] = useState(true);
+  const [showResponses, setShowResponses] = useState(true);
 
   const selectedForm = forms.find((form) => form._id === activeFormId) ?? null;
+  const selectedFormQuestions = useMemo(
+    () => (editorData ? toEditableQuestions(editorData.questions) : []),
+    [editorData],
+  );
+  const selectedFormLayoutMode = editorData?.form.layoutMode ?? "one_per_screen";
+  const selectedFormConfirmationMode = editorData?.form.confirmationMode ?? "none";
+  const selectedFormDescription = editorData?.form.description ?? "";
   const targetWorkspaceOptions = useMemo(
     () =>
       myWorkspaces
@@ -701,6 +733,25 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
   )
     ? selectedTargetWorkspaceId
     : (targetWorkspaceOptions[0]?.id ?? null);
+  const selectedFormBadges = useMemo(() => {
+    if (!selectedForm) {
+      return [];
+    }
+    return [
+      `${selectedForm.questionCount} spørsmål`,
+      `${selectedForm.responseCount} svar`,
+      selectedFormConfirmationMode === "email_copy"
+        ? "E-postbekreftelse"
+        : "Ingen bekreftelse",
+      selectedFormLayoutMode === "one_per_screen"
+        ? "Ett spørsmål per skjerm"
+        : "Gruppert visning",
+    ];
+  }, [
+    selectedForm,
+    selectedFormConfirmationMode,
+    selectedFormLayoutMode,
+  ]);
   const updateQuestions = (updater: (prev: EditableQuestion[]) => EditableQuestion[]) =>
     setQuestions((prev) => normalizeQuestionVisibility(updater(prev)));
   const updateSingleQuestion = (
@@ -728,18 +779,7 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
     setLayoutMode(source.form.layoutMode);
     setStatus(source.form.status);
     setConfirmationMode(source.form.confirmationMode);
-    const nextQuestions = normalizeQuestionVisibility(
-      source.questions.map((question) => ({
-        id: question.questionKey ?? question._id,
-        label: question.label,
-        helpText: question.helpText ?? "",
-        questionType: question.questionType,
-        required: question.required,
-        options: question.options ?? [],
-        visibilityRule: question.visibilityRule,
-        mappingTargets: question.mappingTargets,
-      })),
-    );
+    const nextQuestions = toEditableQuestions(source.questions);
     setQuestions(nextQuestions);
     setExpandedQuestionIds(nextQuestions.map((question) => question.id));
   }
@@ -1021,7 +1061,7 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
   const activeFormResponseRows = activeFormId
     ? submissions.filter((submission) => submission.formId === activeFormId)
     : [];
-  const mappingSummary = questions.reduce(
+  const mappingSummary = selectedFormQuestions.reduce(
     (acc, question) => {
       for (const target of question.mappingTargets) {
         if (target.kind === "assessmentText" || target.kind === "assessmentScale") {
@@ -1087,26 +1127,64 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
 
       <section className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
         <Card className="rounded-3xl">
-          <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-            <div>
-              <CardTitle>Skjemaer</CardTitle>
-              <CardDescription>
-                Velg et skjema for å redigere spørsmål, koblinger og delbare lenker.
-              </CardDescription>
+          <CardHeader className="gap-4">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <CardTitle>Skjemaer</CardTitle>
+                <CardDescription>
+                  Velg et skjema for å åpne oversikt, innstillinger, lenker og svar.
+                </CardDescription>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="rounded-xl border border-border/60 bg-muted/20 p-1">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={formsView === "cards" ? "secondary" : "ghost"}
+                    className="rounded-lg"
+                    onClick={() => setFormsView("cards")}
+                  >
+                    <LayoutGrid className="size-4" />
+                    Kort
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={formsView === "compact" ? "secondary" : "ghost"}
+                    className="rounded-lg"
+                    onClick={() => setFormsView("compact")}
+                  >
+                    <List className="size-4" />
+                    Kompakt
+                  </Button>
+                </div>
+                {selectedForm ? (
+                  <>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="rounded-xl"
+                      disabled={!editorData}
+                      onClick={() => {
+                        primeEditorState(editorData);
+                        setEditorOpen(true);
+                      }}
+                    >
+                      Rediger skjema
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="rounded-xl"
+                      onClick={() => setSettingsOpen(true)}
+                    >
+                      <Settings2 className="size-4" />
+                      Innstillinger
+                    </Button>
+                  </>
+                ) : null}
+              </div>
             </div>
-            {selectedForm ? (
-              <Button
-                type="button"
-                variant="outline"
-                className="rounded-xl"
-                onClick={() => {
-                  primeEditorState(editorData);
-                  setEditorOpen(true);
-                }}
-              >
-                Rediger skjema
-              </Button>
-            ) : null}
           </CardHeader>
           <CardContent className="space-y-4">
             {forms.length === 0 ? (
@@ -1118,416 +1196,285 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
                 </p>
               </div>
             ) : (
-              <div className="grid gap-3">
-                {forms.map((form) => (
-                  <button
-                    key={form._id}
-                    type="button"
-                    onClick={() => setSelectedFormId(form._id)}
-                    className={`rounded-2xl border p-4 text-left transition ${
-                      selectedFormId === form._id
-                        ? "border-primary bg-primary/5"
-                        : "border-border/50 hover:bg-muted/10"
-                    }`}
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <p className="font-medium">{form.title}</p>
-                        <p className="mt-1 text-sm text-muted-foreground">
-                          {form.questionCount} spørsmål · {form.responseCount} svar
-                        </p>
-                        <div className="mt-2 flex flex-wrap gap-2">
-                          {form.isTemplate ? (
-                            <Badge variant="outline">Mal</Badge>
-                          ) : null}
-                          {form.sourceTemplateFormId ? (
-                            <Badge variant="outline">Aktivert fra mal</Badge>
-                          ) : null}
-                          {form.activeActivationCount > 0 ? (
-                            <Badge variant="outline">
-                              Aktivert i {form.activeActivationCount} arbeidsområder
-                            </Badge>
+              <div
+                className={
+                  formsView === "cards"
+                    ? "grid gap-3 lg:grid-cols-2"
+                    : "grid gap-2"
+                }
+              >
+                {forms.map((form) => {
+                  const isSelected = activeFormId === form._id;
+                  return (
+                    <button
+                      key={form._id}
+                      type="button"
+                      onClick={() => setSelectedFormId(form._id)}
+                      className={`rounded-2xl border text-left transition ${
+                        formsView === "cards" ? "p-4" : "px-4 py-3"
+                      } ${
+                        isSelected
+                          ? "border-primary bg-primary/5 shadow-sm"
+                          : "border-border/50 hover:bg-muted/10"
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0 space-y-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <p className="truncate font-medium">{form.title}</p>
+                            {form.isTemplate ? <Badge variant="outline">Mal</Badge> : null}
+                            {form.sourceTemplateFormId ? (
+                              <Badge variant="outline">Aktivert fra mal</Badge>
+                            ) : null}
+                          </div>
+                          <p className="text-sm text-muted-foreground">
+                            {form.questionCount} spørsmål · {form.responseCount} svar
+                            {form.activeActivationCount > 0
+                              ? ` · ${form.activeActivationCount} aktiveringer`
+                              : ""}
+                          </p>
+                          {formsView === "cards" ? (
+                            <p className="text-xs text-muted-foreground">
+                              {form.confirmationMode === "email_copy"
+                                ? "Sender bekreftelse til svarers e-post"
+                                : "Ingen e-postbekreftelse"}
+                            </p>
                           ) : null}
                         </div>
-                        <p className="mt-1 text-xs text-muted-foreground">
-                          {form.confirmationMode === "email_copy"
-                            ? "Sender bekreftelse til svarers e-post"
-                            : "Ingen e-postbekreftelse"}
-                        </p>
+                        <Badge variant={form.status === "published" ? "secondary" : "outline"}>
+                          {form.status === "published"
+                            ? "Publisert"
+                            : form.status === "archived"
+                              ? "Arkivert"
+                              : "Utkast"}
+                        </Badge>
                       </div>
-                      <Badge variant={form.status === "published" ? "secondary" : "outline"}>
-                        {form.status === "published"
-                          ? "Publisert"
-                          : form.status === "archived"
-                            ? "Arkivert"
-                            : "Utkast"}
-                      </Badge>
-                    </div>
-                  </button>
-                ))}
+                    </button>
+                  );
+                })}
               </div>
             )}
 
             {selectedForm ? (
-              <div className="space-y-4 rounded-2xl border border-border/50 bg-muted/10 p-4">
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                  <div>
-                    <p className="text-sm font-medium">Kobling og forhåndsvisning</p>
-                    <p className="text-xs text-muted-foreground">
-                      Se hvordan skjemaet ser ut, og hvilke spørsmål som fyller vurdering,
-                      ROS og PVV.
-                    </p>
-                  </div>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="rounded-xl"
-                    onClick={() => {
-                      primeEditorState(editorData);
-                      setPreviewOpen(true);
-                    }}
-                  >
-                    <ExternalLink className="size-4" />
-                    Forhåndsvis skjema
-                  </Button>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <Badge variant="outline">
-                    Vurdering {mappingSummary.assessment}
-                  </Badge>
-                  <Badge variant="outline">ROS {mappingSummary.ros}</Badge>
-                  <Badge variant="outline">PVV {mappingSummary.pvv}</Badge>
-                  {selectedForm.isTemplate ? <Badge variant="outline">Delt som mal</Badge> : null}
-                  {selectedForm.sourceTemplateFormId ? (
-                    <Badge variant="outline">Kopi fra mal</Badge>
-                  ) : null}
-                  <Badge variant="outline">
-                    {confirmationMode === "email_copy"
-                      ? "E-postbekreftelse på"
-                      : "Ingen bekreftelse"}
-                  </Badge>
-                  <Badge variant="outline">
-                    {layoutMode === "one_per_screen"
-                      ? "Ett spørsmål per skjerm"
-                      : "Gruppert visning"}
-                  </Badge>
-                </div>
-                <div className="space-y-3 rounded-2xl border border-border/50 bg-card p-4">
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                    <div>
-                      <p className="text-sm font-medium">Mal og deling</p>
-                      <p className="text-xs text-muted-foreground">
-                        Publiser skjemaet som mal og aktiver en kopi i andre arbeidsområder.
-                      </p>
+              <div className="space-y-4 rounded-3xl border border-border/60 bg-gradient-to-br from-muted/20 via-background to-muted/10 p-5">
+                <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                  <div className="space-y-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="font-heading text-lg font-semibold">{selectedForm.title}</p>
+                      <Badge variant={selectedForm.status === "published" ? "secondary" : "outline"}>
+                        {selectedForm.status === "published"
+                          ? "Publisert"
+                          : selectedForm.status === "archived"
+                            ? "Arkivert"
+                            : "Utkast"}
+                      </Badge>
+                      {selectedForm.isTemplate ? <Badge variant="outline">Delt som mal</Badge> : null}
+                      {selectedForm.sourceTemplateFormId ? (
+                        <Badge variant="outline">Kopi fra mal</Badge>
+                      ) : null}
                     </div>
+                    <p className="max-w-2xl text-sm text-muted-foreground">
+                      {selectedFormDescription.trim()
+                        ? selectedFormDescription
+                        : "Dette skjemaet er klart for deling, forhåndsvisning og behandling av innsendte forslag."}
+                    </p>
                     <div className="flex flex-wrap gap-2">
-                      <Button
-                        type="button"
-                        variant={selectedForm.isTemplate ? "secondary" : "outline"}
-                        className="rounded-xl"
-                        disabled={Boolean(selectedForm.sourceTemplateFormId)}
-                        onClick={() => handleToggleTemplate(!selectedForm.isTemplate)}
-                      >
-                        {selectedForm.isTemplate ? "Fjern som mal" : "Del som mal"}
-                      </Button>
+                      {selectedFormBadges.map((badge) => (
+                        <Badge key={badge} variant="outline">
+                          {badge}
+                        </Badge>
+                      ))}
                     </div>
                   </div>
-                  {selectedForm.sourceTemplateFormId ? (
-                    <p className="text-sm text-muted-foreground">
-                      Dette skjemaet er en aktivert kopi fra en mal. Deling videre som ny mal
-                      kommer senere.
-                    </p>
-                  ) : (
-                    <>
-                      <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto]">
-                        <div className="space-y-2">
-                          <Label>Aktiver i arbeidsområde</Label>
-                          <select
-                            className="h-10 rounded-xl border border-input bg-background px-3 text-sm"
-                            value={resolvedTargetWorkspaceId ?? ""}
-                            onChange={(event) =>
-                              setSelectedTargetWorkspaceId(
-                                event.target.value
-                                  ? (event.target.value as Id<"workspaces">)
-                                  : null,
-                              )
-                            }
-                          >
-                            {targetWorkspaceOptions.length === 0 ? (
-                              <option value="">Ingen andre arbeidsområder tilgjengelig</option>
-                            ) : (
-                              targetWorkspaceOptions.map((option) => (
-                                <option key={option.id} value={option.id}>
-                                  {option.name}
-                                </option>
-                              ))
-                            )}
-                          </select>
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="rounded-xl"
+                      onClick={() => setShowFormOverview((prev) => !prev)}
+                    >
+                      {showFormOverview ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+                      {showFormOverview ? "Skjul oversikt" : "Vis oversikt"}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="rounded-xl"
+                      disabled={!editorData}
+                      onClick={() => {
+                        primeEditorState(editorData);
+                        setPreviewOpen(true);
+                      }}
+                    >
+                      <ExternalLink className="size-4" />
+                      Forhåndsvis skjema
+                    </Button>
+                  </div>
+                </div>
+
+                {showFormOverview ? (
+                  <div className="space-y-4">
+                    <div className="grid gap-3 md:grid-cols-3">
+                      <div className="rounded-2xl border border-border/50 bg-background/80 p-4">
+                        <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground">
+                          Mapping
+                        </p>
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          <Badge variant="outline">Vurdering {mappingSummary.assessment}</Badge>
+                          <Badge variant="outline">ROS {mappingSummary.ros}</Badge>
+                          <Badge variant="outline">PVV {mappingSummary.pvv}</Badge>
                         </div>
-                        <div className="flex items-end">
+                      </div>
+                      <div className="rounded-2xl border border-border/50 bg-background/80 p-4">
+                        <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground">
+                          Delbare lenker
+                        </p>
+                        <p className="mt-2 text-2xl font-semibold">{links.length}</p>
+                        <p className="text-sm text-muted-foreground">
+                          Opprett og administrer lenker i innstillinger.
+                        </p>
+                      </div>
+                      <div className="rounded-2xl border border-border/50 bg-background/80 p-4">
+                        <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground">
+                          Deling mellom arbeidsområder
+                        </p>
+                        <p className="mt-2 text-2xl font-semibold">{activations.length}</p>
+                        <p className="text-sm text-muted-foreground">
+                          {selectedForm.isTemplate
+                            ? "Skjemaet kan aktiveres som kopi andre steder."
+                            : "Åpne innstillinger for å dele skjemaet som mal."}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="rounded-2xl border border-border/50 bg-background/80 p-4">
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                        <div>
+                          <p className="text-sm font-medium">Snarveier</p>
+                          <p className="text-xs text-muted-foreground">
+                            Hold hovedsiden ryddig og åpne bare det du trenger.
+                          </p>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
                           <Button
                             type="button"
+                            variant="outline"
                             className="rounded-xl"
-                            disabled={!selectedForm.isTemplate || !resolvedTargetWorkspaceId}
-                            onClick={handleActivateTemplate}
+                            onClick={() => setSettingsOpen(true)}
                           >
-                            Aktiver kopi
+                            <Settings2 className="size-4" />
+                            Åpne innstillinger
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className="rounded-xl"
+                            disabled={!editorData}
+                            onClick={() => {
+                              primeEditorState(editorData);
+                              setEditorOpen(true);
+                            }}
+                          >
+                            Rediger spørsmål
                           </Button>
                         </div>
                       </div>
-                      {!selectedForm.isTemplate ? (
-                        <p className="text-xs text-muted-foreground">
-                          Slå på `Del som mal` først for å gjøre skjemaet tilgjengelig i andre
-                          arbeidsområder.
-                        </p>
-                      ) : null}
-                    </>
-                  )}
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between gap-3">
-                      <p className="text-sm font-medium">Aktiveringer</p>
-                      <Badge variant="outline">{activations.length}</Badge>
                     </div>
-                    {activations.length === 0 ? (
-                      <p className="text-sm text-muted-foreground">
-                        Ingen aktiveringer ennå.
-                      </p>
-                    ) : (
-                      <div className="space-y-2">
-                        {activations.map((activation) => (
-                          <div
-                            key={activation._id}
-                            className="flex flex-col gap-3 rounded-2xl border border-border/50 bg-muted/10 p-3 sm:flex-row sm:items-center sm:justify-between"
-                          >
-                            <div className="space-y-1">
-                              <div className="flex flex-wrap items-center gap-2">
-                                <p className="text-sm font-medium">
-                                  {activation.targetWorkspaceName}
-                                </p>
-                                <Badge variant={activation.isActive ? "secondary" : "outline"}>
-                                  {activation.isActive ? "Aktiv" : "Deaktivert"}
-                                </Badge>
-                              </div>
-                              <p className="text-xs text-muted-foreground">
-                                {activation.activatedFormTitle} ·{" "}
-                                {formatDateTime(activation.activatedAt)}
-                              </p>
-                            </div>
-                            <div className="flex gap-2">
-                              <Button
-                                type="button"
-                                variant="outline"
-                                className="rounded-xl"
-                                onClick={() =>
-                                  window.open(
-                                    `/w/${activation.targetWorkspaceId}/skjemaer`,
-                                    "_blank",
-                                    "noopener,noreferrer",
-                                  )
-                                }
-                              >
-                                Åpne
-                              </Button>
-                              <Button
-                                type="button"
-                                variant="outline"
-                                className="rounded-xl"
-                                disabled={!activation.isActive}
-                                onClick={() => handleDeactivateActivation(activation._id)}
-                              >
-                                Deaktiver
-                              </Button>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
                   </div>
-                </div>
-                <div className="space-y-1">
-                  <p className="text-sm font-medium">Delbar lenke</p>
-                  <p className="text-xs text-muted-foreground">
-                    Opprett offentlig lenke med utløpsdato og maks antall svar.
-                  </p>
-                </div>
-                <div className="grid gap-3 md:grid-cols-3">
-                  <div className="space-y-2">
-                    <Label>Utløper</Label>
-                    <Input
-                      type="datetime-local"
-                      value={expiresAt}
-                      onChange={(event) => setExpiresAt(event.target.value)}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Maks svar</Label>
-                    <Input
-                      value={maxResponses}
-                      onChange={(event) => setMaxResponses(event.target.value)}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Tilgang</Label>
-                    <select
-                      className="h-10 rounded-xl border border-input bg-background px-3 text-sm"
-                      value={accessMode}
-                      onChange={(event) =>
-                        setAccessMode(
-                          event.target.value as "anonymous" | "email_required",
-                        )
-                      }
-                    >
-                      <option value="anonymous">Åpen lenke</option>
-                      <option value="email_required">Krev e-post</option>
-                    </select>
-                  </div>
-                </div>
-                <Button type="button" className="rounded-xl" onClick={handleCreateLink}>
-                  <Link2 className="size-4" />
-                  Opprett lenke
-                </Button>
+                ) : null}
 
-                <div className="space-y-2">
-                  {(links ?? []).map((link) => (
-                    <div
-                      key={link._id}
-                      className="flex flex-col gap-3 rounded-2xl border border-border/50 bg-card p-4 sm:flex-row sm:items-center sm:justify-between"
-                    >
-                      <div className="space-y-1 text-sm">
-                        <div className="flex items-center gap-2">
-                          <Badge variant={link.isActive ? "secondary" : "outline"}>
-                            {renderLinkStatusLabel(link.status)}
-                          </Badge>
-                          <span className="text-muted-foreground">
-                            {link.responseCount}
-                            {link.maxResponses ? ` / ${link.maxResponses}` : ""} svar
-                          </span>
-                        </div>
-                        <p className="break-all text-xs text-muted-foreground">
-                          {typeof window !== "undefined"
-                            ? `${window.location.origin}/f/${link.token}`
-                            : `/f/${link.token}`}
-                        </p>
-                      </div>
-                      <div className="flex gap-2">
-                        <Button
-                          type="button"
-                          variant="outline"
-                          className="rounded-xl"
-                          onClick={() =>
-                            navigator.clipboard.writeText(
-                              `${window.location.origin}/f/${link.token}`,
-                            )
-                          }
-                        >
-                          <ExternalLink className="size-4" />
-                          Kopier
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          className="rounded-xl"
-                          onClick={() =>
-                            link.status === "paused"
-                              ? resumeLink({ linkId: link._id })
-                              : pauseLink({ linkId: link._id })
-                          }
-                        >
-                          {link.status === "paused" ? (
-                            <>
-                              <ExternalLink className="size-4" />
-                              Fortsett
-                            </>
-                          ) : (
-                            <>
-                              <Trash2 className="size-4" />
-                              Pause
-                            </>
-                          )}
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          className="rounded-xl"
-                          onClick={() => removeLink({ linkId: link._id })}
-                        >
-                          <Trash2 className="size-4" />
-                          Slett
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
                 <div className="space-y-3 rounded-2xl border border-border/50 bg-card p-4">
-                  <div className="flex items-center justify-between gap-3">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <div>
                       <p className="text-sm font-medium">Svar på dette skjemaet</p>
                       <p className="text-xs text-muted-foreground">
                         Åpne et svar for å se detaljer, auto-generert vurdering og ROS-forslag.
                       </p>
                     </div>
-                    <Badge variant="outline">{activeFormResponseRows.length} svar</Badge>
-                  </div>
-                  {activeFormResponseRows.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">
-                      Ingen har sendt inn dette skjemaet ennå.
-                    </p>
-                  ) : (
-                    <div className="space-y-2">
-                      {activeFormResponseRows.map((submission) => (
-                        <button
-                          key={submission._id}
-                          type="button"
-                          className="flex w-full items-center justify-between gap-3 rounded-2xl border border-border/50 bg-muted/10 p-3 text-left transition hover:bg-muted/20"
-                          onClick={async () => {
-                            setSelectedSubmissionId(submission._id);
-                            setReviewTitle(null);
-                            setReviewPayload(null);
-                            setCreateRos(null);
-                            setRejectionReason("");
-                            setReviewOpen(true);
-                            if (submission.status === "submitted") {
-                              await markUnderReview({ submissionId: submission._id });
-                            }
-                          }}
-                        >
-                          <div>
-                            <p className="text-sm font-medium">
-                              {submission.generatedAssessmentDraft.title}
-                            </p>
-                            <p className="mt-1 text-xs text-muted-foreground">
-                              {new Date(submission.submittedAt).toLocaleString("nb-NO")}
-                            </p>
-                          </div>
-                          <div className="flex flex-wrap gap-2">
-                            {submission.generatedRosSuggestion.shouldCreateRos ? (
-                              <Badge variant="outline">ROS-forslag</Badge>
-                            ) : null}
-                            {submission.personDataSignal ? (
-                              <Badge variant="outline">Persondata</Badge>
-                            ) : null}
-                            <Badge
-                              variant={
-                                submission.status === "approved"
-                                  ? "secondary"
-                                  : submission.status === "rejected"
-                                    ? "outline"
-                                    : "default"
-                              }
-                            >
-                              {submission.status === "submitted"
-                                ? "Ny"
-                                : submission.status === "under_review"
-                                  ? "Under vurdering"
-                                  : submission.status === "approved"
-                                    ? "Godkjent"
-                                    : "Avslått"}
-                            </Badge>
-                          </div>
-                        </button>
-                      ))}
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge variant="outline">{activeFormResponseRows.length} svar</Badge>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="rounded-xl"
+                        onClick={() => setShowResponses((prev) => !prev)}
+                      >
+                        {showResponses ? (
+                          <>
+                            <ChevronUp className="size-4" />
+                            Skjul
+                          </>
+                        ) : (
+                          <>
+                            <ChevronDown className="size-4" />
+                            Vis
+                          </>
+                        )}
+                      </Button>
                     </div>
-                  )}
+                  </div>
+                  {showResponses ? (
+                    activeFormResponseRows.length === 0 ? (
+                      <p className="text-sm text-muted-foreground">
+                        Ingen har sendt inn dette skjemaet ennå.
+                      </p>
+                    ) : (
+                      <div className="space-y-2">
+                        {activeFormResponseRows.map((submission) => (
+                          <button
+                            key={submission._id}
+                            type="button"
+                            className="flex w-full items-center justify-between gap-3 rounded-2xl border border-border/50 bg-muted/10 p-3 text-left transition hover:bg-muted/20"
+                            onClick={async () => {
+                              setSelectedSubmissionId(submission._id);
+                              setReviewTitle(null);
+                              setReviewPayload(null);
+                              setCreateRos(null);
+                              setRejectionReason("");
+                              setReviewOpen(true);
+                              if (submission.status === "submitted") {
+                                await markUnderReview({ submissionId: submission._id });
+                              }
+                            }}
+                          >
+                            <div>
+                              <p className="text-sm font-medium">
+                                {submission.generatedAssessmentDraft.title}
+                              </p>
+                              <p className="mt-1 text-xs text-muted-foreground">
+                                {new Date(submission.submittedAt).toLocaleString("nb-NO")}
+                              </p>
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                              {submission.generatedRosSuggestion.shouldCreateRos ? (
+                                <Badge variant="outline">ROS-forslag</Badge>
+                              ) : null}
+                              {submission.personDataSignal ? (
+                                <Badge variant="outline">Persondata</Badge>
+                              ) : null}
+                              <Badge
+                                variant={
+                                  submission.status === "approved"
+                                    ? "secondary"
+                                    : submission.status === "rejected"
+                                      ? "outline"
+                                      : "default"
+                                }
+                              >
+                                {submission.status === "submitted"
+                                  ? "Ny"
+                                  : submission.status === "under_review"
+                                    ? "Under vurdering"
+                                    : submission.status === "approved"
+                                      ? "Godkjent"
+                                      : "Avslått"}
+                              </Badge>
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    )
+                  ) : null}
                 </div>
               </div>
             ) : null}
@@ -2238,6 +2185,274 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
                 Lagre skjema
               </Button>
             </div>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
+        <DialogContent size="xl" titleId="intake-settings-title">
+          <DialogHeader>
+            <p id="intake-settings-title" className="font-heading text-lg font-semibold">
+              Skjemainnstillinger
+            </p>
+            <p className="text-sm text-muted-foreground">
+              Administrer deling, arbeidsområde-aktivering og delbare lenker uten å fylle opp hovedsiden.
+            </p>
+          </DialogHeader>
+          <DialogBody className="space-y-6">
+            {selectedForm ? (
+              <>
+                <section className="space-y-3 rounded-2xl border border-border/50 bg-muted/10 p-4">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                    <div>
+                      <p className="font-medium">Mal og deling</p>
+                      <p className="text-sm text-muted-foreground">
+                        Publiser skjemaet som mal og aktiver en kopi i andre arbeidsområder.
+                      </p>
+                    </div>
+                    <Button
+                      type="button"
+                      variant={selectedForm.isTemplate ? "secondary" : "outline"}
+                      className="rounded-xl"
+                      disabled={Boolean(selectedForm.sourceTemplateFormId)}
+                      onClick={() => handleToggleTemplate(!selectedForm.isTemplate)}
+                    >
+                      {selectedForm.isTemplate ? "Fjern som mal" : "Del som mal"}
+                    </Button>
+                  </div>
+                  {selectedForm.sourceTemplateFormId ? (
+                    <p className="text-sm text-muted-foreground">
+                      Dette skjemaet er en aktivert kopi fra en mal. Deling videre som ny mal
+                      kommer senere.
+                    </p>
+                  ) : (
+                    <>
+                      <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto]">
+                        <div className="space-y-2">
+                          <Label>Aktiver i arbeidsområde</Label>
+                          <select
+                            className="h-10 rounded-xl border border-input bg-background px-3 text-sm"
+                            value={resolvedTargetWorkspaceId ?? ""}
+                            onChange={(event) =>
+                              setSelectedTargetWorkspaceId(
+                                event.target.value
+                                  ? (event.target.value as Id<"workspaces">)
+                                  : null,
+                              )
+                            }
+                          >
+                            {targetWorkspaceOptions.length === 0 ? (
+                              <option value="">Ingen andre arbeidsområder tilgjengelig</option>
+                            ) : (
+                              targetWorkspaceOptions.map((option) => (
+                                <option key={option.id} value={option.id}>
+                                  {option.name}
+                                </option>
+                              ))
+                            )}
+                          </select>
+                        </div>
+                        <div className="flex items-end">
+                          <Button
+                            type="button"
+                            className="rounded-xl"
+                            disabled={!selectedForm.isTemplate || !resolvedTargetWorkspaceId}
+                            onClick={handleActivateTemplate}
+                          >
+                            Aktiver kopi
+                          </Button>
+                        </div>
+                      </div>
+                      {!selectedForm.isTemplate ? (
+                        <p className="text-xs text-muted-foreground">
+                          Slå på `Del som mal` først for å gjøre skjemaet tilgjengelig i andre
+                          arbeidsområder.
+                        </p>
+                      ) : null}
+                    </>
+                  )}
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="text-sm font-medium">Aktiveringer</p>
+                      <Badge variant="outline">{activations.length}</Badge>
+                    </div>
+                    {activations.length === 0 ? (
+                      <p className="text-sm text-muted-foreground">
+                        Ingen aktiveringer ennå.
+                      </p>
+                    ) : (
+                      <div className="space-y-2">
+                        {activations.map((activation) => (
+                          <div
+                            key={activation._id}
+                            className="flex flex-col gap-3 rounded-2xl border border-border/50 bg-background p-3 sm:flex-row sm:items-center sm:justify-between"
+                          >
+                            <div className="space-y-1">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <p className="text-sm font-medium">
+                                  {activation.targetWorkspaceName}
+                                </p>
+                                <Badge variant={activation.isActive ? "secondary" : "outline"}>
+                                  {activation.isActive ? "Aktiv" : "Deaktivert"}
+                                </Badge>
+                              </div>
+                              <p className="text-xs text-muted-foreground">
+                                {activation.activatedFormTitle} ·{" "}
+                                {formatDateTime(activation.activatedAt)}
+                              </p>
+                            </div>
+                            <div className="flex gap-2">
+                              <Button
+                                type="button"
+                                variant="outline"
+                                className="rounded-xl"
+                                onClick={() =>
+                                  window.open(
+                                    `/w/${activation.targetWorkspaceId}/skjemaer`,
+                                    "_blank",
+                                    "noopener,noreferrer",
+                                  )
+                                }
+                              >
+                                Åpne
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                className="rounded-xl"
+                                disabled={!activation.isActive}
+                                onClick={() => handleDeactivateActivation(activation._id)}
+                              >
+                                Deaktiver
+                              </Button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </section>
+
+                <section className="space-y-3 rounded-2xl border border-border/50 bg-muted/10 p-4">
+                  <div>
+                    <p className="font-medium">Delbare lenker</p>
+                    <p className="text-sm text-muted-foreground">
+                      Opprett offentlig lenke med utløpsdato, maks antall svar og tilgangskrav.
+                    </p>
+                  </div>
+                  <div className="grid gap-3 md:grid-cols-3">
+                    <div className="space-y-2">
+                      <Label>Utløper</Label>
+                      <Input
+                        type="datetime-local"
+                        value={expiresAt}
+                        onChange={(event) => setExpiresAt(event.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Maks svar</Label>
+                      <Input
+                        value={maxResponses}
+                        onChange={(event) => setMaxResponses(event.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Tilgang</Label>
+                      <select
+                        className="h-10 rounded-xl border border-input bg-background px-3 text-sm"
+                        value={accessMode}
+                        onChange={(event) =>
+                          setAccessMode(
+                            event.target.value as "anonymous" | "email_required",
+                          )
+                        }
+                      >
+                        <option value="anonymous">Åpen lenke</option>
+                        <option value="email_required">Krev e-post</option>
+                      </select>
+                    </div>
+                  </div>
+                  <Button type="button" className="rounded-xl" onClick={handleCreateLink}>
+                    <Link2 className="size-4" />
+                    Opprett lenke
+                  </Button>
+                  <div className="space-y-2">
+                    {links.length === 0 ? (
+                      <p className="text-sm text-muted-foreground">
+                        Ingen delbare lenker opprettet ennå.
+                      </p>
+                    ) : (
+                      links.map((link) => (
+                        <div
+                          key={link._id}
+                          className="flex flex-col gap-3 rounded-2xl border border-border/50 bg-background p-4 sm:flex-row sm:items-center sm:justify-between"
+                        >
+                          <div className="space-y-1 text-sm">
+                            <div className="flex items-center gap-2">
+                              <Badge variant={link.isActive ? "secondary" : "outline"}>
+                                {renderLinkStatusLabel(link.status)}
+                              </Badge>
+                              <span className="text-muted-foreground">
+                                {link.responseCount}
+                                {link.maxResponses ? ` / ${link.maxResponses}` : ""} svar
+                              </span>
+                            </div>
+                            <p className="break-all text-xs text-muted-foreground">
+                              {typeof window !== "undefined"
+                                ? `${window.location.origin}/f/${link.token}`
+                                : `/f/${link.token}`}
+                            </p>
+                          </div>
+                          <div className="flex flex-wrap gap-2">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              className="rounded-xl"
+                              onClick={() =>
+                                navigator.clipboard.writeText(
+                                  `${window.location.origin}/f/${link.token}`,
+                                )
+                              }
+                            >
+                              <ExternalLink className="size-4" />
+                              Kopier
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              className="rounded-xl"
+                              onClick={() =>
+                                link.status === "paused"
+                                  ? resumeLink({ linkId: link._id })
+                                  : pauseLink({ linkId: link._id })
+                              }
+                            >
+                              {link.status === "paused" ? "Fortsett" : "Pause"}
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              className="rounded-xl"
+                              onClick={() => removeLink({ linkId: link._id })}
+                            >
+                              <Trash2 className="size-4" />
+                              Slett
+                            </Button>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </section>
+              </>
+            ) : (
+              <p className="text-sm text-muted-foreground">Velg et skjema først.</p>
+            )}
+          </DialogBody>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setSettingsOpen(false)}>
+              Lukk
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
