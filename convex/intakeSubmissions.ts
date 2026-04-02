@@ -2,7 +2,12 @@ import { v } from "convex/values";
 import { api } from "./_generated/api";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
-import { mutation, query } from "./_generated/server";
+import {
+  internalMutation,
+  internalQuery,
+  mutation,
+  query,
+} from "./_generated/server";
 import {
   intakeAnswerValidator,
   intakeGeneratedAssessmentValidator,
@@ -14,6 +19,7 @@ import { getAuthUserId } from "@convex-dev/auth/server";
 import { requireUserId, requireWorkspaceMember } from "./lib/access";
 import { generateIntakeSuggestion } from "./lib/intakeMapping";
 import { createAssessmentWithPayload } from "./lib/assessmentCreation";
+import { normalizeGithubRepoFullName } from "./lib/github";
 
 function requireNonEmptyAnswers(questionCount: number, answersCount: number) {
   if (questionCount === 0) {
@@ -146,6 +152,75 @@ export const listByWorkspace = query({
       });
     }
     return results;
+  },
+});
+
+export const getSubmissionForGithub = internalQuery({
+  args: { submissionId: v.id("intakeSubmissions") },
+  handler: async (ctx, args) => {
+    const submission = await ctx.db.get(args.submissionId);
+    if (!submission) {
+      return null;
+    }
+    const workspace = await ctx.db.get(submission.workspaceId);
+    if (!workspace) {
+      return null;
+    }
+    const form = await ctx.db.get(submission.formId);
+    const questions = await ctx.db
+      .query("intakeFormQuestions")
+      .withIndex("by_form_and_order", (q) => q.eq("formId", submission.formId))
+      .take(100);
+    return { submission, workspace, form, questions };
+  },
+});
+
+export const setIntakeSubmissionGithubProjectItemWithIssue =
+  internalMutation({
+    args: {
+      submissionId: v.id("intakeSubmissions"),
+      itemNodeId: v.string(),
+      statusOptionId: v.string(),
+      githubRepoFullName: v.string(),
+      githubIssueNumber: v.number(),
+      githubIssueNodeId: v.optional(v.string()),
+    },
+    handler: async (ctx, args) => {
+      let repo: string;
+      try {
+        repo = normalizeGithubRepoFullName(args.githubRepoFullName);
+      } catch {
+        throw new Error("Ugyldig repo-navn.");
+      }
+      const n = Math.floor(args.githubIssueNumber);
+      if (!Number.isFinite(n) || n < 1) {
+        throw new Error("Ugyldig issue-nummer.");
+      }
+      await ctx.db.patch(args.submissionId, {
+        githubProjectItemNodeId: args.itemNodeId.trim(),
+        githubProjectStatusOptionId: args.statusOptionId.trim(),
+        githubRepoFullName: repo,
+        githubIssueNumber: n,
+        githubIssueNodeId: args.githubIssueNodeId?.trim() || undefined,
+      });
+    },
+  });
+
+/** Utkast på Projects V2-tavle uten repo-issue (samme mønster som prosessregister uten standard-repo). */
+export const setIntakeSubmissionGithubProjectItemDraft = internalMutation({
+  args: {
+    submissionId: v.id("intakeSubmissions"),
+    itemNodeId: v.string(),
+    statusOptionId: v.string(),
+  },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.submissionId, {
+      githubProjectItemNodeId: args.itemNodeId.trim(),
+      githubProjectStatusOptionId: args.statusOptionId.trim(),
+      githubRepoFullName: undefined,
+      githubIssueNumber: undefined,
+      githubIssueNodeId: undefined,
+    });
   },
 });
 
@@ -371,24 +446,38 @@ export const approve = mutation({
       payload: args.generatedAssessmentDraft.payload,
     });
 
+    const form = await ctx.db.get(submission.formId);
     let approvedRosAnalysisId = submission.approvedRosAnalysisId;
     if (args.createRos) {
-      const firstTemplate = await ctx.db
-        .query("rosTemplates")
-        .withIndex("by_workspace", (q) => q.eq("workspaceId", submission.workspaceId))
-        .take(1);
-      const template = firstTemplate[0];
-      if (!template) {
-        throw new Error("Opprett en ROS-mal før du kan lage ROS-utkast fra skjema.");
+      let templateId = form?.linkedRosTemplateId;
+      if (templateId) {
+        const linkedTemplate = await ctx.db.get(templateId);
+        if (!linkedTemplate || linkedTemplate.workspaceId !== submission.workspaceId) {
+          templateId = undefined;
+        }
+      }
+      if (!templateId) {
+        const firstTemplate = await ctx.db
+          .query("rosTemplates")
+          .withIndex("by_workspace", (q) => q.eq("workspaceId", submission.workspaceId))
+          .take(1);
+        templateId = firstTemplate[0]?._id;
+      }
+      if (!templateId) {
+        templateId = await ctx.runMutation(api.ros.createTemplate, {
+          workspaceId: submission.workspaceId,
+          name: "Standard ROS-mal",
+          description: "Automatisk opprettet fra skjema-kobling.",
+        });
       }
       const analysisId: Id<"rosAnalyses"> = await ctx.runMutation(
         api.ros.createAnalysis,
         {
-        workspaceId: submission.workspaceId,
-        templateId: template._id,
-        title: `ROS · ${args.generatedAssessmentDraft.title}`,
-        assessmentIds: [assessmentId],
-        notes: submission.generatedRosSuggestion.summary,
+          workspaceId: submission.workspaceId,
+          templateId,
+          title: `ROS · ${args.generatedAssessmentDraft.title}`,
+          assessmentIds: [assessmentId],
+          notes: submission.generatedRosSuggestion.summary,
         },
       );
       const analysis = await ctx.db.get(analysisId);
@@ -456,7 +545,7 @@ export const reject = mutation({
     await requireWorkspaceMember(ctx, submission.workspaceId, userId, "member");
     const reason = args.reason.trim();
     if (!reason) {
-      throw new Error("Begrunnelse er påkrevd ved avslag.");
+      throw new Error("Skriv en kort begrunnelse for hvorfor forslaget avslås.");
     }
     await ctx.db.patch(submission._id, {
       status: "rejected",
@@ -464,6 +553,27 @@ export const reject = mutation({
       reviewedByUserId: userId,
       rejectionReason: reason,
     });
+    return null;
+  },
+});
+
+export const remove = mutation({
+  args: {
+    submissionId: v.id("intakeSubmissions"),
+  },
+  handler: async (ctx, args) => {
+    const userId = await requireUserId(ctx);
+    const submission = await ctx.db.get(args.submissionId);
+    if (!submission) {
+      throw new Error("Forslaget finnes ikke lenger.");
+    }
+    await requireWorkspaceMember(ctx, submission.workspaceId, userId, "member");
+    if (submission.status === "approved" || submission.approvedAssessmentId) {
+      throw new Error(
+        "Godkjente forslag kan ikke slettes fordi de allerede kan være koblet til en vurdering.",
+      );
+    }
+    await ctx.db.delete(submission._id);
     return null;
   },
 });

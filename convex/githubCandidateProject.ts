@@ -20,6 +20,10 @@ import {
 import { resolveGithubToken } from "./githubTasks";
 import type { PvvAssessmentResultSummary } from "./candidates";
 import {
+  buildIntakeSubmissionIssueBodyMarkdown,
+  defaultIntakeSubmissionIssueTitle,
+} from "./lib/intakeSubmissionGithubBody";
+import {
   PIPELINE_STATUS_LABELS,
   type PipelineStatus,
 } from "../lib/assessment-pipeline";
@@ -861,6 +865,29 @@ async function assertMemberForCandidate(
   return { candidate: row.candidate, workspace: row.workspace };
 }
 
+async function assertMemberForIntakeSubmission(
+  ctx: ActionCtx,
+  submissionId: Id<"intakeSubmissions">,
+  userId: Id<"users">,
+): Promise<{
+  submission: Doc<"intakeSubmissions">;
+  workspace: Doc<"workspaces">;
+  form: Doc<"intakeForms"> | null;
+  questions: Doc<"intakeFormQuestions">[];
+}> {
+  const row = await ctx.runQuery(internal.intakeSubmissions.getSubmissionForGithub, {
+    submissionId,
+  });
+  if (!row) {
+    throw new Error("Innsendelse finnes ikke.");
+  }
+  await ctx.runQuery(internal.candidates.assertMemberForWorkspace, {
+    workspaceId: row.submission.workspaceId,
+    userId,
+  });
+  return row;
+}
+
 export type ListGithubProjectStatusOptionsResult = {
   projectNodeId: string;
   fieldId: string;
@@ -1664,5 +1691,214 @@ export const removeCandidateFromGithubProject = action({
       itemNodeId: null,
     });
     return { ok: true as const };
+  },
+});
+
+/**
+ * Oppretter GitHub-issue (med valgfri tittel/tekst), legger den i arbeidsområdets
+ * Projects V2-tavle med valgt status, og kobler innsendelsen. Kun manuelt — ikke automatisk ved innsending.
+ */
+export const createGithubRepoIssueForIntakeSubmission = action({
+  args: {
+    submissionId: v.id("intakeSubmissions"),
+    statusOptionId: v.string(),
+    repoFullName: v.optional(v.string()),
+    issueTitle: v.optional(v.string()),
+    issueBody: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) {
+      throw new Error("Du må være innlogget.");
+    }
+    const row = await assertMemberForIntakeSubmission(
+      ctx,
+      args.submissionId,
+      userId,
+    );
+    const { submission, workspace, form, questions } = row;
+    if (submission.githubProjectItemNodeId?.trim()) {
+      throw new Error(
+        "Dette skjemaforslaget er allerede koblet til GitHub-prosjektet.",
+      );
+    }
+    const projectNodeId = workspace.githubProjectNodeId?.trim();
+    if (!projectNodeId) {
+      throw new Error(
+        "Arbeidsområdet har ikke GitHub-prosjekt konfigurert. Lagre det i innstillinger først.",
+      );
+    }
+    const token = await resolveGithubToken(ctx, submission.workspaceId);
+    const meta = await getProjectStatusFieldMetaWithCache(ctx, {
+      workspaceId: submission.workspaceId,
+      workspace,
+      projectNodeId,
+      token,
+    });
+    if (!meta.options.some((o) => o.id === args.statusOptionId)) {
+      throw new Error("Ugyldig status — hent statuslisten på nytt.");
+    }
+    const formTitle = form?.title?.trim() || "Skjema";
+    const draft = submission.generatedAssessmentDraft;
+    const customTitle = args.issueTitle?.trim();
+    const title = (
+      customTitle && customTitle.length > 0
+        ? customTitle
+        : defaultIntakeSubmissionIssueTitle(
+            formTitle,
+            submission.submitterMeta,
+            draft.title,
+          )
+    ).slice(0, 256);
+    if (!title.trim()) {
+      throw new Error("Tittel kan ikke være tom.");
+    }
+    const customBody = args.issueBody?.trim();
+    const bodyMarkdown =
+      customBody && customBody.length > 0
+        ? customBody
+        : buildIntakeSubmissionIssueBodyMarkdown({
+            workspaceId: submission.workspaceId,
+            formTitle,
+            submittedAt: submission.submittedAt,
+            submitterMeta: submission.submitterMeta,
+            questions,
+            answers: submission.answers,
+            draftTitle: draft.title,
+            draftProcessName: draft.payload.processName?.trim() ?? "",
+            draftProcessDescription: draft.payload.processDescription?.trim() ?? "",
+            draftProcessGoal: draft.payload.processGoal?.trim() ?? "",
+          });
+    const body = truncateGithubBodyIfNeeded(bodyMarkdown);
+
+    const updM = `mutation($input: UpdateProjectV2ItemFieldValueInput!) {
+      updateProjectV2ItemFieldValue(input: $input) {
+        projectV2Item { id }
+      }
+    }`;
+
+    const defaultRepos = collectWorkspaceDefaultRepos(workspace);
+    let repo: string | undefined;
+    if (args.repoFullName?.trim()) {
+      try {
+        repo = normalizeGithubRepoFullName(args.repoFullName);
+      } catch {
+        throw new Error("Ugyldig repo-navn.");
+      }
+    } else if (defaultRepos.length > 0) {
+      repo = defaultRepos[0];
+    }
+
+    if (repo) {
+      const [owner, repoName] = repo.split("/");
+      const res = await fetch(
+        `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repoName)}/issues`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            ...GITHUB_REST_HEADERS,
+          },
+          body: JSON.stringify({ title, body }),
+        },
+      );
+      if (!res.ok) {
+        const errText = await res.text();
+        throw new Error(
+          `GitHub kunne ikke opprette issue (${res.status}). ${errText.slice(0, 280)}`,
+        );
+      }
+      const issue = (await res.json()) as {
+        number: number;
+        node_id: string;
+      };
+      const addM = `mutation($projectId: ID!, $contentId: ID!) {
+      addProjectV2ItemById(input: {projectId: $projectId, contentId: $contentId}) {
+        item { id }
+      }
+    }`;
+      const addJson = await githubGraphql(token, addM, {
+        projectId: projectNodeId,
+        contentId: issue.node_id,
+      });
+      const itemId = (
+        addJson.data as {
+          addProjectV2ItemById?: { item?: { id?: string } | null } | null;
+        }
+      )?.addProjectV2ItemById?.item?.id;
+      if (!itemId) {
+        throw new Error(
+          "Issue ble opprettet i GitHub, men kunne ikke legges i prosjekt-tavlen. Sjekk PAT (Projects), prosjekt-node-ID og at repoet kan brukes i prosjektet.",
+        );
+      }
+      await githubGraphql(token, updM, {
+        input: {
+          projectId: projectNodeId,
+          itemId,
+          fieldId: meta.fieldId,
+          value: { singleSelectOptionId: args.statusOptionId },
+        },
+      });
+      await ctx.runMutation(
+        internal.intakeSubmissions.setIntakeSubmissionGithubProjectItemWithIssue,
+        {
+          submissionId: args.submissionId,
+          itemNodeId: itemId,
+          statusOptionId: args.statusOptionId,
+          githubRepoFullName: repo,
+          githubIssueNumber: issue.number,
+          githubIssueNodeId: issue.node_id,
+        },
+      );
+      return {
+        ok: true as const,
+        itemNodeId: itemId,
+        githubRepoFullName: repo,
+        githubIssueNumber: issue.number,
+        kind: "issue" as const,
+      };
+    }
+
+    const addDraftM = `mutation($projectId: ID!, $title: String!, $body: String) {
+      addProjectV2DraftIssue(input: {projectId: $projectId, title: $title, body: $body}) {
+        projectItem { id }
+      }
+    }`;
+    const addDraftJson = await githubGraphql(token, addDraftM, {
+      projectId: projectNodeId,
+      title,
+      body,
+    });
+    const draftItemId = (
+      addDraftJson.data as {
+        addProjectV2DraftIssue?: { projectItem?: { id?: string } | null };
+      }
+    )?.addProjectV2DraftIssue?.projectItem?.id;
+    if (!draftItemId) {
+      throw new Error(
+        "GitHub kunne ikke opprette utkast i prosjektet. Sjekk PAT, prosjekt-node-ID og tilganger (samme oppsett som for prosessregister uten standard-repo).",
+      );
+    }
+    await githubGraphql(token, updM, {
+      input: {
+        projectId: projectNodeId,
+        itemId: draftItemId,
+        fieldId: meta.fieldId,
+        value: { singleSelectOptionId: args.statusOptionId },
+      },
+    });
+    await ctx.runMutation(
+      internal.intakeSubmissions.setIntakeSubmissionGithubProjectItemDraft,
+      {
+        submissionId: args.submissionId,
+        itemNodeId: draftItemId,
+        statusOptionId: args.statusOptionId,
+      },
+    );
+    return {
+      ok: true as const,
+      itemNodeId: draftItemId,
+      kind: "draft" as const,
+    };
   },
 });

@@ -20,6 +20,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Progress } from "@/components/ui/progress";
+import { Separator } from "@/components/ui/separator";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import { toast } from "@/lib/app-toast";
@@ -29,7 +30,10 @@ import {
   defaultIntakeQuestions,
   detectTechnicalTerms,
 } from "@/lib/intake-form";
-import { useMutation, useQuery } from "convex/react";
+import { effectiveGithubDefaultRepos } from "@/lib/github-workspace-helpers";
+import { toastDeleteWithUndo } from "@/lib/toast-delete-undo";
+import { formatUserFacingError } from "@/lib/user-facing-error";
+import { useAction, useMutation, useQuery } from "convex/react";
 import {
   CheckCircle2,
   ChevronDown,
@@ -39,6 +43,7 @@ import {
   EyeOff,
   ExternalLink,
   FileText,
+  GitBranch,
   LayoutGrid,
   Link2,
   List,
@@ -50,7 +55,7 @@ import {
   XCircle,
 } from "lucide-react";
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 type EditableQuestion = {
   id: string;
@@ -80,6 +85,14 @@ type EditableQuestion = {
   >;
 };
 
+function questionIdsWithMappingSectionInitiallyOpen(
+  questionList: EditableQuestion[],
+): string[] {
+  return questionList
+    .filter((item) => item.mappingTargets.length > 0)
+    .map((item) => item.id);
+}
+
 type ReviewPayload = AssessmentPayload;
 
 type FormSummary = {
@@ -102,6 +115,8 @@ type FormEditorData = {
     status: "draft" | "published" | "archived";
     layoutMode: "one_per_screen" | "grouped";
     confirmationMode: "none" | "email_copy";
+    rosIntegrationEnabled?: boolean;
+    linkedRosTemplateId?: Id<"rosTemplates">;
     isTemplate?: boolean;
     sourceTemplateFormId?: Id<"intakeForms">;
   };
@@ -161,10 +176,19 @@ type SubmissionSummary = {
     shouldCreateRos: boolean;
     risks: Array<{ id: string }>;
   };
+  githubRepoFullName?: string;
+  githubIssueNumber?: number;
+  githubProjectItemNodeId?: string;
 };
 
 type SubmissionDetail = {
-  form: { title?: string } | null;
+  form:
+    | {
+        title?: string;
+        rosIntegrationEnabled?: boolean;
+        linkedRosTemplateId?: Id<"rosTemplates">;
+      }
+    | null;
   questions: Array<{ _id: string; label: string }>;
   submission: {
     _id: Id<"intakeSubmissions">;
@@ -194,6 +218,10 @@ type SubmissionDetail = {
       risks: Array<{ id: string; title: string; description: string }>;
     };
     approvedAssessmentId?: Id<"assessments">;
+    submitterMeta?: { name?: string; email?: string };
+    githubRepoFullName?: string;
+    githubIssueNumber?: number;
+    githubProjectItemNodeId?: string;
   };
 };
 
@@ -207,9 +235,35 @@ type PreviewQuestion = {
   visibilityRule?: EditableQuestion["visibilityRule"];
 };
 
+function defaultIntakeGithubIssueTitle(
+  formTitle: string,
+  meta: { name?: string; email?: string },
+  submissionDraftTitle?: string,
+): string {
+  const who = meta.name?.trim() || meta.email?.trim() || "Ukjent innsender";
+  const draft = submissionDraftTitle?.trim();
+  if (draft && draft.length > 0) {
+    return `[Skjemaforslag] ${draft} — ${who}`.slice(0, 256);
+  }
+  return `[Skjemaforslag] ${formTitle.trim() || "Skjema"} — ${who}`.slice(0, 256);
+}
+
+function submissionGithubKind(sub: {
+  githubRepoFullName?: string;
+  githubIssueNumber?: number;
+  githubProjectItemNodeId?: string;
+}): "issue" | "draft" | null {
+  const hasIssue =
+    Boolean(sub.githubRepoFullName?.trim()) && sub.githubIssueNumber != null;
+  if (hasIssue) return "issue";
+  if (Boolean(sub.githubProjectItemNodeId?.trim())) return "draft";
+  return null;
+}
+
 const REVIEW_FIELDS = [
   ["processName", "Prosessnavn"],
   ["processDescription", "Beskrivelse"],
+  ["processGoal", "Mål / automatisering"],
   ["processVolumeNotes", "Volum og frekvens"],
   ["processConstraints", "Begrensninger / risiko"],
   ["hfSecurityInformationNotes", "Sikkerhet og personvern"],
@@ -635,10 +689,16 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
     workspaceId,
   });
   const rosTemplatesQuery = useQuery(api.ros.listTemplates, { workspaceId });
+  const workspaceDocQuery = useQuery(api.workspaces.get, { workspaceId });
+  const myWorkspaceMembership = useQuery(api.workspaces.getMyMembership, {
+    workspaceId,
+  });
 
   const createForm = useMutation(api.intakeForms.create);
   const saveForm = useMutation(api.intakeForms.save);
   const archiveForm = useMutation(api.intakeForms.archive);
+  const updateFormIntegrations = useMutation(api.intakeForms.updateIntegrations);
+  const setFormStatus = useMutation(api.intakeForms.setStatus);
   const publishTemplate = useMutation(api.intakeForms.publishTemplate);
   const activateTemplate = useMutation(api.intakeForms.activateTemplate);
   const deactivateActivation = useMutation(api.intakeForms.deactivateActivation);
@@ -648,18 +708,45 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
   const removeLink = useMutation(api.intakeLinks.remove);
   const approveSubmission = useMutation(api.intakeSubmissions.approve);
   const rejectSubmission = useMutation(api.intakeSubmissions.reject);
+  const removeSubmission = useMutation(api.intakeSubmissions.remove);
   const markUnderReview = useMutation(api.intakeSubmissions.markUnderReview);
+  const createRosTemplate = useMutation(api.ros.createTemplate);
+  const listGithubProjectStatusOptions = useAction(
+    api.githubCandidateProject.listGithubProjectStatusOptions,
+  );
+  const createGithubRepoIssueForIntakeSubmission = useAction(
+    api.githubCandidateProject.createGithubRepoIssueForIntakeSubmission,
+  );
 
   const [selectedFormId, setSelectedFormId] = useState<Id<"intakeForms"> | null>(null);
   const [editorOpen, setEditorOpen] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [reviewOpen, setReviewOpen] = useState(false);
+  const [githubIntakeDialogOpen, setGithubIntakeDialogOpen] = useState(false);
+  const [githubDialogOpenVersion, setGithubDialogOpenVersion] = useState(0);
   const [selectedSubmissionId, setSelectedSubmissionId] =
     useState<Id<"intakeSubmissions"> | null>(null);
+  const [pendingDeletedFormIds, setPendingDeletedFormIds] = useState<
+    Id<"intakeForms">[]
+  >([]);
+  const [pendingDeletedSubmissionIds, setPendingDeletedSubmissionIds] = useState<
+    Id<"intakeSubmissions">[]
+  >([]);
+  const allForms = useMemo(
+    () => (formsQuery ?? []) as FormSummary[],
+    [formsQuery],
+  );
+  const visibleFormIds = allForms
+    .filter(
+      (form) =>
+        form.status !== "archived" && !pendingDeletedFormIds.includes(form._id),
+    )
+    .map((form) => form._id);
   const activeFormId =
-    selectedFormId ??
-    (((formsQuery ?? []) as FormSummary[])[0]?._id ?? null);
+    selectedFormId && visibleFormIds.includes(selectedFormId)
+      ? selectedFormId
+      : (visibleFormIds[0] ?? null);
 
   const editorDataQuery = useQuery(
     api.intakeForms.getEditor,
@@ -679,19 +766,27 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
   );
 
   const forms = useMemo(
-    () => (formsQuery ?? []) as FormSummary[],
-    [formsQuery],
+    () =>
+      allForms.filter(
+        (form) =>
+          form.status !== "archived" && !pendingDeletedFormIds.includes(form._id),
+      ),
+    [allForms, pendingDeletedFormIds],
   );
   const myWorkspaces = useMemo(
     () => (myWorkspacesQuery ?? []) as WorkspaceChoice[],
     [myWorkspacesQuery],
   );
   const submissions = useMemo(
-    () => (submissionsQuery ?? []) as SubmissionSummary[],
-    [submissionsQuery],
+    () =>
+      ((submissionsQuery ?? []) as SubmissionSummary[]).filter(
+        (submission) => !pendingDeletedSubmissionIds.includes(submission._id),
+      ),
+    [pendingDeletedSubmissionIds, submissionsQuery],
   );
   const rosTemplates = useMemo(
-    () => (rosTemplatesQuery ?? []) as Array<{ _id: Id<"rosTemplates"> }>,
+    () =>
+      (rosTemplatesQuery ?? []) as Array<{ _id: Id<"rosTemplates">; name: string }>,
     [rosTemplatesQuery],
   );
   const editorData = (editorDataQuery ?? null) as FormEditorData | null;
@@ -712,6 +807,9 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
   >("none");
   const [questions, setQuestions] = useState<EditableQuestion[]>([]);
   const [expandedQuestionIds, setExpandedQuestionIds] = useState<string[]>([]);
+  const [mappingSectionOpenIds, setMappingSectionOpenIds] = useState<string[]>(
+    [],
+  );
   const [expiresAt, setExpiresAt] = useState(() =>
     formatDateTimeLocal(Date.now() + 1000 * 60 * 60 * 24 * 7),
   );
@@ -723,9 +821,136 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
   const [reviewPayload, setReviewPayload] = useState<ReviewPayload | null>(null);
   const [createRos, setCreateRos] = useState<boolean | null>(null);
   const [rejectionReason, setRejectionReason] = useState("");
+  const [intakeGithubIssueTitle, setIntakeGithubIssueTitle] = useState("");
+  const [intakeGithubIssueBody, setIntakeGithubIssueBody] = useState("");
+  const [intakeGithubStatusOptionId, setIntakeGithubStatusOptionId] =
+    useState("");
+  const [intakeGithubRepoChoice, setIntakeGithubRepoChoice] = useState("");
+  const [intakeGithubStatusLoading, setIntakeGithubStatusLoading] =
+    useState(false);
+  const [intakeGithubStatusError, setIntakeGithubStatusError] = useState<
+    string | null
+  >(null);
+  const [intakeGithubStatusOptions, setIntakeGithubStatusOptions] = useState<
+    { id: string; name: string }[]
+  >([]);
+  const [intakeGithubStatusFieldName, setIntakeGithubStatusFieldName] =
+    useState<string | null>(null);
+  const [intakeGithubCreateBusy, setIntakeGithubCreateBusy] = useState(false);
+
+  const workspaceGithubDefaultRepos = useMemo(
+    () => effectiveGithubDefaultRepos(workspaceDocQuery ?? null),
+    [workspaceDocQuery],
+  );
+
+  const intakeGithubMembershipLoading = myWorkspaceMembership === undefined;
+
+  /** Samme GitHub-prosjekt, PAT og statusfelt som under arbeidsområdets innstillinger / prosessregister — ikke egen skjema-konfigurasjon. */
+  const canCreateIntakeGithubIssue = useMemo(() => {
+    if (intakeGithubMembershipLoading) {
+      return false;
+    }
+    if (!myWorkspaceMembership || myWorkspaceMembership.role === "viewer") {
+      return false;
+    }
+    return Boolean(workspaceDocQuery?.githubProjectNodeId?.trim());
+  }, [
+    intakeGithubMembershipLoading,
+    myWorkspaceMembership,
+    workspaceDocQuery?.githubProjectNodeId,
+  ]);
+
+  useEffect(() => {
+    setIntakeGithubRepoChoice((prev) =>
+      prev && workspaceGithubDefaultRepos.includes(prev)
+        ? prev
+        : (workspaceGithubDefaultRepos[0] ?? ""),
+    );
+  }, [workspaceGithubDefaultRepos]);
+
+  useEffect(() => {
+    if (!githubIntakeDialogOpen || !submissionDetail || !selectedSubmissionId) {
+      return;
+    }
+    if (submissionDetail.submission._id !== selectedSubmissionId) {
+      return;
+    }
+    setIntakeGithubIssueTitle(
+      defaultIntakeGithubIssueTitle(
+        submissionDetail.form?.title ?? "Skjema",
+        submissionDetail.submission.submitterMeta ?? {},
+        reviewTitle ?? submissionDetail.submission.generatedAssessmentDraft.title,
+      ),
+    );
+    setIntakeGithubIssueBody("");
+    // reviewTitle is read when the dialog opens (githubDialogOpenVersion) — omit from deps so
+    // editing «Tittel» i gjennomgang ikke nullstiller feltet mens dialogen er åpen.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    githubIntakeDialogOpen,
+    githubDialogOpenVersion,
+    selectedSubmissionId,
+    submissionDetail?.submission._id,
+  ]);
+
+  useEffect(() => {
+    if ((!reviewOpen && !githubIntakeDialogOpen) || !canCreateIntakeGithubIssue) {
+      setIntakeGithubStatusLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setIntakeGithubStatusLoading(true);
+    setIntakeGithubStatusError(null);
+    void listGithubProjectStatusOptions({ workspaceId })
+      .then((result) => {
+        if (cancelled) {
+          return;
+        }
+        setIntakeGithubStatusOptions(result.options);
+        setIntakeGithubStatusFieldName(result.fieldName);
+        setIntakeGithubStatusOptionId((prev) =>
+          prev && result.options.some((option) => option.id === prev)
+            ? prev
+            : (result.options[0]?.id ?? ""),
+        );
+      })
+      .catch((error: unknown) => {
+        if (cancelled) {
+          return;
+        }
+        setIntakeGithubStatusError(formatUserFacingError(error));
+        setIntakeGithubStatusOptions([]);
+        setIntakeGithubStatusFieldName(null);
+        setIntakeGithubStatusOptionId("");
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setIntakeGithubStatusLoading(false);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    reviewOpen,
+    githubIntakeDialogOpen,
+    canCreateIntakeGithubIssue,
+    workspaceId,
+    listGithubProjectStatusOptions,
+  ]);
+
   const [selectedTargetWorkspaceId, setSelectedTargetWorkspaceId] = useState<
     Id<"workspaces"> | null
   >(null);
+  const [integrationDrafts, setIntegrationDrafts] = useState<
+    Record<
+      string,
+      {
+        rosIntegrationEnabled: boolean;
+        linkedRosTemplateId: Id<"rosTemplates"> | null;
+      }
+    >
+  >({});
   const [formsView, setFormsView] = useState<"cards" | "compact">("compact");
   const [showFormOverview, setShowFormOverview] = useState(false);
   const [showResponses, setShowResponses] = useState(false);
@@ -738,6 +963,15 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
   const selectedFormLayoutMode = editorData?.form.layoutMode ?? "one_per_screen";
   const selectedFormConfirmationMode = editorData?.form.confirmationMode ?? "none";
   const selectedFormDescription = editorData?.form.description ?? "";
+  const integrationDraft = activeFormId ? integrationDrafts[activeFormId] : undefined;
+  const rosIntegrationEnabled =
+    integrationDraft?.rosIntegrationEnabled ?? Boolean(editorData?.form.rosIntegrationEnabled);
+  const linkedRosTemplateId =
+    integrationDraft?.linkedRosTemplateId ?? editorData?.form.linkedRosTemplateId ?? null;
+  const linkedRosTemplate = useMemo(
+    () => rosTemplates.find((template) => template._id === linkedRosTemplateId) ?? null,
+    [linkedRosTemplateId, rosTemplates],
+  );
   const targetWorkspaceOptions = useMemo(
     () =>
       myWorkspaces
@@ -805,6 +1039,7 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
     const nextQuestions = toEditableQuestions(source.questions);
     setQuestions(nextQuestions);
     setExpandedQuestionIds(nextQuestions.map((question) => question.id));
+    setMappingSectionOpenIds(questionIdsWithMappingSectionInitiallyOpen(nextQuestions));
   }
 
   function toggleQuestionExpanded(questionId: string) {
@@ -821,6 +1056,14 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
 
   function closeAllQuestions() {
     setExpandedQuestionIds([]);
+  }
+
+  function toggleMappingSectionOpen(questionId: string) {
+    setMappingSectionOpenIds((prev) =>
+      prev.includes(questionId)
+        ? prev.filter((item) => item !== questionId)
+        : [...prev, questionId],
+    );
   }
 
   function setFollowUpEnabled(questionId: string, enabled: boolean) {
@@ -924,6 +1167,7 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
       const nextQuestions = defaultIntakeQuestions();
       setQuestions(nextQuestions);
       setExpandedQuestionIds(nextQuestions.map((question) => question.id));
+      setMappingSectionOpenIds(questionIdsWithMappingSectionInitiallyOpen(nextQuestions));
       toast.success("Nytt skjema opprettet.");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Kunne ikke opprette skjema.");
@@ -963,17 +1207,6 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
     }
   }
 
-  async function handleArchiveForm() {
-    if (!activeFormId) return;
-    try {
-      await archiveForm({ formId: activeFormId });
-      toast.success("Skjema arkivert.");
-      setEditorOpen(false);
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Kunne ikke arkivere skjema.");
-    }
-  }
-
   async function handleToggleTemplate(enabled: boolean) {
     if (!activeFormId) return;
     try {
@@ -1009,6 +1242,125 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
     }
   }
 
+  async function handleSetFormStatus(nextStatus: "draft" | "published") {
+    if (!activeFormId) return;
+    try {
+      await setFormStatus({
+        formId: activeFormId,
+        status: nextStatus,
+      });
+      setStatus(nextStatus);
+      toast.success(
+        nextStatus === "published"
+          ? "Skjemaet er publisert."
+          : "Skjemaet er avpublisert og satt tilbake til utkast.",
+      );
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Kunne ikke oppdatere skjema-status.",
+      );
+    }
+  }
+
+  async function handleSaveIntegrations() {
+    if (!activeFormId) return;
+    try {
+      let nextTemplateId = linkedRosTemplateId;
+      if (rosIntegrationEnabled && !nextTemplateId) {
+        if ((rosTemplates?.length ?? 0) > 0) {
+          nextTemplateId = rosTemplates[0]!._id;
+        } else {
+          nextTemplateId = await createRosTemplate({
+            workspaceId,
+            name: selectedForm ? `ROS-mal · ${selectedForm.title}` : "Standard ROS-mal",
+            description: "Automatisk opprettet fra skjema-kobling.",
+          });
+        }
+      }
+      await updateFormIntegrations({
+        formId: activeFormId,
+        rosIntegrationEnabled,
+        linkedRosTemplateId: rosIntegrationEnabled ? nextTemplateId ?? null : null,
+      });
+      setIntegrationDrafts((prev) => ({
+        ...prev,
+        [activeFormId]: {
+          rosIntegrationEnabled,
+          linkedRosTemplateId: rosIntegrationEnabled ? nextTemplateId ?? null : null,
+        },
+      }));
+      toast.success(
+        rosIntegrationEnabled
+          ? "Skjemaet er nå koblet til vurdering og risikoanalyse."
+          : "Koblingen til risikoanalyse er slått av. Vurdering opprettes fortsatt ved godkjenning.",
+      );
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Kunne ikke lagre koblingen til ROS-mal.",
+      );
+    }
+  }
+
+  async function handleCreateLinkedRosTemplate() {
+    if (!activeFormId) return;
+    try {
+      const templateId = await createRosTemplate({
+        workspaceId,
+        name: selectedForm ? `ROS-mal · ${selectedForm.title}` : "Standard ROS-mal",
+        description: "Automatisk opprettet fra skjema-kobling.",
+      });
+      await updateFormIntegrations({
+        formId: activeFormId,
+        rosIntegrationEnabled: true,
+        linkedRosTemplateId: templateId,
+      });
+      setIntegrationDrafts((prev) => ({
+        ...prev,
+        [activeFormId]: {
+          rosIntegrationEnabled: true,
+          linkedRosTemplateId: templateId,
+        },
+      }));
+      toast.success("Standard ROS-mal opprettet og koblet til skjemaet.");
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Kunne ikke opprette ROS-mal for skjemaet.",
+      );
+    }
+  }
+
+  async function handleArchiveForm() {
+    if (!activeFormId || !selectedForm) return;
+    const formId = activeFormId;
+    const formTitle = selectedForm.title;
+    const nextVisibleFormId =
+      forms.find((form) => form._id !== formId)?._id ?? null;
+
+    setPendingDeletedFormIds((prev) =>
+      prev.includes(formId) ? prev : [...prev, formId],
+    );
+    setSelectedFormId(nextVisibleFormId);
+    setEditorOpen(false);
+    setSettingsOpen(false);
+
+    toastDeleteWithUndo({
+      title: "Sletter skjema",
+      itemLabel: formTitle,
+      onCommit: async () => {
+        await archiveForm({ formId });
+        setPendingDeletedFormIds((prev) => prev.filter((id) => id !== formId));
+      },
+      onFailed: () => {
+        setPendingDeletedFormIds((prev) => prev.filter((id) => id !== formId));
+        setSelectedFormId(formId);
+      },
+      onCancel: () => {
+        setPendingDeletedFormIds((prev) => prev.filter((id) => id !== formId));
+        setSelectedFormId(formId);
+      },
+    });
+  }
+
   async function handleCreateLink() {
     if (!activeFormId) return;
     try {
@@ -1030,6 +1382,10 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
 
   async function handleApprove() {
     if (!selectedSubmissionId || !submissionDetail) return;
+    if (submissionDetail.submission.status === "approved") {
+      toast.error("Forslaget er allerede godkjent.");
+      return;
+    }
     const effectivePayload =
       reviewPayload ?? submissionDetail.submission.generatedAssessmentDraft.payload;
     const effectiveTitle =
@@ -1045,11 +1401,12 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
         },
         createRos:
           createRos ??
-          (submissionDetail.submission.generatedRosSuggestion.shouldCreateRos &&
-            rosTemplates.length > 0),
+          (Boolean(submissionDetail.form?.rosIntegrationEnabled) &&
+            submissionDetail.submission.generatedRosSuggestion.shouldCreateRos),
       });
       toast.success("Forslaget er godkjent.");
       setReviewOpen(false);
+      setGithubIntakeDialogOpen(false);
       setSelectedSubmissionId(null);
       if (result.assessmentId) {
         window.location.href = `/w/${workspaceId}/a/${result.assessmentId}`;
@@ -1060,18 +1417,67 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
   }
 
   async function handleReject() {
-    if (!selectedSubmissionId) return;
+    if (!selectedSubmissionId || !submissionDetail) return;
+    if (submissionDetail.submission.status === "approved") {
+      toast.error("Godkjente forslag kan ikke avslås.");
+      return;
+    }
+    const trimmedReason = rejectionReason.trim();
+    if (!trimmedReason) {
+      toast.error("Skriv en kort begrunnelse før du avslår forslaget.");
+      return;
+    }
     try {
       await rejectSubmission({
         submissionId: selectedSubmissionId,
-        reason: rejectionReason,
+        reason: trimmedReason,
       });
       toast.success("Forslaget er avslått.");
       setReviewOpen(false);
+      setGithubIntakeDialogOpen(false);
       setSelectedSubmissionId(null);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Kunne ikke avslå forslaget.");
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Kunne ikke avslå forslaget. Prøv igjen med en kort begrunnelse.",
+      );
     }
+  }
+
+  function handleRemoveSubmission(submission: {
+    _id: Id<"intakeSubmissions">;
+    generatedAssessmentDraft: { title: string };
+  }) {
+    const submissionId = submission._id;
+    setPendingDeletedSubmissionIds((prev) =>
+      prev.includes(submissionId) ? prev : [...prev, submissionId],
+    );
+    if (selectedSubmissionId === submissionId) {
+      setReviewOpen(false);
+      setGithubIntakeDialogOpen(false);
+      setSelectedSubmissionId(null);
+    }
+    toastDeleteWithUndo({
+      title: "Sletter forslag",
+      itemLabel: submission.generatedAssessmentDraft.title,
+      onCommit: async () => {
+        await removeSubmission({ submissionId });
+        setPendingDeletedSubmissionIds((prev) =>
+          prev.filter((id) => id !== submissionId),
+        );
+      },
+      onFailed: () => {
+        setPendingDeletedSubmissionIds((prev) =>
+          prev.filter((id) => id !== submissionId),
+        );
+      },
+      onCancel: () => {
+        setPendingDeletedSubmissionIds((prev) =>
+          prev.filter((id) => id !== submissionId),
+        );
+      },
+    });
   }
 
   if (formsQuery === undefined || submissionsQuery === undefined) {
@@ -1109,6 +1515,83 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
     },
     { assessment: 0, ros: 0, pvv: 0 },
   );
+  const rejectionReasonMissing = rejectionReason.trim().length === 0;
+
+  const renderSubmissionGithubStrip = (submission: SubmissionSummary) => {
+    const ghKind = submissionGithubKind(submission);
+    const showGithubRow =
+      Boolean(workspaceDocQuery?.githubProjectNodeId?.trim()) || ghKind !== null;
+    if (!showGithubRow) {
+      return null;
+    }
+    if (ghKind === "issue") {
+      return (
+        <div className="mt-3 flex flex-wrap items-center gap-2 rounded-2xl border border-border/50 bg-muted/15 px-3 py-2.5 text-sm">
+          <GitBranch className="size-3.5 shrink-0 text-muted-foreground" />
+          <span className="text-xs text-muted-foreground">GitHub:</span>
+          <Link
+            href={`https://github.com/${submission.githubRepoFullName}/issues/${submission.githubIssueNumber}`}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex min-w-0 items-center gap-1 font-medium text-primary underline"
+          >
+            <span className="truncate">
+              {submission.githubRepoFullName}#{submission.githubIssueNumber}
+            </span>
+            <ExternalLink className="size-3.5 shrink-0" />
+          </Link>
+        </div>
+      );
+    }
+    if (ghKind === "draft") {
+      return (
+        <div className="mt-3 flex items-center gap-2 rounded-2xl border border-border/50 bg-muted/15 px-3 py-2.5 text-xs text-muted-foreground">
+          <GitBranch className="size-3.5 shrink-0" />
+          Utkast på GitHub-prosjekttavle
+        </div>
+      );
+    }
+    if (!canCreateIntakeGithubIssue) {
+      return null;
+    }
+    return (
+      <div className="mt-3 flex flex-col gap-3 rounded-2xl border border-primary/25 bg-gradient-to-br from-primary/[0.07] via-muted/15 to-muted/25 p-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex min-w-0 items-start gap-3">
+          <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10">
+            <GitBranch className="size-5 text-primary" />
+          </div>
+          <div className="min-w-0 space-y-0.5">
+            <p className="text-sm font-medium">GitHub-prosjekt</p>
+            <p className="text-xs text-muted-foreground">
+              Opprett issue eller utkast på teamets tavle — uten å scrolle i gjennomgang.
+            </p>
+          </div>
+        </div>
+        <Button
+          type="button"
+          size="sm"
+          className="shrink-0 rounded-xl"
+          onClick={async (e) => {
+            e.stopPropagation();
+            e.preventDefault();
+            setSelectedSubmissionId(submission._id);
+            setReviewTitle(null);
+            setReviewPayload(null);
+            setCreateRos(null);
+            setRejectionReason("");
+            setGithubDialogOpenVersion((v) => v + 1);
+            setGithubIntakeDialogOpen(true);
+            if (submission.status === "submitted") {
+              await markUnderReview({ submissionId: submission._id });
+            }
+          }}
+        >
+          <GitBranch className="size-4" />
+          Legg til
+        </Button>
+      </div>
+    );
+  };
 
   return (
     <div className="space-y-8 pb-6">
@@ -1290,6 +1773,25 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
                     </div>
                   </div>
                   <div className="flex flex-wrap gap-2">
+                    {selectedForm.status === "published" ? (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="rounded-xl"
+                        onClick={() => handleSetFormStatus("draft")}
+                      >
+                        Avpubliser
+                      </Button>
+                    ) : selectedForm.status === "draft" ? (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="rounded-xl"
+                        onClick={() => handleSetFormStatus("published")}
+                      >
+                        Publiser
+                      </Button>
+                    ) : null}
                     <Button
                       type="button"
                       className="rounded-xl"
@@ -1448,56 +1950,61 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
                     ) : (
                       <div className="space-y-2">
                         {activeFormResponseRows.map((submission) => (
-                          <button
+                          <div
                             key={submission._id}
-                            type="button"
-                            className="flex w-full flex-col gap-3 rounded-2xl border border-border/50 bg-muted/10 p-4 text-left transition hover:bg-muted/20 md:flex-row md:items-center md:justify-between"
-                            onClick={async () => {
-                              setSelectedSubmissionId(submission._id);
-                              setReviewTitle(null);
-                              setReviewPayload(null);
-                              setCreateRos(null);
-                              setRejectionReason("");
-                              setReviewOpen(true);
-                              if (submission.status === "submitted") {
-                                await markUnderReview({ submissionId: submission._id });
-                              }
-                            }}
+                            className="rounded-2xl border border-border/50 bg-muted/10 p-4 transition hover:bg-muted/20"
                           >
-                            <div className="min-w-0">
-                              <p className="truncate text-sm font-medium">
-                                {submission.generatedAssessmentDraft.title}
-                              </p>
-                              <p className="mt-1 text-xs text-muted-foreground">
-                                {new Date(submission.submittedAt).toLocaleString("nb-NO")}
-                              </p>
-                            </div>
-                            <div className="flex flex-wrap gap-2">
-                              {submission.generatedRosSuggestion.shouldCreateRos ? (
-                                <Badge variant="outline">ROS-forslag</Badge>
-                              ) : null}
-                              {submission.personDataSignal ? (
-                                <Badge variant="outline">Persondata</Badge>
-                              ) : null}
-                              <Badge
-                                variant={
-                                  submission.status === "approved"
-                                    ? "secondary"
-                                    : submission.status === "rejected"
-                                      ? "outline"
-                                      : "default"
+                            <button
+                              type="button"
+                              className="flex w-full flex-col gap-3 text-left md:flex-row md:items-center md:justify-between"
+                              onClick={async () => {
+                                setSelectedSubmissionId(submission._id);
+                                setReviewTitle(null);
+                                setReviewPayload(null);
+                                setCreateRos(null);
+                                setRejectionReason("");
+                                setReviewOpen(true);
+                                if (submission.status === "submitted") {
+                                  await markUnderReview({ submissionId: submission._id });
                                 }
-                              >
-                                {submission.status === "submitted"
-                                  ? "Ny"
-                                  : submission.status === "under_review"
-                                    ? "Under vurdering"
-                                    : submission.status === "approved"
-                                      ? "Godkjent"
-                                      : "Avslått"}
-                              </Badge>
-                            </div>
-                          </button>
+                              }}
+                            >
+                              <div className="min-w-0">
+                                <p className="truncate text-sm font-medium">
+                                  {submission.generatedAssessmentDraft.title}
+                                </p>
+                                <p className="mt-1 text-xs text-muted-foreground">
+                                  {new Date(submission.submittedAt).toLocaleString("nb-NO")}
+                                </p>
+                              </div>
+                              <div className="flex flex-wrap gap-2">
+                                {submission.generatedRosSuggestion.shouldCreateRos ? (
+                                  <Badge variant="outline">ROS-forslag</Badge>
+                                ) : null}
+                                {submission.personDataSignal ? (
+                                  <Badge variant="outline">Persondata</Badge>
+                                ) : null}
+                                <Badge
+                                  variant={
+                                    submission.status === "approved"
+                                      ? "secondary"
+                                      : submission.status === "rejected"
+                                        ? "outline"
+                                        : "default"
+                                  }
+                                >
+                                  {submission.status === "submitted"
+                                    ? "Ny"
+                                    : submission.status === "under_review"
+                                      ? "Under vurdering"
+                                      : submission.status === "approved"
+                                        ? "Godkjent"
+                                        : "Avslått"}
+                                </Badge>
+                              </div>
+                            </button>
+                            {renderSubmissionGithubStrip(submission)}
+                          </div>
                         ))}
                       </div>
                     )
@@ -1528,47 +2035,63 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
               </div>
             ) : (
               submissions.map((submission) => (
-                <button
+                <div
                   key={submission._id}
-                  type="button"
-                  className="w-full rounded-2xl border border-border/50 bg-card p-4 text-left transition hover:bg-muted/10"
-                  onClick={async () => {
-                    setSelectedSubmissionId(submission._id);
-                    setReviewTitle(null);
-                    setReviewPayload(null);
-                    setCreateRos(null);
-                    setRejectionReason("");
-                    setReviewOpen(true);
-                    if (submission.status === "submitted") {
-                      await markUnderReview({ submissionId: submission._id });
-                    }
-                  }}
+                  className="rounded-2xl border border-border/50 bg-card p-4 transition hover:bg-muted/10"
                 >
                   <div className="flex items-start justify-between gap-3">
-                    <div>
+                    <button
+                      type="button"
+                      className="min-w-0 flex-1 text-left"
+                      onClick={async () => {
+                        setSelectedSubmissionId(submission._id);
+                        setReviewTitle(null);
+                        setReviewPayload(null);
+                        setCreateRos(null);
+                        setRejectionReason("");
+                        setReviewOpen(true);
+                        if (submission.status === "submitted") {
+                          await markUnderReview({ submissionId: submission._id });
+                        }
+                      }}
+                    >
                       <p className="font-medium">{submission.generatedAssessmentDraft.title}</p>
                       <p className="mt-1 text-sm text-muted-foreground">
                         {submission.formTitle} ·{" "}
                         {new Date(submission.submittedAt).toLocaleString("nb-NO")}
                       </p>
+                    </button>
+                    <div className="flex items-center gap-2">
+                      <Badge
+                        variant={
+                          submission.status === "approved"
+                            ? "secondary"
+                            : submission.status === "rejected"
+                              ? "outline"
+                              : "default"
+                        }
+                      >
+                        {submission.status === "submitted"
+                          ? "Ny"
+                          : submission.status === "under_review"
+                            ? "Under vurdering"
+                            : submission.status === "approved"
+                              ? "Godkjent"
+                              : "Avslått"}
+                      </Badge>
+                      {submission.status !== "approved" ? (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="rounded-lg text-muted-foreground hover:text-destructive"
+                          onClick={() => handleRemoveSubmission(submission)}
+                        >
+                          <Trash2 className="size-4" />
+                          Slett
+                        </Button>
+                      ) : null}
                     </div>
-                    <Badge
-                      variant={
-                        submission.status === "approved"
-                          ? "secondary"
-                          : submission.status === "rejected"
-                            ? "outline"
-                            : "default"
-                      }
-                    >
-                      {submission.status === "submitted"
-                        ? "Ny"
-                        : submission.status === "under_review"
-                          ? "Under vurdering"
-                          : submission.status === "approved"
-                            ? "Godkjent"
-                            : "Avslått"}
-                    </Badge>
                   </div>
                   <div className="mt-3 flex flex-wrap gap-2">
                     {submission.personDataSignal ? (
@@ -1581,7 +2104,8 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
                       {submission.generatedRosSuggestion.risks.length} risikoer
                     </Badge>
                   </div>
-                </button>
+                  {renderSubmissionGithubStrip(submission)}
+                </div>
               ))
             )}
           </CardContent>
@@ -1702,6 +2226,9 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
                       const nextQuestions = defaultIntakeQuestions();
                       setQuestions(nextQuestions);
                       setExpandedQuestionIds(nextQuestions.map((question) => question.id));
+                      setMappingSectionOpenIds(
+                        questionIdsWithMappingSectionInitiallyOpen(nextQuestions),
+                      );
                     }}
                   >
                     <Sparkles className="size-4" />
@@ -1739,6 +2266,9 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
                   );
                   const isExpanded = expandedQuestionIds.includes(question.id);
                   const mappingCount = question.mappingTargets.length;
+                  const mappingSectionOpen = mappingSectionOpenIds.includes(
+                    question.id,
+                  );
                   const childFollowUps = questions.filter(
                     (candidate) => candidate.visibilityRule?.parentQuestionKey === question.id,
                   );
@@ -1802,6 +2332,9 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
                                 prev.filter((item) => item.id !== question.id),
                               );
                               setExpandedQuestionIds((prev) =>
+                                prev.filter((item) => item !== question.id),
+                              );
+                              setMappingSectionOpenIds((prev) =>
                                 prev.filter((item) => item !== question.id),
                               );
                             }}
@@ -2175,21 +2708,50 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
                           </div>
 
                           <div className="space-y-2 rounded-2xl border border-border/50 bg-muted/10 p-4">
-                            <div>
-                              <Label>Koblinger</Label>
-                              <p className="text-xs text-muted-foreground">
-                                Velg hvilke felter dette spørsmålet skal fylle ut automatisk.
-                              </p>
-                            </div>
-                            <MappingTargetPicker
-                              question={question}
-                              onChange={(next) =>
-                                updateSingleQuestion(question.id, (item) => ({
-                                  ...item,
-                                  mappingTargets: next,
-                                }))
+                            <button
+                              type="button"
+                              className="flex w-full items-start justify-between gap-3 rounded-xl text-left outline-none ring-offset-background transition-colors hover:bg-muted/40 focus-visible:ring-2 focus-visible:ring-ring -m-1 p-1"
+                              onClick={() => toggleMappingSectionOpen(question.id)}
+                              aria-expanded={mappingSectionOpen}
+                              aria-label={
+                                mappingSectionOpen
+                                  ? "Skjul koblinger"
+                                  : "Vis koblinger"
                               }
-                            />
+                            >
+                              <div className="min-w-0 space-y-1">
+                                <p className="text-sm font-medium leading-none">
+                                  Koblinger
+                                </p>
+                                <p className="text-xs text-muted-foreground">
+                                  Velg hvilke felter dette spørsmålet skal fylle ut
+                                  automatisk.
+                                </p>
+                              </div>
+                              <div className="flex shrink-0 items-center gap-2 pt-0.5">
+                                {mappingCount > 0 && !mappingSectionOpen ? (
+                                  <Badge variant="secondary" className="tabular-nums">
+                                    {mappingCount}
+                                  </Badge>
+                                ) : null}
+                                <ChevronDown
+                                  className={`size-4 shrink-0 text-muted-foreground transition-transform ${
+                                    mappingSectionOpen ? "rotate-180" : ""
+                                  }`}
+                                />
+                              </div>
+                            </button>
+                            {mappingSectionOpen ? (
+                              <MappingTargetPicker
+                                question={question}
+                                onChange={(next) =>
+                                  updateSingleQuestion(question.id, (item) => ({
+                                    ...item,
+                                    mappingTargets: next,
+                                  }))
+                                }
+                              />
+                            ) : null}
                           </div>
                         </div>
                       ) : null}
@@ -2230,18 +2792,221 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
           <DialogBody className="space-y-6">
             {selectedForm ? (
               <>
-                <section className="space-y-3 rounded-2xl border border-border/50 bg-muted/10 p-4">
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                    <div>
-                      <p className="font-medium">Mal og deling</p>
-                      <p className="text-sm text-muted-foreground">
+                <section className="rounded-2xl border border-border/60 bg-card p-5 shadow-sm">
+                  <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+                    <div className="min-w-0 space-y-1">
+                      <h3 className="text-sm font-semibold leading-tight">
+                        Kobling til vurdering og risikoanalyse
+                      </h3>
+                      <p className="text-sm text-muted-foreground leading-relaxed">
+                        Vurdering opprettes alltid ved godkjenning. Slå på risikoanalyse når
+                        skjemaet skal bruke en ROS-mal.
+                      </p>
+                    </div>
+                  </div>
+                  <Separator className="my-5" />
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <div className="flex flex-col justify-between gap-3 rounded-xl border border-border/50 bg-muted/20 p-4">
+                      <div className="space-y-1">
+                        <p className="text-sm font-medium">Vurdering</p>
+                        <p className="text-xs leading-relaxed text-muted-foreground">
+                          Opprettes automatisk ved godkjenning hvis den ikke finnes fra før.
+                        </p>
+                      </div>
+                      <Badge className="w-fit" variant="secondary">
+                        Aktiv
+                      </Badge>
+                    </div>
+                    <div className="flex flex-col justify-between gap-3 rounded-xl border border-border/50 bg-muted/20 p-4">
+                      <div className="min-w-0 space-y-1">
+                        <p className="text-sm font-medium">Risikoanalyse</p>
+                        <p className="text-xs leading-relaxed text-muted-foreground">
+                          Bruk valgt ROS-mal når skjemaet peker på risiko. Uten mal opprettes en
+                          standard-mal ved behov.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        aria-pressed={rosIntegrationEnabled}
+                        className={`inline-flex h-9 w-fit shrink-0 items-center justify-center rounded-full px-4 text-sm font-medium transition ${
+                          rosIntegrationEnabled
+                            ? "bg-foreground text-background"
+                            : "border border-border bg-background text-foreground hover:bg-muted/60"
+                        }`}
+                        onClick={() =>
+                          activeFormId
+                            ? setIntegrationDrafts((prev) => ({
+                                ...prev,
+                                [activeFormId]: {
+                                  rosIntegrationEnabled: !rosIntegrationEnabled,
+                                  linkedRosTemplateId,
+                                },
+                              }))
+                            : undefined
+                        }
+                      >
+                        {rosIntegrationEnabled ? "På" : "Av"}
+                      </button>
+                    </div>
+                  </div>
+                  {rosIntegrationEnabled ? (
+                    <>
+                      <Separator className="my-5" />
+                      <div className="space-y-4">
+                        <div className="space-y-2">
+                          <Label className="text-sm" htmlFor="settings-ros-template">
+                            ROS-mal
+                          </Label>
+                          <select
+                            id="settings-ros-template"
+                            className="h-10 w-full rounded-xl border border-input bg-background px-3 text-sm"
+                            value={linkedRosTemplateId ?? ""}
+                            onChange={(event) =>
+                              activeFormId
+                                ? setIntegrationDrafts((prev) => ({
+                                    ...prev,
+                                    [activeFormId]: {
+                                      rosIntegrationEnabled,
+                                      linkedRosTemplateId: event.target.value
+                                        ? (event.target.value as Id<"rosTemplates">)
+                                        : null,
+                                    },
+                                  }))
+                                : undefined
+                            }
+                          >
+                            <option value="">
+                              {(rosTemplates?.length ?? 0) > 0
+                                ? "Bruk første tilgjengelige / opprett ved behov"
+                                : "Ingen ROS-mal ennå"}
+                            </option>
+                            {rosTemplates.map((template) => (
+                              <option key={template._id} value={template._id}>
+                                {template.name}
+                              </option>
+                            ))}
+                          </select>
+                          <p className="text-xs leading-relaxed text-muted-foreground">
+                            {linkedRosTemplate
+                              ? `Valgt mal: ${linkedRosTemplate.name}.`
+                              : (rosTemplates?.length ?? 0) > 0
+                                ? "Velg en mal, eller la stå tom for å bruke den første tilgjengelige."
+                                : "Ingen mal finnes ennå. Du kan opprette en standard-mal nedenfor."}
+                          </p>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className="rounded-xl"
+                            onClick={handleCreateLinkedRosTemplate}
+                          >
+                            Opprett standard ROS-mal
+                          </Button>
+                          <Button
+                            type="button"
+                            className="rounded-xl"
+                            onClick={handleSaveIntegrations}
+                          >
+                            Lagre kobling
+                          </Button>
+                        </div>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <Separator className="my-5" />
+                      <div className="rounded-xl border border-dashed border-border/60 bg-muted/15 p-4">
+                        <p className="text-sm leading-relaxed text-muted-foreground">
+                          Risikoanalyse kobles ikke til for dette skjemaet. Slå på over når du vil
+                          bruke ROS.
+                        </p>
+                        <div className="mt-4 flex flex-wrap gap-2">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className="rounded-xl"
+                            onClick={handleSaveIntegrations}
+                          >
+                            Lagre kobling
+                          </Button>
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </section>
+
+                <section className="rounded-2xl border border-border/60 bg-card p-5 shadow-sm">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+                    <div className="min-w-0 space-y-1">
+                      <h3 className="text-sm font-semibold leading-tight">
+                        Publisering og synlighet
+                      </h3>
+                      <p className="text-sm text-muted-foreground leading-relaxed">
+                        Bytt mellom utkast og publisert, eller fjern skjemaet fra listen med
+                        mulighet til å angre i noen sekunder.
+                      </p>
+                    </div>
+                    <Badge
+                      className="w-fit shrink-0"
+                      variant={selectedForm.status === "published" ? "secondary" : "outline"}
+                    >
+                      {selectedForm.status === "published"
+                        ? "Publisert"
+                        : selectedForm.status === "archived"
+                          ? "Arkivert"
+                          : "Utkast"}
+                    </Badge>
+                  </div>
+                  <Separator className="my-5" />
+                  <div className="flex flex-wrap gap-2">
+                    {selectedForm.status === "published" ? (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="rounded-xl"
+                        onClick={() => handleSetFormStatus("draft")}
+                      >
+                        Avpubliser skjema
+                      </Button>
+                    ) : null}
+                    {selectedForm.status === "draft" ? (
+                      <Button
+                        type="button"
+                        className="rounded-xl"
+                        onClick={() => handleSetFormStatus("published")}
+                      >
+                        Publiser skjema
+                      </Button>
+                    ) : null}
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="rounded-xl text-destructive hover:text-destructive"
+                      onClick={handleArchiveForm}
+                    >
+                      <Trash2 className="size-4" />
+                      Slett skjema
+                    </Button>
+                  </div>
+                  <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
+                    «Slett skjema» skjuler skjemaet med en gang og arkiverer det etter noen sekunder
+                    hvis du ikke angrer.
+                  </p>
+                </section>
+
+                <section className="rounded-2xl border border-border/60 bg-card p-5 shadow-sm">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+                    <div className="min-w-0 space-y-1">
+                      <h3 className="text-sm font-semibold leading-tight">Mal og deling</h3>
+                      <p className="text-sm text-muted-foreground leading-relaxed">
                         Publiser skjemaet som mal og aktiver en kopi i andre arbeidsområder.
                       </p>
                     </div>
                     <Button
                       type="button"
                       variant={selectedForm.isTemplate ? "secondary" : "outline"}
-                      className="rounded-xl"
+                      className="w-full shrink-0 rounded-xl sm:w-auto"
                       disabled={Boolean(selectedForm.sourceTemplateFormId)}
                       onClick={() => handleToggleTemplate(!selectedForm.isTemplate)}
                     >
@@ -2249,73 +3014,76 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
                     </Button>
                   </div>
                   {selectedForm.sourceTemplateFormId ? (
-                    <p className="text-sm text-muted-foreground">
-                      Dette skjemaet er en aktivert kopi fra en mal. Deling videre som ny mal
-                      kommer senere.
+                    <p className="mt-4 text-sm leading-relaxed text-muted-foreground">
+                      Dette skjemaet er en aktivert kopi fra en mal. Deling videre som ny mal kommer
+                      senere.
                     </p>
                   ) : (
                     <>
-                      <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto]">
-                        <div className="space-y-2">
-                          <Label>Aktiver i arbeidsområde</Label>
-                          <select
-                            className="h-10 rounded-xl border border-input bg-background px-3 text-sm"
-                            value={resolvedTargetWorkspaceId ?? ""}
-                            onChange={(event) =>
-                              setSelectedTargetWorkspaceId(
-                                event.target.value
-                                  ? (event.target.value as Id<"workspaces">)
-                                  : null,
-                              )
-                            }
-                          >
-                            {targetWorkspaceOptions.length === 0 ? (
-                              <option value="">Ingen andre arbeidsområder tilgjengelig</option>
-                            ) : (
-                              targetWorkspaceOptions.map((option) => (
-                                <option key={option.id} value={option.id}>
-                                  {option.name}
-                                </option>
-                              ))
-                            )}
-                          </select>
-                        </div>
-                        <div className="flex items-end">
+                      <Separator className="my-5" />
+                      <div className="space-y-4">
+                        <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
+                          <div className="space-y-2">
+                            <Label className="text-sm" htmlFor="settings-activate-workspace">
+                              Aktiver i arbeidsområde
+                            </Label>
+                            <select
+                              id="settings-activate-workspace"
+                              className="h-10 w-full rounded-xl border border-input bg-background px-3 text-sm"
+                              value={resolvedTargetWorkspaceId ?? ""}
+                              onChange={(event) =>
+                                setSelectedTargetWorkspaceId(
+                                  event.target.value
+                                    ? (event.target.value as Id<"workspaces">)
+                                    : null,
+                                )
+                              }
+                            >
+                              {targetWorkspaceOptions.length === 0 ? (
+                                <option value="">Ingen andre arbeidsområder tilgjengelig</option>
+                              ) : (
+                                targetWorkspaceOptions.map((option) => (
+                                  <option key={option.id} value={option.id}>
+                                    {option.name}
+                                  </option>
+                                ))
+                              )}
+                            </select>
+                          </div>
                           <Button
                             type="button"
-                            className="rounded-xl"
+                            className="rounded-xl sm:min-w-[10rem]"
                             disabled={!selectedForm.isTemplate || !resolvedTargetWorkspaceId}
                             onClick={handleActivateTemplate}
                           >
                             Aktiver kopi
                           </Button>
                         </div>
+                        {!selectedForm.isTemplate ? (
+                          <p className="text-xs leading-relaxed text-muted-foreground">
+                            Trykk «Del som mal» over først for å gjøre skjemaet tilgjengelig i andre
+                            arbeidsområder.
+                          </p>
+                        ) : null}
                       </div>
-                      {!selectedForm.isTemplate ? (
-                        <p className="text-xs text-muted-foreground">
-                          Slå på `Del som mal` først for å gjøre skjemaet tilgjengelig i andre
-                          arbeidsområder.
-                        </p>
-                      ) : null}
                     </>
                   )}
-                  <div className="space-y-2">
+                  <Separator className="my-5" />
+                  <div className="space-y-3">
                     <div className="flex items-center justify-between gap-3">
                       <p className="text-sm font-medium">Aktiveringer</p>
                       <Badge variant="outline">{activations.length}</Badge>
                     </div>
                     {activations.length === 0 ? (
-                      <p className="text-sm text-muted-foreground">
-                        Ingen aktiveringer ennå.
-                      </p>
+                      <p className="text-sm text-muted-foreground">Ingen aktiveringer ennå.</p>
                     ) : (
                       <div className="space-y-2">
                         {activations.map((activation) => (
                           <div
                             key={activation._id}
-                            className="flex flex-col gap-3 rounded-2xl border border-border/50 bg-background p-3 sm:flex-row sm:items-center sm:justify-between"
+                            className="flex flex-col gap-3 rounded-xl border border-border/50 bg-muted/15 p-4 sm:flex-row sm:items-center sm:justify-between"
                           >
-                            <div className="space-y-1">
+                            <div className="min-w-0 space-y-1">
                               <div className="flex flex-wrap items-center gap-2">
                                 <p className="text-sm font-medium">
                                   {activation.targetWorkspaceName}
@@ -2329,7 +3097,7 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
                                 {formatDateTime(activation.activatedAt)}
                               </p>
                             </div>
-                            <div className="flex gap-2">
+                            <div className="flex shrink-0 flex-wrap gap-2">
                               <Button
                                 type="button"
                                 variant="outline"
@@ -2361,49 +3129,64 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
                   </div>
                 </section>
 
-                <section className="space-y-3 rounded-2xl border border-border/50 bg-muted/10 p-4">
-                  <div>
-                    <p className="font-medium">Delbare lenker</p>
-                    <p className="text-sm text-muted-foreground">
+                <section className="rounded-2xl border border-border/60 bg-card p-5 shadow-sm">
+                  <div className="space-y-1">
+                    <h3 className="text-sm font-semibold leading-tight">Delbare lenker</h3>
+                    <p className="text-sm text-muted-foreground leading-relaxed">
                       Opprett offentlig lenke med utløpsdato, maks antall svar og tilgangskrav.
                     </p>
                   </div>
-                  <div className="grid gap-3 md:grid-cols-3">
-                    <div className="space-y-2">
-                      <Label>Utløper</Label>
-                      <Input
-                        type="datetime-local"
-                        value={expiresAt}
-                        onChange={(event) => setExpiresAt(event.target.value)}
-                      />
+                  <Separator className="my-5" />
+                  <div className="space-y-4">
+                    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                      <div className="space-y-2">
+                        <Label className="text-sm" htmlFor="settings-link-expires">
+                          Utløper
+                        </Label>
+                        <Input
+                          id="settings-link-expires"
+                          type="datetime-local"
+                          value={expiresAt}
+                          onChange={(event) => setExpiresAt(event.target.value)}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label className="text-sm" htmlFor="settings-link-max">
+                          Maks svar
+                        </Label>
+                        <Input
+                          id="settings-link-max"
+                          value={maxResponses}
+                          onChange={(event) => setMaxResponses(event.target.value)}
+                        />
+                      </div>
+                      <div className="space-y-2 sm:col-span-2 lg:col-span-1">
+                        <Label className="text-sm" htmlFor="settings-link-access">
+                          Tilgang
+                        </Label>
+                        <select
+                          id="settings-link-access"
+                          className="h-10 w-full rounded-xl border border-input bg-background px-3 text-sm"
+                          value={accessMode}
+                          onChange={(event) =>
+                            setAccessMode(
+                              event.target.value as "anonymous" | "email_required",
+                            )
+                          }
+                        >
+                          <option value="anonymous">Åpen lenke</option>
+                          <option value="email_required">Krev e-post</option>
+                        </select>
+                      </div>
                     </div>
-                    <div className="space-y-2">
-                      <Label>Maks svar</Label>
-                      <Input
-                        value={maxResponses}
-                        onChange={(event) => setMaxResponses(event.target.value)}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Tilgang</Label>
-                      <select
-                        className="h-10 rounded-xl border border-input bg-background px-3 text-sm"
-                        value={accessMode}
-                        onChange={(event) =>
-                          setAccessMode(
-                            event.target.value as "anonymous" | "email_required",
-                          )
-                        }
-                      >
-                        <option value="anonymous">Åpen lenke</option>
-                        <option value="email_required">Krev e-post</option>
-                      </select>
+                    <div className="flex flex-wrap gap-2">
+                      <Button type="button" className="rounded-xl" onClick={handleCreateLink}>
+                        <Link2 className="size-4" />
+                        Opprett lenke
+                      </Button>
                     </div>
                   </div>
-                  <Button type="button" className="rounded-xl" onClick={handleCreateLink}>
-                    <Link2 className="size-4" />
-                    Opprett lenke
-                  </Button>
+                  <Separator className="my-5" />
                   <div className="space-y-2">
                     {links.length === 0 ? (
                       <p className="text-sm text-muted-foreground">
@@ -2413,10 +3196,10 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
                       links.map((link) => (
                         <div
                           key={link._id}
-                          className="flex flex-col gap-3 rounded-2xl border border-border/50 bg-background p-4 sm:flex-row sm:items-center sm:justify-between"
+                          className="flex flex-col gap-3 rounded-xl border border-border/50 bg-muted/15 p-4 sm:flex-row sm:items-center sm:justify-between"
                         >
-                          <div className="space-y-1 text-sm">
-                            <div className="flex items-center gap-2">
+                          <div className="min-w-0 space-y-1 text-sm">
+                            <div className="flex flex-wrap items-center gap-2">
                               <Badge variant={link.isActive ? "secondary" : "outline"}>
                                 {renderLinkStatusLabel(link.status)}
                               </Badge>
@@ -2431,7 +3214,7 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
                                 : `/f/${link.token}`}
                             </p>
                           </div>
-                          <div className="flex flex-wrap gap-2">
+                          <div className="flex shrink-0 flex-wrap gap-2">
                             <Button
                               type="button"
                               variant="outline"
@@ -2525,6 +3308,68 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
           <DialogBody className="space-y-6">
             {submissionDetail ? (
               <>
+                {(() => {
+                  const ghSub = submissionDetail.submission;
+                  const intakeGithubHasIssue =
+                    Boolean(ghSub.githubRepoFullName?.trim()) &&
+                    ghSub.githubIssueNumber != null;
+                  const intakeGithubHasDraft =
+                    Boolean(ghSub.githubProjectItemNodeId?.trim()) &&
+                    !intakeGithubHasIssue;
+                  const showIntakeGithubSection =
+                    Boolean(workspaceDocQuery?.githubProjectNodeId?.trim()) ||
+                    intakeGithubHasIssue ||
+                    Boolean(ghSub.githubProjectItemNodeId?.trim());
+                  if (!showIntakeGithubSection) {
+                    return null;
+                  }
+                  return (
+                    <div className="flex flex-col gap-3 rounded-2xl border border-border/60 bg-muted/25 p-4 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="flex min-w-0 items-start gap-3">
+                        <GitBranch className="mt-0.5 size-5 shrink-0 text-muted-foreground" />
+                        <div className="min-w-0 space-y-1">
+                          <p className="text-sm font-medium">GitHub-prosjekt</p>
+                          {intakeGithubHasIssue ? (
+                            <Link
+                              href={`https://github.com/${ghSub.githubRepoFullName}/issues/${ghSub.githubIssueNumber}`}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="inline-flex items-center gap-1 text-sm font-medium text-primary underline"
+                            >
+                              {ghSub.githubRepoFullName}#{ghSub.githubIssueNumber}
+                              <ExternalLink className="size-3.5" />
+                            </Link>
+                          ) : intakeGithubHasDraft ? (
+                            <p className="text-xs text-muted-foreground">
+                              Utkast på prosjekttavle — åpne prosjektet i GitHub for å se kortet.
+                            </p>
+                          ) : (
+                            <p className="text-xs text-muted-foreground">
+                              Legg til i teamets prosjekt — ikke automatisk ved innsending.
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                      {!intakeGithubHasIssue && !intakeGithubHasDraft && canCreateIntakeGithubIssue ? (
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          size="sm"
+                          className="shrink-0 rounded-xl"
+                          onClick={() => {
+                            setGithubDialogOpenVersion((v) => v + 1);
+                            setGithubIntakeDialogOpen(true);
+                          }}
+                        >
+                          <GitBranch className="size-4" />
+                          {workspaceGithubDefaultRepos.length === 0
+                            ? "Legg til (utkast)"
+                            : "Opprett issue"}
+                        </Button>
+                      ) : null}
+                    </div>
+                  );
+                })()}
                 <section className="space-y-3">
                   <div className="flex items-center justify-between gap-3">
                     <div>
@@ -2660,40 +3505,43 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
                       className="mt-1"
                       checked={
                         createRos ??
-                        (submissionDetail.submission.generatedRosSuggestion
-                          .shouldCreateRos &&
-                          rosTemplates.length > 0)
+                        (Boolean(submissionDetail.form?.rosIntegrationEnabled) &&
+                          submissionDetail.submission.generatedRosSuggestion.shouldCreateRos)
                       }
-                      disabled={(rosTemplates?.length ?? 0) === 0}
                       onChange={(event) => setCreateRos(event.target.checked)}
                     />
                     <span>
                       <span className="font-medium">Opprett ROS-utkast ved godkjenning</span>
                       <span className="mt-1 block text-xs text-muted-foreground">
-                        {(rosTemplates?.length ?? 0) > 0
-                          ? "Bruker første tilgjengelige ROS-mal i arbeidsområdet."
-                          : "Du trenger minst én ROS-mal før dette kan brukes."}
+                        {submissionDetail.form?.rosIntegrationEnabled
+                          ? "Bruker skjemaets valgte ROS-mal. Hvis ingen mal finnes, opprettes en standard-mal automatisk."
+                          : "Slå på ROS-kobling i skjemainnstillinger hvis dette skjemaet skal opprette risikoanalyse automatisk."}
                       </span>
                     </span>
                   </label>
                 </section>
 
-                {submissionDetail.submission.status === "approved" &&
-                submissionDetail.submission.approvedAssessmentId ? (
+                {submissionDetail.submission.status === "approved" ? (
                   <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-4 text-sm">
                     <div className="flex items-center gap-2 font-medium text-emerald-900 dark:text-emerald-100">
                       <CheckCircle2 className="size-4" />
                       Forslaget er allerede godkjent
                     </div>
-                    <div className="mt-2">
-                      <Link
-                        href={`/w/${workspaceId}/a/${submissionDetail.submission.approvedAssessmentId}`}
-                        className="inline-flex items-center gap-1 font-medium underline"
-                      >
-                        Åpne opprettet vurdering
-                        <ExternalLink className="size-3.5" />
-                      </Link>
-                    </div>
+                    {submissionDetail.submission.approvedAssessmentId ? (
+                      <div className="mt-2">
+                        <Link
+                          href={`/w/${workspaceId}/a/${submissionDetail.submission.approvedAssessmentId}`}
+                          className="inline-flex items-center gap-1 font-medium underline"
+                        >
+                          Åpne opprettet vurdering
+                          <ExternalLink className="size-3.5" />
+                        </Link>
+                      </div>
+                    ) : (
+                      <p className="mt-2 text-emerald-900/90 dark:text-emerald-100/90">
+                        Vurderingen er opprettet. Oppdater siden hvis lenken ikke vises ennå.
+                      </p>
+                    )}
                   </div>
                 ) : null}
               </>
@@ -2702,27 +3550,305 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
             )}
           </DialogBody>
           <DialogFooter className="flex flex-wrap justify-between gap-2">
-            <div className="flex gap-2">
-              <Textarea
-                value={rejectionReason}
-                onChange={(event) => setRejectionReason(event.target.value)}
-                placeholder="Begrunnelse ved avslag"
-                className="min-h-24 w-[22rem]"
-              />
-            </div>
+            {submissionDetail && submissionDetail.submission.status !== "approved" ? (
+              <div className="flex gap-2">
+                <div className="space-y-2">
+                  <Textarea
+                    value={rejectionReason}
+                    onChange={(event) => setRejectionReason(event.target.value)}
+                    placeholder="Skriv kort hvorfor forslaget avslås"
+                    className="min-h-24 w-[22rem]"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Dette er påkrevd ved avslag og vises internt som begrunnelse.
+                  </p>
+                  {rejectionReasonMissing ? (
+                    <p className="text-xs text-destructive">
+                      Legg inn en kort begrunnelse før du klikker «Avslå».
+                    </p>
+                  ) : null}
+                </div>
+              </div>
+            ) : submissionDetail?.submission.status === "approved" ? (
+              <div className="min-w-0 flex-1 text-sm text-muted-foreground">
+                Godkjente forslag kan ikke godkjennes eller avslås på nytt her.
+              </div>
+            ) : null}
             <div className="flex flex-wrap gap-2">
+              {submissionDetail && submissionDetail.submission.status !== "approved" ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className="text-muted-foreground hover:text-destructive"
+                  onClick={() =>
+                    handleRemoveSubmission({
+                      _id: submissionDetail.submission._id,
+                      generatedAssessmentDraft: {
+                        title: submissionDetail.submission.generatedAssessmentDraft.title,
+                      },
+                    })
+                  }
+                >
+                  <Trash2 className="size-4" />
+                  Slett forslag
+                </Button>
+              ) : null}
               <Button type="button" variant="outline" onClick={() => setReviewOpen(false)}>
                 Lukk
               </Button>
-              <Button type="button" variant="outline" onClick={handleReject}>
-                <XCircle className="size-4" />
-                Avslå
-              </Button>
-              <Button type="button" onClick={handleApprove}>
-                <CheckCircle2 className="size-4" />
-                Godkjenn og opprett vurdering
-              </Button>
+              {submissionDetail && submissionDetail.submission.status !== "approved" ? (
+                <>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={handleReject}
+                    disabled={rejectionReasonMissing}
+                  >
+                    <XCircle className="size-4" />
+                    Avslå
+                  </Button>
+                  <Button type="button" onClick={handleApprove}>
+                    <CheckCircle2 className="size-4" />
+                    Godkjenn og opprett vurdering
+                  </Button>
+                </>
+              ) : null}
             </div>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={githubIntakeDialogOpen} onOpenChange={setGithubIntakeDialogOpen}>
+        <DialogContent size="lg" titleId="intake-github-dialog-title">
+          <DialogHeader>
+            <p
+              id="intake-github-dialog-title"
+              className="font-heading text-lg font-semibold"
+            >
+              Legg til i GitHub-prosjekt
+            </p>
+            <p className="text-sm text-muted-foreground">
+              Bruker samme prosjekt, tilgang (PAT), statusfelt og standard-repos som under
+              arbeidsområdets innstillinger — ikke automatisk ved innsending.
+            </p>
+          </DialogHeader>
+          <DialogBody className="space-y-4">
+            {!submissionDetail || submissionDetail.submission._id !== selectedSubmissionId ? (
+              <p className="text-sm text-muted-foreground">Laster forslag …</p>
+            ) : (
+              (() => {
+                const ghSub = submissionDetail.submission;
+                const intakeGithubHasIssue =
+                  Boolean(ghSub.githubRepoFullName?.trim()) &&
+                  ghSub.githubIssueNumber != null;
+                const intakeGithubHasDraft =
+                  Boolean(ghSub.githubProjectItemNodeId?.trim()) &&
+                  !intakeGithubHasIssue;
+                if (intakeGithubHasIssue) {
+                  return (
+                    <div className="rounded-2xl border border-border/50 bg-card p-4 text-sm">
+                      <p className="font-medium">Allerede koblet til GitHub-issue</p>
+                      <Link
+                        href={`https://github.com/${ghSub.githubRepoFullName}/issues/${ghSub.githubIssueNumber}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="mt-2 inline-flex items-center gap-1 font-medium text-primary underline"
+                      >
+                        {ghSub.githubRepoFullName}#{ghSub.githubIssueNumber}
+                        <ExternalLink className="size-3.5" />
+                      </Link>
+                    </div>
+                  );
+                }
+                if (intakeGithubHasDraft) {
+                  return (
+                    <p className="text-sm text-muted-foreground">
+                      Dette forslaget er allerede lagt inn som utkast på prosjekttavlen. Åpne
+                      prosjektet i GitHub for å se kortet.
+                    </p>
+                  );
+                }
+                if (!canCreateIntakeGithubIssue) {
+                  return (
+                    <p className="text-sm text-muted-foreground">
+                      {intakeGithubMembershipLoading
+                        ? "Laster tilgang til arbeidsområdet …"
+                        : !workspaceDocQuery?.githubProjectNodeId?.trim()
+                          ? "Koble GitHub-prosjekt under arbeidsområdets innstillinger (samme som for prosessregister og vurderinger)."
+                          : "Kun medlemmer, administratorer og eiere kan legge til her."}
+                    </p>
+                  );
+                }
+                return (
+                  <div className="space-y-3">
+                    {intakeGithubStatusLoading ? (
+                      <p className="text-sm text-muted-foreground">
+                        Henter statusalternativer fra GitHub …
+                      </p>
+                    ) : null}
+                    {intakeGithubStatusError ? (
+                      <p className="text-sm text-destructive">{intakeGithubStatusError}</p>
+                    ) : null}
+                    {intakeGithubStatusFieldName ? (
+                      <p className="text-xs text-muted-foreground">
+                        Statusfelt: {intakeGithubStatusFieldName}
+                      </p>
+                    ) : null}
+                    {workspaceGithubDefaultRepos.length === 0 ? (
+                      <p className="text-xs text-muted-foreground">
+                        Uten standard-repo opprettes et utkast på tavlen (samme oppførsel som
+                        prosessregister uten repo). Legg til standard-repo i innstillinger hvis du
+                        vil at det skal bli en ekte issue automatisk.
+                      </p>
+                    ) : null}
+                    <div className="space-y-2">
+                      <Label htmlFor="intake-github-dlg-status">Status i prosjekt</Label>
+                      <select
+                        id="intake-github-dlg-status"
+                        className="flex h-10 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        value={intakeGithubStatusOptionId}
+                        onChange={(event) =>
+                          setIntakeGithubStatusOptionId(event.target.value)
+                        }
+                        disabled={
+                          intakeGithubStatusLoading || intakeGithubStatusOptions.length === 0
+                        }
+                      >
+                        {intakeGithubStatusOptions.map((option) => (
+                          <option key={option.id} value={option.id}>
+                            {option.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    {workspaceGithubDefaultRepos.length > 1 ? (
+                      <div className="space-y-2">
+                        <Label htmlFor="intake-github-dlg-repo">GitHub-repo</Label>
+                        <select
+                          id="intake-github-dlg-repo"
+                          className="flex h-10 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                          value={intakeGithubRepoChoice}
+                          onChange={(event) =>
+                            setIntakeGithubRepoChoice(event.target.value)
+                          }
+                        >
+                          {workspaceGithubDefaultRepos.map((repo) => (
+                            <option key={repo} value={repo}>
+                              {repo}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    ) : null}
+                    <div
+                      role="status"
+                      className="rounded-xl border border-border/60 bg-muted/30 p-3 text-sm text-muted-foreground"
+                    >
+                      <p className="font-medium text-foreground">Innhold til GitHub</p>
+                      <p className="mt-1.5">
+                        Når «Tekst til GitHub» under står tom, henter serveren{" "}
+                        <span className="font-medium text-foreground">
+                          alle utfylte svar fra dette skjemaet
+                        </span>
+                        , innsender, tidspunkt og auto-generert vurderingsutkast, og bygger
+                        Markdown til utkastet eller issuet.
+                      </p>
+                      <p className="mt-2 text-xs tabular-nums">
+                        {submissionDetail.questions.length} spørsmål i skjemaet ·{" "}
+                        {
+                          submissionDetail.questions.filter((q) =>
+                            submissionDetail.submission.answers.some(
+                              (a) => a.questionId === q._id,
+                            ),
+                          ).length
+                        }{" "}
+                        med registrert svar
+                      </p>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="intake-github-dlg-title">Tittel</Label>
+                      <Input
+                        id="intake-github-dlg-title"
+                        value={intakeGithubIssueTitle}
+                        onChange={(event) => setIntakeGithubIssueTitle(event.target.value)}
+                        maxLength={256}
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Standard er innsendt vurderingstittel og innsender — tilpass ved behov.
+                      </p>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="intake-github-dlg-body">Tekst til GitHub (valgfritt)</Label>
+                      <p
+                        id="intake-github-dlg-body-hint"
+                        className="text-xs text-muted-foreground"
+                      >
+                        Skriv kun her hvis du vil erstatte den automatiske teksten. Tomt felt =
+                        alle skjemasvar og vurderingsutkast inkluderes.
+                      </p>
+                      <Textarea
+                        id="intake-github-dlg-body"
+                        aria-describedby="intake-github-dlg-body-hint"
+                        value={intakeGithubIssueBody}
+                        onChange={(event) => setIntakeGithubIssueBody(event.target.value)}
+                        placeholder="La stå tom: da brukes alle svar, innsender og vurderingsutkast automatisk."
+                        className="min-h-28"
+                      />
+                    </div>
+                    <Button
+                      type="button"
+                      className="rounded-xl"
+                      disabled={
+                        intakeGithubCreateBusy ||
+                        intakeGithubStatusLoading ||
+                        !intakeGithubStatusOptionId.trim()
+                      }
+                      onClick={async () => {
+                        setIntakeGithubCreateBusy(true);
+                        try {
+                          const result = await createGithubRepoIssueForIntakeSubmission({
+                            submissionId: submissionDetail.submission._id,
+                            statusOptionId: intakeGithubStatusOptionId,
+                            repoFullName:
+                              workspaceGithubDefaultRepos.length > 1
+                                ? intakeGithubRepoChoice
+                                : undefined,
+                            issueTitle: intakeGithubIssueTitle.trim() || undefined,
+                            issueBody: intakeGithubIssueBody.trim() || undefined,
+                          });
+                          toast.success(
+                            result.kind === "draft"
+                              ? "Utkast er lagt på prosjekttavlen (samme prosjekt som for prosesser)."
+                              : "Issue opprettet i GitHub og lagt i prosjektet.",
+                          );
+                          setGithubIntakeDialogOpen(false);
+                        } catch (error: unknown) {
+                          toast.error(formatUserFacingError(error));
+                        } finally {
+                          setIntakeGithubCreateBusy(false);
+                        }
+                      }}
+                    >
+                      <GitBranch className="size-4" />
+                      {intakeGithubCreateBusy
+                        ? "Oppretter …"
+                        : workspaceGithubDefaultRepos.length === 0
+                          ? "Legg til i GitHub-prosjekt (utkast)"
+                          : "Opprett issue i GitHub-prosjekt"}
+                    </Button>
+                  </div>
+                );
+              })()
+            )}
+          </DialogBody>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setGithubIntakeDialogOpen(false)}
+            >
+              Lukk
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

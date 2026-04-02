@@ -186,6 +186,8 @@ export const getEditor = query({
       form: {
         ...form,
         confirmationMode: form.confirmationMode ?? "none",
+        rosIntegrationEnabled: Boolean(form.rosIntegrationEnabled),
+        linkedRosTemplateId: form.linkedRosTemplateId,
         isTemplate: Boolean(form.isTemplate),
       },
       questions,
@@ -210,6 +212,8 @@ export const create = mutation({
       status: "draft",
       layoutMode: "one_per_screen",
       confirmationMode: "none",
+      rosIntegrationEnabled: false,
+      linkedRosTemplateId: undefined,
       isTemplate: false,
       sourceTemplateFormId: undefined,
       templatePublishedAt: undefined,
@@ -393,6 +397,8 @@ export const activateTemplate = mutation({
       status: "draft",
       layoutMode: sourceForm.layoutMode,
       confirmationMode: sourceForm.confirmationMode ?? "none",
+      rosIntegrationEnabled: Boolean(sourceForm.rosIntegrationEnabled),
+      linkedRosTemplateId: undefined,
       isTemplate: false,
       sourceTemplateFormId: sourceForm._id,
       templatePublishedAt: undefined,
@@ -456,6 +462,72 @@ export const archive = mutation({
     await requireWorkspaceMember(ctx, form.workspaceId, userId, "member");
     await ctx.db.patch(args.formId, {
       status: "archived",
+      updatedAt: Date.now(),
+    });
+    return null;
+  },
+});
+
+export const updateIntegrations = mutation({
+  args: {
+    formId: v.id("intakeForms"),
+    rosIntegrationEnabled: v.boolean(),
+    linkedRosTemplateId: v.optional(v.union(v.id("rosTemplates"), v.null())),
+  },
+  handler: async (ctx, args) => {
+    const userId = await requireUserId(ctx);
+    const form = await ctx.db.get(args.formId);
+    if (!form) {
+      throw new Error("Skjemaet finnes ikke.");
+    }
+    await requireWorkspaceMember(ctx, form.workspaceId, userId, "member");
+
+    let linkedRosTemplateId: Id<"rosTemplates"> | undefined;
+    if (args.rosIntegrationEnabled) {
+      const requestedTemplateId = args.linkedRosTemplateId ?? undefined;
+      if (requestedTemplateId) {
+        const template = await ctx.db.get(requestedTemplateId);
+        if (!template || template.workspaceId !== form.workspaceId) {
+          throw new Error("Valgt ROS-mal finnes ikke i dette arbeidsområdet.");
+        }
+        linkedRosTemplateId = template._id;
+      }
+    }
+
+    await ctx.db.patch(args.formId, {
+      rosIntegrationEnabled: args.rosIntegrationEnabled,
+      linkedRosTemplateId,
+      updatedAt: Date.now(),
+    });
+    return null;
+  },
+});
+
+export const setStatus = mutation({
+  args: {
+    formId: v.id("intakeForms"),
+    status: intakeFormStatusValidator,
+  },
+  handler: async (ctx, args) => {
+    const userId = await requireUserId(ctx);
+    const form = await ctx.db.get(args.formId);
+    if (!form) {
+      throw new Error("Skjemaet finnes ikke.");
+    }
+    await requireWorkspaceMember(ctx, form.workspaceId, userId, "member");
+
+    if (args.status === "published") {
+      const questions = await ctx.db
+        .query("intakeFormQuestions")
+        .withIndex("by_form_and_order", (q) => q.eq("formId", args.formId))
+        .take(1);
+      if (questions.length === 0) {
+        throw new Error("Legg til minst ett spørsmål før du publiserer skjemaet.");
+      }
+    }
+
+    await ctx.db.patch(args.formId, {
+      status: args.status,
       updatedAt: Date.now(),
     });
     return null;

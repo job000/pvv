@@ -681,6 +681,8 @@ export default defineSchema({
     status: intakeFormStatusValidator,
     layoutMode: intakeLayoutModeValidator,
     confirmationMode: v.optional(intakeConfirmationModeValidator),
+    rosIntegrationEnabled: v.optional(v.boolean()),
+    linkedRosTemplateId: v.optional(v.id("rosTemplates")),
     isTemplate: v.optional(v.boolean()),
     sourceTemplateFormId: v.optional(v.id("intakeForms")),
     templatePublishedAt: v.optional(v.number()),
@@ -746,6 +748,12 @@ export default defineSchema({
     rejectionReason: v.optional(v.string()),
     approvedAssessmentId: v.optional(v.id("assessments")),
     approvedRosAnalysisId: v.optional(v.id("rosAnalyses")),
+    /** Manuelt opprettet GitHub-issue + prosjektkort (ikke automatisk fra skjema) */
+    githubProjectItemNodeId: v.optional(v.string()),
+    githubProjectStatusOptionId: v.optional(v.string()),
+    githubRepoFullName: v.optional(v.string()),
+    githubIssueNumber: v.optional(v.number()),
+    githubIssueNodeId: v.optional(v.string()),
   })
     .index("by_form_and_submitted_at", ["formId", "submittedAt"])
     .index("by_workspace_and_submitted_at", ["workspaceId", "submittedAt"])

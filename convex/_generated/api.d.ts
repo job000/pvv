@@ -31,6 +31,7 @@ import type * as lib_githubCandidateSync from "../lib/githubCandidateSync.js";
 import type * as lib_githubGraphql from "../lib/githubGraphql.js";
 import type * as lib_githubSubIssues from "../lib/githubSubIssues.js";
 import type * as lib_intakeMapping from "../lib/intakeMapping.js";
+import type * as lib_intakeSubmissionGithubBody from "../lib/intakeSubmissionGithubBody.js";
 import type * as lib_payloadSnapshot from "../lib/payloadSnapshot.js";
 import type * as lib_rpaScoring from "../lib/rpaScoring.js";
 import type * as orgUnits from "../orgUnits.js";
@@ -74,6 +75,7 @@ declare const fullApi: ApiFromModules<{
   "lib/githubGraphql": typeof lib_githubGraphql;
   "lib/githubSubIssues": typeof lib_githubSubIssues;
   "lib/intakeMapping": typeof lib_intakeMapping;
+  "lib/intakeSubmissionGithubBody": typeof lib_intakeSubmissionGithubBody;
   "lib/payloadSnapshot": typeof lib_payloadSnapshot;
   "lib/rpaScoring": typeof lib_rpaScoring;
   orgUnits: typeof orgUnits;

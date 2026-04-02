@@ -15,29 +15,34 @@ export function toastDeleteWithUndo(options: {
   onCommit: () => Promise<void>;
   /** Kalles hvis `onCommit` kaster (etter feil-toast) */
   onFailed?: (error: unknown) => void;
+  /** Kalles hvis brukeren angrer eller lukker toasten */
+  onCancel?: () => void;
 }): void {
   const delayMs = options.delayMs ?? DEFAULT_DELAY_MS;
   let cancelled = false;
 
   const timeoutHolder: { id?: number } = {};
 
+  function cancelDelete() {
+    if (cancelled) return;
+    cancelled = true;
+    if (timeoutHolder.id !== undefined) {
+      window.clearTimeout(timeoutHolder.id);
+    }
+    options.onCancel?.();
+  }
+
   const toastId = toast.message(options.title, {
     description: `«${options.itemLabel}» slettes om noen sekunder. Trykk Angre for å beholde den.`,
     duration: Infinity,
     closeButton: true,
     onDismiss: () => {
-      if (timeoutHolder.id !== undefined) {
-        window.clearTimeout(timeoutHolder.id);
-      }
-      cancelled = true;
+      cancelDelete();
     },
     action: {
       label: "Angre",
       onClick: () => {
-        cancelled = true;
-        if (timeoutHolder.id !== undefined) {
-          window.clearTimeout(timeoutHolder.id);
-        }
+        cancelDelete();
         toast.dismiss(toastId);
         toast.message("Sletting avbrutt.");
       },

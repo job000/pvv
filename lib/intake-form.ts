@@ -78,7 +78,7 @@ export const INTAKE_MAPPING_TARGET_LABELS = [
   {
     kind: "assessmentText",
     value: "processGoal",
-    label: "Fyll inn mål og ønsket verdi",
+    label: "Fyll inn mål, gevinst eller hva dere vil automatisere",
   },
   {
     kind: "assessmentText",
@@ -211,8 +211,9 @@ export function defaultIntakeQuestions() {
   return [
     {
       id: crypto.randomUUID(),
-      label: "Hva gjør du i dag?",
-      helpText: "Beskriv oppgaven kort med egne ord.",
+      label: "Hva heter oppgaven eller arbeidsflyten hos dere?",
+      helpText:
+        "Ett kort navn eller en setning i vanlig språk. Brukes som prosessnavn og kort beskrivelse av hvordan dere jobber i dag når forslaget gjøres om til vurdering.",
       questionType: "text" as const,
       required: true,
       options: [],
@@ -226,8 +227,21 @@ export function defaultIntakeQuestions() {
     },
     {
       id: crypto.randomUUID(),
-      label: "Hvor ofte gjør du dette?",
-      helpText: "Velg det som passer best.",
+      label: "Hva ønsker dere å automatisere, støtte med teknologi eller forbedre?",
+      helpText:
+        "Beskriv ønsket endring, f.eks. «mindre manuell tasting mellom systemer», «raskere svar til innbyggere» eller «færre feil i registrering». Går inn som mål og ønsket verdi (feltet «Mål og verdi») i vurderingen og er sentralt for RPA-/automatiseringssporet.",
+      questionType: "text" as const,
+      required: true,
+      options: [],
+      mappingTargets: [
+        { kind: "assessmentText" as const, field: "processGoal" as const },
+      ],
+    },
+    {
+      id: crypto.randomUUID(),
+      label: "Hvor ofte utføres dette i praksis?",
+      helpText:
+        "Velg det som ligner mest. Brukes i vurderingen for å forstå omtrent hvor ofte oppgaven kjøres.",
       questionType: "multiple_choice" as const,
       required: true,
       options: [
@@ -240,8 +254,9 @@ export function defaultIntakeQuestions() {
     },
     {
       id: crypto.randomUUID(),
-      label: "Hvor mye tid bruker dere vanligvis per sak?",
-      helpText: "Fyll inn et tall hvis dere vet omtrent hvor lang tid en sak tar.",
+      label: "Hvor lang tid bruker dere på én sak eller en runde av oppgaven?",
+      helpText:
+        "Skriv bare tallet (ikke skriv «min» eller «t» her). Neste skjerm spør om tallet er minutter eller timer per sak — det trengs til tids- og kostnadsgrunnlag i vurderingen.",
       questionType: "number" as const,
       required: false,
       options: [],
@@ -251,13 +266,14 @@ export function defaultIntakeQuestions() {
     },
     {
       id: crypto.randomUUID(),
-      label: "Er dette minutter eller timer per sak?",
-      helpText: "Velg enheten som passer best til tallet over.",
+      label: "Enhet for tidsbruket du nettopp skrev: minutter eller timer per sak?",
+      helpText:
+        "Velg minutter hvis tallet er f.eks. 30 for «30 minutter», eller timer hvis tallet er 2 for «2 timer». Gjelder bare hvis du fylte inn et tall på forrige skjerm.",
       questionType: "multiple_choice" as const,
       required: false,
       options: [
-        { id: "minutes", label: "Minutter" },
-        { id: "hours", label: "Timer" },
+        { id: "minutes", label: "Minutter per sak" },
+        { id: "hours", label: "Timer per sak" },
       ],
       mappingTargets: [
         { kind: "assessmentChoice" as const, field: "timePerCaseUnit" as const },
@@ -265,8 +281,9 @@ export function defaultIntakeQuestions() {
     },
     {
       id: crypto.randomUUID(),
-      label: "Hvor mange saker gjør dere vanligvis?",
-      helpText: "Fyll inn et tall hvis dere vet omtrent hvor mange saker som behandles.",
+      label: "Omtrent hvor mange saker (eller tilsvarende) behandler dere?",
+      helpText:
+        "Skriv antall saker som heltall (f.eks. 15). Neste skjerm spør om tallet er per dag, per uke eller per måned — det brukes som volumgrunnlag i vurderingen.",
       questionType: "number" as const,
       required: false,
       options: [],
@@ -276,8 +293,9 @@ export function defaultIntakeQuestions() {
     },
     {
       id: crypto.randomUUID(),
-      label: "Gjelder dette per dag, uke eller måned?",
-      helpText: "Velg perioden som passer best til tallet over.",
+      label: "Tallet for antall saker — gjelder det per dag, per uke eller per måned?",
+      helpText:
+        "Velg samme tidsrom som dere tenkte på da dere skrev antallet. Eksempel: «40» og «per uke» betyr omtrent 40 saker i gjennomsnitt per uke.",
       questionType: "multiple_choice" as const,
       required: false,
       options: [
@@ -291,8 +309,9 @@ export function defaultIntakeQuestions() {
     },
     {
       id: crypto.randomUUID(),
-      label: "Hvis dere heller tenker i total ressursbruk: hvor mange årsverk går med?",
-      helpText: "Fyll inn omtrent antall årsverk hvis det er lettere enn tid per sak.",
+      label: "Alternativt: omtrent hvor mange årsverk brukes på denne oppgaven?",
+      helpText:
+        "Valgfritt. Ett årsverk = én heltidsstilling i ett år. Desimal er ok (f.eks. 0,25). Fyll inn hvis det er enklere enn tid per sak — brukes i vurderingen når dere ikke kjenner minutter eller timer godt nok.",
       questionType: "number" as const,
       required: false,
       options: [],
@@ -302,8 +321,9 @@ export function defaultIntakeQuestions() {
     },
     {
       id: crypto.randomUUID(),
-      label: "Hvor mange arbeidsdager bruker dere i løpet av et år?",
-      helpText: "Bare fyll inn hvis dere bruker noe annet enn standard arbeidsår.",
+      label: "Hvor mange arbeidsdager per år bruker dere i beregninger?",
+      helpText:
+        "Valgfritt: antall arbeidsdager per kalenderår (typisk omtrent 220–250 i Norge). Bare fyll inn hvis dere avviker fra vanlig mønster. Brukes i vurderingens årsoppgjør for tid.",
       questionType: "number" as const,
       required: false,
       options: [],
@@ -313,8 +333,9 @@ export function defaultIntakeQuestions() {
     },
     {
       id: crypto.randomUUID(),
-      label: "Hvor mange timer er en vanlig arbeidsdag hos dere?",
-      helpText: "Bare fyll inn hvis dere vil overstyre standard arbeidsdag.",
+      label: "Hvor mange timer per arbeidsdag er normalt hos dere?",
+      helpText:
+        "Valgfritt: timer per arbeidsdag, ofte 7,5. Brukes sammen med arbeidsdager i vurderingen. Hopp over hvis standard passer.",
       questionType: "number" as const,
       required: false,
       options: [],
@@ -327,8 +348,9 @@ export function defaultIntakeQuestions() {
     },
     {
       id: crypto.randomUUID(),
-      label: "Hva skjer hvis det blir feil?",
-      helpText: "Beskriv konsekvensen med en enkel setning.",
+      label: "Hva kan gå galt for brukere, drift eller regelverk hvis noe feiler?",
+      helpText:
+        "Én eller noen få setninger om konsekvens. Brukes i vurderingen (blant annet risiko og begrensninger) og kan bidra til ROS (risikoanalyse) når forslaget er godkjent.",
       questionType: "text" as const,
       required: true,
       options: [],
@@ -342,8 +364,9 @@ export function defaultIntakeQuestions() {
     },
     {
       id: personalDataQuestionId,
-      label: "Bruker dere personopplysninger?",
-      helpText: "Velg ja hvis oppgaven bruker opplysninger om personer.",
+      label: "Håndterer oppgaven personopplysninger om enkeltpersoner?",
+      helpText:
+        "Velg ja hvis dere f.eks. bruker navn, kontaktinfo, ID-nummer eller helseopplysninger. Styrer personvern-relevante felt i vurderingen ved godkjenning.",
       questionType: "yes_no" as const,
       required: true,
       options: [],
@@ -351,14 +374,15 @@ export function defaultIntakeQuestions() {
     },
     {
       id: crypto.randomUUID(),
-      label: "Hvilke personopplysninger brukes mest?",
-      helpText: "Velg det som passer best for denne oppgaven.",
+      label: "Hvilken type personopplysninger er mest sentralt her?",
+      helpText:
+        "Velg det som best beskriver det dere bruker mest. Går inn under sikkerhet og personvern i vurderingen.",
       questionType: "multiple_choice" as const,
       required: true,
       options: [
         { id: "name", label: "Navn" },
         { id: "contact", label: "Kontaktopplysninger" },
-        { id: "national_id", label: "Fodselsnummer eller personnummer" },
+        { id: "national_id", label: "Fødselsnummer eller personnummer" },
         { id: "mixed", label: "Kombinasjon av flere typer" },
       ],
       visibilityRule: {
@@ -374,8 +398,9 @@ export function defaultIntakeQuestions() {
     },
     {
       id: crypto.randomUUID(),
-      label: "Hva brukes personopplysningene til i oppgaven?",
-      helpText: "Beskriv kort hvorfor dere trenger disse opplysningene.",
+      label: "Hva brukes personopplysningene til — og hvorfor er det nødvendig?",
+      helpText:
+        "Kort om formål (f.eks. saksbehandling, kundeoppfølging). Brukes i vurderingen under personvern og dokumentasjon.",
       questionType: "text" as const,
       required: false,
       options: [],
