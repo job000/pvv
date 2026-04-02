@@ -30,6 +30,7 @@ import {
   requireUserId,
   requireWorkspaceMember,
 } from "./lib/access";
+import { cascadeDeleteAssessmentData } from "./lib/cascadeDeletePvv";
 import {
   createAssessmentWithPayload,
   defaultAssessmentPayload,
@@ -975,71 +976,7 @@ export const deleteAssessment = mutation({
   args: { assessmentId: v.id("assessments") },
   handler: async (ctx, args) => {
     await requireAssessmentEdit(ctx, args.assessmentId);
-    const drafts = await ctx.db
-      .query("assessmentDrafts")
-      .withIndex("by_assessment", (q) =>
-        q.eq("assessmentId", args.assessmentId),
-      )
-      .collect();
-    for (const d of drafts) await ctx.db.delete(d._id);
-
-    const versions = await ctx.db
-      .query("assessmentVersions")
-      .withIndex("by_assessment", (q) =>
-        q.eq("assessmentId", args.assessmentId),
-      )
-      .collect();
-    for (const v of versions) await ctx.db.delete(v._id);
-
-    const collabs = await ctx.db
-      .query("assessmentCollaborators")
-      .withIndex("by_assessment", (q) =>
-        q.eq("assessmentId", args.assessmentId),
-      )
-      .collect();
-    for (const c of collabs) await ctx.db.delete(c._id);
-
-    const tasks = await ctx.db
-      .query("assessmentTasks")
-      .withIndex("by_assessment", (q) =>
-        q.eq("assessmentId", args.assessmentId),
-      )
-      .collect();
-    for (const t of tasks) await ctx.db.delete(t._id);
-
-    const notes = await ctx.db
-      .query("assessmentNotes")
-      .withIndex("by_assessment", (q) =>
-        q.eq("assessmentId", args.assessmentId),
-      )
-      .collect();
-    for (const n of notes) await ctx.db.delete(n._id);
-
-    const shareLinks = await ctx.db
-      .query("assessmentShareLinks")
-      .withIndex("by_assessment", (q) =>
-        q.eq("assessmentId", args.assessmentId),
-      )
-      .collect();
-    for (const s of shareLinks) await ctx.db.delete(s._id);
-
-    const invites = await ctx.db
-      .query("assessmentInvites")
-      .withIndex("by_assessment", (q) =>
-        q.eq("assessmentId", args.assessmentId),
-      )
-      .collect();
-    for (const inv of invites) await ctx.db.delete(inv._id);
-
-    const rosLinks = await ctx.db
-      .query("rosAnalysisAssessments")
-      .withIndex("by_assessment", (q) =>
-        q.eq("assessmentId", args.assessmentId),
-      )
-      .collect();
-    for (const rl of rosLinks) await ctx.db.delete(rl._id);
-
-    await ctx.db.delete(args.assessmentId);
+    await cascadeDeleteAssessmentData(ctx, args.assessmentId);
     return null;
   },
 });

@@ -1,6 +1,7 @@
 "use client";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -295,7 +296,8 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
     const q = analysisSearch.trim().toLowerCase();
     const filtered = q
       ? list.filter((a) => {
-          const blob = `${a.title} ${a.candidateName ?? ""} ${a.candidateCode ?? ""}`.toLowerCase();
+          const fromIntake = Boolean((a as { fromIntake?: boolean }).fromIntake);
+          const blob = `${a.title} ${a.candidateName ?? ""} ${a.candidateCode ?? ""} ${fromIntake ? "skjema" : ""}`.toLowerCase();
           return blob.includes(q);
         })
       : [...list];
@@ -773,6 +775,9 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
           ) : (
             <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
               {filteredSortedAnalyses.map((a) => {
+                const fromIntake = Boolean(
+                  (a as { fromIntake?: boolean }).fromIntake,
+                );
                 const versionCount = (a as { versionCount?: number }).versionCount ?? 0;
                 const flat = a.matrixValues.flat().map((v) => Math.min(5, Math.max(0, Math.round(v))));
                 const maxLvl = Math.max(0, ...flat);
@@ -805,16 +810,28 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
                         <p className="truncate text-sm font-semibold text-foreground group-hover/card:text-primary">
                           {a.title}
                         </p>
-                        <p className="text-muted-foreground mt-0.5 text-xs">
-                          {a.candidateName ? (
-                            <>
-                              {a.candidateName}{" "}
-                              <span className="font-mono text-[10px]">({a.candidateCode})</span>
-                            </>
-                          ) : (
-                            <span className="italic">Frittstående</span>
-                          )}
-                        </p>
+                        <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs">
+                          {fromIntake ? (
+                            <Badge
+                              variant="secondary"
+                              className="h-5 border-0 px-1.5 text-[10px] font-medium"
+                            >
+                              Fra skjema
+                            </Badge>
+                          ) : null}
+                          <p className="text-muted-foreground">
+                            {a.candidateName ? (
+                              <>
+                                {a.candidateName}{" "}
+                                <span className="font-mono text-[10px]">({a.candidateCode})</span>
+                              </>
+                            ) : fromIntake ? (
+                              <span className="text-muted-foreground">Koblet til PVV fra skjema</span>
+                            ) : (
+                              <span className="italic">Frittstående</span>
+                            )}
+                          </p>
+                        </div>
 
                         <div className="mt-3 flex h-2 w-full overflow-hidden rounded-full bg-muted/40">
                           {(() => {

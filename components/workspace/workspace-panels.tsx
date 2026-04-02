@@ -49,6 +49,7 @@ import { cn } from "@/lib/utils";
 import {
   AlertTriangle,
   ChevronRight,
+  ClipboardCheck,
   Clock,
   Eye,
   ExternalLink,
@@ -560,13 +561,30 @@ export function WorkspaceTeamPanel({
   );
 }
 
+export type ApprovedIntakeProcessregisterRow = {
+  submissionId: Id<"intakeSubmissions">;
+  title: string;
+  reviewedAt: number;
+  approvedAssessmentId: Id<"assessments">;
+  githubRepoFullName?: string;
+  githubIssueNumber?: number;
+};
+
 export function WorkspaceCandidatesPanel({
   workspaceId,
   hubMode = false,
+  approvedIntakeForProcessregister,
 }: {
   workspaceId: Id<"workspaces">;
   /** Når true: vist under PVV-hub med tydeligere forklaring og layout */
   hubMode?: boolean;
+  /**
+   * Fra `WorkspacePvvHub` (spørring heises dit) slik at listen er oppdatert før panelet
+   * monteres når bruker bytter til Prosessregister-fanen.
+   */
+  approvedIntakeForProcessregister:
+    | undefined
+    | ApprovedIntakeProcessregisterRow[];
 }) {
   const membership = useQuery(api.workspaces.getMyMembership, { workspaceId });
   const workspace = useQuery(api.workspaces.get, { workspaceId });
@@ -950,7 +968,8 @@ export function WorkspaceCandidatesPanel({
     candidates === undefined ||
     membership === undefined ||
     orgUnits === undefined ||
-    workspace === undefined
+    workspace === undefined ||
+    approvedIntakeForProcessregister === undefined
   ) {
     return <p className="text-muted-foreground text-sm">Laster …</p>;
   }
@@ -1393,10 +1412,14 @@ export function WorkspaceCandidatesPanel({
               <p className="text-muted-foreground text-xs mt-0.5">
                 {!canEditCandidates
                   ? "Lesertilgang"
-                  : candidates.length > 0
-                    ? `${candidates.length} prosess${candidates.length !== 1 ? "er" : ""} registrert`
-                    : "Kom i gang ved å opprette eller importere en prosess"
-                }
+                  : candidates.length > 0 &&
+                      approvedIntakeForProcessregister.length > 0
+                    ? `${candidates.length} prosess${candidates.length !== 1 ? "er" : ""} registrert · ${approvedIntakeForProcessregister.length} godkjent fra skjema`
+                    : candidates.length > 0
+                      ? `${candidates.length} prosess${candidates.length !== 1 ? "er" : ""} registrert`
+                      : approvedIntakeForProcessregister.length > 0
+                        ? `Ingen prosess-ID ennå — ${approvedIntakeForProcessregister.length} godkjent fra skjema`
+                        : "Kom i gang ved å opprette eller importere en prosess"}
               </p>
             </div>
           </div>
@@ -1427,6 +1450,221 @@ export function WorkspaceCandidatesPanel({
             className="pointer-events-none h-px w-full shrink-0 bg-transparent"
             aria-hidden
           />
+        ) : null}
+
+        {/* ── Oversikt: skjemavurderinger + P-ID (samme kortmønster som Vurderinger / ROS) ── */}
+        {approvedIntakeForProcessregister.length > 0 || candidates.length > 0 ? (
+          <section
+            className="space-y-4"
+            aria-labelledby={
+              hubMode ? "prosessregister-oversikt-heading" : "process-overview-heading"
+            }
+            data-tutorial-anchor="prosess-oversikt-liste"
+          >
+            {hubMode ? (
+              <div className="space-y-1">
+                <h2
+                  id="prosessregister-oversikt-heading"
+                  className="text-foreground text-lg font-semibold tracking-tight"
+                >
+                  Oversikt
+                </h2>
+                <p className="text-muted-foreground text-xs leading-relaxed">
+                  Godkjente skjemaforslag blir til vurderinger (uten egen P-ID). Registrerte prosesser
+                  har kode i registeret — som på vurderings- og ROS-sidene.
+                </p>
+              </div>
+            ) : (
+              <h2
+                id="process-overview-heading"
+                className="text-foreground text-base font-semibold"
+              >
+                {candidates.length > 0 && approvedIntakeForProcessregister.length > 0
+                  ? `${candidates.length} prosess${candidates.length !== 1 ? "er" : ""} · ${approvedIntakeForProcessregister.length} fra skjema`
+                  : candidates.length > 0
+                    ? `${candidates.length} prosess${candidates.length !== 1 ? "er" : ""}`
+                    : `${approvedIntakeForProcessregister.length} fra skjema`}
+              </h2>
+            )}
+
+            {approvedIntakeForProcessregister.length > 0 ? (
+              <div className="space-y-2">
+                {hubMode ? (
+                  <h3 className="text-muted-foreground text-[11px] font-semibold uppercase tracking-[0.12em]">
+                    Fra skjema (godkjent) · {approvedIntakeForProcessregister.length}
+                  </h3>
+                ) : null}
+                <div className="space-y-2">
+                  {approvedIntakeForProcessregister.map((row) => (
+                    <div
+                      key={row.submissionId}
+                      className="flex items-center gap-2 rounded-2xl bg-card p-3 pr-2 shadow-sm ring-1 ring-black/[0.04] transition-all duration-200 hover:shadow-md hover:ring-black/[0.08] sm:gap-3 sm:p-4 dark:ring-white/[0.06] dark:hover:ring-white/[0.12]"
+                    >
+                      <Link
+                        href={`/w/${workspaceId}/a/${row.approvedAssessmentId}`}
+                        className="group flex min-w-0 flex-1 items-center gap-3 sm:gap-4"
+                      >
+                        <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 sm:size-10">
+                          <ClipboardCheck className="text-primary size-4 sm:size-5" aria-hidden />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <p className="text-foreground truncate text-sm font-semibold">
+                              {row.title}
+                            </p>
+                            <Badge
+                              variant="outline"
+                              className="border-primary/25 bg-primary/5 text-[10px] font-medium text-primary"
+                            >
+                              Vurdering
+                            </Badge>
+                          </div>
+                          <p className="text-muted-foreground mt-1 text-xs tabular-nums">
+                            Godkjent{" "}
+                            {new Date(row.reviewedAt).toLocaleString("nb-NO", {
+                              dateStyle: "medium",
+                              timeStyle: "short",
+                            })}
+                          </p>
+                        </div>
+                        <ChevronRight
+                          className="text-muted-foreground/30 size-4 shrink-0 transition-all duration-200 group-hover:translate-x-0.5 group-hover:text-foreground"
+                          aria-hidden
+                        />
+                      </Link>
+                      {row.githubRepoFullName?.trim() && row.githubIssueNumber != null ? (
+                        <a
+                          href={`https://github.com/${row.githubRepoFullName}/issues/${row.githubIssueNumber}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-muted-foreground hover:text-primary inline-flex shrink-0 items-center rounded-lg p-2"
+                          aria-label={`GitHub-issue ${row.githubIssueNumber}`}
+                        >
+                          <ExternalLink className="size-4" aria-hidden />
+                        </a>
+                      ) : null}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+
+            {candidates.length > 0 ? (
+              <div className="space-y-2">
+                {hubMode ? (
+                  <h3 className="text-muted-foreground text-[11px] font-semibold uppercase tracking-[0.12em]">
+                    Registrerte prosesser (P-ID) · {candidates.length}
+                  </h3>
+                ) : null}
+                <div className="space-y-2">
+                  {candidatesSorted.map((c) => {
+                    const hasGithub = Boolean(c.githubProjectItemNodeId);
+                    const canPreviewGh =
+                      c.githubRepoFullName &&
+                      c.githubIssueNumber != null &&
+                      c.githubIssueNumber > 0;
+                    return (
+                      <div
+                        key={c._id}
+                        className="group flex cursor-pointer items-center gap-4 rounded-2xl bg-card p-4 shadow-sm ring-1 ring-black/[0.04] transition-all duration-200 hover:shadow-md hover:ring-black/[0.08] active:scale-[0.995] dark:ring-white/[0.06] dark:hover:ring-white/[0.12]"
+                        onClick={() => setEditCandidateId(c._id)}
+                      >
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2">
+                            <p className="text-foreground truncate text-sm font-semibold">
+                              {c.name}
+                            </p>
+                            <span className="text-muted-foreground shrink-0 font-mono text-[10px]">
+                              {c.code}
+                            </span>
+                          </div>
+                          <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                            {candidateOrgUnitLabel(c, orgUnits) !== "—" ? (
+                              <span className="text-muted-foreground text-xs">
+                                {candidateOrgUnitLabel(c, orgUnits)}
+                              </span>
+                            ) : null}
+                            {hasGithub ? (
+                              <Badge
+                                variant="secondary"
+                                className={cn(
+                                  "h-5 border-emerald-500/30 bg-emerald-500/10 px-1.5 text-[10px] text-emerald-900 dark:text-emerald-100",
+                                  canPreviewGh && "cursor-pointer hover:bg-emerald-500/20",
+                                )}
+                                onClick={
+                                  canPreviewGh
+                                    ? (e) => {
+                                        e.stopPropagation();
+                                        void openGhPreview(
+                                          c.githubRepoFullName!,
+                                          c.githubIssueNumber!,
+                                        );
+                                      }
+                                    : undefined
+                                }
+                              >
+                                GitHub
+                              </Badge>
+                            ) : null}
+                          </div>
+                        </div>
+
+                        <div className="flex shrink-0 items-center gap-1">
+                          {!hasGithub && canEditCandidates && canQuickAddGithubCard ? (
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className="text-muted-foreground hover:text-foreground h-8 gap-1 px-2 text-xs opacity-0 transition-all group-hover:opacity-100"
+                              disabled={rowGithubBusyId === c._id}
+                              title="Legg til i GitHub-prosjekt"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                void registerOneFromOverviewTable(c._id);
+                              }}
+                            >
+                              {rowGithubBusyId === c._id ? (
+                                <Loader2 className="size-3.5 animate-spin" aria-hidden />
+                              ) : (
+                                <GitBranch className="size-3.5" aria-hidden />
+                              )}
+                            </Button>
+                          ) : null}
+
+                          {canEditCandidates ? (
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="text-muted-foreground hover:text-destructive size-8 opacity-0 transition-all group-hover:opacity-100"
+                              disabled={overviewDeleteBusyId === c._id}
+                              aria-label={`Slett prosess ${c.code}`}
+                              title="Slett prosess"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                void deleteCandidateFromOverview(c._id, c);
+                              }}
+                            >
+                              {overviewDeleteBusyId === c._id ? (
+                                <Loader2 className="size-3.5 animate-spin" aria-hidden />
+                              ) : (
+                                <Trash2 className="size-3.5" aria-hidden />
+                              )}
+                            </Button>
+                          ) : null}
+
+                          <ChevronRight
+                            className="text-muted-foreground/30 size-4 transition-all duration-200 group-hover:text-foreground group-hover:translate-x-0.5"
+                            aria-hidden
+                          />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : null}
+          </section>
         ) : null}
 
         {/* ── Create / Import ── */}
@@ -1800,128 +2038,6 @@ export function WorkspaceCandidatesPanel({
               </div>
             ) : null}
           </div>
-        ) : null}
-
-        {/* ── Process list ── */}
-        {candidates.length > 0 ? (
-          <section
-            data-tutorial-anchor="prosess-oversikt-liste"
-            className="space-y-3"
-            aria-labelledby="process-overview-heading"
-          >
-            <h2
-              id="process-overview-heading"
-              className="text-foreground text-base font-semibold"
-            >
-              {candidates.length} prosess{candidates.length !== 1 ? "er" : ""}
-            </h2>
-            <div className="space-y-2">
-              {candidatesSorted.map((c) => {
-                const hasGithub = Boolean(c.githubProjectItemNodeId);
-                const canPreviewGh =
-                  c.githubRepoFullName &&
-                  c.githubIssueNumber != null &&
-                  c.githubIssueNumber > 0;
-                return (
-                  <div
-                    key={c._id}
-                    className="group flex cursor-pointer items-center gap-4 rounded-2xl bg-card p-4 shadow-sm ring-1 ring-black/[0.04] transition-all duration-200 hover:shadow-md hover:ring-black/[0.08] active:scale-[0.995] dark:ring-white/[0.06] dark:hover:ring-white/[0.12]"
-                    onClick={() => setEditCandidateId(c._id)}
-                  >
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2">
-                        <p className="text-foreground truncate text-sm font-semibold">
-                          {c.name}
-                        </p>
-                        <span className="text-muted-foreground shrink-0 font-mono text-[10px]">
-                          {c.code}
-                        </span>
-                      </div>
-                      <div className="mt-1 flex flex-wrap items-center gap-1.5">
-                        {candidateOrgUnitLabel(c, orgUnits) !== "—" ? (
-                          <span className="text-muted-foreground text-xs">
-                            {candidateOrgUnitLabel(c, orgUnits)}
-                          </span>
-                        ) : null}
-                        {hasGithub ? (
-                          <Badge
-                            variant="secondary"
-                            className={cn(
-                              "h-5 border-emerald-500/30 bg-emerald-500/10 px-1.5 text-[10px] text-emerald-900 dark:text-emerald-100",
-                              canPreviewGh && "cursor-pointer hover:bg-emerald-500/20",
-                            )}
-                            onClick={
-                              canPreviewGh
-                                ? (e) => {
-                                    e.stopPropagation();
-                                    void openGhPreview(
-                                      c.githubRepoFullName!,
-                                      c.githubIssueNumber!,
-                                    );
-                                  }
-                                : undefined
-                            }
-                          >
-                            GitHub
-                          </Badge>
-                        ) : null}
-                      </div>
-                    </div>
-
-                    <div className="flex shrink-0 items-center gap-1">
-                      {!hasGithub && canEditCandidates && canQuickAddGithubCard ? (
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          className="text-muted-foreground hover:text-foreground h-8 gap-1 px-2 text-xs opacity-0 transition-all group-hover:opacity-100"
-                          disabled={rowGithubBusyId === c._id}
-                          title="Legg til i GitHub-prosjekt"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            void registerOneFromOverviewTable(c._id);
-                          }}
-                        >
-                          {rowGithubBusyId === c._id ? (
-                            <Loader2 className="size-3.5 animate-spin" aria-hidden />
-                          ) : (
-                            <GitBranch className="size-3.5" aria-hidden />
-                          )}
-                        </Button>
-                      ) : null}
-
-                      {canEditCandidates ? (
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          className="text-muted-foreground hover:text-destructive size-8 opacity-0 transition-all group-hover:opacity-100"
-                          disabled={overviewDeleteBusyId === c._id}
-                          aria-label={`Slett prosess ${c.code}`}
-                          title="Slett prosess"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            void deleteCandidateFromOverview(c._id, c);
-                          }}
-                        >
-                          {overviewDeleteBusyId === c._id ? (
-                            <Loader2 className="size-3.5 animate-spin" aria-hidden />
-                          ) : (
-                            <Trash2 className="size-3.5" aria-hidden />
-                          )}
-                        </Button>
-                      ) : null}
-
-                      <ChevronRight
-                        className="text-muted-foreground/30 size-4 transition-all duration-200 group-hover:text-foreground group-hover:translate-x-0.5"
-                        aria-hidden
-                      />
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </section>
         ) : null}
 
         <ProcessCoverageOverview workspaceId={workspaceId} />
@@ -2746,7 +2862,7 @@ export function WorkspaceCandidatesPanel({
           </DialogContent>
         </Dialog>
 
-        {candidates.length === 0 ? (
+        {candidates.length === 0 && approvedIntakeForProcessregister.length === 0 ? (
           <div
             data-tutorial-anchor="prosess-oversikt-liste"
             className="flex flex-col items-center rounded-2xl bg-muted/15 px-6 py-14 text-center"
@@ -2755,10 +2871,11 @@ export function WorkspaceCandidatesPanel({
               <Users className="text-emerald-600 dark:text-emerald-400 size-6" aria-hidden />
             </div>
             <p className="text-foreground text-base font-semibold">
-              Ingen prosesser ennå
+              Ingen prosesser eller skjemavurderinger ennå
             </p>
             <p className="text-muted-foreground mt-1.5 max-w-xs text-sm">
-              Opprett din første prosess manuelt eller importer fra GitHub.
+              Opprett prosess manuelt, importer fra GitHub, eller bruk skjemaer for å samle forslag
+              som blir vurderinger.
             </p>
             <div className="mt-6 flex gap-3">
               {canEditCandidates ? (
@@ -2793,9 +2910,14 @@ export function WorkspaceCandidatesPanel({
 export function WorkspaceAssessmentsPanel({
   workspaceId,
   hubMode = false,
+  approvedIntakeForProcessregister,
 }: {
   workspaceId: Id<"workspaces">;
   hubMode?: boolean;
+  /** Samme data som Prosessregister — for «Skjema»-merke på vurderingskort. */
+  approvedIntakeForProcessregister?:
+    | undefined
+    | ApprovedIntakeProcessregisterRow[];
 }) {
   const workspace = useQuery(api.workspaces.get, { workspaceId });
   const membership = useQuery(api.workspaces.getMyMembership, { workspaceId });
@@ -2803,6 +2925,11 @@ export function WorkspaceAssessmentsPanel({
     workspaceId,
   });
   const deleteAssessment = useMutation(api.assessments.deleteAssessment);
+
+  const intakeAssessmentIdSet = useMemo(() => {
+    const rows = approvedIntakeForProcessregister ?? [];
+    return new Set(rows.map((r) => r.approvedAssessmentId));
+  }, [approvedIntakeForProcessregister]);
 
   const canEditPipeline =
     membership !== undefined &&
@@ -3037,9 +3164,19 @@ export function WorkspaceAssessmentsPanel({
                     />
                     <div className="pointer-events-none relative z-10 flex flex-col gap-3">
                       <div className="flex items-start justify-between gap-2">
-                        <p className="group-hover/card:text-primary min-w-0 text-sm font-semibold leading-snug transition-colors line-clamp-2">
-                          {a.title}
-                        </p>
+                        <div className="min-w-0 flex-1 space-y-1.5">
+                          <p className="group-hover/card:text-primary min-w-0 text-sm font-semibold leading-snug transition-colors line-clamp-2">
+                            {a.title}
+                          </p>
+                          {intakeAssessmentIdSet.has(a._id) ? (
+                            <Badge
+                              variant="outline"
+                              className="pointer-events-none border-primary/25 bg-primary/5 text-[10px] font-medium text-primary"
+                            >
+                              Fra skjema
+                            </Badge>
+                          ) : null}
+                        </div>
                         <div className="pointer-events-auto shrink-0">
                           {canEditPipeline ? (
                             <PipelineStatusSelect

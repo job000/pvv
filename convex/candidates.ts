@@ -18,6 +18,15 @@ import {
   hasPvvSyncMarkersInBody,
 } from "./lib/githubCandidateSync";
 import { normalizeGithubRepoFullName } from "./lib/github";
+import {
+  cascadeDeleteAssessmentData,
+  cascadeDeleteRosAnalysisData,
+} from "./lib/cascadeDeletePvv";
+import {
+  assertGithubIssueNotIntakeLinked,
+  assertGithubProjectItemNotIntakeLinked,
+  loadIntakeGithubOccupiedRefs,
+} from "./lib/intakeGithubOccupiedRefs";
 import { payloadToSnapshot } from "./lib/payloadSnapshot";
 import { computeAllResults } from "./lib/rpaScoring";
 
@@ -34,6 +43,31 @@ function draftPayloadMatchesCandidate(
   if (!raw) return false;
   if (raw === String(candidate._id)) return true;
   return normalizeProcessCode(raw) === normalizeProcessCode(candidate.code);
+}
+
+async function collectAssessmentIdsLinkedToCandidate(
+  ctx: MutationCtx,
+  candidate: Doc<"candidates">,
+): Promise<Id<"assessments">[]> {
+  const assessments = await ctx.db
+    .query("assessments")
+    .withIndex("by_workspace", (q) =>
+      q.eq("workspaceId", candidate.workspaceId),
+    )
+    .collect();
+  const out: Id<"assessments">[] = [];
+  for (const a of assessments) {
+    const draft = await ctx.db
+      .query("assessmentDrafts")
+      .withIndex("by_assessment", (q) => q.eq("assessmentId", a._id))
+      .unique();
+    if (!draft) continue;
+    const payload = draft.payload as { candidateId?: string };
+    if (draftPayloadMatchesCandidate(payload, candidate)) {
+      out.push(a._id);
+    }
+  }
+  return out;
 }
 
 export type PvvAssessmentResultSummary = {
@@ -754,6 +788,8 @@ export const createFromGithubProjectItem = mutation({
       throw new Error("Prosess-ID er allerede i bruk i dette arbeidsområdet.");
     }
     const pid = args.projectItemNodeId.trim();
+    const intakeRefs = await loadIntakeGithubOccupiedRefs(ctx, args.workspaceId);
+    assertGithubProjectItemNotIntakeLinked(intakeRefs, pid);
     const existing = await ctx.db
       .query("candidates")
       .withIndex("by_workspace", (q) =>
@@ -780,6 +816,18 @@ export const createFromGithubProjectItem = mutation({
       } catch {
         throw new Error("Ugyldig repo-navn.");
       }
+    }
+    if (
+      (args.contentKind === "issue" || args.contentKind === "pull_request") &&
+      repo &&
+      args.githubIssueNumber != null
+    ) {
+      assertGithubIssueNotIntakeLinked(
+        intakeRefs,
+        repo,
+        Math.floor(args.githubIssueNumber),
+        args.githubIssueNodeId,
+      );
     }
     const now = Date.now();
     const id = await ctx.db.insert("candidates", {
@@ -859,6 +907,14 @@ export const createCandidateFromGithubIssue = mutation({
         "Denne GitHub-saken er allerede koblet til en prosess i dette arbeidsområdet.",
       );
     }
+
+    const intakeRefs = await loadIntakeGithubOccupiedRefs(ctx, args.workspaceId);
+    assertGithubIssueNotIntakeLinked(
+      intakeRefs,
+      repo,
+      issueNum,
+      args.githubIssueNodeId,
+    );
 
     const now = Date.now();
     return await ctx.db.insert("candidates", {
@@ -967,6 +1023,56 @@ export const remove = mutation({
       throw new Error("Kandidat finnes ikke.");
     }
     await requireWorkspaceMember(ctx, row.workspaceId, userId, "member");
+
+    const assessmentIds = await collectAssessmentIdsLinkedToCandidate(ctx, row);
+    const rosRows = await ctx.db
+      .query("rosAnalyses")
+      .withIndex("by_candidate", (q) =>
+        q.eq("candidateId", args.candidateId),
+      )
+      .collect();
+    const rosIds = new Set(rosRows.map((r) => r._id));
+
+    const intakeRows = await ctx.db
+      .query("intakeSubmissions")
+      .withIndex("by_workspace_and_submitted_at", (q) =>
+        q.eq("workspaceId", row.workspaceId),
+      )
+      .take(500);
+    for (const sub of intakeRows) {
+      if (
+        sub.approvedAssessmentId &&
+        assessmentIds.includes(sub.approvedAssessmentId)
+      ) {
+        const patch: {
+          approvedAssessmentId: undefined;
+          status: "under_review";
+          reviewedAt: undefined;
+          reviewedByUserId: undefined;
+          approvedRosAnalysisId?: undefined;
+        } = {
+          approvedAssessmentId: undefined,
+          status: "under_review",
+          reviewedAt: undefined,
+          reviewedByUserId: undefined,
+        };
+        if (
+          sub.approvedRosAnalysisId &&
+          rosIds.has(sub.approvedRosAnalysisId)
+        ) {
+          patch.approvedRosAnalysisId = undefined;
+        }
+        await ctx.db.patch(sub._id, patch);
+      }
+    }
+
+    for (const aid of assessmentIds) {
+      await cascadeDeleteAssessmentData(ctx, aid);
+    }
+    for (const r of rosRows) {
+      await cascadeDeleteRosAnalysisData(ctx, r._id);
+    }
+
     await ctx.db.delete(args.candidateId);
     return null;
   },

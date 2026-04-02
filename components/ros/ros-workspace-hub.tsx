@@ -8,6 +8,7 @@ import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import { cn } from "@/lib/utils";
 import { useQuery } from "convex/react";
+import { Badge } from "@/components/ui/badge";
 import {
   AlertCircle,
   ArrowRight,
@@ -39,6 +40,7 @@ export type RosWorkspaceHubData = {
     title: string;
     candidateCode: string;
     updatedAt: number;
+    fromIntake?: boolean;
   }>;
 };
 
@@ -314,6 +316,11 @@ export function RosWorkspaceHub({
                   className="group inline-flex max-w-full items-center gap-1.5 rounded-md border border-border/50 bg-card px-2 py-1.5 text-xs shadow-sm transition-all hover:border-primary/30"
                 >
                   <span className="min-w-0 truncate font-medium">{r.title}</span>
+                  {r.fromIntake ? (
+                    <Badge variant="secondary" className="h-4 shrink-0 border-0 px-1 text-[9px] font-medium">
+                      Skjema
+                    </Badge>
+                  ) : null}
                   {r.candidateCode ? (
                     <span className="text-muted-foreground shrink-0 font-mono text-[10px]">
                       {r.candidateCode}
@@ -465,6 +472,11 @@ export function RosWorkspaceHub({
                 className="group inline-flex max-w-full items-center gap-2 rounded-lg border border-border/50 bg-card px-3 py-2 text-sm shadow-sm transition-all hover:border-primary/30 hover:shadow-md"
               >
                 <span className="min-w-0 truncate font-medium">{r.title}</span>
+                {r.fromIntake ? (
+                  <Badge variant="secondary" className="h-5 shrink-0 border-0 px-1.5 text-[10px] font-medium">
+                    Skjema
+                  </Badge>
+                ) : null}
                 {r.candidateCode ? (
                   <span className="text-muted-foreground shrink-0 font-mono text-xs">
                     {r.candidateCode}

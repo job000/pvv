@@ -4,6 +4,10 @@ import { internal } from "./_generated/api";
 import type { Doc } from "./_generated/dataModel";
 import { action } from "./_generated/server";
 import { fetchProjectStatusFieldOptions } from "./githubCandidateProject";
+import {
+  intakeGithubOccupiedRefsFromSerialized,
+  isGithubColumnItemOccupiedByIntake,
+} from "./lib/intakeGithubOccupiedRefs";
 import { githubGraphql } from "./lib/githubGraphql";
 import { resolveGithubToken } from "./githubTasks";
 
@@ -149,6 +153,11 @@ export const listGithubProjectItemsInStatusColumn = action({
       );
     }
     const statusFieldId = meta.fieldId;
+    const occupied = await ctx.runQuery(
+      internal.intakeSubmissions.loadGithubOccupiedRefsForWorkspace,
+      { workspaceId: args.workspaceId },
+    );
+    const intakeGithubRefs = intakeGithubOccupiedRefsFromSerialized(occupied);
     const out: GithubProjectColumnItemRow[] = [];
     let after: string | null = null;
     let pages = 0;
@@ -252,6 +261,9 @@ export const listGithubProjectItemsInStatusColumn = action({
           };
         }
         if (row) {
+          if (isGithubColumnItemOccupiedByIntake(intakeGithubRefs, row)) {
+            continue;
+          }
           out.push(row);
         }
       }

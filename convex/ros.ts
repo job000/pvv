@@ -12,6 +12,8 @@ import {
   requireUserId,
   requireWorkspaceMember,
 } from "./lib/access";
+import { loadIntakeApprovedDerivedIds } from "./lib/intakeDerivedIds";
+import { cascadeDeleteRosAnalysisData } from "./lib/cascadeDeletePvv";
 import {
   cellHasAttention,
   flattenCellItemsMatrixToLegacyNotes,
@@ -376,6 +378,10 @@ export const listAnalyses = query({
       return [];
     }
     await requireWorkspaceMember(ctx, args.workspaceId, userId, "viewer");
+    const { rosAnalysisIds: intakeRosIds } = await loadIntakeApprovedDerivedIds(
+      ctx,
+      args.workspaceId,
+    );
     const rows = await ctx.db
       .query("rosAnalyses")
       .withIndex("by_workspace_updated", (q) =>
@@ -412,6 +418,7 @@ export const listAnalyses = query({
           ? (templateNameById.get(r.templateId) ?? null)
           : null,
         versionCount: versionRows.length,
+        fromIntake: intakeRosIds.has(r._id),
       });
     }
     return out;
@@ -430,6 +437,11 @@ export const workspaceHub = query({
       return null;
     }
     await requireWorkspaceMember(ctx, args.workspaceId, userId, "viewer");
+
+    const { rosAnalysisIds: intakeRosIds } = await loadIntakeApprovedDerivedIds(
+      ctx,
+      args.workspaceId,
+    );
 
     const templateRows = await ctx.db
       .query("rosTemplates")
@@ -481,6 +493,7 @@ export const workspaceHub = query({
           title: r.title,
           candidateCode: cand?.code ?? "",
           updatedAt: r.updatedAt,
+          fromIntake: intakeRosIds.has(r._id),
         };
       });
 
@@ -1743,44 +1756,8 @@ export const removeAnalysis = mutation({
   args: { analysisId: v.id("rosAnalyses") },
   handler: async (ctx, args) => {
     const userId = await requireUserId(ctx);
-    const row = await requireRosAnalysisEdit(ctx, args.analysisId, userId);
-    const links = await ctx.db
-      .query("rosAnalysisAssessments")
-      .withIndex("by_ros_analysis", (q) =>
-        q.eq("rosAnalysisId", args.analysisId),
-      )
-      .collect();
-    for (const l of links) {
-      await ctx.db.delete(l._id);
-    }
-    const versions = await ctx.db
-      .query("rosAnalysisVersions")
-      .withIndex("by_ros_analysis", (q) =>
-        q.eq("rosAnalysisId", args.analysisId),
-      )
-      .collect();
-    for (const v of versions) {
-      await ctx.db.delete(v._id);
-    }
-    const tasks = await ctx.db
-      .query("rosTasks")
-      .withIndex("by_ros_analysis", (q) =>
-        q.eq("rosAnalysisId", args.analysisId),
-      )
-      .collect();
-    for (const t of tasks) {
-      await ctx.db.delete(t._id);
-    }
-    const journalRows = await ctx.db
-      .query("rosAnalysisJournalEntries")
-      .withIndex("by_ros_analysis", (q) =>
-        q.eq("rosAnalysisId", args.analysisId),
-      )
-      .collect();
-    for (const j of journalRows) {
-      await ctx.db.delete(j._id);
-    }
-    await ctx.db.delete(row._id);
+    await requireRosAnalysisEdit(ctx, args.analysisId, userId);
+    await cascadeDeleteRosAnalysisData(ctx, args.analysisId);
     return null;
   },
 });

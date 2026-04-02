@@ -1,7 +1,9 @@
 "use client";
 
+import { api } from "@/convex/_generated/api";
 import { cn } from "@/lib/utils";
 import type { Id } from "@/convex/_generated/dataModel";
+import { useQuery } from "convex/react";
 import { ClipboardList, FileText, Users } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -21,6 +23,12 @@ type Props = {
 
 export function WorkspacePvvHub({ workspaceId, activeTab }: Props) {
   const router = useRouter();
+
+  /** Alltid abonnert — ikke bare når Prosessregister-fanen er aktiv (unngår tom liste ved bytte av fane). */
+  const approvedIntakeForProcessregister = useQuery(
+    api.intakeSubmissions.listApprovedForProcessregister,
+    { workspaceId },
+  );
 
   const setTab = useCallback(
     (next: PvvHubTab) => {
@@ -105,9 +113,17 @@ export function WorkspacePvvHub({ workspaceId, activeTab }: Props) {
         className="min-h-0"
       >
         {activeTab === "vurderinger" ? (
-          <WorkspaceAssessmentsPanel workspaceId={workspaceId} hubMode />
+          <WorkspaceAssessmentsPanel
+            workspaceId={workspaceId}
+            hubMode
+            approvedIntakeForProcessregister={approvedIntakeForProcessregister}
+          />
         ) : (
-          <WorkspaceCandidatesPanel workspaceId={workspaceId} hubMode />
+          <WorkspaceCandidatesPanel
+            workspaceId={workspaceId}
+            hubMode
+            approvedIntakeForProcessregister={approvedIntakeForProcessregister}
+          />
         )}
       </div>
     </div>

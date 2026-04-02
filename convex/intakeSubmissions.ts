@@ -20,6 +20,11 @@ import { requireUserId, requireWorkspaceMember } from "./lib/access";
 import { generateIntakeSuggestion } from "./lib/intakeMapping";
 import { createAssessmentWithPayload } from "./lib/assessmentCreation";
 import { normalizeGithubRepoFullName } from "./lib/github";
+import { loadIntakeGithubOccupiedRefs } from "./lib/intakeGithubOccupiedRefs";
+import {
+  cascadeDeleteAssessmentData,
+  cascadeDeleteRosAnalysisData,
+} from "./lib/cascadeDeletePvv";
 
 function requireNonEmptyAnswers(questionCount: number, answersCount: number) {
   if (questionCount === 0) {
@@ -152,6 +157,63 @@ export const listByWorkspace = query({
       });
     }
     return results;
+  },
+});
+
+/**
+ * Godkjente skjemaforslag med opprettet vurdering — vises i prosessregisteret fordi de ikke har egen
+ * rad i `candidates` (kun `assessments`).
+ */
+export const listApprovedForProcessregister = query({
+  args: { workspaceId: v.id("workspaces") },
+  handler: async (ctx, args) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) {
+      return [];
+    }
+    await requireWorkspaceMember(ctx, args.workspaceId, userId, "viewer");
+    const rows = await ctx.db
+      .query("intakeSubmissions")
+      .withIndex("by_workspace_and_status_and_submitted_at", (q) =>
+        q.eq("workspaceId", args.workspaceId).eq("status", "approved"),
+      )
+      .order("desc")
+      .take(500);
+    const out: Array<{
+      submissionId: Id<"intakeSubmissions">;
+      title: string;
+      reviewedAt: number;
+      approvedAssessmentId: Id<"assessments">;
+      githubRepoFullName?: string;
+      githubIssueNumber?: number;
+    }> = [];
+    for (const r of rows) {
+      if (!r.approvedAssessmentId) {
+        continue;
+      }
+      out.push({
+        submissionId: r._id,
+        title: r.generatedAssessmentDraft.title,
+        reviewedAt: r.reviewedAt ?? r.submittedAt,
+        approvedAssessmentId: r.approvedAssessmentId,
+        githubRepoFullName: r.githubRepoFullName,
+        githubIssueNumber: r.githubIssueNumber,
+      });
+    }
+    return out;
+  },
+});
+
+/** Brukes av actions (f.eks. kolonnevisning) for å skjule kort som allerede tilhører skjemaintake. */
+export const loadGithubOccupiedRefsForWorkspace = internalQuery({
+  args: { workspaceId: v.id("workspaces") },
+  handler: async (ctx, args) => {
+    const r = await loadIntakeGithubOccupiedRefs(ctx, args.workspaceId);
+    return {
+      projectItemIds: [...r.projectItemIds],
+      issueKeys: [...r.issueKeys],
+      issueNodeIds: [...r.issueNodeIds],
+    };
   },
 });
 
@@ -568,10 +630,14 @@ export const remove = mutation({
       throw new Error("Forslaget finnes ikke lenger.");
     }
     await requireWorkspaceMember(ctx, submission.workspaceId, userId, "member");
-    if (submission.status === "approved" || submission.approvedAssessmentId) {
-      throw new Error(
-        "Godkjente forslag kan ikke slettes fordi de allerede kan være koblet til en vurdering.",
-      );
+    if (submission.approvedAssessmentId) {
+      const assessment = await ctx.db.get(submission.approvedAssessmentId);
+      if (assessment) {
+        await cascadeDeleteAssessmentData(ctx, submission.approvedAssessmentId);
+      }
+    }
+    if (submission.approvedRosAnalysisId) {
+      await cascadeDeleteRosAnalysisData(ctx, submission.approvedRosAnalysisId);
     }
     await ctx.db.delete(submission._id);
     return null;
