@@ -31,6 +31,7 @@ import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 type AnswerState = Record<string, string | number | boolean>;
 type SubmissionAnswer =
   | { questionId: string; kind: "text"; value: string }
+  | { questionId: string; kind: "number"; value: number }
   | { questionId: string; kind: "multiple_choice"; optionId: string; label: string }
   | { questionId: string; kind: "scale"; value: number }
   | { questionId: string; kind: "yes_no"; value: boolean };
@@ -47,7 +48,7 @@ type PublicQuestion = {
   questionKey: string;
   label: string;
   helpText?: string;
-  questionType: "text" | "multiple_choice" | "scale" | "yes_no";
+  questionType: "text" | "number" | "multiple_choice" | "scale" | "yes_no";
   required: boolean;
   options: Array<{ id: string; label: string }>;
   visibilityRule?:
@@ -137,6 +138,21 @@ function useIsClient() {
     () => true,
     () => false,
   );
+}
+
+function parseNumberAnswer(value: string | number | boolean | undefined): number | null {
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? value : null;
+  }
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return null;
+    }
+    const parsed = Number(trimmed.replace(",", "."));
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
 }
 
 function readPublicTheme(): PublicTheme {
@@ -279,6 +295,13 @@ export function IntakePublicForm({ token }: { token: string }) {
       toast.error("Svar på spørsmålet før du går videre.");
       return false;
     }
+    if (
+      currentQuestion.questionType === "number" &&
+      parseNumberAnswer(answers[currentQuestion._id]) === null
+    ) {
+      toast.error("Skriv inn et gyldig tall før du går videre.");
+      return false;
+    }
     return true;
   }
 
@@ -301,52 +324,72 @@ export function IntakePublicForm({ token }: { token: string }) {
         toast.error(`Svar mangler for «${question.label}».`);
         return;
       }
+      if (
+        question.questionType === "number" &&
+        isAnswered(question._id) &&
+        parseNumberAnswer(answers[question._id]) === null
+      ) {
+        toast.error(`Skriv inn et gyldig tall for «${question.label}».`);
+        return;
+      }
     }
     const preparedAnswers: SubmissionAnswer[] = visibleQuestions.flatMap(
       (question: PublicQuestion): SubmissionAnswer[] => {
-      const value = answers[question._id];
-      if (!isAnswered(question._id)) {
-        return [];
-      }
-      if (question.questionType === "text") {
+        const value = answers[question._id];
+        if (!isAnswered(question._id)) {
+          return [];
+        }
+        if (question.questionType === "text") {
+          return [
+            {
+              questionId: question._id,
+              kind: "text" as const,
+              value: String(value ?? ""),
+            },
+          ];
+        }
+        if (question.questionType === "number") {
+          const numericValue = parseNumberAnswer(value);
+          return numericValue === null
+            ? []
+            : [
+                {
+                  questionId: question._id,
+                  kind: "number" as const,
+                  value: numericValue,
+                },
+              ];
+        }
+        if (question.questionType === "multiple_choice") {
+          const option = question.options.find(
+            (item: { id: string; label: string }) => item.id === value,
+          );
+          return [
+            {
+              questionId: question._id,
+              kind: "multiple_choice" as const,
+              optionId: String(value ?? ""),
+              label: option?.label ?? "",
+            },
+          ];
+        }
+        if (question.questionType === "scale") {
+          return [
+            {
+              questionId: question._id,
+              kind: "scale" as const,
+              value: Number(value ?? 3),
+            },
+          ];
+        }
         return [
           {
             questionId: question._id,
-            kind: "text" as const,
-            value: String(value ?? ""),
+            kind: "yes_no" as const,
+            value: Boolean(value),
           },
         ];
-      }
-      if (question.questionType === "multiple_choice") {
-        const option = question.options.find(
-          (item: { id: string; label: string }) => item.id === value,
-        );
-        return [
-          {
-            questionId: question._id,
-            kind: "multiple_choice" as const,
-            optionId: String(value ?? ""),
-            label: option?.label ?? "",
-          },
-        ];
-      }
-      if (question.questionType === "scale") {
-        return [
-          {
-            questionId: question._id,
-            kind: "scale" as const,
-            value: Number(value ?? 3),
-          },
-        ];
-      }
-      return [
-        {
-          questionId: question._id,
-          kind: "yes_no" as const,
-          value: Boolean(value),
-        },
-      ];
-    },
+      },
     );
     try {
       const result = await submitPublic({
@@ -605,7 +648,7 @@ function QuestionRenderer({
     _id: string;
     label: string;
     helpText?: string;
-    questionType: "text" | "multiple_choice" | "scale" | "yes_no";
+    questionType: "text" | "number" | "multiple_choice" | "scale" | "yes_no";
     required: boolean;
     options: Array<{ id: string; label: string }>;
   };
@@ -634,6 +677,16 @@ function QuestionRenderer({
           value={typeof value === "string" ? value : ""}
           onChange={(event) => onChange(event.target.value)}
           className="min-h-40 rounded-[1.5rem] border-border/60 bg-background/80 p-5 text-base shadow-sm dark:border-white/10 dark:bg-zinc-900/80"
+        />
+      ) : null}
+
+      {question.questionType === "number" ? (
+        <Input
+          type="number"
+          inputMode="decimal"
+          value={typeof value === "string" || typeof value === "number" ? value : ""}
+          onChange={(event) => onChange(event.target.value)}
+          className="h-14 rounded-[1.35rem] border-border/60 bg-background/80 px-5 text-base shadow-sm dark:border-white/10 dark:bg-zinc-900/80"
         />
       ) : null}
 

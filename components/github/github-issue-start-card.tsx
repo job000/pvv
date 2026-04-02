@@ -8,7 +8,7 @@ import type { Doc, Id } from "@/convex/_generated/dataModel";
 import { parseSuggestedCodeAndNameFromGithubTitle } from "@/lib/github-process-title";
 import { toast } from "@/lib/app-toast";
 import { cn } from "@/lib/utils";
-import { useAction, useMutation, useQuery } from "convex/react";
+import { useAction, useConvex, useMutation, useQuery } from "convex/react";
 import {
   ArrowRight,
   ExternalLink,
@@ -48,6 +48,7 @@ export function GithubIssueStartCard({
   defaultTemplateId,
 }: Props) {
   const router = useRouter();
+  const convex = useConvex();
   const membership = useQuery(api.workspaces.getMyMembership, { workspaceId });
   const candidates = useQuery(api.candidates.listByWorkspace, { workspaceId });
   const templates = useQuery(
@@ -71,6 +72,15 @@ export function GithubIssueStartCard({
   const [busyMode, setBusyMode] = useState<
     "register" | "url" | "standalone" | null
   >(null);
+  const existingAssessmentQuery = useQuery(
+    api.assessments.findLatestForCandidate,
+    variant === "assessment" && selectedCandidateId
+      ? {
+          workspaceId,
+          candidateId: selectedCandidateId as Id<"candidates">,
+        }
+      : "skip",
+  );
 
   const sortedCandidates = useMemo(() => {
     if (!candidates?.length) return [];
@@ -84,6 +94,14 @@ export function GithubIssueStartCard({
     (membership.role === "owner" ||
       membership.role === "admin" ||
       membership.role === "member");
+  const selectedCandidate =
+    (candidates ?? []).find((candidate) => candidate._id === selectedCandidateId) ?? null;
+  const existingAssessment =
+    variant === "assessment" ? (existingAssessmentQuery ?? null) : null;
+  const resumeCheckPending =
+    variant === "assessment" &&
+    Boolean(selectedCandidateId) &&
+    existingAssessmentQuery === undefined;
 
   async function handleStartStandalone() {
     const title = standaloneTitle.trim();
@@ -132,8 +150,20 @@ export function GithubIssueStartCard({
     }
   }
 
-  async function handleStartFromRegister() {
-    if (!selectedCandidateId) {
+  async function createAssessmentFromCandidate(candidate: Doc<"candidates">) {
+    const safeTitle = `Vurdering av ${candidate.name}`.slice(0, 240);
+    const aid = await createAssessment({
+      workspaceId,
+      title: safeTitle,
+      shareWithWorkspace: true,
+      fromCandidateId: candidate._id,
+    });
+    setSelectedCandidateId("");
+    router.push(`/w/${workspaceId}/a/${aid}`);
+  }
+
+  async function handleContinueFromRegister() {
+    if (!selectedCandidateId || !existingAssessment) {
       toast.error("Velg en prosess fra registeret.");
       return;
     }
@@ -141,27 +171,27 @@ export function GithubIssueStartCard({
       toast.error("Du trenger medlem-tilgang.");
       return;
     }
-    const c = (candidates ?? []).find((x) => x._id === selectedCandidateId);
-    if (!c) {
+    setBusyMode("register");
+    try {
+      router.push(`/w/${workspaceId}/a/${existingAssessment.assessmentId}`);
+    } finally {
+      setBusyMode(null);
+    }
+  }
+
+  async function handleStartNewFromRegister() {
+    if (!selectedCandidate) {
       toast.error("Fant ikke prosessen.");
+      return;
+    }
+    if (!canEdit) {
+      toast.error("Du trenger medlem-tilgang.");
       return;
     }
     setBusyMode("register");
     try {
-      const safeTitle =
-        variant === "assessment"
-          ? `Vurdering av ${c.name}`.slice(0, 240)
-          : `ROS — ${c.name}`.slice(0, 240);
-
       if (variant === "assessment") {
-        const aid = await createAssessment({
-          workspaceId,
-          title: safeTitle,
-          shareWithWorkspace: true,
-          fromCandidateId: c._id,
-        });
-        setSelectedCandidateId("");
-        router.push(`/w/${workspaceId}/a/${aid}`);
+        await createAssessmentFromCandidate(selectedCandidate);
         return;
       }
 
@@ -176,8 +206,8 @@ export function GithubIssueStartCard({
       const analysisId = await createAnalysis({
         workspaceId,
         templateId: tplId,
-        candidateId: c._id,
-        title: safeTitle,
+        candidateId: selectedCandidate._id,
+        title: `ROS — ${selectedCandidate.name}`.slice(0, 240),
       });
       setSelectedCandidateId("");
       router.push(`/w/${workspaceId}/ros/a/${analysisId}`);
@@ -188,6 +218,14 @@ export function GithubIssueStartCard({
     } finally {
       setBusyMode(null);
     }
+  }
+
+  async function handleStartFromRegister() {
+    if (variant === "assessment" && existingAssessment) {
+      await handleContinueFromRegister();
+      return;
+    }
+    await handleStartNewFromRegister();
   }
 
   async function handleStartFromUrl() {
@@ -232,6 +270,22 @@ export function GithubIssueStartCard({
       const safeTitle = preview.title.slice(0, 240);
 
       if (variant === "assessment") {
+        const existingAssessment = await convex.query(
+          api.assessments.findLatestForCandidate,
+          {
+            workspaceId,
+            candidateId,
+          },
+        );
+        if (existingAssessment) {
+          setSelectedCandidateId(candidateId);
+          setActiveTab("process");
+          setIssueUrl("");
+          toast.message(
+            "Fant en påbegynt vurdering for prosessen. Velg om du vil fortsette eller starte på nytt.",
+          );
+          return;
+        }
         const aid = await createAssessment({
           workspaceId,
           title: safeTitle,
@@ -290,6 +344,10 @@ export function GithubIssueStartCard({
 
   const actionLabel =
     variant === "assessment" ? "Start vurdering" : "Start ROS";
+  const processActionLabel =
+    variant === "assessment" && existingAssessment
+      ? "Fortsett vurdering"
+      : actionLabel;
 
   const tabs: { id: StartTab; icon: React.ReactNode; label: string; desc: string }[] = [
     {
@@ -351,8 +409,8 @@ export function GithubIssueStartCard({
               Velg en prosess som allerede er registrert.
             </p>
           </div>
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
-            <div className="min-w-0 flex-1 space-y-1.5">
+          <div className="space-y-3">
+            <div className="min-w-0 space-y-1.5">
               <Label
                 htmlFor={`gh-register-${variant}`}
                 className="text-muted-foreground text-xs font-medium"
@@ -385,25 +443,76 @@ export function GithubIssueStartCard({
                   Ingen prosesser ennå — opprett under Prosessregister.
                 </p>
               ) : null}
+              {variant === "assessment" && selectedCandidateId && resumeCheckPending ? (
+                <p className="text-muted-foreground text-xs">
+                  Sjekker om det finnes en påbegynt vurdering for prosessen …
+                </p>
+              ) : null}
+              {variant === "assessment" && existingAssessment ? (
+                <div className="rounded-2xl border border-primary/20 bg-primary/5 px-4 py-3 text-xs text-muted-foreground">
+                  <p className="font-medium text-foreground">{existingAssessment.title}</p>
+                  <p className="mt-1 leading-relaxed">
+                    Sist oppdatert{" "}
+                    {new Date(existingAssessment.updatedAt).toLocaleString("nb-NO")} ·{" "}
+                    {existingAssessment.nextStepHint}
+                  </p>
+                </div>
+              ) : null}
             </div>
-            <Button
-              type="button"
-              className="h-10 shrink-0 gap-2 rounded-xl px-5 shadow-sm sm:w-auto"
-              disabled={
-                busy ||
-                !selectedCandidateId ||
-                rosNeedsTemplate ||
-                (variant === "ros" && templates === undefined)
-              }
-              onClick={() => void handleStartFromRegister()}
-            >
-              {busyMode === "register" ? (
-                <Loader2 className="size-4 animate-spin" aria-hidden />
-              ) : (
-                <ArrowRight className="size-4" aria-hidden />
+
+            <div
+              className={cn(
+                "flex flex-col gap-3",
+                variant === "assessment" && existingAssessment
+                  ? "rounded-2xl border border-border/50 bg-background p-3 sm:flex-row sm:items-center sm:justify-between"
+                  : "sm:flex-row sm:justify-end",
               )}
-              {actionLabel}
-            </Button>
+            >
+              {variant === "assessment" && existingAssessment ? (
+                <div className="space-y-1">
+                  <p className="text-sm font-medium text-foreground">
+                    Det finnes allerede en påbegynt vurdering
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Fortsett den eksisterende, eller opprett en ny vurdering fra samme
+                    prosess.
+                  </p>
+                </div>
+              ) : null}
+              <div className="flex flex-col gap-2 sm:flex-row">
+                {variant === "assessment" && existingAssessment ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="h-10 gap-2 rounded-xl px-5 shadow-sm sm:w-auto"
+                    disabled={busy || resumeCheckPending}
+                    onClick={() => void handleStartNewFromRegister()}
+                  >
+                    <Sparkles className="size-4" aria-hidden />
+                    Start på nytt
+                  </Button>
+                ) : null}
+                <Button
+                  type="button"
+                  className="h-10 gap-2 rounded-xl px-5 shadow-sm sm:w-auto"
+                  disabled={
+                    busy ||
+                    !selectedCandidateId ||
+                    resumeCheckPending ||
+                    rosNeedsTemplate ||
+                    (variant === "ros" && templates === undefined)
+                  }
+                  onClick={() => void handleStartFromRegister()}
+                >
+                  {busyMode === "register" ? (
+                    <Loader2 className="size-4 animate-spin" aria-hidden />
+                  ) : (
+                    <ArrowRight className="size-4" aria-hidden />
+                  )}
+                  {processActionLabel}
+                </Button>
+              </div>
+            </div>
           </div>
         </div>
       ) : null}

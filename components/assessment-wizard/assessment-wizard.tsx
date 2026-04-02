@@ -40,7 +40,6 @@ import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import type { AssessmentPayload } from "@/lib/assessment-types";
 import {
-  PIPELINE_STATUS_LABELS,
   normalizePipelineStatus,
   nextStepHint,
   type PipelineStatus,
@@ -73,6 +72,28 @@ const DETAILS_SLIDE_INDEX =
 
 /** Én kilde til utkast-form — brukes ved første lasting og etter gjenoppretting fra versjon. */
 function normalizeDraftPayload(raw: AssessmentPayload): AssessmentPayload {
+  const timePerCaseValue = raw.timePerCaseValue ?? raw.minutesPerCase ?? undefined;
+  const timePerCaseUnit =
+    raw.timePerCaseUnit ?? (raw.minutesPerCase !== undefined ? "minutes" : undefined);
+  const caseVolumeValue =
+    raw.caseVolumeValue ??
+    raw.casesPerWeek ??
+    raw.casesPerMonth ??
+    undefined;
+  const caseVolumeUnit =
+    raw.caseVolumeUnit ??
+    (raw.casesPerWeek !== undefined
+      ? "week"
+      : raw.casesPerMonth !== undefined
+        ? "month"
+        : undefined);
+  const workloadInputMode =
+    raw.workloadInputMode ??
+    (raw.manualFteEstimate !== undefined &&
+    timePerCaseValue === undefined &&
+    caseVolumeValue === undefined
+      ? "fte"
+      : "per_case");
   return {
     ...raw,
     processDescription: raw.processDescription ?? "",
@@ -90,6 +111,11 @@ function normalizeDraftPayload(raw: AssessmentPayload): AssessmentPayload {
     hfEconomicRationaleNotes: raw.hfEconomicRationaleNotes ?? "",
     hfCriticalManualGapNotes: raw.hfCriticalManualGapNotes ?? "",
     hfOperationsSupportNotes: raw.hfOperationsSupportNotes ?? "",
+    timePerCaseValue,
+    timePerCaseUnit,
+    caseVolumeValue,
+    caseVolumeUnit,
+    workloadInputMode,
   };
 }
 
@@ -149,6 +175,13 @@ const QUICK_AUTOMATION_PRESETS: Record<
   },
 };
 
+function roundKpiValue(value: number) {
+  return Math.round(value * 10) / 10;
+}
+
+type TimePerCaseUnit = "minutes" | "hours";
+type CaseVolumeUnit = "day" | "week" | "month";
+
 function parseKpiNumber(
   raw: string,
   fallback: number,
@@ -157,6 +190,145 @@ function parseKpiNumber(
   if (raw.trim() === "") return fallback;
   const n = Number(raw);
   return Number.isFinite(n) ? n : current;
+}
+
+function parseOptionalKpiNumber(
+  raw: string,
+  current?: number,
+): number | undefined {
+  if (raw.trim() === "") return undefined;
+  const normalized = raw.replace(",", ".");
+  const n = Number(normalized);
+  return Number.isFinite(n) ? n : current;
+}
+
+function effectiveTimePerCaseValue(payload: AssessmentPayload): number | undefined {
+  return payload.timePerCaseValue ?? payload.minutesPerCase ?? undefined;
+}
+
+function effectiveTimePerCaseUnit(payload: AssessmentPayload): TimePerCaseUnit {
+  return payload.timePerCaseUnit ?? "minutes";
+}
+
+function effectiveCaseVolumeValue(payload: AssessmentPayload): number | undefined {
+  if (payload.caseVolumeValue !== undefined) {
+    return payload.caseVolumeValue;
+  }
+  if (payload.casesPerWeek !== undefined) {
+    return payload.casesPerWeek;
+  }
+  if (payload.casesPerMonth !== undefined) {
+    return payload.casesPerMonth;
+  }
+  return undefined;
+}
+
+function effectiveCaseVolumeUnit(payload: AssessmentPayload): CaseVolumeUnit {
+  if (payload.caseVolumeUnit) {
+    return payload.caseVolumeUnit;
+  }
+  if (payload.casesPerMonth !== undefined) {
+    return "month";
+  }
+  return "week";
+}
+
+function effectiveWorkloadInputMode(
+  payload: AssessmentPayload,
+): "per_case" | "fte" {
+  return payload.workloadInputMode ?? "per_case";
+}
+
+function annualCasesFromPayload(payload: AssessmentPayload): number | null {
+  const caseVolumeValue = effectiveCaseVolumeValue(payload);
+  if (!(typeof caseVolumeValue === "number" && caseVolumeValue > 0)) {
+    return null;
+  }
+  switch (effectiveCaseVolumeUnit(payload)) {
+    case "day":
+      return caseVolumeValue * 5 * 52;
+    case "month":
+      return caseVolumeValue * 12;
+    case "week":
+    default:
+      return caseVolumeValue * 52;
+  }
+}
+
+function derivedBaselineHoursFromPayload(
+  payload: AssessmentPayload,
+): number | null {
+  const annualCases = annualCasesFromPayload(payload);
+  const timePerCaseValue = effectiveTimePerCaseValue(payload);
+  if (
+    typeof timePerCaseValue === "number" &&
+    timePerCaseValue > 0 &&
+    annualCases !== null
+  ) {
+    const hoursPerCase =
+      effectiveTimePerCaseUnit(payload) === "hours"
+        ? timePerCaseValue
+        : timePerCaseValue / 60;
+    return roundKpiValue(hoursPerCase * annualCases);
+  }
+
+  const manualFteEstimate = payload.manualFteEstimate;
+  if (typeof manualFteEstimate === "number" && manualFteEstimate > 0) {
+    return roundKpiValue(
+      manualFteEstimate * payload.workingDays * payload.workingHoursPerDay,
+    );
+  }
+  return null;
+}
+
+function workloadSummaryFromPayload(payload: AssessmentPayload): {
+  title: string;
+  description: string;
+} | null {
+  const annualCases = annualCasesFromPayload(payload);
+  const timePerCaseValue = effectiveTimePerCaseValue(payload);
+  if (
+    typeof timePerCaseValue === "number" &&
+    timePerCaseValue > 0 &&
+    annualCases !== null
+  ) {
+    const caseVolumeValue = effectiveCaseVolumeValue(payload) ?? 0;
+    const caseVolumeUnitLabel =
+      effectiveCaseVolumeUnit(payload) === "day"
+        ? "dag"
+        : effectiveCaseVolumeUnit(payload) === "month"
+          ? "måned"
+          : "uke";
+    const timeUnitLabel =
+      effectiveTimePerCaseUnit(payload) === "hours" ? "timer" : "min";
+    return {
+      title: "Bruker tid per sak og volum",
+      description: `${roundKpiValue(timePerCaseValue)} ${timeUnitLabel} per sak og ${roundKpiValue(caseVolumeValue)} saker per ${caseVolumeUnitLabel} gir ca. ${Math.round(derivedBaselineHoursFromPayload(payload) ?? 0)} timer per år.`,
+    };
+  }
+
+  const manualFteEstimate = payload.manualFteEstimate;
+  if (typeof manualFteEstimate === "number" && manualFteEstimate > 0) {
+    return {
+      title: "Bruker FTE som grunnlag",
+      description: `${roundKpiValue(manualFteEstimate)} årsverk med ${roundKpiValue(payload.workingHoursPerDay)} timer per dag og ${Math.round(payload.workingDays)} arbeidsdager gir ca. ${Math.round(manualFteEstimate * payload.workingDays * payload.workingHoursPerDay)} timer per år.`,
+    };
+  }
+
+  return null;
+}
+
+function syncWorkloadDerivedFields(
+  payload: AssessmentPayload,
+): AssessmentPayload {
+  const derivedBaselineHours = derivedBaselineHoursFromPayload(payload);
+  if (derivedBaselineHours === null) {
+    return payload;
+  }
+  return {
+    ...payload,
+    baselineHours: derivedBaselineHours,
+  };
 }
 
 type Props = { assessmentId: Id<"assessments"> };
@@ -199,6 +371,7 @@ export function AssessmentWizard({ assessmentId }: Props) {
   /** Eksplisitt lagring før navigasjon (Ferdig / forlat veiviser). */
   const [leavingBusy, setLeavingBusy] = useState(false);
   const router = useRouter();
+  const assessmentRow = data?.assessment ?? null;
 
   const goneFromServer =
     data !== undefined &&
@@ -258,10 +431,10 @@ export function AssessmentWizard({ assessmentId }: Props) {
   }, [data?.draft?.payload, data?.draft?._id, data?.draft?.revision]);
 
   useEffect(() => {
-    if (data?.assessment) {
-      setTitleDraft(data.assessment.title);
+    if (assessmentRow) {
+      setTitleDraft(assessmentRow.title);
     }
-  }, [data?.assessment?.title, assessmentId]);
+  }, [assessmentRow, assessmentId]);
 
   const computed = useMemo(() => {
     if (!payload) return null;
@@ -269,6 +442,18 @@ export function AssessmentWizard({ assessmentId }: Props) {
       payloadToSnapshot(payload as unknown as Record<string, unknown>),
     );
   }, [payload]);
+  const annualCasesEstimate = useMemo(
+    () => (payload ? annualCasesFromPayload(payload) : null),
+    [payload],
+  );
+  const derivedBaselineHoursEstimate = useMemo(
+    () => (payload ? derivedBaselineHoursFromPayload(payload) : null),
+    [payload],
+  );
+  const workloadSummary = useMemo(
+    () => (payload ? workloadSummaryFromPayload(payload) : null),
+    [payload],
+  );
 
   const evaluationContext = useMemo((): AssessmentEvaluationContext | undefined => {
     if (!payload) return undefined;
@@ -408,8 +593,8 @@ export function AssessmentWizard({ assessmentId }: Props) {
   }, [assessmentId, canEdit, draftConflict, saveDraft]);
 
   useEffect(() => {
-    if (!canEdit || !data?.assessment) return;
-    const server = data.assessment.title;
+    if (!canEdit || !assessmentRow) return;
+    const server = assessmentRow.title;
     const trimmed = titleDraft.trim();
     if (trimmed === server || trimmed === "") return;
     const t = setTimeout(() => {
@@ -431,8 +616,7 @@ export function AssessmentWizard({ assessmentId }: Props) {
   }, [
     titleDraft,
     canEdit,
-    data?.assessment?._id,
-    data?.assessment?.title,
+    assessmentRow,
     assessmentId,
     updateAssessmentTitle,
   ]);
@@ -646,15 +830,42 @@ export function AssessmentWizard({ assessmentId }: Props) {
 
   const [candidatePickerKey, setCandidatePickerKey] = useState(0);
 
+  function applyPayloadPatch(
+    patch: Partial<AssessmentPayload>,
+    options?: { manualBaselineOverride?: boolean },
+  ) {
+    setPayload((prev) => {
+      if (!prev) {
+        return prev;
+      }
+      const next = { ...prev, ...patch };
+      if (options?.manualBaselineOverride) {
+        return {
+          ...next,
+          timePerCaseValue: undefined,
+          timePerCaseUnit: undefined,
+          caseVolumeValue: undefined,
+          caseVolumeUnit: undefined,
+          workloadInputMode: "per_case",
+          minutesPerCase: undefined,
+          casesPerWeek: undefined,
+          casesPerMonth: undefined,
+          manualFteEstimate: undefined,
+        };
+      }
+      return syncWorkloadDerivedFields(next);
+    });
+  }
+
   function update<K extends keyof AssessmentPayload>(
     key: K,
     value: AssessmentPayload[K],
   ) {
-    setPayload((prev) => (prev ? { ...prev, [key]: value } : prev));
+    applyPayloadPatch({ [key]: value } as Partial<AssessmentPayload>);
   }
 
   function updateMany(patch: Partial<AssessmentPayload>) {
-    setPayload((prev) => (prev ? { ...prev, ...patch } : prev));
+    applyPayloadPatch(patch);
   }
 
   if (data === undefined || access === undefined) {
@@ -952,6 +1163,299 @@ export function AssessmentWizard({ assessmentId }: Props) {
                     />
                   </div>
                 </div>
+                <div className="space-y-4 rounded-2xl bg-muted/10 p-5 ring-1 ring-black/[0.04] dark:ring-white/[0.06]">
+                  <div className="space-y-1">
+                    <h3 className="text-base font-semibold text-foreground">
+                      Tallgrunnlag
+                    </h3>
+                    <p className="text-sm text-muted-foreground">
+                      Legg inn volum og tidsbruk tidlig, så får dere et bedre grunnlag for
+                      vurderingen med en gang.
+                    </p>
+                  </div>
+                  <div className="rounded-2xl border border-primary/15 bg-background/80 p-4">
+                    <p className="text-sm font-medium text-foreground">
+                      Dette brukes direkte i vurderingen
+                    </p>
+                    <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                      Tallene under styrer beregningen av `Timer / år`, `FTE` og dermed hvor
+                      mye manuelt arbeid vurderingen legger til grunn. Hvis du lar feltene stå
+                      tomme, brukes det grove anslaget i spørsmålet om manuelt arbeid lenger
+                      ned.
+                    </p>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <Badge variant="outline">Påvirker Timer / år</Badge>
+                      <Badge variant="outline">Påvirker FTE</Badge>
+                      <Badge variant="outline">Påvirker prioritering</Badge>
+                    </div>
+                  </div>
+                  <div className="grid gap-3 md:grid-cols-2">
+                    <button
+                      type="button"
+                      className={cn(
+                        "rounded-2xl border p-4 text-left transition",
+                        effectiveWorkloadInputMode(payload) === "per_case"
+                          ? "border-primary bg-primary/5 shadow-sm"
+                          : "border-border/50 bg-background/70 hover:bg-background",
+                      )}
+                      onClick={() =>
+                        applyPayloadPatch({
+                          workloadInputMode: "per_case",
+                          manualFteEstimate: undefined,
+                        })
+                      }
+                      disabled={!canEdit}
+                    >
+                      <p className="text-sm font-semibold text-foreground">
+                        Jeg vet tid per sak og volum
+                      </p>
+                      <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                        Bruk denne når dere vet omtrent hvor lang tid en sak tar, og hvor mange
+                        saker dere håndterer.
+                      </p>
+                    </button>
+                    <button
+                      type="button"
+                      className={cn(
+                        "rounded-2xl border p-4 text-left transition",
+                        effectiveWorkloadInputMode(payload) === "fte"
+                          ? "border-primary bg-primary/5 shadow-sm"
+                          : "border-border/50 bg-background/70 hover:bg-background",
+                      )}
+                      onClick={() =>
+                        applyPayloadPatch({
+                          workloadInputMode: "fte",
+                          timePerCaseValue: undefined,
+                          timePerCaseUnit: undefined,
+                          caseVolumeValue: undefined,
+                          caseVolumeUnit: undefined,
+                          minutesPerCase: undefined,
+                          casesPerWeek: undefined,
+                          casesPerMonth: undefined,
+                        })
+                      }
+                      disabled={!canEdit}
+                    >
+                      <p className="text-sm font-semibold text-foreground">
+                        Jeg vet bare omtrent total ressursbruk
+                      </p>
+                      <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                        Bruk denne når dere ikke kjenner tid per sak, men vet omtrent hvor mange
+                        årsverk som går med.
+                      </p>
+                    </button>
+                  </div>
+                  <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                    {effectiveWorkloadInputMode(payload) === "per_case" ? (
+                      <>
+                    <div className="space-y-2 xl:col-span-2">
+                      <Label htmlFor="screening-time-per-case">
+                        Hvor mye tid bruker dere vanligvis per sak?
+                      </Label>
+                      <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_11rem]">
+                        <Input
+                          id="screening-time-per-case"
+                          inputMode="decimal"
+                          value={
+                            effectiveTimePerCaseValue(payload) === undefined
+                              ? ""
+                              : String(effectiveTimePerCaseValue(payload))
+                          }
+                          onChange={(e) =>
+                            applyPayloadPatch({
+                              timePerCaseValue: parseOptionalKpiNumber(
+                                e.target.value,
+                                effectiveTimePerCaseValue(payload),
+                              ),
+                              timePerCaseUnit: effectiveTimePerCaseUnit(payload),
+                              minutesPerCase: undefined,
+                            })
+                          }
+                          disabled={!canEdit}
+                          placeholder="F.eks. 12"
+                          className="h-10 rounded-xl bg-background shadow-sm"
+                        />
+                        <select
+                          className="h-10 rounded-xl border border-input bg-background px-3 text-sm shadow-sm"
+                          value={effectiveTimePerCaseUnit(payload)}
+                          onChange={(e) =>
+                            applyPayloadPatch({
+                              timePerCaseValue: effectiveTimePerCaseValue(payload),
+                              timePerCaseUnit: e.target.value as TimePerCaseUnit,
+                              minutesPerCase: undefined,
+                            })
+                          }
+                          disabled={!canEdit}
+                        >
+                          <option value="minutes">Minutter</option>
+                          <option value="hours">Timer</option>
+                        </select>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        Velg først tall, og deretter om det gjelder minutter eller timer per
+                        sak.
+                      </p>
+                    </div>
+                    <div className="space-y-2 xl:col-span-2">
+                      <Label htmlFor="screening-case-volume">
+                        Hvor mange saker gjør dere vanligvis?
+                      </Label>
+                      <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_11rem]">
+                        <Input
+                          id="screening-case-volume"
+                          inputMode="decimal"
+                          value={
+                            effectiveCaseVolumeValue(payload) === undefined
+                              ? ""
+                              : String(effectiveCaseVolumeValue(payload))
+                          }
+                          onChange={(e) =>
+                            applyPayloadPatch({
+                              caseVolumeValue: parseOptionalKpiNumber(
+                                e.target.value,
+                                effectiveCaseVolumeValue(payload),
+                              ),
+                              caseVolumeUnit: effectiveCaseVolumeUnit(payload),
+                              casesPerWeek: undefined,
+                              casesPerMonth: undefined,
+                            })
+                          }
+                          disabled={!canEdit}
+                          placeholder="F.eks. 40"
+                          className="h-10 rounded-xl bg-background shadow-sm"
+                        />
+                        <select
+                          className="h-10 rounded-xl border border-input bg-background px-3 text-sm shadow-sm"
+                          value={effectiveCaseVolumeUnit(payload)}
+                          onChange={(e) =>
+                            applyPayloadPatch({
+                              caseVolumeValue: effectiveCaseVolumeValue(payload),
+                              caseVolumeUnit: e.target.value as CaseVolumeUnit,
+                              casesPerWeek: undefined,
+                              casesPerMonth: undefined,
+                            })
+                          }
+                          disabled={!canEdit}
+                        >
+                          <option value="day">Per dag</option>
+                          <option value="week">Per uke</option>
+                          <option value="month">Per måned</option>
+                        </select>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        Velg volumet slik dere vanligvis snakker om det: per dag, uke eller
+                        måned.
+                      </p>
+                    </div>
+                      </>
+                    ) : null}
+                    {effectiveWorkloadInputMode(payload) === "fte" ? (
+                    <div className="space-y-2">
+                      <Label htmlFor="screening-manual-fte">
+                        Omtrent hvor mange årsverk går med
+                      </Label>
+                      <Input
+                        id="screening-manual-fte"
+                        inputMode="decimal"
+                        value={
+                          payload.manualFteEstimate === undefined
+                            ? ""
+                            : String(payload.manualFteEstimate)
+                        }
+                        onChange={(e) =>
+                          applyPayloadPatch({
+                            manualFteEstimate: parseOptionalKpiNumber(
+                              e.target.value,
+                              payload.manualFteEstimate,
+                            ),
+                          })
+                        }
+                        disabled={!canEdit}
+                        placeholder="F.eks. 1.5"
+                        className="h-10 rounded-xl bg-background shadow-sm"
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Bruk dette hvis dere ikke kjenner tid per sak, men vet omtrent total
+                        ressursbruk.
+                      </p>
+                    </div>
+                    ) : null}
+                    {effectiveWorkloadInputMode(payload) === "fte" ? (
+                      <>
+                    <div className="space-y-2">
+                      <Label htmlFor="screening-working-days">
+                        Hvor mange arbeidsdager brukes i året
+                      </Label>
+                      <Input
+                        id="screening-working-days"
+                        inputMode="decimal"
+                        value={String(payload.workingDays)}
+                        onChange={(e) =>
+                          update(
+                            "workingDays",
+                            parseKpiNumber(
+                              e.target.value,
+                              KPI_DEFAULTS.workingDays,
+                              payload.workingDays,
+                            ),
+                          )
+                        }
+                        disabled={!canEdit}
+                        className="h-10 rounded-xl bg-background shadow-sm"
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Standard er 230, men juster hvis dere bruker en annen norm.
+                      </p>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="screening-working-hours">
+                        Hvor mange timer er en vanlig arbeidsdag
+                      </Label>
+                      <Input
+                        id="screening-working-hours"
+                        inputMode="decimal"
+                        value={String(payload.workingHoursPerDay)}
+                        onChange={(e) =>
+                          update(
+                            "workingHoursPerDay",
+                            parseKpiNumber(
+                              e.target.value,
+                              KPI_DEFAULTS.workingHoursPerDay,
+                              payload.workingHoursPerDay,
+                            ),
+                          )
+                        }
+                        disabled={!canEdit}
+                        className="h-10 rounded-xl bg-background shadow-sm"
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Brukes sammen med årsverk og arbeidsdager for å regne timer per år.
+                      </p>
+                    </div>
+                      </>
+                    ) : null}
+                  </div>
+                  <div className="rounded-2xl border border-border/50 bg-background/80 p-4">
+                    <p className="text-sm font-medium text-foreground">Slik regner vi nå</p>
+                    {workloadSummary ? (
+                      <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
+                        <span className="font-medium text-foreground">
+                          {workloadSummary.title}.
+                        </span>{" "}
+                        {workloadSummary.description}
+                      </p>
+                    ) : (
+                      <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
+                        Velg først hvordan dere vil oppgi arbeidsmengden. Deretter viser vi bare
+                        de feltene som trengs for den metoden.
+                      </p>
+                    )}
+                    <p className="mt-2 text-xs text-muted-foreground">
+                      Dette gjør det enklere å fylle riktig og reduserer risikoen for at flere
+                      forskjellige felter sier ulike ting.
+                    </p>
+                  </div>
+                </div>
                 <LikertField
                   id="quick-importance"
                   label="Hvor viktig er dette for virksomheten?"
@@ -1001,11 +1505,29 @@ export function AssessmentWizard({ assessmentId }: Props) {
                   ]}
                   disabled={readOnly}
                 />
-                <div className="grid gap-3 sm:grid-cols-3">
+                <div className="grid gap-3 sm:grid-cols-4">
+                  <ScoreCard
+                    label="Saker / år"
+                    value={
+                      annualCasesEstimate === null
+                        ? "—"
+                        : String(Math.round(annualCasesEstimate))
+                    }
+                    sub="Utledet fra volum"
+                  />
                   <ScoreCard
                     label="Timer / år"
                     value={String(Math.round(payload.baselineHours))}
-                    sub="Raskt anslag"
+                    sub={
+                      derivedBaselineHoursEstimate !== null
+                        ? "Utledet fra tallgrunnlag"
+                        : "Raskt anslag"
+                    }
+                  />
+                  <ScoreCard
+                    label="FTE"
+                    value={computed ? computed.fte.toFixed(2) : "—"}
+                    sub="Beregnet behov"
                   />
                   <ScoreCard
                     label="Datastruktur"
@@ -1323,12 +1845,43 @@ export function AssessmentWizard({ assessmentId }: Props) {
                           disabled={readOnly}
                         />
                         <div className="grid gap-4 sm:grid-cols-2">
+                          <div className="space-y-2">
+                            <Label htmlFor="detail-baselineHours">Manuelle timer / år</Label>
+                            <Input
+                              id="detail-baselineHours"
+                              inputMode="decimal"
+                              value={String(payload.baselineHours)}
+                              onChange={(e) =>
+                                applyPayloadPatch(
+                                  {
+                                    baselineHours: parseKpiNumber(
+                                      e.target.value,
+                                      KPI_DEFAULTS.baselineHours,
+                                      payload.baselineHours,
+                                    ),
+                                  },
+                                  { manualBaselineOverride: true },
+                                )
+                              }
+                              disabled={!canEdit}
+                              className="h-10 rounded-xl bg-background shadow-sm"
+                            />
+                            <p className="text-xs text-muted-foreground">
+                              Manuell overstyring. Dette nullstiller feltene for per sak, volum
+                              og FTE over.
+                            </p>
+                          </div>
                           {(
                             [
-                              ["baselineHours", "Manuelle timer / år", KPI_DEFAULTS.baselineHours],
                               ["reworkHours", "Omarbeid / år", KPI_DEFAULTS.reworkHours],
                               ["auditHours", "Kontroll / år", KPI_DEFAULTS.auditHours],
                               ["thinClientPercent", "Tynnklientandel (%)", 30],
+                              ["workingDays", "Arbeidsdager / år", KPI_DEFAULTS.workingDays],
+                              [
+                                "workingHoursPerDay",
+                                "Timer per arbeidsdag",
+                                KPI_DEFAULTS.workingHoursPerDay,
+                              ],
                             ] as const
                           ).map(([k, label, fallback]) => (
                             <div key={k} className="space-y-2">
@@ -1350,6 +1903,28 @@ export function AssessmentWizard({ assessmentId }: Props) {
                               />
                             </div>
                           ))}
+                          <div className="space-y-2">
+                            <Label htmlFor="detail-manual-fte">FTE / årsverk (anslag)</Label>
+                            <Input
+                              id="detail-manual-fte"
+                              inputMode="decimal"
+                              value={
+                                payload.manualFteEstimate === undefined
+                                  ? ""
+                                  : String(payload.manualFteEstimate)
+                              }
+                              onChange={(e) =>
+                                applyPayloadPatch({
+                                  manualFteEstimate: parseOptionalKpiNumber(
+                                    e.target.value,
+                                    payload.manualFteEstimate,
+                                  ),
+                                })
+                              }
+                              disabled={!canEdit}
+                              className="h-10 rounded-xl bg-background shadow-sm"
+                            />
+                          </div>
                         </div>
                         <div className="rounded-2xl bg-background/80 p-4 ring-1 ring-black/[0.04] dark:ring-white/[0.06]">
                           <div className="flex items-start gap-3">

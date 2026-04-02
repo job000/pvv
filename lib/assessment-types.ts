@@ -22,6 +22,15 @@ export type AssessmentPayload = {
   applicationCount: number;
   ocrRequired: boolean;
   thinClientPercent: number;
+  timePerCaseValue?: number;
+  timePerCaseUnit?: "minutes" | "hours";
+  caseVolumeValue?: number;
+  caseVolumeUnit?: "day" | "week" | "month";
+  workloadInputMode?: "per_case" | "fte";
+  minutesPerCase?: number;
+  casesPerWeek?: number;
+  casesPerMonth?: number;
+  manualFteEstimate?: number;
   baselineHours: number;
   reworkHours: number;
   auditHours: number;

@@ -10,9 +10,18 @@ import { defaultAssessmentPayload } from "./assessmentCreation";
 type IntakeQuestionDoc = {
   _id: string;
   label: string;
-  questionType: "text" | "multiple_choice" | "scale" | "yes_no";
+  questionType: "text" | "number" | "multiple_choice" | "scale" | "yes_no";
   mappingTargets: IntakeMappingTarget[];
 };
+
+type WorkloadNumberField =
+  | "timePerCaseValue"
+  | "caseVolumeValue"
+  | "manualFteEstimate"
+  | "workingDays"
+  | "workingHoursPerDay";
+
+type WorkloadChoiceField = "timePerCaseUnit" | "caseVolumeUnit";
 
 type MappingResult = {
   generatedAssessment: IntakeGeneratedAssessment;
@@ -30,6 +39,8 @@ function normalizedText(answer: IntakeAnswer): string {
   switch (answer.kind) {
     case "text":
       return answer.value.trim();
+    case "number":
+      return String(answer.value);
     case "multiple_choice":
       return answer.label.trim();
     case "scale":
@@ -42,6 +53,8 @@ function normalizedText(answer: IntakeAnswer): string {
 function normalizedScale(answer: IntakeAnswer): number | null {
   switch (answer.kind) {
     case "scale":
+      return clampLikert(answer.value);
+    case "number":
       return clampLikert(answer.value);
     case "yes_no":
       return answer.value ? 4 : 1;
@@ -57,6 +70,29 @@ function normalizedScale(answer: IntakeAnswer): number | null {
       return Number.isFinite(maybe) ? clampLikert(maybe) : null;
     }
   }
+}
+
+function normalizedNumber(answer: IntakeAnswer): number | null {
+  switch (answer.kind) {
+    case "number":
+      return Number.isFinite(answer.value) ? answer.value : null;
+    case "scale":
+      return Number.isFinite(answer.value) ? answer.value : null;
+    case "text": {
+      const maybe = Number(answer.value.replace(",", ".").trim());
+      return Number.isFinite(maybe) ? maybe : null;
+    }
+    default:
+      return null;
+  }
+}
+
+function normalizedChoice(answer: IntakeAnswer): string | null {
+  if (answer.kind === "multiple_choice") {
+    return answer.optionId;
+  }
+  const text = normalizedText(answer).trim().toLowerCase();
+  return text || null;
 }
 
 function normalizeFrequency(answer: IntakeAnswer): number {
@@ -180,6 +216,113 @@ function buildRiskTitle(questionLabel: string): string {
   return questionLabel.trim() || "Identifisert risiko";
 }
 
+function annualCasesFromPayload(payload: AssessmentPayload): number | null {
+  const caseVolumeValue =
+    payload.caseVolumeValue ??
+    payload.casesPerWeek ??
+    payload.casesPerMonth ??
+    undefined;
+  if (!(typeof caseVolumeValue === "number" && caseVolumeValue > 0)) {
+    return null;
+  }
+  const caseVolumeUnit =
+    payload.caseVolumeUnit ??
+    (payload.casesPerMonth !== undefined ? "month" : "week");
+  switch (caseVolumeUnit) {
+    case "day":
+      return caseVolumeValue * 5 * 52;
+    case "month":
+      return caseVolumeValue * 12;
+    case "week":
+    default:
+      return caseVolumeValue * 52;
+  }
+}
+
+function derivedBaselineHoursFromPayload(payload: AssessmentPayload): number | null {
+  const annualCases = annualCasesFromPayload(payload);
+  const timePerCaseValue = payload.timePerCaseValue ?? payload.minutesPerCase ?? undefined;
+  if (
+    typeof timePerCaseValue === "number" &&
+    timePerCaseValue > 0 &&
+    annualCases !== null
+  ) {
+    const hoursPerCase =
+      (payload.timePerCaseUnit ?? "minutes") === "hours"
+        ? timePerCaseValue
+        : timePerCaseValue / 60;
+    return Math.round(hoursPerCase * annualCases * 10) / 10;
+  }
+  if (
+    typeof payload.manualFteEstimate === "number" &&
+    payload.manualFteEstimate > 0 &&
+    payload.workingDays > 0 &&
+    payload.workingHoursPerDay > 0
+  ) {
+    return Math.round(
+      payload.manualFteEstimate * payload.workingDays * payload.workingHoursPerDay * 10,
+    ) / 10;
+  }
+  return null;
+}
+
+function syncWorkloadDerivedFields(payload: AssessmentPayload): AssessmentPayload {
+  const derivedBaselineHours = derivedBaselineHoursFromPayload(payload);
+  if (derivedBaselineHours === null) {
+    return payload;
+  }
+  return {
+    ...payload,
+    baselineHours: derivedBaselineHours,
+  };
+}
+
+function applyAssessmentNumber(
+  payload: AssessmentPayload,
+  field: WorkloadNumberField,
+  value: number,
+): AssessmentPayload {
+  let nextPayload: AssessmentPayload = {
+    ...payload,
+    [field]: value,
+  };
+  if (field === "timePerCaseValue" || field === "caseVolumeValue") {
+    nextPayload = {
+      ...nextPayload,
+      workloadInputMode: "per_case",
+    };
+  }
+  if (field === "manualFteEstimate") {
+    nextPayload = {
+      ...nextPayload,
+      workloadInputMode: "fte",
+    };
+  }
+  return syncWorkloadDerivedFields(nextPayload);
+}
+
+function applyAssessmentChoice(
+  payload: AssessmentPayload,
+  field: WorkloadChoiceField,
+  value: string,
+): AssessmentPayload {
+  if (field === "timePerCaseUnit" && (value === "minutes" || value === "hours")) {
+    return syncWorkloadDerivedFields({
+      ...payload,
+      timePerCaseUnit: value,
+      workloadInputMode: "per_case",
+    });
+  }
+  if (field === "caseVolumeUnit" && (value === "day" || value === "week" || value === "month")) {
+    return syncWorkloadDerivedFields({
+      ...payload,
+      caseVolumeUnit: value,
+      workloadInputMode: "per_case",
+    });
+  }
+  return payload;
+}
+
 export function generateIntakeSuggestion(
   questions: IntakeQuestionDoc[],
   answers: IntakeAnswer[],
@@ -215,6 +358,35 @@ export function generateIntakeSuggestion(
             [target.field]: scale,
           };
           autoFilledFields.add(target.field);
+        }
+        continue;
+      }
+      if (target.kind === "assessmentNumber") {
+        const numericValue = normalizedNumber(answer);
+        if (numericValue !== null) {
+          payload = applyAssessmentNumber(payload, target.field, numericValue);
+          autoFilledFields.add(target.field);
+          if (target.field === "timePerCaseValue" || target.field === "caseVolumeValue") {
+            autoFilledFields.add("workloadInputMode");
+          }
+          if (target.field === "manualFteEstimate") {
+            autoFilledFields.add("workloadInputMode");
+          }
+          if (derivedBaselineHoursFromPayload(payload) !== null) {
+            autoFilledFields.add("baselineHours");
+          }
+        }
+        continue;
+      }
+      if (target.kind === "assessmentChoice") {
+        const choiceValue = normalizedChoice(answer);
+        if (choiceValue) {
+          payload = applyAssessmentChoice(payload, target.field, choiceValue);
+          autoFilledFields.add(target.field);
+          autoFilledFields.add("workloadInputMode");
+          if (derivedBaselineHoursFromPayload(payload) !== null) {
+            autoFilledFields.add("baselineHours");
+          }
         }
         continue;
       }

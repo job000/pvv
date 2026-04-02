@@ -49,6 +49,21 @@ export const assessmentPayloadFields = {
   applicationCount: v.number(),
   ocrRequired: v.boolean(),
   thinClientPercent: v.number(),
+  timePerCaseValue: v.optional(v.number()),
+  timePerCaseUnit: v.optional(
+    v.union(v.literal("minutes"), v.literal("hours")),
+  ),
+  caseVolumeValue: v.optional(v.number()),
+  caseVolumeUnit: v.optional(
+    v.union(v.literal("day"), v.literal("week"), v.literal("month")),
+  ),
+  workloadInputMode: v.optional(
+    v.union(v.literal("per_case"), v.literal("fte")),
+  ),
+  minutesPerCase: v.optional(v.number()),
+  casesPerWeek: v.optional(v.number()),
+  casesPerMonth: v.optional(v.number()),
+  manualFteEstimate: v.optional(v.number()),
   baselineHours: v.number(),
   reworkHours: v.number(),
   auditHours: v.number(),
@@ -119,6 +134,7 @@ export const intakeLayoutModeValidator = v.union(
 
 export const intakeQuestionTypeValidator = v.union(
   v.literal("text"),
+  v.literal("number"),
   v.literal("multiple_choice"),
   v.literal("scale"),
   v.literal("yes_no"),
@@ -194,6 +210,23 @@ export const intakeMappingTargetValidator = v.union(
     ),
   }),
   v.object({
+    kind: v.literal("assessmentNumber"),
+    field: v.union(
+      v.literal("timePerCaseValue"),
+      v.literal("caseVolumeValue"),
+      v.literal("manualFteEstimate"),
+      v.literal("workingDays"),
+      v.literal("workingHoursPerDay"),
+    ),
+  }),
+  v.object({
+    kind: v.literal("assessmentChoice"),
+    field: v.union(
+      v.literal("timePerCaseUnit"),
+      v.literal("caseVolumeUnit"),
+    ),
+  }),
+  v.object({
     kind: v.literal("derivedFrequency"),
   }),
   v.object({
@@ -212,6 +245,11 @@ export const intakeAnswerValidator = v.union(
     questionId: v.string(),
     kind: v.literal("text"),
     value: v.string(),
+  }),
+  v.object({
+    questionId: v.string(),
+    kind: v.literal("number"),
+    value: v.number(),
   }),
   v.object({
     questionId: v.string(),

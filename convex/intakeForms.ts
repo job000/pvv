@@ -30,7 +30,7 @@ function validateConditionalQuestions(
   questions: Array<{
     id: string;
     label: string;
-    questionType: "text" | "multiple_choice" | "scale" | "yes_no";
+    questionType: "text" | "number" | "multiple_choice" | "scale" | "yes_no";
     options?: Array<{ id: string; label: string }>;
     visibilityRule?: {
       parentQuestionKey: string;

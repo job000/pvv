@@ -56,7 +56,7 @@ type EditableQuestion = {
   id: string;
   label: string;
   helpText?: string;
-  questionType: "text" | "multiple_choice" | "scale" | "yes_no";
+  questionType: "text" | "number" | "multiple_choice" | "scale" | "yes_no";
   required: boolean;
   options: Array<{ id: string; label: string }>;
   visibilityRule?:
@@ -71,6 +71,8 @@ type EditableQuestion = {
   mappingTargets: Array<
     | { kind: "assessmentText"; field: string }
     | { kind: "assessmentScale"; field: string }
+    | { kind: "assessmentNumber"; field: string }
+    | { kind: "assessmentChoice"; field: string }
     | { kind: "derivedFrequency" }
     | { kind: "rosConsequence" }
     | { kind: "rosRiskDescription" }
@@ -171,6 +173,7 @@ type SubmissionDetail = {
     personDataSignal: boolean;
     answers: Array<
       | { questionId: string; kind: "text"; value: string }
+      | { questionId: string; kind: "number"; value: number }
       | {
           questionId: string;
           kind: "multiple_choice";
@@ -266,6 +269,8 @@ function renderQuestionTypeLabel(kind: EditableQuestion["questionType"]) {
   switch (kind) {
     case "text":
       return "Tekst";
+    case "number":
+      return "Tall";
     case "multiple_choice":
       return "Flervalg";
     case "scale":
@@ -273,6 +278,14 @@ function renderQuestionTypeLabel(kind: EditableQuestion["questionType"]) {
     case "yes_no":
       return "Ja / Nei";
   }
+}
+
+function canHaveFollowUps(questionType: EditableQuestion["questionType"]) {
+  return (
+    questionType === "yes_no" ||
+    questionType === "multiple_choice" ||
+    questionType === "scale"
+  );
 }
 
 function getQuestionHeadline(question: EditableQuestion, index: number) {
@@ -412,7 +425,12 @@ function MappingTargetPicker({
               checked={checked}
               onChange={(event) => {
                 if (event.target.checked) {
-                  if (target.kind === "assessmentText" || target.kind === "assessmentScale") {
+                  if (
+                    target.kind === "assessmentText" ||
+                    target.kind === "assessmentScale" ||
+                    target.kind === "assessmentNumber" ||
+                    target.kind === "assessmentChoice"
+                  ) {
                     onChange([
                       ...question.mappingTargets,
                       { kind: target.kind, field: target.value },
@@ -549,6 +567,11 @@ function AdminFormPreview({
               {question.questionType === "text" ? (
                 <div className="rounded-2xl border border-border/50 bg-card px-4 py-5 text-sm text-muted-foreground">
                   Tekstsvar
+                </div>
+              ) : null}
+              {question.questionType === "number" ? (
+                <div className="rounded-2xl border border-border/50 bg-card px-4 py-5 text-sm text-muted-foreground">
+                  Tallfelt
                 </div>
               ) : null}
               {question.questionType === "multiple_choice" ? (
@@ -703,9 +726,9 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
   const [selectedTargetWorkspaceId, setSelectedTargetWorkspaceId] = useState<
     Id<"workspaces"> | null
   >(null);
-  const [formsView, setFormsView] = useState<"cards" | "compact">("cards");
-  const [showFormOverview, setShowFormOverview] = useState(true);
-  const [showResponses, setShowResponses] = useState(true);
+  const [formsView, setFormsView] = useState<"cards" | "compact">("compact");
+  const [showFormOverview, setShowFormOverview] = useState(false);
+  const [showResponses, setShowResponses] = useState(false);
 
   const selectedForm = forms.find((form) => form._id === activeFormId) ?? null;
   const selectedFormQuestions = useMemo(
@@ -807,7 +830,7 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
     }
     const availableParents = questions
       .slice(0, questionIndex)
-      .filter((candidate) => candidate.questionType !== "text");
+      .filter((candidate) => canHaveFollowUps(candidate.questionType));
 
     if (enabled && availableParents.length === 0) {
       toast.error(
@@ -845,7 +868,7 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
 
   function addFollowUpQuestion(parentId: string) {
     const parent = questions.find((question) => question.id === parentId);
-    if (!parent || parent.questionType === "text") {
+    if (!parent || !canHaveFollowUps(parent.questionType)) {
       toast.error("Oppfølgingsspørsmål må kobles til Ja / Nei, flervalg eller skala.");
       return;
     }
@@ -1064,7 +1087,12 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
   const mappingSummary = selectedFormQuestions.reduce(
     (acc, question) => {
       for (const target of question.mappingTargets) {
-        if (target.kind === "assessmentText" || target.kind === "assessmentScale") {
+        if (
+          target.kind === "assessmentText" ||
+          target.kind === "assessmentScale" ||
+          target.kind === "assessmentNumber" ||
+          target.kind === "assessmentChoice"
+        ) {
           acc.assessment += 1;
         } else if (
           target.kind === "rosConsequence" ||
@@ -1158,31 +1186,6 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
                     Kompakt
                   </Button>
                 </div>
-                {selectedForm ? (
-                  <>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className="rounded-xl"
-                      disabled={!editorData}
-                      onClick={() => {
-                        primeEditorState(editorData);
-                        setEditorOpen(true);
-                      }}
-                    >
-                      Rediger skjema
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className="rounded-xl"
-                      onClick={() => setSettingsOpen(true)}
-                    >
-                      <Settings2 className="size-4" />
-                      Innstillinger
-                    </Button>
-                  </>
-                ) : null}
               </div>
             </div>
           </CardHeader>
@@ -1256,11 +1259,11 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
             )}
 
             {selectedForm ? (
-              <div className="space-y-4 rounded-3xl border border-border/60 bg-gradient-to-br from-muted/20 via-background to-muted/10 p-5">
-                <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                  <div className="space-y-2">
+              <div className="space-y-4 rounded-[28px] border border-border/60 bg-card p-4 shadow-sm sm:p-5">
+                <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+                  <div className="min-w-0 space-y-3">
                     <div className="flex flex-wrap items-center gap-2">
-                      <p className="font-heading text-lg font-semibold">{selectedForm.title}</p>
+                      <p className="font-heading text-xl font-semibold">{selectedForm.title}</p>
                       <Badge variant={selectedForm.status === "published" ? "secondary" : "outline"}>
                         {selectedForm.status === "published"
                           ? "Publisert"
@@ -1273,10 +1276,10 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
                         <Badge variant="outline">Kopi fra mal</Badge>
                       ) : null}
                     </div>
-                    <p className="max-w-2xl text-sm text-muted-foreground">
+                    <p className="max-w-3xl text-sm text-muted-foreground">
                       {selectedFormDescription.trim()
                         ? selectedFormDescription
-                        : "Dette skjemaet er klart for deling, forhåndsvisning og behandling av innsendte forslag."}
+                        : "Bruk skjemaet til innsamling, forhåndsvisning og behandling av innsendte forslag."}
                     </p>
                     <div className="flex flex-wrap gap-2">
                       {selectedFormBadges.map((badge) => (
@@ -1289,12 +1292,14 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
                   <div className="flex flex-wrap gap-2">
                     <Button
                       type="button"
-                      variant="outline"
                       className="rounded-xl"
-                      onClick={() => setShowFormOverview((prev) => !prev)}
+                      disabled={!editorData}
+                      onClick={() => {
+                        primeEditorState(editorData);
+                        setEditorOpen(true);
+                      }}
                     >
-                      {showFormOverview ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
-                      {showFormOverview ? "Skjul oversikt" : "Vis oversikt"}
+                      Rediger skjema
                     </Button>
                     <Button
                       type="button"
@@ -1307,88 +1312,110 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
                       }}
                     >
                       <ExternalLink className="size-4" />
-                      Forhåndsvis skjema
+                      Forhåndsvis
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="rounded-xl"
+                      onClick={() => setSettingsOpen(true)}
+                    >
+                      <Settings2 className="size-4" />
+                      Innstillinger
                     </Button>
                   </div>
                 </div>
 
-                {showFormOverview ? (
-                  <div className="space-y-4">
-                    <div className="grid gap-3 md:grid-cols-3">
-                      <div className="rounded-2xl border border-border/50 bg-background/80 p-4">
-                        <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground">
-                          Mapping
+                <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                  <div className="rounded-2xl border border-border/50 bg-muted/10 px-4 py-3">
+                    <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground">
+                      Spørsmål og svar
+                    </p>
+                    <p className="mt-1 text-sm font-medium">
+                      {selectedForm.questionCount} spørsmål, {activeFormResponseRows.length} svar
+                    </p>
+                  </div>
+                  <div className="rounded-2xl border border-border/50 bg-muted/10 px-4 py-3">
+                    <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground">
+                      Delbare lenker
+                    </p>
+                    <p className="mt-1 text-sm font-medium">{links.length} lenker klare for deling</p>
+                  </div>
+                  <div className="rounded-2xl border border-border/50 bg-muted/10 px-4 py-3">
+                    <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground">
+                      Mapping
+                    </p>
+                    <p className="mt-1 text-sm font-medium">
+                      {mappingSummary.assessment} vurdering, {mappingSummary.ros} ROS, {mappingSummary.pvv} PVV
+                    </p>
+                  </div>
+                  <div className="rounded-2xl border border-border/50 bg-muted/10 px-4 py-3">
+                    <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground">
+                      Deling
+                    </p>
+                    <p className="mt-1 text-sm font-medium">{activations.length} aktiveringer</p>
+                  </div>
+                </div>
+
+                <div className="rounded-2xl border border-border/50 bg-background/70 p-4">
+                  <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                    <div>
+                      <p className="text-sm font-medium">Detaljer</p>
+                      <p className="text-xs text-muted-foreground">
+                        Åpne bare mer informasjon når du trenger den.
+                      </p>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="rounded-xl"
+                      onClick={() => setShowFormOverview((prev) => !prev)}
+                    >
+                      {showFormOverview ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+                      {showFormOverview ? "Skjul detaljer" : "Vis detaljer"}
+                    </Button>
+                  </div>
+                  {showFormOverview ? (
+                    <div className="mt-4 grid gap-4 lg:grid-cols-2">
+                      <div className="rounded-2xl border border-border/50 bg-muted/10 p-4">
+                        <p className="text-sm font-medium">Skjemaoppsett</p>
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          <Badge variant="outline">
+                            {selectedFormConfirmationMode === "email_copy"
+                              ? "E-postbekreftelse"
+                              : "Ingen bekreftelse"}
+                          </Badge>
+                          <Badge variant="outline">
+                            {selectedFormLayoutMode === "one_per_screen"
+                              ? "Ett spørsmål per skjerm"
+                              : "Gruppert visning"}
+                          </Badge>
+                        </div>
+                        <p className="mt-3 text-sm text-muted-foreground">
+                          Endre deling, lenker og maloppsett i innstillinger.
                         </p>
+                      </div>
+                      <div className="rounded-2xl border border-border/50 bg-muted/10 p-4">
+                        <p className="text-sm font-medium">Automatisk utfylling</p>
                         <div className="mt-3 flex flex-wrap gap-2">
                           <Badge variant="outline">Vurdering {mappingSummary.assessment}</Badge>
                           <Badge variant="outline">ROS {mappingSummary.ros}</Badge>
                           <Badge variant="outline">PVV {mappingSummary.pvv}</Badge>
                         </div>
-                      </div>
-                      <div className="rounded-2xl border border-border/50 bg-background/80 p-4">
-                        <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground">
-                          Delbare lenker
-                        </p>
-                        <p className="mt-2 text-2xl font-semibold">{links.length}</p>
-                        <p className="text-sm text-muted-foreground">
-                          Opprett og administrer lenker i innstillinger.
-                        </p>
-                      </div>
-                      <div className="rounded-2xl border border-border/50 bg-background/80 p-4">
-                        <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground">
-                          Deling mellom arbeidsområder
-                        </p>
-                        <p className="mt-2 text-2xl font-semibold">{activations.length}</p>
-                        <p className="text-sm text-muted-foreground">
-                          {selectedForm.isTemplate
-                            ? "Skjemaet kan aktiveres som kopi andre steder."
-                            : "Åpne innstillinger for å dele skjemaet som mal."}
+                        <p className="mt-3 text-sm text-muted-foreground">
+                          Viser hvor mange koblinger som fyller ut interne felter automatisk.
                         </p>
                       </div>
                     </div>
+                  ) : null}
+                </div>
 
-                    <div className="rounded-2xl border border-border/50 bg-background/80 p-4">
-                      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                        <div>
-                          <p className="text-sm font-medium">Snarveier</p>
-                          <p className="text-xs text-muted-foreground">
-                            Hold hovedsiden ryddig og åpne bare det du trenger.
-                          </p>
-                        </div>
-                        <div className="flex flex-wrap gap-2">
-                          <Button
-                            type="button"
-                            variant="outline"
-                            className="rounded-xl"
-                            onClick={() => setSettingsOpen(true)}
-                          >
-                            <Settings2 className="size-4" />
-                            Åpne innstillinger
-                          </Button>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            className="rounded-xl"
-                            disabled={!editorData}
-                            onClick={() => {
-                              primeEditorState(editorData);
-                              setEditorOpen(true);
-                            }}
-                          >
-                            Rediger spørsmål
-                          </Button>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                ) : null}
-
-                <div className="space-y-3 rounded-2xl border border-border/50 bg-card p-4">
+                <div className="space-y-3 rounded-2xl border border-border/50 bg-background/70 p-4">
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <div>
-                      <p className="text-sm font-medium">Svar på dette skjemaet</p>
+                      <p className="text-sm font-medium">Innsendte svar</p>
                       <p className="text-xs text-muted-foreground">
-                        Åpne et svar for å se detaljer, auto-generert vurdering og ROS-forslag.
+                        Åpne et svar for detaljer, auto-generert vurdering og ROS-forslag.
                       </p>
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
@@ -1424,7 +1451,7 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
                           <button
                             key={submission._id}
                             type="button"
-                            className="flex w-full items-center justify-between gap-3 rounded-2xl border border-border/50 bg-muted/10 p-3 text-left transition hover:bg-muted/20"
+                            className="flex w-full flex-col gap-3 rounded-2xl border border-border/50 bg-muted/10 p-4 text-left transition hover:bg-muted/20 md:flex-row md:items-center md:justify-between"
                             onClick={async () => {
                               setSelectedSubmissionId(submission._id);
                               setReviewTitle(null);
@@ -1437,8 +1464,8 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
                               }
                             }}
                           >
-                            <div>
-                              <p className="text-sm font-medium">
+                            <div className="min-w-0">
+                              <p className="truncate text-sm font-medium">
                                 {submission.generatedAssessmentDraft.title}
                               </p>
                               <p className="mt-1 text-xs text-muted-foreground">
@@ -1706,7 +1733,7 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
                   const warning = plainLanguageWarnings.find((item) => item.id === question.id);
                   const availableParentQuestions = questions
                     .slice(0, index)
-                    .filter((candidate) => candidate.questionType !== "text");
+                    .filter((candidate) => canHaveFollowUps(candidate.questionType));
                   const selectedParent = availableParentQuestions.find(
                     (candidate) => candidate.id === question.visibilityRule?.parentQuestionKey,
                   );
@@ -1842,6 +1869,7 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
                                 }
                               >
                                 <option value="text">Tekst</option>
+                                <option value="number">Tall</option>
                                 <option value="multiple_choice">Flervalg</option>
                                 <option value="scale">Skala 1-5</option>
                                 <option value="yes_no">Ja / Nei</option>
@@ -1950,7 +1978,7 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
                               >
                                 Deaktiver oppfølging
                               </Button>
-                            ) : question.questionType !== "text" ? (
+                            ) : canHaveFollowUps(question.questionType) ? (
                               <Button
                                 type="button"
                                 variant="outline"
@@ -2089,10 +2117,10 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
                                     "Dette spørsmålet vises alltid."}
                                 </p>
                               </div>
-                            ) : question.questionType === "text" ? (
+                            ) : !canHaveFollowUps(question.questionType) ? (
                               <div className="rounded-xl bg-muted/50 px-3 py-3 text-xs text-muted-foreground">
-                                Tekstspørsmål kan ikke styre oppfølgingslogikk. Bruk Ja / Nei,
-                                flervalg eller skala hvis dette spørsmålet skal ha oppfølging.
+                                Bare Ja / Nei, flervalg og skala kan styre oppfølgingslogikk.
+                                Bruk en av disse hvis spørsmålet skal vise oppfølging.
                               </div>
                             ) : childFollowUps.length > 0 ? (
                               <div className="space-y-3 rounded-xl bg-muted/50 px-3 py-3">
@@ -2524,6 +2552,7 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
                       );
                       let answerLabel = "Ikke besvart";
                       if (answer?.kind === "text") answerLabel = answer.value;
+                      if (answer?.kind === "number") answerLabel = String(answer.value);
                       if (answer?.kind === "multiple_choice") answerLabel = answer.label;
                       if (answer?.kind === "scale") answerLabel = String(answer.value);
                       if (answer?.kind === "yes_no") answerLabel = answer.value ? "Ja" : "Nei";

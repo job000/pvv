@@ -292,6 +292,58 @@ export const create = mutation({
   },
 });
 
+export const findLatestForCandidate = query({
+  args: {
+    workspaceId: v.id("workspaces"),
+    candidateId: v.id("candidates"),
+  },
+  handler: async (ctx, args) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) {
+      return null;
+    }
+    await requireWorkspaceMember(ctx, args.workspaceId, userId, "viewer");
+    const candidate = await ctx.db.get(args.candidateId);
+    if (!candidate || candidate.workspaceId !== args.workspaceId) {
+      return null;
+    }
+
+    const candidateCode = candidate.code;
+    const assessments = ctx.db
+      .query("assessments")
+      .withIndex("by_workspace_updated", (q) =>
+        q.eq("workspaceId", args.workspaceId),
+      )
+      .order("desc");
+
+    for await (const assessment of assessments) {
+      if (!(await canReadAssessment(ctx, assessment, userId))) {
+        continue;
+      }
+      const draft = await ctx.db
+        .query("assessmentDrafts")
+        .withIndex("by_assessment", (q) => q.eq("assessmentId", assessment._id))
+        .unique();
+      const draftCandidateCode = draft
+        ? String((draft.payload as Record<string, unknown>).candidateId ?? "")
+        : "";
+      if (draftCandidateCode !== candidateCode) {
+        continue;
+      }
+      const pipelineStatus = normalizePipelineStatus(assessment.pipelineStatus);
+      return {
+        assessmentId: assessment._id,
+        title: assessment.title,
+        updatedAt: assessment.updatedAt,
+        pipelineStatus,
+        nextStepHint: nextStepHint(pipelineStatus),
+      };
+    }
+
+    return null;
+  },
+});
+
 export const updateAssessmentTitle = mutation({
   args: {
     assessmentId: v.id("assessments"),

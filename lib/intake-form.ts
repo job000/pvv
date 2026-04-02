@@ -23,6 +23,7 @@ export const INTAKE_SUBMISSION_STATUSES = [
 
 export const INTAKE_QUESTION_TYPES = [
   "text",
+  "number",
   "multiple_choice",
   "scale",
   "yes_no",
@@ -48,6 +49,19 @@ export const INTAKE_ASSESSMENT_TEXT_FIELDS = [
 export const INTAKE_ASSESSMENT_SCALE_FIELDS = [
   "criticalityBusinessImpact",
   "criticalityRegulatoryRisk",
+] as const;
+
+export const INTAKE_ASSESSMENT_NUMBER_FIELDS = [
+  "timePerCaseValue",
+  "caseVolumeValue",
+  "manualFteEstimate",
+  "workingDays",
+  "workingHoursPerDay",
+] as const;
+
+export const INTAKE_ASSESSMENT_CHOICE_FIELDS = [
+  "timePerCaseUnit",
+  "caseVolumeUnit",
 ] as const;
 
 export const INTAKE_MAPPING_TARGET_LABELS = [
@@ -110,6 +124,41 @@ export const INTAKE_MAPPING_TARGET_LABELS = [
     kind: "assessmentScale",
     value: "criticalityRegulatoryRisk",
     label: "Bruk som viktighet for regelverk og kontroll",
+  },
+  {
+    kind: "assessmentNumber",
+    value: "timePerCaseValue",
+    label: "Lagre som tid per sak",
+  },
+  {
+    kind: "assessmentChoice",
+    value: "timePerCaseUnit",
+    label: "Lagre som enhet for tid per sak",
+  },
+  {
+    kind: "assessmentNumber",
+    value: "caseVolumeValue",
+    label: "Lagre som antall saker",
+  },
+  {
+    kind: "assessmentChoice",
+    value: "caseVolumeUnit",
+    label: "Lagre som periode for antall saker",
+  },
+  {
+    kind: "assessmentNumber",
+    value: "manualFteEstimate",
+    label: "Lagre som årsverk / FTE",
+  },
+  {
+    kind: "assessmentNumber",
+    value: "workingDays",
+    label: "Lagre som arbeidsdager per år",
+  },
+  {
+    kind: "assessmentNumber",
+    value: "workingHoursPerDay",
+    label: "Lagre som timer per arbeidsdag",
   },
   {
     kind: "derivedFrequency",
@@ -188,6 +237,93 @@ export function defaultIntakeQuestions() {
         { id: "rarely", label: "Sjelden" },
       ],
       mappingTargets: [{ kind: "derivedFrequency" as const }],
+    },
+    {
+      id: crypto.randomUUID(),
+      label: "Hvor mye tid bruker dere vanligvis per sak?",
+      helpText: "Fyll inn et tall hvis dere vet omtrent hvor lang tid en sak tar.",
+      questionType: "number" as const,
+      required: false,
+      options: [],
+      mappingTargets: [
+        { kind: "assessmentNumber" as const, field: "timePerCaseValue" as const },
+      ],
+    },
+    {
+      id: crypto.randomUUID(),
+      label: "Er dette minutter eller timer per sak?",
+      helpText: "Velg enheten som passer best til tallet over.",
+      questionType: "multiple_choice" as const,
+      required: false,
+      options: [
+        { id: "minutes", label: "Minutter" },
+        { id: "hours", label: "Timer" },
+      ],
+      mappingTargets: [
+        { kind: "assessmentChoice" as const, field: "timePerCaseUnit" as const },
+      ],
+    },
+    {
+      id: crypto.randomUUID(),
+      label: "Hvor mange saker gjør dere vanligvis?",
+      helpText: "Fyll inn et tall hvis dere vet omtrent hvor mange saker som behandles.",
+      questionType: "number" as const,
+      required: false,
+      options: [],
+      mappingTargets: [
+        { kind: "assessmentNumber" as const, field: "caseVolumeValue" as const },
+      ],
+    },
+    {
+      id: crypto.randomUUID(),
+      label: "Gjelder dette per dag, uke eller måned?",
+      helpText: "Velg perioden som passer best til tallet over.",
+      questionType: "multiple_choice" as const,
+      required: false,
+      options: [
+        { id: "day", label: "Per dag" },
+        { id: "week", label: "Per uke" },
+        { id: "month", label: "Per måned" },
+      ],
+      mappingTargets: [
+        { kind: "assessmentChoice" as const, field: "caseVolumeUnit" as const },
+      ],
+    },
+    {
+      id: crypto.randomUUID(),
+      label: "Hvis dere heller tenker i total ressursbruk: hvor mange årsverk går med?",
+      helpText: "Fyll inn omtrent antall årsverk hvis det er lettere enn tid per sak.",
+      questionType: "number" as const,
+      required: false,
+      options: [],
+      mappingTargets: [
+        { kind: "assessmentNumber" as const, field: "manualFteEstimate" as const },
+      ],
+    },
+    {
+      id: crypto.randomUUID(),
+      label: "Hvor mange arbeidsdager bruker dere i løpet av et år?",
+      helpText: "Bare fyll inn hvis dere bruker noe annet enn standard arbeidsår.",
+      questionType: "number" as const,
+      required: false,
+      options: [],
+      mappingTargets: [
+        { kind: "assessmentNumber" as const, field: "workingDays" as const },
+      ],
+    },
+    {
+      id: crypto.randomUUID(),
+      label: "Hvor mange timer er en vanlig arbeidsdag hos dere?",
+      helpText: "Bare fyll inn hvis dere vil overstyre standard arbeidsdag.",
+      questionType: "number" as const,
+      required: false,
+      options: [],
+      mappingTargets: [
+        {
+          kind: "assessmentNumber" as const,
+          field: "workingHoursPerDay" as const,
+        },
+      ],
     },
     {
       id: crypto.randomUUID(),

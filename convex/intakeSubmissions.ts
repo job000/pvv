@@ -36,6 +36,7 @@ type VisibilityRule =
 
 type IntakeAnswerDoc =
   | { questionId: string; kind: "text"; value: string }
+  | { questionId: string; kind: "number"; value: number }
   | { questionId: string; kind: "multiple_choice"; optionId: string; label: string }
   | { questionId: string; kind: "scale"; value: number }
   | { questionId: string; kind: "yes_no"; value: boolean };
@@ -44,7 +45,7 @@ type IntakeQuestionDoc = {
   _id: string;
   questionKey?: string;
   label: string;
-  questionType: "text" | "multiple_choice" | "scale" | "yes_no";
+  questionType: "text" | "number" | "multiple_choice" | "scale" | "yes_no";
   required: boolean;
   mappingTargets: IntakeMappingTarget[];
   visibilityRule?: VisibilityRule;
@@ -240,6 +241,9 @@ export const submitPublic = mutation({
       if (answer.kind === "text" && !answer.value.trim() && question.required) {
         throw new Error(`Svar mangler for «${question.label}».`);
       }
+      if (answer.kind === "number" && !Number.isFinite(answer.value)) {
+        throw new Error(`Ugyldig tallformat for «${question.label}».`);
+      }
     }
 
     const suggestion = generateIntakeSuggestion(visibleQuestions, visibleAnswers);
@@ -287,6 +291,8 @@ export const submitPublic = mutation({
             let answerLabel = "Ikke besvart";
             if (answer?.kind === "text") {
               answerLabel = answer.value.trim() || "Ikke besvart";
+            } else if (answer?.kind === "number") {
+              answerLabel = String(answer.value);
             } else if (answer?.kind === "multiple_choice") {
               answerLabel = answer.label;
             } else if (answer?.kind === "scale") {
