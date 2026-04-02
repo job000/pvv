@@ -70,7 +70,7 @@ export default async function RootLayout({
         className="flex min-h-dvh flex-col touch-manipulation"
         suppressHydrationWarning
       >
-        <ConvexAuthNextjsServerProvider>
+        <ConvexAuthNextjsServerProvider verbose={process.env.NODE_ENV === "development"}>
           <ConvexClientProvider>
             <ThemeProvider>
               <UserPreferencesSync />

@@ -2,10 +2,6 @@
 
 import { PasswordInput } from "@/components/ui/password-input";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-} from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { TailarkAuthBackground } from "@/components/auth/tailark-auth-background";
@@ -14,7 +10,7 @@ import { ThemeModeToggle } from "@/components/theme-mode-toggle";
 import { formatUserFacingError } from "@/lib/user-facing-error";
 import { useAuthActions } from "@convex-dev/auth/react";
 import { cn } from "@/lib/utils";
-import { Mail } from "lucide-react";
+import { ArrowRight, Loader2, Lock, Mail } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 
@@ -43,12 +39,9 @@ export function AuthForm({
         email,
         password,
       });
-      // OAuth/magic link har allerede satt window.location i auth-biblioteket.
       if (result.redirect !== undefined) {
         return;
       }
-      // Full navigasjon: unngår race der App Router navigerer før Convex Auth
-      // har bekreftet sesjon (første innlogging virket «død», andre forsøk gikk).
       const next = new URLSearchParams(window.location.search).get("next");
       const safeNext =
         next?.startsWith("/") && !next.startsWith("//") ? next : "/dashboard";
@@ -72,7 +65,7 @@ export function AuthForm({
   return (
     <div
       className={cn(
-        "relative flex min-h-dvh flex-col",
+        "relative flex min-h-dvh flex-col items-center justify-center",
         className,
       )}
     >
@@ -82,26 +75,36 @@ export function AuthForm({
         <ThemeModeToggle />
       </div>
 
-      <div className="relative z-10 flex flex-1 flex-col items-center px-4 pb-10 pt-16 sm:px-6 sm:pt-20">
-        <div className="flex flex-col items-center gap-1.5">
-          <BrandMark size={40} priority className="rounded-xl" />
-          <p className="font-heading text-foreground text-base font-semibold tracking-tight">
-            FRO
-          </p>
+      <div className="relative z-10 flex w-full max-w-[26rem] flex-col items-center px-5">
+        {/* Brand */}
+        <div className="flex flex-col items-center gap-3">
+          <div className="relative">
+            <div className="absolute -inset-3 rounded-3xl bg-primary/20 blur-xl motion-safe:animate-pulse" />
+            <BrandMark size={36} priority className="relative rounded-xl shadow-md ring-1 ring-white/20" />
+          </div>
+          <div className="text-center">
+            <h1 className="font-heading text-xl font-bold tracking-tight">
+              {isSignUp ? "Opprett konto" : "Velkommen tilbake"}
+            </h1>
+            <p className="text-muted-foreground mt-1 text-sm">
+              {isSignUp
+                ? "Kom i gang med FRO på sekunder"
+                : "Logg inn for å fortsette til FRO"}
+            </p>
+          </div>
         </div>
 
-        <Card className="border-border/60 bg-card/85 mt-10 w-full max-w-sm border shadow-xl backdrop-blur-md dark:bg-card/80">
-          <nav
-            className="p-1.5"
-            aria-label="Innlogging eller registrering"
-          >
-            <div className="bg-muted/50 flex rounded-xl p-0.5">
+        {/* Card */}
+        <div className="mt-8 w-full rounded-3xl bg-card/80 p-6 shadow-xl ring-1 ring-black/[0.04] backdrop-blur-xl sm:p-8 dark:bg-card/70 dark:ring-white/[0.06]">
+          {/* Tabs */}
+          <nav aria-label="Innlogging eller registrering">
+            <div className="flex rounded-2xl bg-muted/50 p-1">
               <Link
                 href="/sign-in"
                 className={cn(
-                  "flex flex-1 items-center justify-center rounded-[10px] py-2 text-center text-sm font-medium transition-colors",
+                  "flex flex-1 items-center justify-center gap-1.5 rounded-xl py-2.5 text-sm font-medium transition-all duration-200",
                   !isSignUp
-                    ? "bg-background text-foreground shadow-sm"
+                    ? "bg-background text-foreground shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.06]"
                     : "text-muted-foreground hover:text-foreground",
                 )}
                 scroll={false}
@@ -111,9 +114,9 @@ export function AuthForm({
               <Link
                 href="/sign-up"
                 className={cn(
-                  "flex flex-1 items-center justify-center rounded-[10px] py-2 text-center text-sm font-medium transition-colors",
+                  "flex flex-1 items-center justify-center gap-1.5 rounded-xl py-2.5 text-sm font-medium transition-all duration-200",
                   isSignUp
-                    ? "bg-background text-foreground shadow-sm"
+                    ? "bg-background text-foreground shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.06]"
                     : "text-muted-foreground hover:text-foreground",
                 )}
                 scroll={false}
@@ -123,44 +126,47 @@ export function AuthForm({
             </div>
           </nav>
 
-          <form onSubmit={(e) => void submit(e)}>
-            <CardContent className="space-y-4 px-5 pb-6 pt-2">
-              <div className="space-y-1.5">
-                <Label htmlFor="email" className="text-muted-foreground text-xs">
-                  E-post
-                </Label>
-                <div className="relative">
-                  <Mail
-                    className="text-muted-foreground pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2"
-                    aria-hidden
-                  />
-                  <Input
-                    id="email"
-                    type="email"
-                    autoComplete="email"
-                    inputMode="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    required
-                    className="h-10 pl-9"
-                    placeholder="din@epost.no"
-                  />
-                </div>
+          {/* Form */}
+          <form onSubmit={(e) => void submit(e)} className="mt-6 space-y-4">
+            <div className="space-y-1.5">
+              <Label htmlFor="email" className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                E-post
+              </Label>
+              <div className="relative">
+                <Mail
+                  className="text-muted-foreground pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2"
+                  aria-hidden
+                />
+                <Input
+                  id="email"
+                  type="email"
+                  autoComplete="email"
+                  inputMode="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  required
+                  className="h-11 rounded-xl pl-10 text-sm"
+                  placeholder="din@epost.no"
+                />
               </div>
-              <div className="space-y-1.5">
-                <div className="flex items-center justify-between gap-2">
-                  <Label
-                    htmlFor="password"
-                    className="text-muted-foreground text-xs"
-                  >
-                    Passord
-                  </Label>
-                  {isSignUp ? (
-                    <span className="text-muted-foreground text-[11px]">
-                      min. 8 tegn
-                    </span>
-                  ) : null}
-                </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between gap-2">
+                <Label htmlFor="password" className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                  Passord
+                </Label>
+                {isSignUp && (
+                  <span className="text-muted-foreground text-[10px]">
+                    min. 8 tegn
+                  </span>
+                )}
+              </div>
+              <div className="relative">
+                <Lock
+                  className="text-muted-foreground pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 z-10"
+                  aria-hidden
+                />
                 <PasswordInput
                   id="password"
                   autoComplete={
@@ -170,38 +176,44 @@ export function AuthForm({
                   onChange={(e) => setPassword(e.target.value)}
                   required
                   minLength={8}
-                  className="h-10"
+                  className="h-11 rounded-xl pl-10 text-sm"
                   placeholder="••••••••"
                 />
               </div>
-              {error ? (
-                <div
-                  className="text-destructive bg-destructive/10 border-destructive/25 rounded-lg border px-3 py-2 text-sm"
-                  role="alert"
-                >
-                  {error}
-                </div>
-              ) : null}
-              <Button
-                type="submit"
-                disabled={loading}
-                className="h-11 w-full font-semibold shadow-sm"
-              >
-                {loading
-                  ? "…"
-                  : isSignUp
-                    ? "Opprett konto"
-                    : "Logg inn"}
-              </Button>
-            </CardContent>
-          </form>
-        </Card>
+            </div>
 
+            {error && (
+              <div
+                className="text-destructive bg-destructive/10 rounded-xl px-4 py-3 text-sm"
+                role="alert"
+              >
+                {error}
+              </div>
+            )}
+
+            <Button
+              type="submit"
+              disabled={loading}
+              className="h-12 w-full rounded-xl text-sm font-semibold shadow-md transition-all duration-200 hover:shadow-lg"
+            >
+              {loading ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <>
+                  {isSignUp ? "Opprett konto" : "Logg inn"}
+                  <ArrowRight className="ml-1.5 size-4" />
+                </>
+              )}
+            </Button>
+          </form>
+        </div>
+
+        {/* Footer link */}
         <Link
           href="/"
-          className="text-muted-foreground hover:text-foreground mt-8 text-xs transition-colors"
+          className="text-muted-foreground hover:text-foreground mt-6 text-xs transition-colors"
         >
-          ← Forside
+          ← Tilbake til forsiden
         </Link>
       </div>
     </div>

@@ -51,7 +51,10 @@ export function AppShell({
   useEffect(() => {
     if (!requireAuth || isLoading) return;
     if (!isAuthenticated) {
-      router.replace(`/sign-in?next=${encodeURIComponent(pathname || "/dashboard")}`);
+      const timeout = setTimeout(() => {
+        router.replace(`/sign-in?next=${encodeURIComponent(pathname || "/dashboard")}`);
+      }, 1500);
+      return () => clearTimeout(timeout);
     }
   }, [requireAuth, isLoading, isAuthenticated, router, pathname]);
 
