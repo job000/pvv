@@ -16,6 +16,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useMemo } from "react";
 import { WORKSPACE_ROLE_LABEL_NB } from "@/lib/role-labels-nb";
+import { ArrowRight } from "lucide-react";
 
 export default function WorkspaceOverviewPage() {
   const params = useParams();
@@ -80,7 +81,7 @@ export default function WorkspaceOverviewPage() {
 
   return (
     <div className="space-y-6 pb-4">
-      <header className="border-border/60 border-b pb-3">
+      <header className="rounded-2xl bg-muted/10 px-4 py-4 ring-1 ring-black/[0.04] dark:ring-white/[0.06]">
         <div className="flex flex-col gap-1 sm:flex-row sm:items-baseline sm:justify-between sm:gap-4">
           <h1 className="font-heading text-lg font-semibold tracking-tight text-foreground sm:text-xl">
             {workspace.name}
@@ -128,13 +129,13 @@ export default function WorkspaceOverviewPage() {
             <section aria-labelledby="dash-metrics-heading" className="space-y-4">
               <div>
                 <p className="text-muted-foreground text-[11px] font-semibold uppercase tracking-[0.12em]">
-                  Oversikt
+                  Kontrollsenter
                 </p>
                 <h2
                   id="dash-metrics-heading"
                   className="font-heading mt-1 text-base font-semibold tracking-tight text-foreground sm:text-lg"
                 >
-                  Nøkkeltall og aktivitet
+                  Hva du bør gjøre videre
                 </h2>
               </div>
               <WorkspaceOperationalDashboard
@@ -152,6 +153,9 @@ export default function WorkspaceOverviewPage() {
               <h2 className="font-heading mt-1 text-base font-semibold tracking-tight text-foreground sm:text-lg">
                 Snarveier
               </h2>
+              <p className="text-muted-foreground mt-1 text-sm">
+                Åpne de viktigste områdene raskt og gå videre med arbeidet.
+              </p>
             </div>
             {visibleShortcuts.length > 0 ? (
               <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -159,16 +163,22 @@ export default function WorkspaceOverviewPage() {
                   <li key={href}>
                     <Link
                       href={href}
-                      className="hover:border-primary/30 flex min-h-[52px] gap-3 rounded-2xl border border-border/45 bg-card p-4 shadow-[0_1px_3px_rgba(0,0,0,0.04)] ring-1 ring-black/[0.03] transition-all hover:bg-muted/35 hover:shadow-md dark:ring-white/[0.05]"
+                      className="group flex min-h-[108px] flex-col justify-between gap-4 rounded-2xl bg-card p-4 shadow-sm ring-1 ring-black/[0.04] transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md hover:ring-primary/20 dark:ring-white/[0.06]"
                     >
-                      <div className="bg-primary/10 text-primary flex size-10 shrink-0 items-center justify-center rounded-xl ring-1 ring-primary/12">
-                        <Icon className="size-5" aria-hidden />
+                      <div className="flex items-start gap-3">
+                        <div className="bg-primary/10 text-primary flex size-11 shrink-0 items-center justify-center rounded-xl ring-1 ring-primary/12 transition-transform duration-200 group-hover:scale-105">
+                          <Icon className="size-5" aria-hidden />
+                        </div>
+                        <div className="min-w-0">
+                          <p className="font-semibold leading-snug">{title}</p>
+                          <p className="text-muted-foreground mt-1 text-sm leading-snug">
+                            {desc}
+                          </p>
+                        </div>
                       </div>
-                      <div className="min-w-0">
-                        <p className="font-semibold leading-snug">{title}</p>
-                        <p className="text-muted-foreground mt-0.5 text-xs leading-snug">
-                          {desc}
-                        </p>
+                      <div className="inline-flex items-center gap-1 text-sm font-semibold text-foreground">
+                        Åpne nå
+                        <ArrowRight className="size-3.5 transition-transform group-hover:translate-x-0.5" />
                       </div>
                     </Link>
                   </li>

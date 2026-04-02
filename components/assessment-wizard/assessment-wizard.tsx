@@ -7,13 +7,20 @@ import {
 import { AssessmentCollaborationPanel } from "@/components/assessment-wizard/assessment-collaboration-panel";
 import { AssessmentContextCard } from "@/components/assessment-wizard/assessment-context-card";
 import { AssessmentExportPanel } from "@/components/assessment-wizard/assessment-export-panel";
-import { AssessmentProcessSlide } from "@/components/assessment-wizard/assessment-process-slide";
+import { HfRequirementsSection } from "@/components/assessment-wizard/hf-requirements-section";
+import { ProcessProfileSection } from "@/components/assessment-wizard/process-profile-section";
 import { AssessmentWizardSchemaHelp } from "@/components/assessment-wizard/assessment-wizard-schema-help";
 import { AssessmentWizardMeta } from "@/components/assessment-wizard/assessment-wizard-meta";
 import { LikertField } from "@/components/rpa-assessment/likert-field";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
 import {
   Dialog,
   DialogBody,
@@ -24,15 +31,13 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Progress,
   ProgressLabel,
 } from "@/components/ui/progress";
-import { Separator } from "@/components/ui/separator";
-import { Slider } from "@/components/ui/slider";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
-import { buildAssessmentContextForAi } from "@/lib/ai/buildAssessmentContextForAi";
 import type { AssessmentPayload } from "@/lib/assessment-types";
 import {
   PIPELINE_STATUS_LABELS,
@@ -53,17 +58,18 @@ import useEmblaCarousel from "embla-carousel-react";
 import {
   ChevronLeft,
   ChevronRight,
-  ClipboardCopy,
-  History,
+  CircleGauge,
+  Sparkles,
+  Target,
   Share2,
   Trash2,
 } from "lucide-react";
+import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-const SAMARBEID_SLIDE_INDEX =
-  ASSESSMENT_WIZARD_STEP_LABELS.indexOf("Samarbeid");
-const SAMARBEID_STEP_NUMBER = SAMARBEID_SLIDE_INDEX + 1;
+const DETAILS_SLIDE_INDEX =
+  ASSESSMENT_WIZARD_STEP_LABELS.indexOf("Detaljer");
 
 /** Én kilde til utkast-form — brukes ved første lasting og etter gjenoppretting fra versjon. */
 function normalizeDraftPayload(raw: AssessmentPayload): AssessmentPayload {
@@ -96,6 +102,52 @@ const KPI_DEFAULTS = {
   workingHoursPerDay: 7.5,
   employees: 3,
 } as const;
+
+const QUICK_AUTOMATION_PRESETS: Record<
+  1 | 2 | 3 | 4 | 5,
+  Partial<AssessmentPayload>
+> = {
+  1: {
+    baselineHours: 120,
+    reworkHours: 10,
+    auditHours: 10,
+    structuredInput: 2,
+    processVariability: 5,
+    digitization: 2,
+  },
+  2: {
+    baselineHours: 300,
+    reworkHours: 20,
+    auditHours: 20,
+    structuredInput: 3,
+    processVariability: 4,
+    digitization: 3,
+  },
+  3: {
+    baselineHours: 800,
+    reworkHours: 50,
+    auditHours: 40,
+    structuredInput: 3,
+    processVariability: 3,
+    digitization: 3,
+  },
+  4: {
+    baselineHours: 1400,
+    reworkHours: 80,
+    auditHours: 60,
+    structuredInput: 4,
+    processVariability: 2,
+    digitization: 4,
+  },
+  5: {
+    baselineHours: 2200,
+    reworkHours: 120,
+    auditHours: 80,
+    structuredInput: 5,
+    processVariability: 1,
+    digitization: 5,
+  },
+};
 
 function parseKpiNumber(
   raw: string,
@@ -435,7 +487,7 @@ export function AssessmentWizard({ assessmentId }: Props) {
   }, [persist]);
 
   const openTeamAndVersions = useCallback(() => {
-    emblaApi?.scrollTo(SAMARBEID_SLIDE_INDEX);
+    emblaApi?.scrollTo(DETAILS_SLIDE_INDEX);
     requestAnimationFrame(() => {
       document.getElementById("versjoner")?.scrollIntoView({
         behavior: "smooth",
@@ -578,7 +630,7 @@ export function AssessmentWizard({ assessmentId }: Props) {
     const go = () => {
       if (typeof window === "undefined") return;
       if (window.location.hash === "#versjoner") {
-        emblaApi.scrollTo(SAMARBEID_SLIDE_INDEX);
+        emblaApi.scrollTo(DETAILS_SLIDE_INDEX);
         requestAnimationFrame(() => {
           document.getElementById("versjoner")?.scrollIntoView({
             behavior: "smooth",
@@ -599,6 +651,10 @@ export function AssessmentWizard({ assessmentId }: Props) {
     value: AssessmentPayload[K],
   ) {
     setPayload((prev) => (prev ? { ...prev, [key]: value } : prev));
+  }
+
+  function updateMany(patch: Partial<AssessmentPayload>) {
+    setPayload((prev) => (prev ? { ...prev, ...patch } : prev));
   }
 
   if (data === undefined || access === undefined) {
@@ -793,15 +849,20 @@ export function AssessmentWizard({ assessmentId }: Props) {
       />
 
       {/* ── Stepper ── */}
-      <div className="rounded-2xl bg-muted/20 p-4">
+      <div className="rounded-2xl bg-muted/15 p-4">
         <div className="mb-3 flex items-center justify-between gap-3">
-          <p className="text-foreground text-sm font-semibold">
-            <span className="text-muted-foreground font-normal">
-              Steg {slide + 1}/{ASSESSMENT_WIZARD_STEP_LABELS.length}
-            </span>
-            {" · "}
-            {ASSESSMENT_WIZARD_STEP_LABELS[slide]}
-          </p>
+          <div>
+            <p className="text-foreground text-sm font-semibold">
+              <span className="text-muted-foreground font-normal">
+                Steg {slide + 1}/{ASSESSMENT_WIZARD_STEP_LABELS.length}
+              </span>
+              {" · "}
+              {ASSESSMENT_WIZARD_STEP_LABELS[slide]}
+            </p>
+            <p className="text-muted-foreground mt-1 text-xs">
+              Få fram en anbefaling først. Fyll bare ut detaljer hvis du trenger dem.
+            </p>
+          </div>
           <div className="flex items-center gap-2">
             <AssessmentWizardSchemaHelp />
             <select
@@ -855,118 +916,125 @@ export function AssessmentWizard({ assessmentId }: Props) {
             <Slide>
               <div className="space-y-1">
                 <h2 className="text-foreground text-xl font-semibold sm:text-2xl">
-                  Prosess
+                  Screening
                 </h2>
                 <p className="text-muted-foreground text-sm">
-                  Beskriv prosessen som skal vurderes.
+                  Først avgjør dere om dette er verdt å se nærmere på.
                 </p>
               </div>
-              <AssessmentProcessSlide
-                payload={payload}
-                canEdit={canEdit}
-                update={update}
-                candidates={candidates}
-                candidatePickerKey={candidatePickerKey}
-                bumpCandidatePickerKey={() =>
-                  setCandidatePickerKey((k) => k + 1)
-                }
-              />
-            </Slide>
-
-            <Slide bare>
-              <AssessmentContextCard
-                assessmentId={assessmentId}
-                workspaceId={assessment.workspaceId}
-                assessment={assessment}
-                canEdit={canEdit}
-                processScope={payload.processScope ?? "unsure"}
-              />
-            </Slide>
-
-            <Slide>
-              <div className="space-y-1">
-                <h2 className="text-foreground text-xl font-semibold sm:text-2xl">
-                  Hvor viktig er dette for virksomheten?
-                </h2>
-                <p className="text-muted-foreground text-sm">
-                  Konsekvens for virksomheten — brukes til prioritering.
-                </p>
-              </div>
-              <div className="space-y-8">
+              <div className="space-y-6">
+                <div className="space-y-4 rounded-2xl bg-muted/10 p-5 ring-1 ring-black/[0.04] dark:ring-white/[0.06]">
+                  <div className="space-y-2">
+                    <Label htmlFor="quick-process-name" className="text-sm font-medium">
+                      Kort navn på prosessen
+                    </Label>
+                    <Input
+                      id="quick-process-name"
+                      value={payload.processName}
+                      onChange={(e) => update("processName", e.target.value)}
+                      disabled={!canEdit}
+                      placeholder="F.eks. Fakturamottak eller manuell registrering"
+                      className="h-11 rounded-xl bg-background shadow-sm"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="quick-process-description" className="text-sm font-medium">
+                      Kort beskrivelse (valgfritt)
+                    </Label>
+                    <Textarea
+                      id="quick-process-description"
+                      value={payload.processDescription ?? ""}
+                      onChange={(e) => update("processDescription", e.target.value)}
+                      disabled={!canEdit}
+                      placeholder="F.eks. Overføring mellom to systemer"
+                      rows={3}
+                      className="min-h-[6.5rem] resize-y rounded-xl bg-background shadow-sm"
+                    />
+                  </div>
+                </div>
                 <LikertField
-                  id="cbi"
-                  label="Hvor stort er konsekvensen om prosessen svikter?"
-                  hint="Tenk på tap av inntekt, pasientsikkerhet, kundetillit, omdømme og driftsstans."
+                  id="quick-importance"
+                  label="Hvor viktig er dette for virksomheten?"
+                  hint="Dette er screeningen: hvis det ikke er viktig, er det sjelden verdt å bruke tid på RPA-vurdering."
                   value={clampLikert5(payload.criticalityBusinessImpact)}
-                  onChange={(v) => update("criticalityBusinessImpact", v)}
-                  left="Minimal"
-                  right="Svært alvorlig"
-                  scaleLabels={["Ubetydelig", "Liten", "Moderat", "Stor", "Kritisk"]}
+                  onChange={(v) =>
+                    updateMany({
+                      criticalityBusinessImpact: v,
+                      criticalityRegulatoryRisk: v,
+                    })
+                  }
+                  left="Lav betydning"
+                  right="Svært viktig"
+                  scaleLabels={[
+                    "Lav",
+                    "Noe viktig",
+                    "Middels",
+                    "Høy",
+                    "Kritisk",
+                  ]}
                   disabled={readOnly}
                 />
                 <LikertField
-                  id="crr"
-                  label="Hvor strenge er regulatoriske krav?"
-                  hint="GDPR, helselovgivning, arkivplikt, tilsyn, sertifiseringskrav."
-                  value={clampLikert5(payload.criticalityRegulatoryRisk)}
-                  onChange={(v) => update("criticalityRegulatoryRisk", v)}
-                  left="Få krav"
-                  right="Svært strenge"
-                  scaleLabels={["Minimalt", "Noe", "Moderate", "Strenge", "Svært strenge"]}
+                  id="quick-automation"
+                  label="Hvor mye manuelt arbeid skjer i dag?"
+                  hint="Mye manuelt, repetitivt arbeid gir grunn til å gå videre til egnethetsvurdering."
+                  value={clampLikert5(
+                    payload.baselineHours >= 1800
+                      ? 5
+                      : payload.baselineHours >= 1200
+                        ? 4
+                        : payload.baselineHours >= 650
+                          ? 3
+                          : payload.baselineHours >= 220
+                            ? 2
+                            : 1,
+                  )}
+                  onChange={(v) => updateMany(QUICK_AUTOMATION_PRESETS[v])}
+                  left="Lite manuelt"
+                  right="Svært mye manuelt"
+                  scaleLabels={[
+                    "Lite",
+                    "Noe",
+                    "Middels",
+                    "Mye",
+                    "Svært mye",
+                  ]}
                   disabled={readOnly}
                 />
+                <div className="grid gap-3 sm:grid-cols-3">
+                  <ScoreCard
+                    label="Timer / år"
+                    value={String(Math.round(payload.baselineHours))}
+                    sub="Raskt anslag"
+                  />
+                  <ScoreCard
+                    label="Datastruktur"
+                    value={`${payload.structuredInput}/5`}
+                    sub="Justeres automatisk"
+                  />
+                  <ScoreCard
+                    label="Digitalisering"
+                    value={`${payload.digitization}/5`}
+                    sub="Justeres automatisk"
+                  />
+                </div>
               </div>
             </Slide>
 
             <Slide>
               <div className="space-y-1">
                 <h2 className="text-foreground text-xl font-semibold sm:text-2xl">
-                  Er prosessen og systemene forutsigbare?
+                  RPA-egnethet
                 </h2>
                 <p className="text-muted-foreground text-sm">
-                  Robot trenger stabile regler og forutsigbare systemer.
+                  Her vurderer dere bare det som avgjør om en robot faktisk er realistisk.
                 </p>
               </div>
               <div className="space-y-8">
                 <LikertField
-                  id="ps"
-                  label="Hvor stabil er arbeidsmåten?"
-                  hint="Hyppige endringer i skjema, policy eller unntak betyr mer vedlikehold."
-                  value={clampLikert5(payload.processStability)}
-                  onChange={(v) => update("processStability", v)}
-                  left="Endrer seg ofte"
-                  right="Svært stabil"
-                  scaleLabels={["Ukentlig", "Månedlig", "Kvartalsvis", "Halvårlig", "Sjelden/aldri"]}
-                  disabled={readOnly}
-                />
-                <LikertField
-                  id="as"
-                  label="Er IT-systemene stabile?"
-                  hint="Hyppige oppgraderinger, popup-vinduer eller treghet gjør at roboten feiler."
-                  value={clampLikert5(payload.applicationStability)}
-                  onChange={(v) => update("applicationStability", v)}
-                  left="Uforutsigbart"
-                  right="Svært stabilt"
-                  scaleLabels={["Ofte feil", "Noe ustabilt", "OK", "Forutsigbart", "Solid og stabilt"]}
-                  disabled={readOnly}
-                />
-              </div>
-            </Slide>
-
-            <Slide>
-              <div className="space-y-1">
-                <h2 className="text-foreground text-xl font-semibold sm:text-2xl">
-                  Hvor mye kan automatiseres?
-                </h2>
-                <p className="text-muted-foreground text-sm">
-                  Datastruktur, variasjon og digitaliseringsgrad.
-                </p>
-              </div>
-              <div className="space-y-8">
-                <LikertField
-                  id="si"
+                  id="fit-structured-input"
                   label="Hvor strukturert er input-dataene?"
-                  hint="Faste felt og tall er enkle. Fritekst og skannede dokumenter krever AI/OCR."
+                  hint="RPA fungerer best når data kommer i faste felter, ikke som fritekst, PDF-bilder eller skannede dokumenter."
                   value={clampLikert5(payload.structuredInput)}
                   onChange={(v) => update("structuredInput", v)}
                   left="Ustrukturert"
@@ -975,66 +1043,49 @@ export function AssessmentWizard({ assessmentId }: Props) {
                   disabled={readOnly}
                 />
                 <LikertField
-                  id="pv"
-                  label="Hvor mye varierer sakene?"
-                  hint="Mange unntak og spesialtilfeller betyr mer manuelt arbeid."
+                  id="fit-variability"
+                  label="Hvor like er sakene?"
+                  hint="Mange unntak og variasjoner betyr at prosessen ofte er dårligere egnet for klassisk RPA."
                   value={clampLikert5(payload.processVariability)}
                   onChange={(v) => update("processVariability", v)}
-                  left="Nesten identiske"
-                  right="Svært ulike"
-                  scaleLabels={["< 5 % unntak", "5–15 %", "15–30 %", "30–50 %", "> 50 % unntak"]}
+                  left="Svært ulike"
+                  right="Nesten identiske"
+                  scaleLabels={["Mange unntak", "Noen unntak", "Blandet", "Ganske like", "Nesten likt hver gang"]}
                   disabled={readOnly}
                 />
                 <LikertField
-                  id="dg"
-                  label="Hvor digitalisert er prosessen?"
-                  hint="Papir og fysiske signaturer må digitaliseres først."
+                  id="fit-stability"
+                  label="Hvor stabil er prosessen og systemene?"
+                  hint="Hvis skjermbilder, regler eller flyt endrer seg ofte, blir roboten dyr og skjør."
+                  value={clampLikert5(
+                    Math.round((payload.processStability + payload.applicationStability) / 2),
+                  )}
+                  onChange={(v) =>
+                    updateMany({
+                      processStability: v,
+                      applicationStability: v,
+                    })
+                  }
+                  left="Ustabilt"
+                  right="Svært stabilt"
+                  scaleLabels={["Ustabilt", "Noe ustabilt", "Middels", "Stabilt", "Svært stabilt"]}
+                  disabled={readOnly}
+                />
+                <LikertField
+                  id="fit-digital"
+                  label="Hvor digital er prosessen?"
+                  hint="Papir, skanning og manuell tolking gjør RPA mindre realistisk uten ekstra teknologi."
                   value={clampLikert5(payload.digitization)}
                   onChange={(v) => update("digitization", v)}
                   left="Mye papir"
-                  right="Heldigitalt"
-                  scaleLabels={["Papirbasert", "Mest papir", "Halvt/halvt", "Mest digitalt", "100 % digitalt"]}
+                  right="Heldigital"
+                  scaleLabels={["Papir", "Mest papir", "Blandet", "Mest digitalt", "Heldigitalt"]}
                   disabled={readOnly}
                 />
-              </div>
-            </Slide>
-
-            <Slide>
-              <div className="space-y-1">
-                <h2 className="text-foreground text-xl font-semibold sm:text-2xl">
-                  Omfang og arbeidsmiljø
-                </h2>
-                <p className="text-muted-foreground text-sm">
-                  Flytlengde, antall systemer og teknisk miljø.
-                </p>
-              </div>
-              <div className="space-y-8">
-                <LikertField
-                  id="processLength"
-                  label="Hvor lang er arbeidsflyten?"
-                  hint="Tell alle steg fra start til slutt: klikk, navigeringer, kopier/lim."
-                  value={clampLikert5(payload.processLength)}
-                  onChange={(v) => update("processLength", v)}
-                  left="Svært kort"
-                  right="Svært lang"
-                  scaleLabels={["1–5 steg", "6–15", "16–30", "31–60", "60+"]}
-                  disabled={readOnly}
-                />
-                <LikertField
-                  id="applicationCount"
-                  label="Hvor mange systemer brukes?"
-                  hint="Alt som åpnes: fagapplikasjoner, e-post, Excel, intranett osv."
-                  value={clampLikert5(payload.applicationCount)}
-                  onChange={(v) => update("applicationCount", v)}
-                  left="1 system"
-                  right="Mange systemer"
-                  scaleLabels={["1", "2", "3–4", "5–6", "7+"]}
-                  disabled={readOnly}
-                />
-                <div className="space-y-5 rounded-2xl bg-muted/15 p-4 sm:p-5">
+                <div className="rounded-2xl bg-muted/10 p-4 ring-1 ring-black/[0.04] dark:ring-white/[0.06]">
                   <div className="flex items-start gap-3">
                     <Checkbox
-                      id="ocr"
+                      id="fit-ocr"
                       checked={payload.ocrRequired}
                       onCheckedChange={(c) =>
                         canEdit && update("ocrRequired", c === true)
@@ -1043,374 +1094,349 @@ export function AssessmentWizard({ assessmentId }: Props) {
                       className="mt-0.5"
                     />
                     <div>
-                      <Label htmlFor="ocr" className="text-sm font-medium">
-                        Kreves skanning/OCR?
+                      <Label htmlFor="fit-ocr" className="text-sm font-medium">
+                        Kreves skanning / OCR?
                       </Label>
-                      <p className="text-muted-foreground text-xs mt-0.5">
-                        Bilder, papir eller PDF uten maskinlesbar tekst.
+                      <p className="text-muted-foreground mt-1 text-xs leading-relaxed">
+                        Hvis ja, er dette fortsatt mulig, men ofte mindre rett fram enn klassisk RPA.
                       </p>
                     </div>
-                  </div>
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between gap-3">
-                      <Label
-                        htmlFor="thin-client"
-                        className="text-sm font-medium"
-                      >
-                        Andel tynnklient (Citrix/fjernskrivebord)
-                      </Label>
-                      <Badge variant="outline" className="shrink-0 tabular-nums">
-                        {payload.thinClientPercent} %
-                      </Badge>
-                    </div>
-                    <Slider
-                      id="thin-client"
-                      min={0}
-                      max={100}
-                      step={1}
-                      value={[payload.thinClientPercent]}
-                      onValueChange={(v) => {
-                        const raw = Array.isArray(v) ? v[0] : v;
-                        update(
-                          "thinClientPercent",
-                          Math.min(100, Math.max(0, Math.round(Number(raw)))),
-                        );
-                      }}
-                      disabled={!canEdit}
-                    />
-                    <p className="text-muted-foreground text-[11px]">
-                      0 % = nettleser / lokalt · 100 % = alt i tynnklient
-                    </p>
                   </div>
                 </div>
               </div>
             </Slide>
 
             <Slide>
-              <div className="flex items-center gap-2">
+              <div className="space-y-1">
                 <h2 className="text-foreground text-xl font-semibold sm:text-2xl">
-                  Tall og kostnader
+                  Resultat
                 </h2>
-                <Badge className="bg-amber-600 text-[10px] text-white hover:bg-amber-600/90 dark:bg-amber-700">
-                  Merkantilt
-                </Badge>
+                <p className="text-muted-foreground text-sm">
+                  Dette er den samlede vurderingen etter screening og RPA-egnethet.
+                </p>
               </div>
-              <p className="text-muted-foreground text-sm">
-                Tidsbruk og kostnader per år. Anslag er nok.
-              </p>
-              <div className="grid gap-5 sm:grid-cols-2">
-                {(
-                  [
-                    [
-                      "baselineHours",
-                      "Manuelle timer på prosessen per år",
-                      "Omtrent hvor mange timer brukes totalt på denne typen arbeid i året (alle som deltar).",
-                    ],
-                    [
-                      "reworkHours",
-                      "Timer til retting og omarbeid",
-                      "Tid brukt på feil, korrigering og gjøre om arbeid.",
-                    ],
-                    [
-                      "auditHours",
-                      "Timer til kontroll og revisjon",
-                      "Intern kontroll, kvalitetssjekk, revisjon som følger prosessen.",
-                    ],
-                    [
-                      "avgCostPerYear",
-                      "Full kostnad per årsverk (kroner)",
-                      "Lønn + overhead + sosiale kostnader — et snitt for dem som gjør jobben.",
-                    ],
-                    [
-                      "workingDays",
-                      "Arbeidsdager per år",
-                      "Vanligvis rundt 220–260 avhengig av avtale.",
-                    ],
-                    [
-                      "workingHoursPerDay",
-                      "Timer per arbeidsdag",
-                      "F.eks. 7,5 dersom dere bruker ordinær dag.",
-                    ],
-                    [
-                      "employees",
-                      "Antall som jobber med denne prosessen",
-                      "Hvor mange årsverk er involvert (kan være desimal, f.eks. 2,5).",
-                    ],
-                  ] as const
-                ).map(([key, title, hint]) => (
-                  <div key={key} className="space-y-1.5 rounded-xl bg-muted/15 p-4">
-                    <Label htmlFor={`kpi-${key}`} className="text-sm font-medium">
-                      {title}
-                    </Label>
-                    <p className="text-muted-foreground text-xs">
-                      {hint}
-                    </p>
-                    <Input
-                      id={`kpi-${key}`}
-                      type="number"
-                      value={payload[key]}
-                      onChange={(e) => {
-                        const k = key as keyof typeof KPI_DEFAULTS;
-                        update(
-                          k,
-                          parseKpiNumber(
-                            e.target.value,
-                            KPI_DEFAULTS[k],
-                            payload[k] as number,
-                          ) as AssessmentPayload[typeof k],
-                        );
-                      }}
-                      disabled={!canEdit}
-                      className="h-10 rounded-xl bg-background shadow-sm"
+              {computed ? (
+                <div className="space-y-6">
+                  <QuickResultHero
+                    computed={computed}
+                    workspaceId={assessment.workspaceId}
+                    title={titleDraft.trim() || assessment.title}
+                    payload={payload}
+                  />
+                  <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                    <ScoreCard
+                      label="Kategori"
+                      value={
+                        computed.priorityScore >= 60
+                          ? "Høy"
+                          : computed.priorityScore >= 35
+                            ? "Middels"
+                            : "Lav"
+                      }
+                      sub="Samlet vurdering"
+                    />
+                    <ScoreCard
+                      label="Automasjon"
+                      value={`${computed.ap.toFixed(0)} %`}
+                      sub="Screening + egnethet"
+                    />
+                    <ScoreCard
+                      label="Viktighet"
+                      value={`${computed.criticality.toFixed(0)} %`}
+                      sub="Betydning for virksomheten"
+                    />
+                    <ScoreCard
+                      label="Anbefaling"
+                      value={computed.priorityScore >= 35 ? "Gå til ROS" : "Ikke prioritert"}
+                      sub={
+                        computed.priorityScore >= 35
+                          ? "Verdt å gå videre med"
+                          : "Bør vente eller vurderes senere"
+                      }
                     />
                   </div>
-                ))}
-              </div>
-            </Slide>
-
-            <Slide>
-              <div className="space-y-1">
-                <h2 className="text-foreground text-xl font-semibold sm:text-2xl">
-                  Samarbeid
-                </h2>
-                <p className="text-muted-foreground text-sm">
-                  Team, oppgaver og versjoner.
-                </p>
-              </div>
-              <div className="space-y-6">
-                <AssessmentCollaborationPanel
-                  assessmentId={assessmentId}
-                  workspaceId={assessment.workspaceId}
-                  canEdit={canEdit}
-                  versionPreviewRequest={versionPreviewRequest}
-                  onVersionPreviewRequestConsumed={
-                    onVersionPreviewRequestConsumed
-                  }
-                  onDraftRestored={(p, meta) => {
-                    setPayload(normalizeDraftPayload(p));
-                    if (meta?.revision !== undefined) {
-                      draftRevisionRef.current = meta.revision;
-                      setDraftRevision(meta.revision);
-                    }
-                  }}
-                />
-              </div>
-            </Slide>
-
-            <Slide>
-              <div className="space-y-1">
-                <h2 className="text-foreground text-xl font-semibold sm:text-2xl">
-                  Oppsummering
-                </h2>
-                <p className="text-muted-foreground text-sm">
-                  Siste steg — alt lagres fortløpende. Trykk «Ferdig» for å avslutte.
-                </p>
-              </div>
-              <div className="space-y-6">
-                {canEdit ? (
-                  <Alert className="border-primary/25 bg-primary/[0.04]">
-                    <AlertTitle className="flex flex-wrap items-center gap-2">
-                      <History
-                        className="text-primary size-4 shrink-0"
-                        aria-hidden
-                      />
-                      Utkast er lagret — slik bruker du milepæler
-                    </AlertTitle>
-                    <AlertDescription className="space-y-3 text-foreground/90">
-                      <p className="leading-relaxed">
-                        Alt du har fylt inn, lagres automatisk som{" "}
-                        <strong className="text-foreground">utkast</strong>.
-                        Navngitte milepæler i loggen (nå:{" "}
-                        <strong className="text-foreground tabular-nums">
-                          {milestoneCount}
-                        </strong>
-                        ) opprettes når du trykker{" "}
-                        <strong className="text-foreground">«Lagre versjon»</strong>{" "}
-                        under Samarbeid — valgfritt for sporbarhet, anbefales før
-                        revisjon eller viktige beslutninger.
-                      </p>
-                      <ul className="text-foreground/95 list-inside list-disc space-y-1.5 text-sm leading-relaxed">
-                        <li>
-                          Gå til{" "}
-                          <strong className="text-foreground">
-                            steg {SAMARBEID_STEP_NUMBER} · Samarbeid
-                          </strong>{" "}
-                          (nedtrekket «Hopp til steg» eller knappen under). Der
-                          ligger blokken{" "}
-                          <strong className="text-foreground">
-                            Milepæler (navngitte versjoner)
-                          </strong>
-                          .
-                        </li>
-                        <li>
-                          Øverst på siden:{" "}
-                          <strong className="text-foreground">
-                            Velg milepæl
-                          </strong>{" "}
-                          og{" "}
-                          <strong className="text-foreground">
-                            Team, milepæler, deling
-                          </strong>
-                          .
-                        </li>
-                      </ul>
-                      <div className="pt-1">
-                        <Button
-                          type="button"
-                          variant="default"
-                          size="sm"
-                          className="gap-1.5"
-                          onClick={openTeamAndVersions}
-                        >
-                          <History className="size-3.5" aria-hidden />
-                          Åpne versjonsoversikt (steg {SAMARBEID_STEP_NUMBER}{" "}
-                          · Samarbeid)
-                        </Button>
-                      </div>
-                    </AlertDescription>
-                  </Alert>
-                ) : null}
-                {computed ? (
-                  <>
-                    <ProcessSummaryBlocks payload={payload} />
-                    <div className="flex flex-wrap gap-2">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        className="gap-1.5"
-                        onClick={() => {
-                          const text = buildAssessmentContextForAi({
-                            title: assessment.title,
-                            processName: payload.processName,
-                            candidateId: payload.candidateId,
-                            processDescription: payload.processDescription,
-                            processGoal: payload.processGoal,
-                            processActors: payload.processActors,
-                            processSystems: payload.processSystems,
-                            processFlowSummary: payload.processFlowSummary,
-                            processVolumeNotes: payload.processVolumeNotes,
-                            processConstraints: payload.processConstraints,
-                            processFollowUp: payload.processFollowUp,
-                            processScope: payload.processScope,
-                            hfOperationsSupportLevel:
-                              payload.hfOperationsSupportLevel,
-                            hfSecurityInformationNotes:
-                              payload.hfSecurityInformationNotes,
-                            hfOrganizationalBreadthNotes:
-                              payload.hfOrganizationalBreadthNotes,
-                            hfEconomicRationaleNotes:
-                              payload.hfEconomicRationaleNotes,
-                            hfCriticalManualGapNotes:
-                              payload.hfCriticalManualGapNotes,
-                            hfOperationsSupportNotes:
-                              payload.hfOperationsSupportNotes,
-                            priorityScore: computed.priorityScore,
-                            pipelineLabel:
-                              PIPELINE_STATUS_LABELS[
-                                normalizePipelineStatus(
-                                  assessment.pipelineStatus,
-                                )
-                              ],
-                          });
-                          void navigator.clipboard.writeText(text);
-                        }}
-                      >
-                        <ClipboardCopy className="size-3.5" aria-hidden />
-                        Kopier kontekst for KI
-                      </Button>
-                      <span className="text-muted-foreground self-center text-xs">
-                        Lim inn i eget KI-verktøy for sortering eller oppsummering.
+                  <div className="space-y-2">
+                    <div className="flex justify-between gap-3 text-sm">
+                      <span className="text-muted-foreground">
+                        RPA-egnethet / gjennomførbarhet
+                      </span>
+                      <span className="shrink-0 font-semibold tabular-nums">
+                        {computed.ease.toFixed(1)} % · {computed.easeLabel}
                       </span>
                     </div>
-                    <div className="rounded-xl border border-primary/20 bg-primary/[0.04] p-4">
-                      <p className="text-muted-foreground text-xs font-medium uppercase tracking-wide">Samlet anbefaling</p>
-                      <p className="font-heading mt-1 text-lg font-semibold">
-                        {computed.priorityScore >= 60
-                          ? "Sterk kandidat for automatisering"
-                          : computed.priorityScore >= 35
-                            ? "Moderat kandidat — vurder nærmere"
-                            : "Lav prioritet — andre prosesser bør vurderes først"}
-                      </p>
-                      <p className="text-muted-foreground mt-1 text-sm leading-relaxed">
-                        {computed.priorityScore >= 60
-                          ? "Høyt potensial og viktig prosess. Anbefales prioritert i porteføljen."
-                          : computed.priorityScore >= 35
-                            ? "Kan ha verdi, men vurder om det finnes enklere eller viktigere prosesser."
-                            : "Enten lavt automatiseringspotensial, lav viktighet, eller begge deler."}
-                        {!computed.feasible
-                          ? " OBS: Prosess- eller systemstabilitet er for lav — avklar dette før oppstart."
-                          : ""}
-                      </p>
-                    </div>
-                    <div className="grid gap-4 sm:grid-cols-2">
-                      <ScoreCard
-                        label="Automatiseringspotensial"
-                        value={`${computed.ap.toFixed(1)} %`}
-                        sub="Andel av prosessen som kan automatiseres, basert på datastruktur, saksvariasjon, digitalisering og volum."
-                      />
-                      <ScoreCard
-                        label="Viktighet og konsekvens"
-                        value={`${computed.criticality.toFixed(1)} %`}
-                        sub="Kombinasjon av forretningskonsekvens, regulatorisk risiko og tidsbruk."
-                      />
-                      <ScoreCard
-                        label="Porteføljeprioritet"
-                        value={`${computed.priorityScore.toFixed(1)} / 100`}
-                        sub="Geometrisk snitt av potensial og viktighet — krever at begge er høye for toppscore."
-                      />
-                      <ScoreCard
-                        label={computed.feasible ? "Stabil nok for robot" : "Stabilitet: Advarsel"}
-                        value={computed.feasible ? "Ja" : "Nei — ustabil"}
-                        sub={computed.feasible
-                          ? "Prosess og systemer er vurdert som tilstrekkelig forutsigbare."
-                          : "Prosess eller systemer endrer seg for ofte. Stabiliser før automatisering."}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <div className="flex justify-between gap-3 text-sm">
-                        <span className="text-muted-foreground">
-                          Gjennomførbarhet — hvor enkelt er det å bygge?
-                        </span>
-                        <span className="shrink-0 font-semibold tabular-nums">
-                          {computed.ease.toFixed(1)} % · {computed.easeLabel}
-                        </span>
+                    <Progress value={computed.ease}>
+                      <div className="flex w-full justify-between gap-2 pb-2">
+                        <ProgressLabel className="text-muted-foreground">
+                          Mindre realistisk
+                        </ProgressLabel>
+                        <ProgressLabel className="text-muted-foreground">
+                          Mer realistisk
+                        </ProgressLabel>
                       </div>
-                      <Progress value={computed.ease}>
-                        <div className="flex w-full justify-between gap-2 pb-2">
-                          <ProgressLabel className="text-muted-foreground">
-                            Vanskeligere
-                          </ProgressLabel>
-                          <ProgressLabel className="text-muted-foreground">
-                            Enklere
-                          </ProgressLabel>
+                    </Progress>
+                  </div>
+                </div>
+              ) : null}
+            </Slide>
+
+            <Slide>
+              <div className="space-y-1">
+                <h2 className="text-foreground text-xl font-semibold sm:text-2xl">
+                  Detaljer ved behov
+                </h2>
+                <p className="text-muted-foreground text-sm">
+                  Alt under er valgfritt og skjult som standard.
+                </p>
+              </div>
+              <div className="space-y-6">
+                <Accordion multiple defaultValue={[]} className="space-y-3">
+                  <AccordionItem
+                    value="details-process"
+                    className="rounded-2xl bg-muted/10 px-4 ring-1 ring-black/[0.04] dark:ring-white/[0.06]"
+                  >
+                    <AccordionTrigger className="py-4 text-left text-sm font-semibold hover:no-underline">
+                      Prosessdetaljer og kontekst
+                    </AccordionTrigger>
+                    <AccordionContent className="pb-4">
+                      <div className="space-y-5">
+                        {candidates && candidates.length > 0 ? (
+                          <div className="space-y-2">
+                            <Label htmlFor="pick-candidate-fast">
+                              Koble til prosess i registeret
+                            </Label>
+                            <select
+                              key={candidatePickerKey}
+                              id="pick-candidate-fast"
+                              className="border-input bg-background h-10 w-full rounded-lg border px-3 text-sm shadow-xs outline-none"
+                              defaultValue=""
+                              onChange={(e) => {
+                                const id = e.target.value as Id<"candidates">;
+                                if (!id) return;
+                                const cand = candidates.find((x) => x._id === id);
+                                if (cand) {
+                                  update("candidateId", cand.code);
+                                  update("processName", cand.name);
+                                }
+                                setCandidatePickerKey((k) => k + 1);
+                              }}
+                              disabled={!canEdit}
+                            >
+                              <option value="">Velg fra arbeidsområdet …</option>
+                              {candidates.map((c) => (
+                                <option key={c._id} value={c._id}>
+                                  {c.name} ({c.code})
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        ) : null}
+                        <div className="grid gap-4 sm:grid-cols-2">
+                          <div className="space-y-2">
+                            <Label htmlFor="candidate-ref-fast">Referanse / ID</Label>
+                            <Input
+                              id="candidate-ref-fast"
+                              value={payload.candidateId}
+                              onChange={(e) => update("candidateId", e.target.value)}
+                              disabled={!canEdit}
+                              className="h-10 rounded-xl"
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <Label>Hvor strekker prosessen seg?</Label>
+                            <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+                              {(
+                                [
+                                  ["single", "Én hovedenhet"],
+                                  ["multi", "Flere enheter / på tvers"],
+                                  ["unsure", "Ikke avklart"],
+                                ] as const
+                              ).map(([value, label]) => (
+                                <Button
+                                  key={value}
+                                  type="button"
+                                  variant={
+                                    (payload.processScope ?? "unsure") === value
+                                      ? "secondary"
+                                      : "outline"
+                                  }
+                                  size="sm"
+                                  className="h-auto min-h-10 justify-start whitespace-normal rounded-xl px-4 py-2.5 text-left"
+                                  disabled={!canEdit}
+                                  onClick={() => update("processScope", value)}
+                                >
+                                  {label}
+                                </Button>
+                              ))}
+                            </div>
+                          </div>
                         </div>
-                      </Progress>
-                    </div>
-                    <Separator />
-                    <p className="text-muted-foreground text-xs font-medium uppercase tracking-wide">Estimert gevinst</p>
-                    <dl className="grid gap-3 text-sm sm:grid-cols-2">
-                      <div className="flex justify-between gap-2 rounded-lg bg-muted/30 px-3 py-2">
-                        <dt className="text-muted-foreground">Timer spart / år</dt>
-                        <dd className="font-mono font-semibold">{computed.benH.toFixed(0)}</dd>
+                        <ProcessProfileSection
+                          payload={payload}
+                          canEdit={canEdit}
+                          update={update}
+                          compact
+                        />
                       </div>
-                      <div className="flex justify-between gap-2 rounded-lg bg-muted/30 px-3 py-2">
-                        <dt className="text-muted-foreground">Besparelse / år</dt>
-                        <dd className="font-mono font-semibold">
-                          {Math.round(computed.benC).toLocaleString("nb-NO")} kr
-                        </dd>
+                    </AccordionContent>
+                  </AccordionItem>
+
+                  <AccordionItem
+                    value="details-scoring"
+                    className="rounded-2xl bg-muted/10 px-4 ring-1 ring-black/[0.04] dark:ring-white/[0.06]"
+                  >
+                    <AccordionTrigger className="py-4 text-left text-sm font-semibold hover:no-underline">
+                      Utvidede justeringer
+                    </AccordionTrigger>
+                    <AccordionContent className="pb-4">
+                      <div className="space-y-8">
+                        <LikertField
+                          id="detail-reg-risk"
+                          label="Hvor strenge er regulatoriske krav?"
+                          hint="Juster hvis den raske viktighetsvurderingen trenger mer presisjon."
+                          value={clampLikert5(payload.criticalityRegulatoryRisk)}
+                          onChange={(v) => update("criticalityRegulatoryRisk", v)}
+                          left="Få krav"
+                          right="Svært strenge"
+                          scaleLabels={["Lave", "Noe", "Middels", "Strenge", "Svært strenge"]}
+                          disabled={readOnly}
+                        />
+                        <LikertField
+                          id="detail-process-length"
+                          label="Hvor lang er arbeidsflyten?"
+                          hint="Lengre flyter kan være mer krevende å bygge og vedlikeholde."
+                          value={clampLikert5(payload.processLength)}
+                          onChange={(v) => update("processLength", v)}
+                          left="Kort"
+                          right="Lang"
+                          scaleLabels={["Kort", "Noe", "Middels", "Lang", "Svært lang"]}
+                          disabled={readOnly}
+                        />
+                        <LikertField
+                          id="detail-app-count"
+                          label="Hvor mange systemer brukes?"
+                          hint="Flere systemer gir mer kompleksitet."
+                          value={clampLikert5(payload.applicationCount)}
+                          onChange={(v) => update("applicationCount", v)}
+                          left="Få"
+                          right="Mange"
+                          scaleLabels={["1", "2", "3–4", "5–6", "7+"]}
+                          disabled={readOnly}
+                        />
+                        <div className="grid gap-4 sm:grid-cols-2">
+                          {(
+                            [
+                              ["baselineHours", "Manuelle timer / år", KPI_DEFAULTS.baselineHours],
+                              ["reworkHours", "Omarbeid / år", KPI_DEFAULTS.reworkHours],
+                              ["auditHours", "Kontroll / år", KPI_DEFAULTS.auditHours],
+                              ["thinClientPercent", "Tynnklientandel (%)", 30],
+                            ] as const
+                          ).map(([k, label, fallback]) => (
+                            <div key={k} className="space-y-2">
+                              <Label htmlFor={`detail-${k}`}>{label}</Label>
+                              <Input
+                                id={`detail-${k}`}
+                                inputMode="decimal"
+                                value={String(payload[k])}
+                                onChange={(e) => {
+                                  const num = parseKpiNumber(
+                                    e.target.value,
+                                    fallback,
+                                    Number(payload[k]),
+                                  );
+                                  update(k, num as AssessmentPayload[typeof k]);
+                                }}
+                                disabled={!canEdit}
+                                className="h-10 rounded-xl bg-background shadow-sm"
+                              />
+                            </div>
+                          ))}
+                        </div>
+                        <div className="rounded-2xl bg-background/80 p-4 ring-1 ring-black/[0.04] dark:ring-white/[0.06]">
+                          <div className="flex items-start gap-3">
+                            <Checkbox
+                              id="detail-ocr"
+                              checked={payload.ocrRequired}
+                              onCheckedChange={(c) =>
+                                canEdit && update("ocrRequired", c === true)
+                              }
+                              disabled={!canEdit}
+                              className="mt-0.5"
+                            />
+                            <div>
+                              <Label htmlFor="detail-ocr" className="text-sm font-medium">
+                                Kreves skanning / OCR?
+                              </Label>
+                              <p className="text-muted-foreground mt-1 text-xs">
+                                Slå dette på hvis input fortsatt er papir, bilder eller PDF uten maskinlesbar tekst.
+                              </p>
+                            </div>
+                          </div>
+                        </div>
                       </div>
-                      <div className="flex justify-between gap-2 rounded-lg bg-muted/30 px-3 py-2">
-                        <dt className="text-muted-foreground">Årsverk frigitt</dt>
-                        <dd className="font-mono font-semibold">{computed.benFte.toFixed(2)}</dd>
-                      </div>
-                      <div className="flex justify-between gap-2 rounded-lg bg-muted/30 px-3 py-2">
-                        <dt className="text-muted-foreground">Totale timer / år</dt>
-                        <dd className="font-mono font-semibold">{computed.hoursY.toFixed(0)}</dd>
-                      </div>
-                    </dl>
-                  </>
-                ) : null}
+                    </AccordionContent>
+                  </AccordionItem>
+
+                  <AccordionItem
+                    value="details-context"
+                    className="rounded-2xl bg-muted/10 px-4 ring-1 ring-black/[0.04] dark:ring-white/[0.06]"
+                  >
+                    <AccordionTrigger className="py-4 text-left text-sm font-semibold hover:no-underline">
+                      Organisasjon, ROS og personvern
+                    </AccordionTrigger>
+                    <AccordionContent className="pb-4">
+                      <AssessmentContextCard
+                        assessmentId={assessmentId}
+                        workspaceId={assessment.workspaceId}
+                        assessment={assessment}
+                        canEdit={canEdit}
+                        processScope={payload.processScope ?? "unsure"}
+                      />
+                    </AccordionContent>
+                  </AccordionItem>
+
+                  <AccordionItem
+                    value="details-security"
+                    className="rounded-2xl bg-muted/10 px-4 ring-1 ring-black/[0.04] dark:ring-white/[0.06]"
+                  >
+                    <AccordionTrigger className="py-4 text-left text-sm font-semibold hover:no-underline">
+                      Sikkerhet og utvidet kontekst
+                    </AccordionTrigger>
+                    <AccordionContent className="pb-4">
+                      <HfRequirementsSection
+                        payload={payload}
+                        canEdit={canEdit}
+                        update={update}
+                      />
+                    </AccordionContent>
+                  </AccordionItem>
+                </Accordion>
+
+                <div className="space-y-6 rounded-2xl bg-muted/10 p-4 ring-1 ring-black/[0.04] dark:ring-white/[0.06]">
+                  <div className="space-y-1">
+                    <h3 className="text-base font-semibold text-foreground">
+                      Team og versjoner
+                    </h3>
+                    <p className="text-sm text-muted-foreground">
+                      Bruk dette når den raske vurderingen er klar og dere vil samarbeide videre.
+                    </p>
+                  </div>
+                  <AssessmentCollaborationPanel
+                    assessmentId={assessmentId}
+                    workspaceId={assessment.workspaceId}
+                    canEdit={canEdit}
+                    versionPreviewRequest={versionPreviewRequest}
+                    onVersionPreviewRequestConsumed={
+                      onVersionPreviewRequestConsumed
+                    }
+                    onDraftRestored={(p, meta) => {
+                      setPayload(normalizeDraftPayload(p));
+                      if (meta?.revision !== undefined) {
+                        draftRevisionRef.current = meta.revision;
+                        setDraftRevision(meta.revision);
+                      }
+                    }}
+                  />
+                </div>
               </div>
             </Slide>
           </div>
@@ -1577,43 +1603,119 @@ export function AssessmentWizard({ assessmentId }: Props) {
   );
 }
 
-function ProcessSummaryBlocks({ payload }: { payload: AssessmentPayload }) {
-  const rows: Array<[string, string | undefined]> = [
-    ["Helhetlig beskrivelse", payload.processDescription],
-    ["Mål og verdi", payload.processGoal],
-    ["Flyt og hovedtrinn", payload.processFlowSummary],
-    ["Roller og ansvar", payload.processActors],
-    ["Systemer og data", payload.processSystems],
-    ["Volum og mønster", payload.processVolumeNotes],
-    ["Begrensninger og risiko", payload.processConstraints],
-    ["Videre og oppfølging", payload.processFollowUp],
-  ];
-  const filled = rows.filter(([, v]) => (v ?? "").trim().length > 0);
+function QuickResultHero({
+  computed,
+  workspaceId,
+  title,
+  payload,
+}: {
+  computed: NonNullable<ReturnType<typeof computeAllResults>>;
+  workspaceId: Id<"workspaces">;
+  title: string;
+  payload: AssessmentPayload;
+}) {
+  const tier =
+    computed.priorityScore >= 60
+      ? {
+          label: "Høyt potensial",
+          summary: "Screeningen ser lovende ut, og kandidaten virker realistisk for RPA.",
+          action: "Gå videre til ROS",
+          tone:
+            "from-emerald-500/[0.14] via-background to-primary/[0.08] ring-emerald-500/20",
+        }
+      : computed.priorityScore >= 35
+        ? {
+            label: "Middels potensial",
+            summary: "Kandidaten kan være aktuell, men egnethet eller gevinst bør avklares litt mer.",
+            action: "Gå videre til ROS",
+            tone:
+              "from-amber-500/[0.14] via-background to-primary/[0.06] ring-amber-500/20",
+          }
+        : {
+            label: "Lavt potensial",
+            summary: "Screeningen eller egnetheten er for svak til å prioritere dette nå.",
+            action: "Ikke prioritert",
+            tone:
+              "from-slate-500/[0.12] via-background to-muted/30 ring-black/[0.06] dark:ring-white/[0.06]",
+          };
 
-  if (filled.length === 0) {
-    return (
-      <p className="text-muted-foreground rounded-xl border border-dashed px-4 py-6 text-center text-sm">
-        Ingen utfyllt prosessprofil ennå — gå til steget «Prosess» for å legge
-        inn kontekst.
-      </p>
-    );
-  }
+  const summaryLine =
+    payload.processDescription?.trim() || payload.processName?.trim() || title;
 
   return (
-    <div className="grid gap-3 sm:grid-cols-2">
-      {filled.map(([label, value]) => (
-        <div
-          key={label}
-          className="rounded-xl border border-border/70 bg-gradient-to-br from-muted/30 to-card px-4 py-3"
-        >
-          <p className="text-muted-foreground mb-1.5 text-[11px] font-semibold uppercase tracking-wide">
-            {label}
-          </p>
-          <p className="text-foreground text-sm leading-relaxed whitespace-pre-wrap">
-            {value}
-          </p>
+    <div
+      className={cn(
+        "rounded-3xl bg-gradient-to-br p-5 shadow-sm ring-1",
+        tier.tone,
+      )}
+    >
+      <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+        <div className="max-w-2xl space-y-3">
+          <div className="inline-flex items-center gap-2 rounded-full bg-background/80 px-3 py-1 text-[11px] font-semibold text-muted-foreground shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.08]">
+            <Sparkles className="size-3.5 text-primary" />
+            Screening + egnethet
+          </div>
+          <div>
+            <p className="font-heading text-2xl font-semibold tracking-tight text-foreground">
+              {tier.label}
+            </p>
+            <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+              {tier.summary}
+              {!computed.feasible
+                ? " Stabilitet virker fortsatt svak, så avklar teknikk og prosess før oppstart."
+                : ""}
+            </p>
+          </div>
+          <div className="rounded-2xl bg-background/70 px-4 py-3 shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.08]">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+              Vurdering
+            </p>
+            <p className="mt-1 text-sm font-medium text-foreground">
+              {summaryLine}
+            </p>
+          </div>
         </div>
-      ))}
+
+        <div className="flex w-full max-w-sm flex-col gap-3">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="rounded-2xl bg-background/80 px-4 py-3 shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.08]">
+              <div className="flex items-center gap-2">
+                <Target className="size-4 text-primary" />
+                <p className="text-xs font-semibold text-muted-foreground">
+                  Prioritet
+                </p>
+              </div>
+              <p className="font-heading mt-2 text-2xl font-semibold text-foreground">
+                {computed.priorityScore.toFixed(0)}
+              </p>
+            </div>
+            <div className="rounded-2xl bg-background/80 px-4 py-3 shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.08]">
+              <div className="flex items-center gap-2">
+                <CircleGauge className="size-4 text-primary" />
+                <p className="text-xs font-semibold text-muted-foreground">
+                  Gjennomførbarhet
+                </p>
+              </div>
+              <p className="font-heading mt-2 text-2xl font-semibold text-foreground">
+                {computed.ease.toFixed(0)} %
+              </p>
+            </div>
+          </div>
+
+          {computed.priorityScore >= 35 ? (
+            <Link
+              href={`/w/${workspaceId}/ros`}
+              className={cn(buttonVariants({ size: "sm" }), "h-11 rounded-xl")}
+            >
+              {tier.action}
+            </Link>
+          ) : (
+            <div className="rounded-2xl bg-background/80 px-4 py-3 text-sm font-semibold text-foreground shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.08]">
+              {tier.action}
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
