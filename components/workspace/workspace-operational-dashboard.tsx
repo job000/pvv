@@ -16,7 +16,6 @@ import {
 } from "@/lib/assessment-ui-helpers";
 import { cn } from "@/lib/utils";
 import {
-  AlertTriangle,
   ArrowRight,
   ArrowUpRight,
   ClipboardList,
@@ -82,6 +81,7 @@ function DashboardMetricCard({
   title: string;
   value: string | number;
   status: string;
+  /** Kort forklaring for skjermleser / tooltip — ikke vises som avsnitt (mindre støy). */
   hint: string;
   href: string;
   icon: ComponentType<{ className?: string }>;
@@ -90,13 +90,14 @@ function DashboardMetricCard({
   return (
     <Link
       href={href}
+      title={hint}
       className={cn(
         "group block rounded-2xl p-4 shadow-sm ring-1 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md",
         dashboardMetricTone(tone),
       )}
     >
       <div className="flex items-start justify-between gap-3">
-        <div>
+        <div className="min-w-0">
           <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
             {title}
           </p>
@@ -108,7 +109,7 @@ function DashboardMetricCard({
           <Icon className="size-4.5 text-foreground/80 transition-transform group-hover:scale-110" />
         </div>
       </div>
-      <div className="mt-3 space-y-2">
+      <div className="mt-3">
         <span
           className={cn(
             "inline-flex rounded-lg px-2 py-1 text-[10px] font-semibold",
@@ -117,7 +118,6 @@ function DashboardMetricCard({
         >
           {status}
         </span>
-        <p className="text-sm leading-snug text-muted-foreground">{hint}</p>
       </div>
     </Link>
   );
@@ -131,15 +131,69 @@ function FocusActionCard({
   cta,
   icon: Icon,
   tone = "default",
+  emphasize,
 }: {
   eyebrow: string;
   title: string;
+  /** Valgfri — skjul når tom for mindre tekstmasse */
   detail: string;
   href: string;
   cta: string;
   icon: ComponentType<{ className?: string }>;
   tone?: "default" | "warning" | "action";
+  /** Primærkort — større type og tydeligere CTA */
+  emphasize?: boolean;
 }) {
+  const iconWrapClass =
+    tone === "warning"
+      ? "bg-amber-500/10 text-amber-900 ring-amber-500/20 dark:text-amber-100"
+      : tone === "action"
+        ? "bg-primary/10 text-primary ring-primary/20"
+        : "bg-muted/80 text-foreground ring-border/60";
+
+  if (emphasize) {
+    return (
+      <Link
+        href={href}
+        className={cn(
+          "group bg-card flex gap-4 rounded-2xl border p-4 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md sm:gap-5 sm:p-5",
+          tone === "warning"
+            ? "border-amber-500/35"
+            : tone === "action"
+              ? "border-primary/25"
+              : "border-border/70",
+        )}
+      >
+        <div
+          className={cn(
+            "flex size-12 shrink-0 items-center justify-center rounded-2xl ring-1 sm:size-14",
+            iconWrapClass,
+          )}
+          aria-hidden
+        >
+          <Icon className="size-6 sm:size-7 transition-transform duration-200 group-hover:scale-105" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+            {eyebrow}
+          </p>
+          <p className="mt-2 text-base font-semibold leading-snug text-foreground sm:text-lg">
+            {title}
+          </p>
+          {detail ? (
+            <p className="mt-1.5 line-clamp-2 text-xs leading-snug text-muted-foreground sm:text-sm">
+              {detail}
+            </p>
+          ) : null}
+          <div className="mt-4 inline-flex items-center gap-1 text-base font-semibold text-foreground">
+            {cta}
+            <ArrowRight className="size-3.5 transition-transform group-hover:translate-x-0.5" />
+          </div>
+        </div>
+      </Link>
+    );
+  }
+
   return (
     <Link
       href={href}
@@ -160,9 +214,11 @@ function FocusActionCard({
           <p className="mt-2 text-sm font-semibold leading-snug text-foreground">
             {title}
           </p>
-          <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-            {detail}
-          </p>
+          {detail ? (
+            <p className="mt-1.5 line-clamp-2 text-xs leading-snug text-muted-foreground">
+              {detail}
+            </p>
+          ) : null}
         </div>
         <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-card shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.08]">
           <Icon className="size-4.5 text-foreground/80 transition-transform group-hover:scale-110" />
@@ -235,12 +291,12 @@ export function WorkspaceOperationalDashboard({
   }
 
   const {
-    assessmentCount,
     withoutRosLinkCount,
     onHoldCount,
     readyForPrioritizationCount,
     assessmentsWithoutRos,
     readyForPrioritization,
+    blockedItems,
     priorityTop,
     recentlyUpdated,
   } = dash;
@@ -249,98 +305,153 @@ export function WorkspaceOperationalDashboard({
   const rosTarget = assessmentsWithoutRos[0] ?? null;
   const nextActionTarget =
     readyForPrioritization[0] ?? assessmentsWithoutRos[0] ?? priorityTop[0] ?? null;
+  /** Oppfølging uten å falle tilbake til samme sak som ROS-kortet når det finnes egne «neste steg». */
+  const followUpRow =
+    readyForPrioritization[0] ??
+    blockedItems[0] ??
+    null;
 
   const followUpCount = readyForPrioritizationCount + onHoldCount;
+
+  type PrimaryKey = "ros" | "followup" | "recent" | "start";
+  const primarySpec: {
+    key: PrimaryKey;
+    eyebrow: string;
+    title: string;
+    detail: string;
+    href: string;
+    cta: string;
+    icon: ComponentType<{ className?: string }>;
+    tone: "default" | "warning" | "action";
+  } = (() => {
+    if (withoutRosLinkCount > 0 && rosTarget) {
+      return {
+        key: "ros",
+        eyebrow: "Gjør dette først",
+        title: rosTarget.title,
+        detail:
+          withoutRosLinkCount === 1
+            ? "Mangler ROS-kobling"
+            : `${withoutRosLinkCount} vurderinger uten ROS`,
+        href: `/w/${wid}/a/${rosTarget.assessmentId}`,
+        cta: "Koble ROS",
+        icon: ShieldPlus,
+        tone: "warning",
+      };
+    }
+    if (followUpCount > 0 && nextActionTarget) {
+      return {
+        key: "followup",
+        eyebrow: "Gjør dette først",
+        title: nextActionTarget.title,
+        detail: nextActionTarget.nextStepHint,
+        href: `/w/${wid}/a/${nextActionTarget.assessmentId}`,
+        cta: "Fortsett",
+        icon: PlayCircle,
+        tone: "action",
+      };
+    }
+    if (latestWork) {
+      return {
+        key: "recent",
+        eyebrow: "Sist du jobbet med",
+        title: latestWork.title,
+        detail: formatRelativeUpdatedAt(latestWork.updatedAt),
+        href: `/w/${wid}/a/${latestWork.assessmentId}`,
+        cta: "Åpne",
+        icon: ClipboardList,
+        tone: "default",
+      };
+    }
+    return {
+      key: "start",
+      eyebrow: "Kom i gang",
+      title: "Opprett eller åpne en vurdering",
+      detail: "",
+      href: `/w/${wid}/vurderinger`,
+      cta: "Til vurderinger",
+      icon: ClipboardList,
+      tone: "default",
+    };
+  })();
 
   return (
     <div className="space-y-8">
       {showMetrics ? (
         <section className="space-y-4" aria-labelledby="workspace-focus-heading">
-          <div className="rounded-3xl bg-gradient-to-br from-primary/[0.08] via-background to-amber-500/[0.05] p-5 shadow-sm ring-1 ring-black/[0.05] dark:ring-white/[0.06]">
-            <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
-              <div className="max-w-2xl space-y-3">
-                <div className="inline-flex items-center gap-2 rounded-full bg-background/80 px-3 py-1 text-[11px] font-semibold text-muted-foreground shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.08]">
-                  <Sparkles className="size-3.5 text-primary" />
-                  Fokus nå
+          <div className="bg-muted/25 rounded-2xl border border-border/60 p-4 shadow-sm sm:p-5">
+            <div className="space-y-4">
+              <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                <div className="inline-flex items-center gap-2 rounded-full border border-border/70 bg-background px-3 py-1 text-[11px] font-semibold text-muted-foreground">
+                  <Sparkles className="text-primary size-3.5" aria-hidden />
+                  Neste steg
                 </div>
-                <div>
-                  <h2
-                    id="workspace-focus-heading"
-                    className="font-heading text-xl font-semibold tracking-tight text-foreground sm:text-2xl"
-                  >
-                    Her er det viktigste å gjøre videre
-                  </h2>
-                  <p className="mt-2 max-w-xl text-sm leading-relaxed text-muted-foreground">
-                    Dashboardet er prioritert rundt neste steg: arbeid som mangler ROS,
-                    vurderinger som trenger oppfølging og det siste du jobbet med.
-                  </p>
-                </div>
+                <h2
+                  id="workspace-focus-heading"
+                  className="font-heading text-lg font-semibold tracking-tight text-foreground sm:text-xl"
+                >
+                  Én ting å gjøre nå
+                </h2>
               </div>
 
-              <div className="grid gap-3 sm:grid-cols-3 lg:w-[38rem]">
-                <FocusActionCard
-                  eyebrow="Mangler ROS"
-                  title={
-                    withoutRosLinkCount > 0
-                      ? `${withoutRosLinkCount} vurdering${withoutRosLinkCount === 1 ? "" : "er"} uten ROS`
-                      : "Alle vurderinger har ROS koblet"
-                  }
-                  detail={
-                    rosTarget
-                      ? `Neste forslag: ${rosTarget.title}`
-                      : "Ingen åpne ROS-koblinger å følge opp akkurat nå."
-                  }
-                  href={
-                    rosTarget
-                      ? `/w/${wid}/a/${rosTarget.assessmentId}`
-                      : `/w/${wid}/ros`
-                  }
-                  cta={withoutRosLinkCount > 0 ? "Legg til ROS" : "Åpne ROS"}
-                  icon={ShieldPlus}
-                  tone={withoutRosLinkCount > 0 ? "warning" : "default"}
-                />
-                <FocusActionCard
-                  eyebrow="Trenger oppfølging"
-                  title={
-                    followUpCount > 0
-                      ? `${followUpCount} vurdering${followUpCount === 1 ? "" : "er"} trenger neste steg`
-                      : "Ingen saker står i kø akkurat nå"
-                  }
-                  detail={
-                    nextActionTarget
-                      ? nextActionTarget.nextStepHint
-                      : "Teamet er ajour med synlige vurderinger."
-                  }
-                  href={
-                    nextActionTarget
-                      ? `/w/${wid}/a/${nextActionTarget.assessmentId}`
-                      : `/w/${wid}/vurderinger`
-                  }
-                  cta="Fortsett vurdering"
-                  icon={PlayCircle}
-                  tone={followUpCount > 0 ? "action" : "default"}
-                />
-                <FocusActionCard
-                  eyebrow="Sist arbeid"
-                  title={
-                    latestWork
-                      ? `Fortsett med ${latestWork.title}`
-                      : "Start den første vurderingen"
-                  }
-                  detail={
-                    latestWork
-                      ? formatRelativeUpdatedAt(latestWork.updatedAt)
-                      : "Opprett en vurdering og bygg porteføljen videre."
-                  }
-                  href={
-                    latestWork
-                      ? `/w/${wid}/a/${latestWork.assessmentId}`
-                      : `/w/${wid}/vurderinger`
-                  }
-                  cta={latestWork ? "Åpne siste arbeid" : "Start ny vurdering"}
-                  icon={ClipboardList}
-                  tone="default"
-                />
+              <FocusActionCard
+                eyebrow={primarySpec.eyebrow}
+                title={primarySpec.title}
+                detail={primarySpec.detail}
+                href={primarySpec.href}
+                cta={primarySpec.cta}
+                icon={primarySpec.icon}
+                tone={primarySpec.tone}
+                emphasize
+              />
+
+              <div
+                className="flex flex-wrap gap-x-5 gap-y-2 border-t border-black/[0.06] pt-4 text-sm dark:border-white/[0.08]"
+                aria-label="Andre snarveier"
+              >
+                {primarySpec.key !== "ros" && withoutRosLinkCount > 0 && rosTarget ? (
+                  <Link
+                    href={`/w/${wid}/a/${rosTarget.assessmentId}`}
+                    className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 font-medium transition-colors"
+                  >
+                    <ShieldPlus className="size-3.5 text-amber-600 dark:text-amber-400" aria-hidden />
+                    Uten ROS ({withoutRosLinkCount})
+                    <ArrowRight className="size-3.5 opacity-60" aria-hidden />
+                  </Link>
+                ) : null}
+                {primarySpec.key !== "followup" && followUpCount > 0 ? (
+                  <Link
+                    href={
+                      followUpRow
+                        ? `/w/${wid}/a/${followUpRow.assessmentId}`
+                        : `/w/${wid}/vurderinger`
+                    }
+                    className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 font-medium transition-colors"
+                  >
+                    <PlayCircle className="size-3.5 text-primary" aria-hidden />
+                    Trenger oppfølging ({followUpCount})
+                    <ArrowRight className="size-3.5 opacity-60" aria-hidden />
+                  </Link>
+                ) : null}
+                {primarySpec.key !== "recent" && latestWork ? (
+                  <Link
+                    href={`/w/${wid}/a/${latestWork.assessmentId}`}
+                    className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 font-medium transition-colors"
+                  >
+                    <ClipboardList className="size-3.5" aria-hidden />
+                    Sist arbeid
+                    <ArrowRight className="size-3.5 opacity-60" aria-hidden />
+                  </Link>
+                ) : null}
+                {withoutRosLinkCount === 0 ? (
+                  <Link
+                    href={`/w/${wid}/ros`}
+                    className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 font-medium transition-colors"
+                  >
+                    ROS-oversikt
+                    <ArrowRight className="size-3.5 opacity-60" aria-hidden />
+                  </Link>
+                ) : null}
               </div>
             </div>
           </div>
@@ -349,24 +460,24 @@ export function WorkspaceOperationalDashboard({
             <DashboardMetricCard
               title="Uten ROS"
               value={withoutRosLinkCount}
-              status={withoutRosLinkCount > 0 ? "Trenger handling" : "Bra"}
+              status={withoutRosLinkCount > 0 ? "Trenger handling" : "OK"}
               hint={
                 withoutRosLinkCount > 0
-                  ? "Disse vurderingene bør kobles til ROS før de blir liggende."
-                  : "Ingen åpne vurderinger mangler ROS-kobling."
+                  ? "Vurderinger som mangler ROS-kobling — klikk for liste."
+                  : "Alle synlige vurderinger har ROS der det trengs."
               }
               href={`/w/${wid}/vurderinger`}
               icon={ShieldAlert}
               tone={withoutRosLinkCount > 0 ? "warning" : "good"}
             />
             <DashboardMetricCard
-              title="Klar for neste steg"
+              title="Neste steg"
               value={readyForPrioritizationCount}
-              status={readyForPrioritizationCount > 0 ? "Gå videre" : "Ingen kø"}
+              status={readyForPrioritizationCount > 0 ? "Klar" : "Tomt"}
               hint={
                 readyForPrioritizationCount > 0
-                  ? "Vurderinger som er modne for prioritering eller videre beslutning."
-                  : "Ingen vurderinger venter på neste beslutning akkurat nå."
+                  ? "Klare for prioritering eller beslutning."
+                  : "Ingen vurderinger venter på neste steg."
               }
               href={`/w/${wid}/vurderinger`}
               icon={PlayCircle}
@@ -375,11 +486,11 @@ export function WorkspaceOperationalDashboard({
             <DashboardMetricCard
               title="På vent"
               value={onHoldCount}
-              status={onHoldCount > 0 ? "Blokkert" : "Under kontroll"}
+              status={onHoldCount > 0 ? "Venter" : "OK"}
               hint={
                 onHoldCount > 0
-                  ? "Saker som står stille og trenger oppklaring."
-                  : "Ingen synlige vurderinger er satt på vent."
+                  ? "Saker på vent som trenger oppklaring."
+                  : "Ingen vurderinger er satt på vent."
               }
               href={`/w/${wid}/vurderinger`}
               icon={PauseCircle}
@@ -388,8 +499,8 @@ export function WorkspaceOperationalDashboard({
             <DashboardMetricCard
               title="Prosesser"
               value="Åpne"
-              status="Navigasjon"
-              hint="Gå til prosessregisteret før du starter nye vurderinger."
+              status="Register"
+              hint="Prosessregisteret (under Vurderinger → fanen Prosesser)."
               href={`/w/${wid}/vurderinger?fane=prosesser`}
               icon={Users}
               tone="neutral"
@@ -409,14 +520,9 @@ export function WorkspaceOperationalDashboard({
           {showPriority ? (
             <section className="space-y-3">
               <div className="flex items-center justify-between gap-2">
-                <div>
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                    Prioritering
-                  </p>
-                  <h2 className="font-heading mt-1 text-base font-semibold tracking-tight">
-                    Høyeste prioritet
-                  </h2>
-                </div>
+                <h2 className="font-heading text-base font-semibold tracking-tight">
+                  Høy prioritet
+                </h2>
                 <Link
                   href={`/w/${wid}/vurderinger`}
                   className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-semibold text-muted-foreground transition-colors hover:text-foreground"
@@ -446,14 +552,9 @@ export function WorkspaceOperationalDashboard({
           {showRecent ? (
             <section className="space-y-3">
               <div className="flex items-center justify-between gap-2">
-                <div>
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                    Aktivitet
-                  </p>
-                  <h2 className="font-heading mt-1 text-base font-semibold tracking-tight">
-                    Sist oppdatert
-                  </h2>
-                </div>
+                <h2 className="font-heading text-base font-semibold tracking-tight">
+                  Sist oppdatert
+                </h2>
                 <Link
                   href={`/w/${wid}/vurderinger`}
                   className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-semibold text-muted-foreground transition-colors hover:text-foreground"
@@ -569,19 +670,21 @@ function AssessmentDashRow({
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-muted-foreground">
+      <div className="text-muted-foreground flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px]">
         <span>{PIPELINE_STATUS_LABELS[row.pipelineStatus]}</span>
-        <span>· {rosLinked ? "ROS koblet" : "ROS mangler"}</span>
-        {row.ownerName ? <span>· {row.ownerName}</span> : null}
+        {row.ownerName ? <span>{row.ownerName}</span> : null}
       </div>
 
-      <div className="flex items-start gap-2 rounded-xl bg-muted/25 px-3 py-2">
+      <div className="bg-muted/25 flex items-start gap-2 rounded-xl px-3 py-2">
         {rosLinked ? (
-          <PlayCircle className="mt-0.5 size-3.5 shrink-0 text-primary" />
+          <PlayCircle className="text-primary mt-0.5 size-3.5 shrink-0" aria-hidden />
         ) : (
-          <ShieldAlert className="mt-0.5 size-3.5 shrink-0 text-amber-700 dark:text-amber-300" />
+          <ShieldAlert
+            className="mt-0.5 size-3.5 shrink-0 text-amber-700 dark:text-amber-300"
+            aria-hidden
+          />
         )}
-        <p className="line-clamp-2 text-xs leading-relaxed text-foreground/90">
+        <p className="line-clamp-2 text-xs leading-snug text-foreground/90 sm:line-clamp-1">
           {row.nextStepHint}
         </p>
       </div>

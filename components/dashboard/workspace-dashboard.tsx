@@ -141,7 +141,7 @@ export function WorkspaceDashboardGrid({
           {workspaces.length > 3 ? (
             <div className="relative">
               <Search
-                className="text-muted-foreground pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2"
+                className="text-muted-foreground pointer-events-none absolute left-3 top-1/2 z-10 size-4 -translate-y-1/2"
                 aria-hidden
               />
               <Input
@@ -149,7 +149,7 @@ export function WorkspaceDashboardGrid({
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Søk …"
-                className="h-9 w-48 rounded-lg pl-9 text-sm"
+                className="h-9 w-48 rounded-lg pl-10 pr-3 text-sm md:pl-10 md:pr-3"
                 aria-label="Filtrer arbeidsområder"
                 autoComplete="off"
               />

@@ -42,14 +42,9 @@ export function WorkspacePvvHub({ workspaceId, activeTab }: Props) {
     <div className="space-y-4 pb-4">
       <header className="border-border/60 border-b pb-3">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="space-y-1">
-            <h1 className="font-heading text-lg font-semibold tracking-tight text-foreground sm:text-xl">
-              Vurderinger og prosessregister
-            </h1>
-            <p className="text-sm text-muted-foreground">
-              Bruk skjemaer når du vil samle inn enkle forslag før de blir vurderinger.
-            </p>
-          </div>
+          <h1 className="font-heading text-lg font-semibold tracking-tight text-foreground sm:text-xl">
+            {activeTab === "vurderinger" ? "Vurderinger" : "Prosessregister"}
+          </h1>
           <div className="flex flex-col gap-2 sm:items-end">
             <div
               className="flex w-full shrink-0 gap-0.5 rounded-2xl border border-border/50 bg-muted/40 p-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] backdrop-blur-sm dark:bg-muted/25 sm:w-auto sm:min-w-0"
@@ -91,10 +86,11 @@ export function WorkspacePvvHub({ workspaceId, activeTab }: Props) {
             </div>
             <Link
               href={`/w/${workspaceId}/skjemaer`}
+              title="Skjemaer og innsending (intake)"
               className="inline-flex h-10 items-center gap-2 rounded-xl border border-border/60 bg-card px-4 text-sm font-medium text-foreground transition hover:bg-muted/20"
             >
-              <FileText className="size-4" />
-              Skjemaer og intake
+              <FileText className="size-4 shrink-0" aria-hidden />
+              Skjemaer
             </Link>
           </div>
         </div>

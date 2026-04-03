@@ -103,25 +103,20 @@ export function AppShell({
                 </Button>
               ) : null}
               <nav
-                className="flex min-w-0 items-center gap-1.5 sm:gap-2"
+                className="flex min-w-0 shrink-0 items-center gap-1.5 sm:gap-2"
                 aria-label="Hovednavigasjon"
               >
                 <Link
                   href="/dashboard?oversikt=1"
-                  className="font-heading bg-primary/10 text-primary hover:bg-primary/[0.14] focus-visible:ring-ring shrink-0 rounded-xl px-2.5 py-1.5 text-sm font-semibold tracking-tight shadow-sm ring-1 ring-primary/15 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
+                  className={cn(
+                    "font-heading focus-visible:ring-ring shrink-0 rounded-xl px-2.5 py-1.5 text-sm font-semibold tracking-tight shadow-sm ring-1 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2",
+                    workspacesNavActive
+                      ? "bg-primary/10 text-primary hover:bg-primary/[0.14] ring-primary/15"
+                      : "bg-muted/50 text-muted-foreground hover:bg-muted/70 hover:text-foreground ring-border/55",
+                  )}
+                  aria-label="Til arbeidsområde-oversikt"
                 >
                   FRO
-                </Link>
-                <Link
-                  href="/dashboard?oversikt=1"
-                  className={cn(
-                    "rounded-full px-3 py-1.5 text-sm font-medium transition-all",
-                    workspacesNavActive
-                      ? "bg-background text-foreground shadow-sm ring-1 ring-border/90"
-                      : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
-                  )}
-                >
-                  Arbeidsområder
                 </Link>
               </nav>
               {workspaceChrome?.hasWorkspace ? (

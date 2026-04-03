@@ -1581,15 +1581,15 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
       return null;
     }
     return (
-      <div className="mt-3 flex flex-col gap-3 rounded-2xl border border-primary/25 bg-gradient-to-br from-primary/[0.07] via-muted/15 to-muted/25 p-4 sm:flex-row sm:items-center sm:justify-between">
+      <div className="border-primary/25 bg-muted/15 mt-3 flex flex-col gap-3 rounded-2xl border p-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex min-w-0 items-start gap-3">
-          <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10">
-            <GitBranch className="size-5 text-primary" />
+          <div className="bg-primary/10 flex size-10 shrink-0 items-center justify-center rounded-xl">
+            <GitBranch className="text-primary size-5" />
           </div>
           <div className="min-w-0 space-y-0.5">
-            <p className="text-sm font-medium">GitHub-prosjekt</p>
-            <p className="text-xs text-muted-foreground">
-              Opprett issue eller utkast på teamets tavle — uten å scrolle i gjennomgang.
+            <p className="text-sm font-medium">GitHub</p>
+            <p className="text-muted-foreground text-xs">
+              Issue eller utkast på prosjekt-tavlen.
             </p>
           </div>
         </div>
@@ -1620,56 +1620,58 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
   };
 
   return (
-    <div className="space-y-8 pb-6">
-      <header className="flex flex-col gap-3 rounded-2xl border border-border/50 bg-muted/10 p-5">
+    <div className="space-y-6 pb-6">
+      <header className="border-border/50 bg-muted/10 flex flex-col gap-4 rounded-2xl border p-4 sm:p-5">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-          <div className="space-y-1">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-              Form Builder
-            </p>
+          <div className="min-w-0 space-y-1">
             <h1 className="font-heading text-xl font-semibold tracking-tight">
-              Skjema og intake
+              Skjemaer
             </h1>
-            <p className="max-w-2xl text-sm leading-relaxed text-muted-foreground">
-              Lag enkle skjema for ansatte eller eksterne, samle forslag og godkjenn
-              dem før det blir opprettet vurdering og ROS.
+            <p className="text-muted-foreground max-w-xl text-sm leading-snug">
+              Del lenke → motta svar → godkjenn → vurdering (ROS valgfritt).
             </p>
           </div>
-          <Button type="button" className="h-11 rounded-xl" onClick={handleCreateForm}>
+          <Button type="button" className="h-11 shrink-0 rounded-xl" onClick={handleCreateForm}>
             <Plus className="size-4" />
             Nytt skjema
           </Button>
         </div>
-        <div className="grid gap-3 md:grid-cols-3">
-          <Card className="rounded-2xl">
-            <CardHeader className="pb-2">
-              <CardDescription>Skjemaer</CardDescription>
-              <CardTitle>{forms.length}</CardTitle>
-            </CardHeader>
-          </Card>
-          <Card className="rounded-2xl">
-            <CardHeader className="pb-2">
-              <CardDescription>Ventende forslag</CardDescription>
-              <CardTitle>{pendingCount}</CardTitle>
-            </CardHeader>
-          </Card>
-          <Card className="rounded-2xl">
-            <CardHeader className="pb-2">
-              <CardDescription>ROS-maler</CardDescription>
-              <CardTitle>{rosTemplates?.length ?? 0}</CardTitle>
-            </CardHeader>
-          </Card>
+        <div className="grid gap-2 sm:grid-cols-3">
+          <div className="bg-card rounded-2xl border border-border/50 px-4 py-3 shadow-sm">
+            <p className="text-muted-foreground text-[11px] font-medium uppercase tracking-wide">
+              Skjemaer
+            </p>
+            <p className="font-heading mt-0.5 text-2xl font-semibold tabular-nums">
+              {forms.length}
+            </p>
+          </div>
+          <div className="bg-card rounded-2xl border border-border/50 px-4 py-3 shadow-sm">
+            <p className="text-muted-foreground text-[11px] font-medium uppercase tracking-wide">
+              Ventende
+            </p>
+            <p className="font-heading mt-0.5 text-2xl font-semibold tabular-nums">
+              {pendingCount}
+            </p>
+          </div>
+          <div className="bg-card rounded-2xl border border-border/50 px-4 py-3 shadow-sm">
+            <p className="text-muted-foreground text-[11px] font-medium uppercase tracking-wide">
+              ROS-maler
+            </p>
+            <p className="font-heading mt-0.5 text-2xl font-semibold tabular-nums">
+              {rosTemplates?.length ?? 0}
+            </p>
+          </div>
         </div>
       </header>
 
-      <section className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
+      <section className="grid gap-5 xl:grid-cols-[1.1fr_0.9fr]">
         <Card className="rounded-3xl">
-          <CardHeader className="gap-4">
+          <CardHeader className="gap-3 pb-2">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
               <div>
-                <CardTitle>Skjemaer</CardTitle>
-                <CardDescription>
-                  Velg et skjema for å åpne oversikt, innstillinger, lenker og svar.
+                <CardTitle>Dine skjemaer</CardTitle>
+                <CardDescription className="mt-1">
+                  Velg et skjema for å redigere, dele lenke eller behandle svar.
                 </CardDescription>
               </div>
               <div className="flex flex-wrap items-center gap-2">
@@ -1698,13 +1700,13 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
               </div>
             </div>
           </CardHeader>
-          <CardContent className="space-y-4">
+          <CardContent className="space-y-3">
             {forms.length === 0 ? (
-              <div className="rounded-2xl border border-dashed border-border/60 bg-muted/10 p-8 text-center">
-                <FileText className="mx-auto mb-3 size-6 text-muted-foreground" />
+              <div className="border-border/60 bg-muted/10 rounded-2xl border border-dashed p-6 text-center">
+                <FileText className="text-muted-foreground mx-auto mb-2 size-6" />
                 <p className="font-medium">Ingen skjemaer ennå</p>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  Start med et enkelt skjema og legg inn vanlige spørsmål i klart språk.
+                <p className="text-muted-foreground mt-1 text-sm">
+                  Trykk «Nytt skjema» over.
                 </p>
               </div>
             ) : (
@@ -1746,10 +1748,10 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
                               : ""}
                           </p>
                           {formsView === "cards" ? (
-                            <p className="text-xs text-muted-foreground">
+                            <p className="text-muted-foreground text-[11px]">
                               {form.confirmationMode === "email_copy"
-                                ? "Sender bekreftelse til svarers e-post"
-                                : "Ingen e-postbekreftelse"}
+                                ? "E-post til svarer"
+                                : "Uten e-post"}
                             </p>
                           ) : null}
                         </div>
@@ -1785,11 +1787,11 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
                         <Badge variant="outline">Kopi fra mal</Badge>
                       ) : null}
                     </div>
-                    <p className="max-w-3xl text-sm text-muted-foreground">
-                      {selectedFormDescription.trim()
-                        ? selectedFormDescription
-                        : "Bruk skjemaet til innsamling, forhåndsvisning og behandling av innsendte forslag."}
-                    </p>
+                    {selectedFormDescription.trim() ? (
+                      <p className="text-muted-foreground max-w-3xl text-sm leading-snug">
+                        {selectedFormDescription}
+                      </p>
+                    ) : null}
                     <div className="flex flex-wrap gap-2">
                       {selectedFormBadges.map((badge) => (
                         <Badge key={badge} variant="outline">
@@ -1849,48 +1851,61 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
                       onClick={() => setSettingsOpen(true)}
                     >
                       <Settings2 className="size-4" />
-                      Innstillinger
+                      ROS, mal, lenker
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="rounded-xl text-destructive hover:bg-destructive/10 hover:text-destructive"
+                      title="Skjules med en gang — angre i varselet nederst"
+                      onClick={() => void handleArchiveForm()}
+                    >
+                      <Trash2 className="size-4" />
+                      Slett
                     </Button>
                   </div>
                 </div>
 
-                <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-                  <div className="rounded-2xl border border-border/50 bg-muted/10 px-4 py-3">
-                    <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground">
-                      Spørsmål og svar
+                <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+                  <div className="border-border/50 bg-muted/10 rounded-xl border px-3 py-2.5">
+                    <p className="text-muted-foreground text-[10px] font-semibold uppercase tracking-wide">
+                      Innhold
                     </p>
-                    <p className="mt-1 text-sm font-medium">
-                      {selectedForm.questionCount} spørsmål, {activeFormResponseRows.length} svar
-                    </p>
-                  </div>
-                  <div className="rounded-2xl border border-border/50 bg-muted/10 px-4 py-3">
-                    <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground">
-                      Delbare lenker
-                    </p>
-                    <p className="mt-1 text-sm font-medium">{links.length} lenker klare for deling</p>
-                  </div>
-                  <div className="rounded-2xl border border-border/50 bg-muted/10 px-4 py-3">
-                    <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground">
-                      Mapping
-                    </p>
-                    <p className="mt-1 text-sm font-medium">
-                      {mappingSummary.assessment} vurdering, {mappingSummary.ros} ROS, {mappingSummary.pvv} PVV
+                    <p className="mt-0.5 text-sm font-medium tabular-nums">
+                      {selectedForm.questionCount} spørsmål · {activeFormResponseRows.length} svar
                     </p>
                   </div>
-                  <div className="rounded-2xl border border-border/50 bg-muted/10 px-4 py-3">
-                    <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground">
+                  <div className="border-border/50 bg-muted/10 rounded-xl border px-3 py-2.5">
+                    <p className="text-muted-foreground text-[10px] font-semibold uppercase tracking-wide">
+                      Lenker
+                    </p>
+                    <p className="mt-0.5 text-sm font-medium tabular-nums">{links.length} aktive</p>
+                  </div>
+                  <div className="border-border/50 bg-muted/10 rounded-xl border px-3 py-2.5">
+                    <p className="text-muted-foreground text-[10px] font-semibold uppercase tracking-wide">
+                      Auto-utfylling
+                    </p>
+                    <p className="mt-0.5 text-sm font-medium leading-snug">
+                      {mappingSummary.assessment} vurdering · {mappingSummary.ros} ROS ·{" "}
+                      {mappingSummary.pvv} PVV
+                    </p>
+                  </div>
+                  <div className="border-border/50 bg-muted/10 rounded-xl border px-3 py-2.5">
+                    <p className="text-muted-foreground text-[10px] font-semibold uppercase tracking-wide">
                       Deling
                     </p>
-                    <p className="mt-1 text-sm font-medium">{activations.length} aktiveringer</p>
+                    <p className="mt-0.5 text-sm font-medium tabular-nums">
+                      {activations.length} aktiveringer
+                    </p>
                   </div>
                 </div>
 
-                <div className="rounded-2xl border border-border/50 bg-background/70 p-4">
+                <div className="border-border/50 bg-background/70 rounded-2xl border p-3 sm:p-4">
                   <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                     <div>
-                      <p className="text-sm font-medium">Detaljer</p>
-                      <p className="text-xs text-muted-foreground">
-                        Åpne bare mer informasjon når du trenger den.
+                      <p className="text-sm font-medium">Flere detaljer</p>
+                      <p className="text-muted-foreground text-xs">
+                        Oppsett og koblinger (valgfritt).
                       </p>
                     </div>
                     <Button
@@ -1919,31 +1934,28 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
                               : "Gruppert visning"}
                           </Badge>
                         </div>
-                        <p className="mt-3 text-sm text-muted-foreground">
-                          Endre deling, lenker og maloppsett i innstillinger.
+                        <p className="text-muted-foreground mt-2 text-xs leading-snug">
+                          Juster i «Innstillinger».
                         </p>
                       </div>
                       <div className="rounded-2xl border border-border/50 bg-muted/10 p-4">
-                        <p className="text-sm font-medium">Automatisk utfylling</p>
-                        <div className="mt-3 flex flex-wrap gap-2">
+                        <p className="text-sm font-medium">Auto-utfylling</p>
+                        <div className="mt-2 flex flex-wrap gap-2">
                           <Badge variant="outline">Vurdering {mappingSummary.assessment}</Badge>
                           <Badge variant="outline">ROS {mappingSummary.ros}</Badge>
                           <Badge variant="outline">PVV {mappingSummary.pvv}</Badge>
                         </div>
-                        <p className="mt-3 text-sm text-muted-foreground">
-                          Viser hvor mange koblinger som fyller ut interne felter automatisk.
-                        </p>
                       </div>
                     </div>
                   ) : null}
                 </div>
 
-                <div className="space-y-3 rounded-2xl border border-border/50 bg-background/70 p-4">
+                <div className="border-border/50 bg-background/70 space-y-3 rounded-2xl border p-3 sm:p-4">
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <div>
-                      <p className="text-sm font-medium">Innsendte svar</p>
-                      <p className="text-xs text-muted-foreground">
-                        Åpne et svar for detaljer, auto-generert vurdering og ROS-forslag.
+                      <p className="text-sm font-medium">Svar på dette skjemaet</p>
+                      <p className="text-muted-foreground text-xs">
+                        Klikk for gjennomgang og godkjenning.
                       </p>
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
@@ -2059,21 +2071,19 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
         </Card>
 
         <Card className="rounded-3xl">
-          <CardHeader>
-            <CardTitle>Forslag til vurdering</CardTitle>
-            <CardDescription>
-              Innsendte svar blir liggende her til gjennomgang. Godkjenning oppretter
-              vurdering, og ROS er valgfritt hvis skjemaet peker på risiko.
+          <CardHeader className="pb-2">
+            <CardTitle>Alle innsendte forslag</CardTitle>
+            <CardDescription className="mt-1">
+              Samlet kø på tvers av skjemaer — godkjenn for å opprette vurdering.
             </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
+          <CardContent className="space-y-3">
             {submissions.length === 0 ? (
-              <div className="rounded-2xl border border-dashed border-border/60 bg-muted/10 p-8 text-center">
-                <ClipboardCheck className="mx-auto mb-3 size-6 text-muted-foreground" />
-                <p className="font-medium">Ingen forslag ennå</p>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  Når noen sender inn et skjema, vises det her som et forslag til
-                  vurdering.
+              <div className="border-border/60 bg-muted/10 rounded-2xl border border-dashed p-6 text-center">
+                <ClipboardCheck className="text-muted-foreground mx-auto mb-2 size-6" />
+                <p className="font-medium">Ingen forslag i køen</p>
+                <p className="text-muted-foreground mt-1 text-sm">
+                  De dukker opp her når noen sender inn.
                 </p>
               </div>
             ) : (
@@ -2161,8 +2171,8 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
             <p id="intake-editor-title" className="font-heading text-lg font-semibold">
               Rediger skjema
             </p>
-            <p className="text-sm text-muted-foreground">
-              Skriv spørsmål i klart språk og koble dem til vurdering, ROS og PVV.
+            <p className="text-muted-foreground text-sm">
+              Spørsmål, layout og koblinger til vurdering / ROS / PVV.
             </p>
           </DialogHeader>
           <DialogBody className="space-y-6">
@@ -2174,11 +2184,10 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
                     Skjemaoppsett
                   </div>
                   <h3 className="font-heading text-xl font-semibold">
-                    Gjør skjemaet klart for deling
+                    Navn og visning
                   </h3>
-                  <p className="max-w-2xl text-sm text-muted-foreground">
-                    Start med navn og introduksjon, og finjuster deretter hvordan svareren
-                    møter skjemaet.
+                  <p className="text-muted-foreground max-w-2xl text-sm leading-snug">
+                    Tittel, beskrivelse og hvordan spørsmålene vises.
                   </p>
                 </div>
                 <div className="flex flex-wrap gap-2">
@@ -2850,46 +2859,44 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
         <DialogContent size="xl" titleId="intake-settings-title">
           <DialogHeader>
             <p id="intake-settings-title" className="font-heading text-lg font-semibold">
-              Skjemainnstillinger
+              ROS, mal og lenker
             </p>
-            <p className="text-sm text-muted-foreground">
-              Administrer deling, arbeidsområde-aktivering og delbare lenker uten å fylle opp hovedsiden.
+            <p className="text-muted-foreground text-sm leading-snug">
+              Publisering og sletting ligger på hovedsiden over.
             </p>
           </DialogHeader>
-          <DialogBody className="space-y-6">
+          <DialogBody className="space-y-5">
             {selectedForm ? (
               <>
-                <section className="rounded-2xl border border-border/60 bg-card p-5 shadow-sm">
+                <section className="border-border/60 bg-card rounded-2xl border p-4 shadow-sm sm:p-5">
                   <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
                     <div className="min-w-0 space-y-1">
                       <h3 className="text-sm font-semibold leading-tight">
-                        Kobling til vurdering og risikoanalyse
+                        Vurdering og ROS
                       </h3>
-                      <p className="text-sm text-muted-foreground leading-relaxed">
-                        Vurdering opprettes alltid ved godkjenning. Slå på risikoanalyse når
-                        skjemaet skal bruke en ROS-mal.
+                      <p className="text-muted-foreground text-xs leading-snug">
+                        Vurdering ved godkjenning. ROS er valgfritt.
                       </p>
                     </div>
                   </div>
-                  <Separator className="my-5" />
-                  <div className="grid gap-4 md:grid-cols-2">
-                    <div className="flex flex-col justify-between gap-3 rounded-xl border border-border/50 bg-muted/20 p-4">
-                      <div className="space-y-1">
+                  <Separator className="my-4" />
+                  <div className="grid gap-3 md:grid-cols-2">
+                    <div className="border-border/50 bg-muted/20 flex flex-col justify-between gap-2 rounded-xl border p-3">
+                      <div className="space-y-0.5">
                         <p className="text-sm font-medium">Vurdering</p>
-                        <p className="text-xs leading-relaxed text-muted-foreground">
-                          Opprettes automatisk ved godkjenning hvis den ikke finnes fra før.
+                        <p className="text-muted-foreground text-[11px] leading-snug">
+                          Alltid ved godkjenning.
                         </p>
                       </div>
                       <Badge className="w-fit" variant="secondary">
                         Aktiv
                       </Badge>
                     </div>
-                    <div className="flex flex-col justify-between gap-3 rounded-xl border border-border/50 bg-muted/20 p-4">
-                      <div className="min-w-0 space-y-1">
-                        <p className="text-sm font-medium">Risikoanalyse</p>
-                        <p className="text-xs leading-relaxed text-muted-foreground">
-                          Bruk valgt ROS-mal når skjemaet peker på risiko. Uten mal opprettes en
-                          standard-mal ved behov.
+                    <div className="border-border/50 bg-muted/20 flex flex-col justify-between gap-2 rounded-xl border p-3">
+                      <div className="min-w-0 space-y-0.5">
+                        <p className="text-sm font-medium">ROS</p>
+                        <p className="text-muted-foreground text-[11px] leading-snug">
+                          Slå på for ROS-mal og forslag.
                         </p>
                       </div>
                       <button
@@ -2918,8 +2925,8 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
                   </div>
                   {rosIntegrationEnabled ? (
                     <>
-                      <Separator className="my-5" />
-                      <div className="space-y-4">
+                      <Separator className="my-4" />
+                      <div className="space-y-3">
                         <div className="space-y-2">
                           <Label className="text-sm" htmlFor="settings-ros-template">
                             ROS-mal
@@ -2944,8 +2951,8 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
                           >
                             <option value="">
                               {(rosTemplates?.length ?? 0) > 0
-                                ? "Bruk første tilgjengelige / opprett ved behov"
-                                : "Ingen ROS-mal ennå"}
+                                ? "Standard (første mal)"
+                                : "Ingen mal"}
                             </option>
                             {rosTemplates.map((template) => (
                               <option key={template._id} value={template._id}>
@@ -2953,12 +2960,12 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
                               </option>
                             ))}
                           </select>
-                          <p className="text-xs leading-relaxed text-muted-foreground">
+                          <p className="text-muted-foreground text-[11px] leading-snug">
                             {linkedRosTemplate
-                              ? `Valgt mal: ${linkedRosTemplate.name}.`
+                              ? linkedRosTemplate.name
                               : (rosTemplates?.length ?? 0) > 0
-                                ? "Velg en mal, eller la stå tom for å bruke den første tilgjengelige."
-                                : "Ingen mal finnes ennå. Du kan opprette en standard-mal nedenfor."}
+                                ? "Tom = første tilgjengelige mal."
+                                : "Opprett standard-mal under."}
                           </p>
                         </div>
                         <div className="flex flex-wrap gap-2">
@@ -2982,11 +2989,10 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
                     </>
                   ) : (
                     <>
-                      <Separator className="my-5" />
-                      <div className="rounded-xl border border-dashed border-border/60 bg-muted/15 p-4">
-                        <p className="text-sm leading-relaxed text-muted-foreground">
-                          Risikoanalyse kobles ikke til for dette skjemaet. Slå på over når du vil
-                          bruke ROS.
+                      <Separator className="my-4" />
+                      <div className="border-border/60 bg-muted/15 rounded-xl border border-dashed p-3">
+                        <p className="text-muted-foreground text-xs leading-snug">
+                          ROS er av. Slå på over for å velge mal.
                         </p>
                         <div className="mt-4 flex flex-wrap gap-2">
                           <Button
@@ -3003,71 +3009,12 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
                   )}
                 </section>
 
-                <section className="rounded-2xl border border-border/60 bg-card p-5 shadow-sm">
+                <section className="border-border/60 bg-card rounded-2xl border p-4 shadow-sm sm:p-5">
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
                     <div className="min-w-0 space-y-1">
-                      <h3 className="text-sm font-semibold leading-tight">
-                        Publisering og synlighet
-                      </h3>
-                      <p className="text-sm text-muted-foreground leading-relaxed">
-                        Bytt mellom utkast og publisert, eller fjern skjemaet fra listen med
-                        mulighet til å angre i noen sekunder.
-                      </p>
-                    </div>
-                    <Badge
-                      className="w-fit shrink-0"
-                      variant={selectedForm.status === "published" ? "secondary" : "outline"}
-                    >
-                      {selectedForm.status === "published"
-                        ? "Publisert"
-                        : selectedForm.status === "archived"
-                          ? "Arkivert"
-                          : "Utkast"}
-                    </Badge>
-                  </div>
-                  <Separator className="my-5" />
-                  <div className="flex flex-wrap gap-2">
-                    {selectedForm.status === "published" ? (
-                      <Button
-                        type="button"
-                        variant="outline"
-                        className="rounded-xl"
-                        onClick={() => handleSetFormStatus("draft")}
-                      >
-                        Avpubliser skjema
-                      </Button>
-                    ) : null}
-                    {selectedForm.status === "draft" ? (
-                      <Button
-                        type="button"
-                        className="rounded-xl"
-                        onClick={() => handleSetFormStatus("published")}
-                      >
-                        Publiser skjema
-                      </Button>
-                    ) : null}
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className="rounded-xl text-destructive hover:text-destructive"
-                      onClick={handleArchiveForm}
-                    >
-                      <Trash2 className="size-4" />
-                      Slett skjema
-                    </Button>
-                  </div>
-                  <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
-                    «Slett skjema» skjuler skjemaet med en gang og arkiverer det etter noen sekunder
-                    hvis du ikke angrer.
-                  </p>
-                </section>
-
-                <section className="rounded-2xl border border-border/60 bg-card p-5 shadow-sm">
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
-                    <div className="min-w-0 space-y-1">
-                      <h3 className="text-sm font-semibold leading-tight">Mal og deling</h3>
-                      <p className="text-sm text-muted-foreground leading-relaxed">
-                        Publiser skjemaet som mal og aktiver en kopi i andre arbeidsområder.
+                      <h3 className="text-sm font-semibold leading-tight">Mal og aktivering</h3>
+                      <p className="text-muted-foreground text-xs leading-snug">
+                        Del som mal, deretter aktiver kopi i annet område.
                       </p>
                     </div>
                     <Button
@@ -3081,14 +3028,13 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
                     </Button>
                   </div>
                   {selectedForm.sourceTemplateFormId ? (
-                    <p className="mt-4 text-sm leading-relaxed text-muted-foreground">
-                      Dette skjemaet er en aktivert kopi fra en mal. Deling videre som ny mal kommer
-                      senere.
+                    <p className="text-muted-foreground mt-3 text-xs leading-snug">
+                      Aktivert fra mal — ikke delt som ny mal her.
                     </p>
                   ) : (
                     <>
-                      <Separator className="my-5" />
-                      <div className="space-y-4">
+                      <Separator className="my-4" />
+                      <div className="space-y-3">
                         <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
                           <div className="space-y-2">
                             <Label className="text-sm" htmlFor="settings-activate-workspace">
@@ -3127,22 +3073,21 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
                           </Button>
                         </div>
                         {!selectedForm.isTemplate ? (
-                          <p className="text-xs leading-relaxed text-muted-foreground">
-                            Trykk «Del som mal» over først for å gjøre skjemaet tilgjengelig i andre
-                            arbeidsområder.
+                          <p className="text-muted-foreground text-[11px] leading-snug">
+                            «Del som mal» må være på for å aktivere andre steder.
                           </p>
                         ) : null}
                       </div>
                     </>
                   )}
-                  <Separator className="my-5" />
-                  <div className="space-y-3">
+                  <Separator className="my-4" />
+                  <div className="space-y-2">
                     <div className="flex items-center justify-between gap-3">
                       <p className="text-sm font-medium">Aktiveringer</p>
                       <Badge variant="outline">{activations.length}</Badge>
                     </div>
                     {activations.length === 0 ? (
-                      <p className="text-sm text-muted-foreground">Ingen aktiveringer ennå.</p>
+                      <p className="text-muted-foreground text-xs">Ingen ennå.</p>
                     ) : (
                       <div className="space-y-2">
                         {activations.map((activation) => (
@@ -3196,15 +3141,15 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
                   </div>
                 </section>
 
-                <section className="rounded-2xl border border-border/60 bg-card p-5 shadow-sm">
-                  <div className="space-y-1">
+                <section className="border-border/60 bg-card rounded-2xl border p-4 shadow-sm sm:p-5">
+                  <div className="space-y-0.5">
                     <h3 className="text-sm font-semibold leading-tight">Delbare lenker</h3>
-                    <p className="text-sm text-muted-foreground leading-relaxed">
-                      Opprett offentlig lenke med utløpsdato, maks antall svar og tilgangskrav.
+                    <p className="text-muted-foreground text-xs leading-snug">
+                      Utløp, maks svar, åpen eller e-post.
                     </p>
                   </div>
-                  <Separator className="my-5" />
-                  <div className="space-y-4">
+                  <Separator className="my-4" />
+                  <div className="space-y-3">
                     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                       <div className="space-y-2">
                         <Label className="text-sm" htmlFor="settings-link-expires">
@@ -3253,12 +3198,10 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
                       </Button>
                     </div>
                   </div>
-                  <Separator className="my-5" />
+                  <Separator className="my-4" />
                   <div className="space-y-2">
                     {links.length === 0 ? (
-                      <p className="text-sm text-muted-foreground">
-                        Ingen delbare lenker opprettet ennå.
-                      </p>
+                      <p className="text-muted-foreground text-xs">Ingen lenker ennå.</p>
                     ) : (
                       links.map((link) => (
                         <div

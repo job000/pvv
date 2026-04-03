@@ -66,10 +66,8 @@ import {
   Trash2,
   User,
   Users,
-  Wrench,
   Zap,
 } from "lucide-react";
-import type { LucideIcon } from "lucide-react";
 
 import { WorkspaceDeleteDialog } from "@/components/workspace/workspace-delete-dialog";
 import { useRouter } from "next/navigation";
@@ -87,51 +85,40 @@ import { WorkspaceGithubIntegrationCard } from "./workspace-github-integration-c
 import { ProcessCoverageOverview } from "./process-coverage-overview";
 import { ProsessregisterHubLead } from "./prosessregister-hub-lead";
 
-function AssessmentListMetricBar({
-  label,
-  value,
-  icon: Icon,
-  barClass,
+/** Kompakt rad i listevisning — mindre visuell støy enn tre full bredde-grafer. */
+function AssessmentListScoresCompact({
+  ap,
+  crit,
+  ease,
+  easeLabel,
 }: {
-  label: string;
-  value: number | null | undefined;
-  icon: LucideIcon;
-  barClass: string;
+  ap: number;
+  crit: number;
+  ease: number | null | undefined;
+  easeLabel?: string | null;
 }) {
-  const pct =
-    value == null || !Number.isFinite(value)
-      ? null
-      : Math.min(100, Math.max(0, value));
+  const e =
+    ease != null && Number.isFinite(ease) ? Math.min(100, Math.max(0, ease)) : null;
+  const implWord =
+    easeLabel && easeLabel.length > 0
+      ? easeLabel.length > 10
+        ? `${easeLabel.slice(0, 9)}…`
+        : easeLabel
+      : "Impl.";
   return (
-    <div className="space-y-1">
-      <div className="flex items-center justify-between gap-2 text-[11px]">
-        <span className="text-muted-foreground flex min-w-0 items-center gap-1.5 font-medium">
-          <Icon
-            className="text-muted-foreground/85 size-3.5 shrink-0"
-            aria-hidden
-          />
-          <span className="truncate">{label}</span>
-        </span>
-        {pct != null ? (
-          <span className="text-foreground shrink-0 tabular-nums font-semibold">
-            {pct.toFixed(0)}%
+    <p className="text-muted-foreground text-[11px] tabular-nums leading-snug">
+      <span className="text-sky-700 dark:text-sky-300">Gevinst {ap.toFixed(0)}%</span>
+      <span className="mx-1.5 text-border">·</span>
+      <span className="text-rose-700 dark:text-rose-300">Viktighet {crit.toFixed(0)}%</span>
+      {e != null ? (
+        <>
+          <span className="mx-1.5 text-border">·</span>
+          <span className="text-violet-700 dark:text-violet-300">
+            {implWord} {e.toFixed(0)}%
           </span>
-        ) : (
-          <span className="text-muted-foreground shrink-0">—</span>
-        )}
-      </div>
-      <div
-        className="bg-muted/70 h-1.5 overflow-hidden rounded-full ring-1 ring-black/[0.04] dark:ring-white/[0.06]"
-        aria-hidden
-      >
-        {pct != null ? (
-          <div
-            className={cn("h-full rounded-full transition-[width]", barClass)}
-            style={{ width: `${pct}%` }}
-          />
-        ) : null}
-      </div>
-    </div>
+        </>
+      ) : null}
+    </p>
   );
 }
 
@@ -3017,42 +3004,48 @@ export function WorkspaceAssessmentsPanel({
     );
   }
 
+  const hasActiveFilter =
+    search.trim().length > 0 || statusFilter !== "all";
+
   return (
-    <div className="space-y-8">
-      {/* ── Creation area ── */}
+    <div className="space-y-6">
       <GithubIssueStartCard workspaceId={workspaceId} variant="assessment" />
 
-      {/* ── Evaluations list ── */}
       <section
-        className="space-y-4"
+        className="space-y-3"
         role="region"
         aria-labelledby="vurderinger-liste-heading"
       >
         <div className="flex items-center justify-between gap-3">
-          <div>
-            <h2
-              id="vurderinger-liste-heading"
-              className="text-foreground text-lg font-semibold tracking-tight"
-            >
-              Alle vurderinger
-            </h2>
-            <p className="text-muted-foreground mt-0.5 text-xs">
-              {assessments.length === 0
-                ? "Ingen vurderinger ennå — opprett over."
-                : `${assessments.length} ${assessments.length === 1 ? "vurdering" : "vurderinger"}`}
-            </p>
-          </div>
+          <h2
+            id="vurderinger-liste-heading"
+            className="text-foreground text-lg font-semibold tracking-tight"
+          >
+            {assessments.length === 0 ? (
+              "Dine vurderinger"
+            ) : (
+              <>
+                Dine vurderinger
+                <span className="text-muted-foreground ml-2 text-sm font-normal tabular-nums">
+                  ({assessments.length})
+                </span>
+              </>
+            )}
+          </h2>
         </div>
 
         {assessments.length > 0 ? (
           <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
             <div className="relative min-w-0 flex-1">
-              <Search className="text-muted-foreground pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2" />
+              <Search
+                className="text-muted-foreground pointer-events-none absolute left-3 top-1/2 z-10 size-4 -translate-y-1/2"
+                aria-hidden
+              />
               <Input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="Søk i tittel …"
-                className="bg-background h-10 rounded-xl pl-9 text-sm shadow-sm"
+                placeholder="Søk …"
+                className="bg-background h-10 rounded-xl pl-10 pr-3 text-sm shadow-sm md:pl-10 md:pr-3"
                 aria-label="Søk i vurderinger"
               />
             </div>
@@ -3097,20 +3090,19 @@ export function WorkspaceAssessmentsPanel({
           </div>
         ) : null}
 
-        {assessments.length > 0 && filteredAssessments.length > 0 ? (
-          <div className="flex flex-wrap items-center gap-2 text-xs">
-            <span className="text-muted-foreground">
-              {filteredAssessments.length} treff
-            </span>
-            <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 font-medium text-emerald-800 dark:text-emerald-200">
+        {assessments.length > 0 &&
+        filteredAssessments.length > 0 &&
+        hasActiveFilter ? (
+          <div className="text-muted-foreground flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px]">
+            <span className="tabular-nums">{filteredAssessments.length} treff</span>
+            <span className="text-border">·</span>
+            <span className="text-emerald-800 dark:text-emerald-200">
               Høy {priorityDistribution.high}
             </span>
-            <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/10 px-2 py-0.5 font-medium text-amber-800 dark:text-amber-200">
-              Middels {priorityDistribution.mid}
+            <span className="text-amber-800 dark:text-amber-200">
+              Mid. {priorityDistribution.mid}
             </span>
-            <span className="inline-flex items-center gap-1 rounded-full bg-muted/60 px-2 py-0.5 font-medium text-muted-foreground">
-              Lavere {priorityDistribution.low}
-            </span>
+            <span>Lav {priorityDistribution.low}</span>
           </div>
         ) : null}
 
@@ -3123,7 +3115,7 @@ export function WorkspaceAssessmentsPanel({
               Ingen vurderinger ennå
             </p>
             <p className="text-muted-foreground mt-1.5 max-w-xs text-sm">
-              Velg en metode over for å opprette din første vurdering.
+              Bruk «Ny vurdering» over.
             </p>
           </div>
         ) : filteredAssessments.length === 0 ? (
@@ -3152,7 +3144,7 @@ export function WorkspaceAssessmentsPanel({
                 <li key={a._id} className="group/card relative">
                   <div
                     className={cn(
-                      "relative overflow-hidden rounded-2xl bg-card p-5 shadow-sm ring-1 ring-black/[0.04] transition-all duration-200 hover:shadow-md hover:ring-black/[0.08] active:scale-[0.995] dark:ring-white/[0.06] dark:hover:ring-white/[0.12]",
+                      "relative overflow-hidden rounded-2xl bg-card p-4 shadow-sm ring-1 ring-black/[0.04] transition-all duration-200 hover:shadow-md hover:ring-black/[0.08] active:scale-[0.995] dark:ring-white/[0.06] dark:hover:ring-white/[0.12]",
                       "border-l-[3px]",
                       priorityBorderAccentClass(prio),
                     )}
@@ -3230,32 +3222,15 @@ export function WorkspaceAssessmentsPanel({
                       </div>
 
                       {hasModelScores ? (
-                        <div className="space-y-1.5">
-                          <AssessmentListMetricBar
-                            label="Gevinst"
-                            value={ap}
-                            icon={Zap}
-                            barClass="bg-sky-500"
-                          />
-                          <AssessmentListMetricBar
-                            label="Viktighet"
-                            value={crit}
-                            icon={AlertTriangle}
-                            barClass="bg-rose-500"
-                          />
-                          {a.cachedEase != null &&
-                          Number.isFinite(a.cachedEase) ? (
-                            <AssessmentListMetricBar
-                              label={a.cachedEaseLabel ?? "Implementering"}
-                              value={a.cachedEase}
-                              icon={Wrench}
-                              barClass="bg-violet-500"
-                            />
-                          ) : null}
-                        </div>
+                        <AssessmentListScoresCompact
+                          ap={ap!}
+                          crit={crit!}
+                          ease={a.cachedEase}
+                          easeLabel={a.cachedEaseLabel}
+                        />
                       ) : (
-                        <p className="text-muted-foreground rounded-lg bg-muted/20 px-3 py-2 text-[11px]">
-                          Fullfør veiviseren for å beregne poeng.
+                        <p className="text-muted-foreground bg-muted/20 rounded-md px-2 py-1.5 text-[11px] leading-snug">
+                          Fullfør veiviseren for poeng.
                         </p>
                       )}
 

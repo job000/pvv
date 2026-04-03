@@ -502,13 +502,16 @@ export function ProcessCoverageOverview({
           </p>
         </div>
         <div className="relative w-full sm:max-w-xs">
-          <Search className="text-muted-foreground pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2" />
+          <Search
+            className="text-muted-foreground pointer-events-none absolute left-3 top-1/2 z-10 size-4 -translate-y-1/2"
+            aria-hidden
+          />
           <Input
             type="search"
             value={q}
             onChange={(e) => setQ(e.target.value)}
             placeholder="Søk i navn eller ID …"
-            className="h-11 min-h-[44px] bg-background pl-9 text-[16px] sm:h-10 sm:min-h-0 sm:text-sm"
+            className="h-11 min-h-[44px] bg-background pl-10 pr-3 text-[16px] sm:h-10 sm:min-h-0 sm:text-sm md:pl-10 md:pr-3"
             aria-label="Filtrer prosesser"
           />
         </div>

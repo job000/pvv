@@ -371,12 +371,20 @@ export function GithubIssueStartCard({
   ];
 
   return (
-    <div className="rounded-2xl bg-muted/20 p-4 sm:p-5">
-      {/* Tab bar */}
+    <section
+      className="rounded-2xl border border-border/50 bg-muted/15 p-4 sm:p-5"
+      aria-labelledby={`start-${variant}-heading`}
+    >
+      <h2
+        id={`start-${variant}-heading`}
+        className="font-heading text-foreground mb-3 text-sm font-semibold tracking-tight"
+      >
+        {variant === "assessment" ? "Ny vurdering" : "Ny ROS"}
+      </h2>
       <div
-        className="mb-5 flex gap-0.5 rounded-xl bg-muted/50 p-1"
+        className="mb-4 flex gap-0.5 rounded-xl bg-muted/50 p-1"
         role="tablist"
-        aria-label="Velg opprettelsesmetode"
+        aria-label="Opprett fra prosess, GitHub eller blanke ark"
       >
         {tabs.map((t) => (
           <button
@@ -384,8 +392,9 @@ export function GithubIssueStartCard({
             type="button"
             role="tab"
             aria-selected={activeTab === t.id}
+            aria-label={`${t.label}. ${t.desc}`}
             className={cn(
-              "flex flex-1 items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-all duration-150",
+              "flex flex-1 items-center justify-center gap-2 rounded-lg px-2 py-2 text-sm font-medium transition-all duration-150 sm:px-3",
               activeTab === t.id
                 ? "bg-card text-foreground shadow-sm"
                 : "text-muted-foreground hover:text-foreground",
@@ -393,22 +402,13 @@ export function GithubIssueStartCard({
             onClick={() => setActiveTab(t.id)}
           >
             {t.icon}
-            <span className="hidden sm:inline">{t.label}</span>
+            <span className="hidden min-[380px]:inline">{t.label}</span>
           </button>
         ))}
       </div>
 
-      {/* Tab panels */}
       {activeTab === "process" ? (
         <div className="space-y-3">
-          <div>
-            <p className="text-foreground text-sm font-semibold">
-              Start fra prosessregisteret
-            </p>
-            <p className="text-muted-foreground mt-0.5 text-xs">
-              Velg en prosess som allerede er registrert.
-            </p>
-          </div>
           <div className="space-y-3">
             <div className="min-w-0 space-y-1.5">
               <Label
@@ -440,7 +440,7 @@ export function GithubIssueStartCard({
               </select>
               {sortedCandidates.length === 0 ? (
                 <p className="text-muted-foreground text-xs">
-                  Ingen prosesser ennå — opprett under Prosessregister.
+                  Ingen prosesser — legg til under fanen Prosessregister.
                 </p>
               ) : null}
               {variant === "assessment" && selectedCandidateId && resumeCheckPending ? (
@@ -449,11 +449,9 @@ export function GithubIssueStartCard({
                 </p>
               ) : null}
               {variant === "assessment" && existingAssessment ? (
-                <div className="rounded-2xl border border-primary/20 bg-primary/5 px-4 py-3 text-xs text-muted-foreground">
+                <div className="rounded-xl border border-primary/20 bg-primary/5 px-3 py-2.5 text-xs text-muted-foreground">
                   <p className="font-medium text-foreground">{existingAssessment.title}</p>
-                  <p className="mt-1 leading-relaxed">
-                    Sist oppdatert{" "}
-                    {new Date(existingAssessment.updatedAt).toLocaleString("nb-NO")} ·{" "}
+                  <p className="mt-1 line-clamp-2 leading-snug">
                     {existingAssessment.nextStepHint}
                   </p>
                 </div>
@@ -469,15 +467,9 @@ export function GithubIssueStartCard({
               )}
             >
               {variant === "assessment" && existingAssessment ? (
-                <div className="space-y-1">
-                  <p className="text-sm font-medium text-foreground">
-                    Det finnes allerede en påbegynt vurdering
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    Fortsett den eksisterende, eller opprett en ny vurdering fra samme
-                    prosess.
-                  </p>
-                </div>
+                <p className="text-muted-foreground max-w-md text-xs">
+                  Fortsett under eller start på nytt fra samme prosess.
+                </p>
               ) : null}
               <div className="flex flex-col gap-2 sm:flex-row">
                 {variant === "assessment" && existingAssessment ? (
@@ -519,14 +511,6 @@ export function GithubIssueStartCard({
 
       {activeTab === "github" ? (
         <div className="space-y-3">
-          <div>
-            <p className="text-foreground text-sm font-semibold">
-              Importer fra GitHub
-            </p>
-            <p className="text-muted-foreground mt-0.5 text-xs">
-              Lim inn en issue-lenke. Prosessen opprettes automatisk.
-            </p>
-          </div>
           <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
             <div className="min-w-0 flex-1 space-y-1.5">
               <Label
@@ -575,18 +559,6 @@ export function GithubIssueStartCard({
 
       {activeTab === "new" ? (
         <div className="space-y-3">
-          <div>
-            <p className="text-foreground text-sm font-semibold">
-              {variant === "assessment"
-                ? "Ny vurdering"
-                : "Frittstående ROS-analyse"}
-            </p>
-            <p className="text-muted-foreground mt-0.5 text-xs">
-              {variant === "assessment"
-                ? "Gi saken et navn og start veiviseren."
-                : "Opprett uten kobling til prosess eller GitHub."}
-            </p>
-          </div>
           <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
             <div className="min-w-0 flex-1 space-y-1.5">
               <Label
@@ -631,6 +603,6 @@ export function GithubIssueStartCard({
           </div>
         </div>
       ) : null}
-    </div>
+    </section>
   );
 }

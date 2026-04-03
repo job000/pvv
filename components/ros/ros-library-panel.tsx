@@ -471,13 +471,16 @@ export function RosLibraryPanel({ workspaceId }: { workspaceId: Id<"workspaces">
                 Søk
               </Label>
               <div className="relative">
-                <Search className="text-muted-foreground pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2" />
+                <Search
+                  className="text-muted-foreground pointer-events-none absolute left-3 top-1/2 z-10 size-4 -translate-y-1/2"
+                  aria-hidden
+                />
                 <Input
                   id="lib-search"
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                   placeholder="Tittel, risiko, tiltak …"
-                  className="min-h-11 touch-manipulation pl-9 sm:min-h-10"
+                  className="min-h-11 touch-manipulation pl-10 pr-3 sm:min-h-10 md:pl-10 md:pr-3"
                   autoComplete="off"
                 />
               </div>

@@ -713,13 +713,16 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
           {analysesList.length > 0 ? (
             <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-end">
               <div className="relative min-w-[12rem] flex-1">
-                <Search className="text-muted-foreground pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2" />
+                <Search
+                  className="text-muted-foreground pointer-events-none absolute left-3 top-1/2 z-10 size-4 -translate-y-1/2"
+                  aria-hidden
+                />
                 <Input
                   type="search"
                   value={analysisSearch}
                   onChange={(e) => setAnalysisSearch(e.target.value)}
                   placeholder="Søk i tittel eller prosess …"
-                  className="pl-9"
+                  className="pl-10 pr-3 md:pl-10 md:pr-3"
                   aria-label="Filtrer analyser"
                 />
               </div>

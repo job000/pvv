@@ -82,15 +82,14 @@ export default function WorkspaceOverviewPage() {
   return (
     <div className="space-y-6 pb-4">
       <ProductPageHeader
-        eyebrow="Arbeidsområde"
         title={workspace.name}
         description={
           <>
-            <span className="text-foreground">
-              Din rolle: <strong>{roleLabel}</strong>
-            </span>
+            <span className="text-muted-foreground text-sm">{roleLabel}</span>
             {workspace.notes ? (
-              <span className="mt-2 block text-muted-foreground">{workspace.notes}</span>
+              <span className="text-muted-foreground mt-2 block text-sm leading-snug">
+                {workspace.notes}
+              </span>
             ) : null}
           </>
         }
@@ -111,15 +110,12 @@ export default function WorkspaceOverviewPage() {
             viewPrefs.showPrioritySection ||
             viewPrefs.showRecentSection) && (
             <section aria-labelledby="dash-metrics-heading" className="space-y-4">
-              <div>
-                <p className="product-section-eyebrow">Kontrollsenter</p>
-                <h2
-                  id="dash-metrics-heading"
-                  className="font-heading mt-1 text-base font-semibold tracking-tight text-foreground sm:text-lg"
-                >
-                  Det viktigste først
-                </h2>
-              </div>
+              <h2
+                id="dash-metrics-heading"
+                className="font-heading text-base font-semibold tracking-tight text-foreground sm:text-lg"
+              >
+                Oversikt
+              </h2>
               <WorkspaceOperationalDashboard
                 workspaceId={workspaceId}
                 sectionVisibility={sectionVisibility}
@@ -128,15 +124,9 @@ export default function WorkspaceOverviewPage() {
           )}
 
           <section className="space-y-4">
-              <div>
-                <p className="product-section-eyebrow">Hurtigvalg</p>
-                <h2 className="font-heading mt-1 text-base font-semibold tracking-tight text-foreground sm:text-lg">
-                  Snarveier
-                </h2>
-                <p className="text-muted-foreground mt-1 text-sm">
-                  Gå rett til det du skal gjøre.
-                </p>
-              </div>
+              <h2 className="font-heading text-base font-semibold tracking-tight text-foreground sm:text-lg">
+                Snarveier
+              </h2>
             {visibleShortcuts.length > 0 ? (
               <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                 {visibleShortcuts.map(({ href, title, desc, icon: Icon }) => (
@@ -174,27 +164,22 @@ export default function WorkspaceOverviewPage() {
 
           {showBegreperSection ? (
             <section className="space-y-4">
-              <div>
-                <p className="product-section-eyebrow">Hjelp</p>
-                <h2 className="font-heading mt-1 text-base font-semibold tracking-tight text-foreground sm:text-lg">
-                  Begreper
-                </h2>
-              </div>
+              <h2 className="font-heading text-base font-semibold tracking-tight text-foreground sm:text-lg">
+                Begreper
+              </h2>
               <Card className="rounded-2xl border-border/40 bg-muted/15 shadow-[0_1px_3px_rgba(0,0,0,0.03)] ring-1 ring-black/[0.03] dark:ring-white/[0.05]">
                 <CardHeader className="pb-2">
                   <CardTitle className="text-base font-semibold">
-                    Prosess, vurdering og ROS
+                    Prosess · vurdering · ROS
                   </CardTitle>
-                  <CardDescription className="text-sm leading-relaxed">
-                    <strong className="text-foreground">Prosessregisteret</strong> (
+                  <CardDescription className="text-sm leading-snug">
+                    <strong className="text-foreground">Prosessregisteret</strong> har{" "}
                     {candidates.length}{" "}
-                    {candidates.length === 1 ? "prosess" : "prosesser"}) lister
-                    prosesser med ID. En{" "}
-                    <strong className="text-foreground">vurdering</strong> er én
-                    automatiseringssak (skjema, prioritet, pipeline-status).{" "}
-                    <strong className="text-foreground">ROS</strong> er
-                    risikoanalyse og kobles til vurderinger ved behov — uavhengig av
-                    registeret.
+                    {candidates.length === 1 ? "prosess" : "prosesser"}. En{" "}
+                    <strong className="text-foreground">vurdering</strong> er én sak
+                    (skjema, prioritet, status).{" "}
+                    <strong className="text-foreground">ROS</strong> er risikoanalyse
+                    og kobles til vurderingen når det trengs.
                   </CardDescription>
                 </CardHeader>
               </Card>
