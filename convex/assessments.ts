@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
+import { insertUserInAppNotification } from "./userInAppNotifications";
 import {
   mutation,
   query,
@@ -40,6 +41,7 @@ import {
 import { sanitizeAssessmentProcessTextFields } from "../lib/assessment-process-profile";
 import { payloadToSnapshot } from "./lib/payloadSnapshot";
 import { computeAllResults } from "./lib/rpaScoring";
+import { queryUsersByEmailPrefix } from "./lib/userSearch";
 
 async function refreshCachedPriority(
   ctx: MutationCtx,
@@ -1007,6 +1009,52 @@ export const listCollaborators = query({
   },
 });
 
+/** E-postprefiks blant registrerte brukere (for samarbeidsinvitasjon). Krever redigeringstilgang. */
+export const suggestUsersForCollaboratorInvite = query({
+  args: {
+    assessmentId: v.id("assessments"),
+    prefix: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) {
+      return [];
+    }
+    await requireAssessmentEdit(ctx, args.assessmentId);
+    const raw = args.prefix.trim().toLowerCase();
+    if (raw.length < 2) {
+      return [];
+    }
+    const rows = await queryUsersByEmailPrefix(ctx, raw, 24);
+    const collabRows = await ctx.db
+      .query("assessmentCollaborators")
+      .withIndex("by_assessment", (q) =>
+        q.eq("assessmentId", args.assessmentId),
+      )
+      .collect();
+    const collabUserIds = new Set(collabRows.map((c) => c.userId));
+    const out: Array<{
+      email: string;
+      name: string | null;
+      alreadyCollaborator: boolean;
+    }> = [];
+    for (const u of rows) {
+      if (!u.email) {
+        continue;
+      }
+      out.push({
+        email: u.email,
+        name: u.name ?? null,
+        alreadyCollaborator: collabUserIds.has(u._id),
+      });
+      if (out.length >= 12) {
+        break;
+      }
+    }
+    return out;
+  },
+});
+
 export const inviteCollaborator = mutation({
   args: {
     assessmentId: v.id("assessments"),
@@ -1056,6 +1104,13 @@ export const inviteCollaborator = mutation({
           userId: foundUser._id,
           role: args.role,
           addedAt: Date.now(),
+        });
+        const atitle = assessment.title.trim() || "vurdering";
+        await insertUserInAppNotification(ctx, {
+          userId: foundUser._id,
+          title: `Du er lagt til på vurderingen «${atitle}»`,
+          body: `Rolle: ${args.role === "editor" ? "redaktør" : args.role === "reviewer" ? "medvurderer" : "leser"}.`,
+          href: `/w/${assessment.workspaceId}/a/${args.assessmentId}`,
         });
         await ctx.scheduler.runAfter(
           0,

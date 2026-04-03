@@ -43,13 +43,62 @@ export const sendPendingWorkspaceInvite = internalAction({
         subject: `[FRO] Invitasjon til arbeidsområdet ${payload.workspaceName}`,
         html: `<p>Hei,</p>
 <p><strong>${safeInviter}</strong> har invitert deg til arbeidsområdet <strong>${safeWs}</strong> med rollen <strong>${escapeHtml(payload.roleLabel)}</strong>.</p>
-<p>Logg inn i FRO med <strong>denne e-postadressen</strong> for å bli med automatisk:</p>
+<p>Logg inn i FRO med <strong>denne e-postadressen</strong>. Under <strong>Oversikt</strong> kan du godta eller avslå invitasjonen.</p>
 <p><a href="${dashboardUrl}">Åpne FRO</a></p>
-<p>Hvis du ikke forventet denne invitasjonen, kan du se bort fra e-posten.</p>`,
+<p>Hvis du ikke forventet denne invitasjonen, kan du avslå i appen eller se bort fra e-posten.</p>`,
       }),
     });
     if (!res.ok) {
       console.error("Resend workspace-invite:", await res.text());
+      return { ok: false as const, reason: "resend_error" as const };
+    }
+    return { ok: true as const };
+  },
+});
+
+export const sendWorkspaceUserInviteEmail = internalAction({
+  args: {
+    userId: v.id("users"),
+    workspaceId: v.id("workspaces"),
+    role: v.union(
+      v.literal("admin"),
+      v.literal("member"),
+      v.literal("viewer"),
+    ),
+  },
+  handler: async (ctx, args) => {
+    const { key, from, publicUrl } = resendEnv();
+    const payload = await ctx.runQuery(
+      internal.notificationEmailInternal.getWorkspaceUserInviteEmailPayload,
+      args,
+    );
+    if (!payload) {
+      return { ok: false as const, reason: "skipped" as const };
+    }
+    if (!key) {
+      return { ok: false as const, reason: "no_api_key" as const };
+    }
+    const dashboardUrl = `${publicUrl}/dashboard`;
+    const safeWs = escapeHtml(payload.workspaceName);
+    const res = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${key}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        from,
+        to: [payload.toEmail],
+        subject: `[FRO] Invitasjon til ${payload.workspaceName}`,
+        html: `<p>Hei,</p>
+<p>Du er invitert til arbeidsområdet <strong>${safeWs}</strong> som <strong>${escapeHtml(payload.roleLabel)}</strong>.</p>
+<p>Logg inn og gå til <strong>Oversikt</strong> for å <strong>godta</strong> eller <strong>avslå</strong>.</p>
+<p><a href="${dashboardUrl}">Åpne FRO</a></p>
+<p>Du kan skru av slike varsler under Varslinger i FRO.</p>`,
+      }),
+    });
+    if (!res.ok) {
+      console.error("Resend workspace user-invite:", await res.text());
       return { ok: false as const, reason: "resend_error" as const };
     }
     return { ok: true as const };

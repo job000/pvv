@@ -26,6 +26,34 @@ async function userWantsInviteEmail(
   return settings?.notifyEmailInvitations !== false;
 }
 
+export const getWorkspaceUserInviteEmailPayload = internalQuery({
+  args: {
+    userId: v.id("users"),
+    workspaceId: v.id("workspaces"),
+    role: v.union(
+      v.literal("admin"),
+      v.literal("member"),
+      v.literal("viewer"),
+    ),
+  },
+  handler: async (ctx, args) => {
+    if (!(await userWantsInviteEmail(ctx, args.userId))) {
+      return null;
+    }
+    const user = await ctx.db.get(args.userId);
+    const email = user?.email?.trim();
+    if (!email) {
+      return null;
+    }
+    const ws = await ctx.db.get(args.workspaceId);
+    return {
+      toEmail: email,
+      workspaceName: ws?.name ?? "Arbeidsområde",
+      roleLabel: ROLE_NB_WORKSPACE[args.role] ?? args.role,
+    };
+  },
+});
+
 export const getPendingWorkspaceInviteEmailPayload = internalQuery({
   args: { inviteId: v.id("workspaceInvites") },
   handler: async (ctx, args) => {

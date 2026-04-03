@@ -21,6 +21,7 @@ import { useAction, useMutation, useQuery } from "convex/react";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { InviteEmailSuggestInput } from "@/components/user/invite-email-suggest-input";
 import { PipelineStatusSelect } from "@/components/assessment/pipeline-status-select";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -320,6 +321,15 @@ export function WorkspaceSettingsPanel({
   );
 }
 
+function useDebouncedInviteEmail(value: string, ms: number): string {
+  const [debounced, setDebounced] = useState(value);
+  useEffect(() => {
+    const t = setTimeout(() => setDebounced(value), ms);
+    return () => clearTimeout(t);
+  }, [value, ms]);
+  return debounced;
+}
+
 export function WorkspaceTeamPanel({
   workspaceId,
 }: {
@@ -336,6 +346,9 @@ export function WorkspaceTeamPanel({
   const cancelWorkspaceInvite = useMutation(
     api.workspaces.cancelWorkspaceInvite,
   );
+  const cancelWorkspaceUserInvite = useMutation(
+    api.workspaces.cancelWorkspaceUserInvite,
+  );
 
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState<"admin" | "member" | "viewer">(
@@ -344,6 +357,18 @@ export function WorkspaceTeamPanel({
 
   const isAdmin =
     membership?.role === "owner" || membership?.role === "admin";
+
+  const debouncedInviteEmail = useDebouncedInviteEmail(inviteEmail.trim(), 300);
+  const invitePreview = useQuery(
+    api.workspaces.previewWorkspaceInviteTarget,
+    isAdmin && debouncedInviteEmail.includes("@")
+      ? { workspaceId, email: debouncedInviteEmail }
+      : "skip",
+  );
+  const pendingUserInvites = useQuery(
+    api.workspaces.listWorkspaceUserInvitesForAdmin,
+    isAdmin ? { workspaceId } : "skip",
+  );
 
   if (members === undefined || membership === undefined) {
     return <p className="text-muted-foreground text-sm">Laster …</p>;
@@ -358,13 +383,36 @@ export function WorkspaceTeamPanel({
       });
       setInviteEmail("");
       toast.success(
-        r.kind === "linked"
-          ? "Bruker lagt til."
-          : "Invitasjon registrert (aktiveres når brukeren logger inn med e-posten).",
+        r.kind === "pending_acceptance"
+          ? "Invitasjon sendt. Brukeren må godta i oversikten før vedkommende blir medlem."
+          : "Invitasjon er registrert. Når personen logger inn med e-posten, kan vedkommende godta eller avslå under Oversikt.",
       );
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Invitasjon feilet.");
+      toast.error(e instanceof Error ? e.message : "Kunne ikke legge til eller invitere.");
     }
+  }
+
+  const trimmedInvite = inviteEmail.trim();
+  const previewStale =
+    trimmedInvite.includes("@") &&
+    debouncedInviteEmail !== trimmedInvite;
+  const inviteButtonDisabled =
+    !trimmedInvite ||
+    invitePreview?.kind === "already_member" ||
+    invitePreview?.kind === "already_pending" ||
+    (trimmedInvite.includes("@") && !previewStale && invitePreview === undefined);
+
+  let inviteButtonLabel = "Legg til eller inviter";
+  if (previewStale) {
+    inviteButtonLabel = "Sjekker …";
+  } else if (invitePreview?.kind === "invite_registered_user") {
+    inviteButtonLabel = "Send invitasjon";
+  } else if (invitePreview?.kind === "invite_email") {
+    inviteButtonLabel = "Send invitasjon";
+  } else if (invitePreview?.kind === "already_member") {
+    inviteButtonLabel = "Allerede medlem";
+  } else if (invitePreview?.kind === "already_pending") {
+    inviteButtonLabel = "Venter allerede";
   }
 
   if (isAdmin) {
@@ -372,19 +420,22 @@ export function WorkspaceTeamPanel({
       <div className="space-y-5">
         {/* Invite form */}
         <div className="rounded-2xl bg-card p-5 shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.06] sm:p-6">
-          <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Inviter ny bruker</p>
+          <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+            Legg til eller inviter bruker
+          </p>
+          <p className="text-muted-foreground mt-1 max-w-2xl text-xs leading-relaxed">
+            Mottaker får varsel og må godta under Oversikt før vedkommende blir medlem. Uregistrert
+            e-post får invitasjon som dukker opp når personen logger inn med samme adresse.
+          </p>
           <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-end">
-            <div className="min-w-0 flex-1 space-y-1.5">
-              <Label htmlFor="invite-email" className="text-xs">E-post</Label>
-              <Input
-                id="invite-email"
-                type="email"
-                value={inviteEmail}
-                onChange={(e) => setInviteEmail(e.target.value)}
-                placeholder="kollega@firma.no"
-                className="rounded-xl"
-              />
-            </div>
+            <InviteEmailSuggestInput
+              id="invite-email"
+              label="E-post"
+              value={inviteEmail}
+              onChange={setInviteEmail}
+              placeholder="kollega@firma.no"
+              source={{ kind: "workspace", workspaceId }}
+            />
             <div className="w-full space-y-1.5 sm:w-40">
               <Label htmlFor="invite-role" className="text-xs">Rolle</Label>
               <select
@@ -400,11 +451,78 @@ export function WorkspaceTeamPanel({
                 <option value="viewer">Kun visning</option>
               </select>
             </div>
-            <Button type="button" className="rounded-xl" onClick={() => void sendInvite()}>
-              Inviter
+            <Button
+              type="button"
+              className="rounded-xl"
+              disabled={inviteButtonDisabled}
+              onClick={() => void sendInvite()}
+            >
+              {inviteButtonLabel}
             </Button>
           </div>
+          {invitePreview?.kind === "invite_registered_user" ? (
+            <p className="text-muted-foreground mt-2 text-xs leading-relaxed">
+              {invitePreview.displayName
+                ? `«${invitePreview.displayName}» får varsel og kan godta eller avslå.`
+                : "Registrert bruker — vedkommende må godta invitasjonen under Oversikt."}
+            </p>
+          ) : null}
+          {invitePreview?.kind === "invite_email" ? (
+            <p className="text-muted-foreground mt-2 text-xs leading-relaxed">
+              Ingen bruker med denne e-posten i FRO ennå. Etter innlogging kan vedkommende godta eller
+              avslå under Oversikt.
+            </p>
+          ) : null}
+          {invitePreview?.kind === "already_member" ? (
+            <p className="mt-2 text-xs font-medium text-amber-800 dark:text-amber-300">
+              Denne brukeren er allerede medlem av arbeidsområdet.
+            </p>
+          ) : null}
+          {invitePreview?.kind === "already_pending" ? (
+            <p className="mt-2 text-xs font-medium text-amber-800 dark:text-amber-300">
+              Det finnes allerede en ventende invitasjon til denne brukeren.
+            </p>
+          ) : null}
         </div>
+
+        {/* Pending: registered users (awaiting accept) */}
+        {pendingUserInvites !== undefined && pendingUserInvites.length > 0 ? (
+          <div className="space-y-2">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+              Venter på svar (registrerte brukere)
+            </p>
+            {pendingUserInvites.map((row) => (
+              <div
+                key={row._id}
+                className="group/pui flex items-center gap-3 rounded-2xl bg-card px-4 py-3 shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.06]"
+              >
+                <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-sky-500/10">
+                  <span className="text-xs font-bold text-sky-700 dark:text-sky-300">
+                    {(row.name ?? row.email ?? "?").charAt(0).toUpperCase()}
+                  </span>
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-medium">
+                    {row.name ?? row.email ?? row.userId}
+                  </p>
+                  <p className="text-muted-foreground text-[10px]">
+                    {WORKSPACE_ROLE_LABEL_NB[row.role] ?? row.role} · Venter på godkjenning ·{" "}
+                    {new Date(row.createdAt).toLocaleDateString("nb-NO", { dateStyle: "medium" })}
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="rounded-xl text-xs opacity-0 transition-opacity group-hover/pui:opacity-100"
+                  onClick={() => void cancelWorkspaceUserInvite({ inviteId: row._id })}
+                >
+                  Trekk tilbake
+                </Button>
+              </div>
+            ))}
+          </div>
+        ) : null}
 
         {/* Pending invitations */}
         {pendingInvites !== undefined && pendingInvites.length > 0 && (

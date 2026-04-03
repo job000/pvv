@@ -432,6 +432,19 @@ export default defineSchema({
   }).index("by_user", ["userId"]),
 
   /**
+   * In-app-varsler (topplinje). Uavhengig av e-postinnstillinger under «Varslinger».
+   */
+  userInAppNotifications: defineTable({
+    userId: v.id("users"),
+    title: v.string(),
+    body: v.optional(v.string()),
+    /** Intern app-sti, f.eks. /w/<workspaceId> eller /w/.../a/<assessmentId> */
+    href: v.optional(v.string()),
+    readAt: v.optional(v.number()),
+    createdAt: v.number(),
+  }).index("by_user_created", ["userId", "createdAt"]),
+
+  /**
    * Per-bruker visning av arbeidsområdets dashboard (snarveier og seksjoner).
    * Manglende rad = standard (alle snarveier og alle seksjoner synlige).
    */
@@ -463,6 +476,25 @@ export default defineSchema({
     .index("by_email", ["email"])
     .index("by_token", ["token"])
     .index("by_workspace", ["workspaceId"]),
+
+  /**
+   * Invitasjon til registrert bruker — må godtas før workspaceMembers opprettes.
+   * E-postbaserte ventende invitasjoner (workspaceInvites) materialiseres hit ved innlogging.
+   */
+  workspaceUserInvites: defineTable({
+    workspaceId: v.id("workspaces"),
+    userId: v.id("users"),
+    role: v.union(
+      v.literal("admin"),
+      v.literal("member"),
+      v.literal("viewer"),
+    ),
+    invitedByUserId: v.id("users"),
+    createdAt: v.number(),
+  })
+    .index("by_workspace", ["workspaceId"])
+    .index("by_user", ["userId", "createdAt"])
+    .index("by_user_workspace", ["userId", "workspaceId"]),
 
   /**
    * Organisasjonskart (offentlig sektor / sykehus): Helseforetak → avdeling → seksjon.

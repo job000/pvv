@@ -1,6 +1,7 @@
 "use client";
 
 import { DashboardEntryRedirect } from "@/components/dashboard/dashboard-entry-redirect";
+import { PendingWorkspaceInvitesBanner } from "@/components/dashboard/pending-workspace-invites-banner";
 import { DashboardLayout } from "@/components/dashboard/dashboard-layout";
 import { TasksBoard } from "@/components/dashboard/tasks-board";
 import { WorkspaceDashboardGrid } from "@/components/dashboard/workspace-dashboard";
@@ -93,6 +94,8 @@ export default function DashboardPage() {
             ) : null
           }
         />
+
+        <PendingWorkspaceInvitesBanner />
 
         {/* ── Create + Workspaces grid ── */}
         <WorkspaceDashboardGrid

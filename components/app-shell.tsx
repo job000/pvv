@@ -1,6 +1,7 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
+import { InAppNotificationMenu } from "@/components/user/in-app-notification-menu";
 import { UserAvatarNav } from "@/components/user/user-avatar-nav";
 import { useWorkspaceChromeOptional } from "@/components/workspace/workspace-chrome-context";
 import { api } from "@/convex/_generated/api";
@@ -132,6 +133,7 @@ export function AppShell({
             <div className="flex shrink-0 items-center gap-2 sm:gap-3">
               <div className="border-border/55 bg-muted/25 flex items-center gap-0.5 rounded-2xl border p-1 shadow-inner">
                 <UserAvatarNav />
+                <InAppNotificationMenu />
                 {isClient ? (
                   <Button
                     type="button"

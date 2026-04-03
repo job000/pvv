@@ -8,7 +8,50 @@ import {
   requireUserId,
   requireWorkspaceMember,
 } from "./lib/access";
+import { insertUserInAppNotification } from "./userInAppNotifications";
 import { normalizeGithubRepoFullName } from "./lib/github";
+import { queryUsersByEmailPrefix } from "./lib/userSearch";
+
+const WORKSPACE_INVITE_ROLE_NB: Record<"admin" | "member" | "viewer", string> = {
+  admin: "Administrator",
+  member: "Medlem",
+  viewer: "Visning",
+};
+
+async function enqueueWorkspaceUserInvite(
+  ctx: MutationCtx,
+  input: {
+    workspaceId: Id<"workspaces">;
+    userId: Id<"users">;
+    role: "admin" | "member" | "viewer";
+    invitedByUserId: Id<"users">;
+  },
+) {
+  const ws = await ctx.db.get(input.workspaceId);
+  const wname = ws?.name?.trim() || "arbeidsområde";
+  await ctx.db.insert("workspaceUserInvites", {
+    workspaceId: input.workspaceId,
+    userId: input.userId,
+    role: input.role,
+    invitedByUserId: input.invitedByUserId,
+    createdAt: Date.now(),
+  });
+  await insertUserInAppNotification(ctx, {
+    userId: input.userId,
+    title: `Invitasjon til «${wname}»`,
+    body: `Du er invitert som ${WORKSPACE_INVITE_ROLE_NB[input.role]}. Gå til oversikten for å godta eller avslå.`,
+    href: "/dashboard",
+  });
+  await ctx.scheduler.runAfter(
+    0,
+    internal.notificationEmails.sendWorkspaceUserInviteEmail,
+    {
+      userId: input.userId,
+      workspaceId: input.workspaceId,
+      role: input.role,
+    },
+  );
+}
 
 async function deleteAssessmentCascade(
   ctx: MutationCtx,
@@ -200,6 +243,105 @@ export const listMembers = query({
       });
     }
     return out;
+  },
+});
+
+/** E-postprefiks-søk blant registrerte brukere (for invitasjon). Kun admin/eier. */
+export const suggestUsersForWorkspaceInvite = query({
+  args: {
+    workspaceId: v.id("workspaces"),
+    prefix: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) {
+      return [];
+    }
+    await requireWorkspaceMember(ctx, args.workspaceId, userId, "admin");
+    const raw = args.prefix.trim().toLowerCase();
+    if (raw.length < 2) {
+      return [];
+    }
+    const rows = await queryUsersByEmailPrefix(ctx, raw, 24);
+    const memberRows = await ctx.db
+      .query("workspaceMembers")
+      .withIndex("by_workspace", (q) =>
+        q.eq("workspaceId", args.workspaceId),
+      )
+      .collect();
+    const memberIds = new Set(memberRows.map((m) => m.userId));
+    const out: Array<{
+      email: string;
+      name: string | null;
+      alreadyMember: boolean;
+    }> = [];
+    for (const u of rows) {
+      if (!u.email) {
+        continue;
+      }
+      out.push({
+        email: u.email,
+        name: u.name ?? null,
+        alreadyMember: memberIds.has(u._id),
+      });
+      if (out.length >= 12) {
+        break;
+      }
+    }
+    return out;
+  },
+});
+
+/**
+ * Hva som skjer ved invitasjon med denne e-posten (kun for admin-UI).
+ */
+export const previewWorkspaceInviteTarget = query({
+  args: {
+    workspaceId: v.id("workspaces"),
+    email: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) {
+      return null;
+    }
+    await requireWorkspaceMember(ctx, args.workspaceId, userId, "admin");
+    const email = args.email.trim().toLowerCase();
+    if (!email || !email.includes("@")) {
+      return { kind: "incomplete" as const };
+    }
+    const foundUser = await ctx.db
+      .query("users")
+      .withIndex("email", (q) => q.eq("email", email))
+      .unique();
+    if (!foundUser) {
+      return { kind: "invite_email" as const };
+    }
+    const existing = await ctx.db
+      .query("workspaceMembers")
+      .withIndex("by_user_workspace", (q) =>
+        q.eq("userId", foundUser._id).eq("workspaceId", args.workspaceId),
+      )
+      .unique();
+    if (existing) {
+      return { kind: "already_member" as const };
+    }
+    const pendingUser = await ctx.db
+      .query("workspaceUserInvites")
+      .withIndex("by_user_workspace", (q) =>
+        q.eq("userId", foundUser._id).eq("workspaceId", args.workspaceId),
+      )
+      .unique();
+    if (pendingUser) {
+      return {
+        kind: "already_pending" as const,
+        displayName: foundUser.name?.trim() || null,
+      };
+    }
+    return {
+      kind: "invite_registered_user" as const,
+      displayName: foundUser.name?.trim() || null,
+    };
   },
 });
 
@@ -397,6 +539,16 @@ export const remove = mutation({
       await ctx.db.delete(inv._id);
     }
 
+    const pendingUserInvites = await ctx.db
+      .query("workspaceUserInvites")
+      .withIndex("by_workspace", (q) =>
+        q.eq("workspaceId", args.workspaceId),
+      )
+      .collect();
+    for (const row of pendingUserInvites) {
+      await ctx.db.delete(row._id);
+    }
+
     const githubSecret = await ctx.db
       .query("workspaceGithubSecrets")
       .withIndex("by_workspace", (q) =>
@@ -492,18 +644,33 @@ export const inviteMember = mutation({
       if (existing) {
         throw new Error("Brukeren er allerede medlem.");
       }
-      await ctx.db.insert("workspaceMembers", {
+      const pendingOffer = await ctx.db
+        .query("workspaceUserInvites")
+        .withIndex("by_user_workspace", (q) =>
+          q.eq("userId", foundUser._id).eq("workspaceId", args.workspaceId),
+        )
+        .unique();
+      if (pendingOffer) {
+        throw new Error("Det finnes allerede en ventende invitasjon til denne brukeren.");
+      }
+      const emailRows = await ctx.db
+        .query("workspaceInvites")
+        .withIndex("by_workspace", (q) =>
+          q.eq("workspaceId", args.workspaceId),
+        )
+        .collect();
+      for (const row of emailRows) {
+        if (row.email === email) {
+          await ctx.db.delete(row._id);
+        }
+      }
+      await enqueueWorkspaceUserInvite(ctx, {
         workspaceId: args.workspaceId,
         userId: foundUser._id,
         role: args.role,
-        joinedAt: Date.now(),
+        invitedByUserId: userId,
       });
-      await ctx.scheduler.runAfter(
-        0,
-        internal.notificationEmails.sendWorkspaceDirectAddEmail,
-        { userId: foundUser._id, workspaceId: args.workspaceId },
-      );
-      return { kind: "linked" as const };
+      return { kind: "pending_acceptance" as const };
     }
     const pending = await ctx.db
       .query("workspaceInvites")
@@ -601,6 +768,10 @@ export const updateMemberRole = mutation({
   },
 });
 
+/**
+ * Flytter e-postinvitasjoner til brukerens kø (workspaceUserInvites) slik at de kan godta/avslå.
+ * Kalles fra dashboard ved innlogging.
+ */
 export const acceptWorkspaceInvitesForEmail = mutation({
   args: {},
   handler: async (ctx) => {
@@ -608,32 +779,176 @@ export const acceptWorkspaceInvitesForEmail = mutation({
     const user = await ctx.db.get(userId);
     const email = user?.email?.trim().toLowerCase();
     if (!email) {
-      return 0;
+      return { materialized: 0 };
     }
     const invites = await ctx.db
       .query("workspaceInvites")
       .withIndex("by_email", (q) => q.eq("email", email))
       .collect();
-    let n = 0;
+    let materialized = 0;
     for (const inv of invites) {
-      const existing = await ctx.db
+      const existingMember = await ctx.db
         .query("workspaceMembers")
         .withIndex("by_user_workspace", (q) =>
           q.eq("userId", userId).eq("workspaceId", inv.workspaceId),
         )
         .unique();
-      if (!existing) {
-        await ctx.db.insert("workspaceMembers", {
+      if (existingMember) {
+        await ctx.db.delete(inv._id);
+        continue;
+      }
+      const existingOffer = await ctx.db
+        .query("workspaceUserInvites")
+        .withIndex("by_user_workspace", (q) =>
+          q.eq("userId", userId).eq("workspaceId", inv.workspaceId),
+        )
+        .unique();
+      if (!existingOffer) {
+        await ctx.db.insert("workspaceUserInvites", {
           workspaceId: inv.workspaceId,
           userId,
           role: inv.role,
-          joinedAt: Date.now(),
+          invitedByUserId: inv.invitedByUserId,
+          createdAt: Date.now(),
         });
-        n++;
+        const ws = await ctx.db.get(inv.workspaceId);
+        const wname = ws?.name?.trim() || "arbeidsområde";
+        await insertUserInAppNotification(ctx, {
+          userId,
+          title: `Invitasjon til «${wname}»`,
+          body: `Du er invitert som ${WORKSPACE_INVITE_ROLE_NB[inv.role]}. Gå til oversikten for å godta eller avslå.`,
+          href: "/dashboard",
+        });
+        materialized++;
       }
       await ctx.db.delete(inv._id);
     }
-    return n;
+    return { materialized };
+  },
+});
+
+export const listMyWorkspaceUserInvites = query({
+  args: {},
+  handler: async (ctx) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) {
+      return [];
+    }
+    const rows = await ctx.db
+      .query("workspaceUserInvites")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .collect();
+    const out = [];
+    for (const row of rows) {
+      const ws = await ctx.db.get(row.workspaceId);
+      if (!ws) {
+        continue;
+      }
+      const inviter = await ctx.db.get(row.invitedByUserId);
+      out.push({
+        _id: row._id,
+        workspaceId: row.workspaceId,
+        workspaceName: ws.name,
+        role: row.role,
+        createdAt: row.createdAt,
+        inviterName:
+          inviter?.name?.trim() ||
+          inviter?.email?.trim() ||
+          "En kollega",
+      });
+    }
+    return out.sort((a, b) => b.createdAt - a.createdAt);
+  },
+});
+
+export const acceptWorkspaceUserInvite = mutation({
+  args: { inviteId: v.id("workspaceUserInvites") },
+  handler: async (ctx, args) => {
+    const userId = await requireUserId(ctx);
+    const row = await ctx.db.get(args.inviteId);
+    if (!row || row.userId !== userId) {
+      throw new Error("Invitasjonen finnes ikke.");
+    }
+    const ws = await ctx.db.get(row.workspaceId);
+    if (!ws) {
+      await ctx.db.delete(args.inviteId);
+      throw new Error("Arbeidsområdet finnes ikke lenger.");
+    }
+    const existing = await ctx.db
+      .query("workspaceMembers")
+      .withIndex("by_user_workspace", (q) =>
+        q.eq("userId", userId).eq("workspaceId", row.workspaceId),
+      )
+      .unique();
+    if (existing) {
+      await ctx.db.delete(args.inviteId);
+      return null;
+    }
+    await ctx.db.insert("workspaceMembers", {
+      workspaceId: row.workspaceId,
+      userId,
+      role: row.role,
+      joinedAt: Date.now(),
+    });
+    await ctx.db.delete(args.inviteId);
+    return null;
+  },
+});
+
+export const declineWorkspaceUserInvite = mutation({
+  args: { inviteId: v.id("workspaceUserInvites") },
+  handler: async (ctx, args) => {
+    const userId = await requireUserId(ctx);
+    const row = await ctx.db.get(args.inviteId);
+    if (!row || row.userId !== userId) {
+      throw new Error("Invitasjonen finnes ikke.");
+    }
+    await ctx.db.delete(args.inviteId);
+    return null;
+  },
+});
+
+export const listWorkspaceUserInvitesForAdmin = query({
+  args: { workspaceId: v.id("workspaces") },
+  handler: async (ctx, args) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) {
+      return [];
+    }
+    await requireWorkspaceMember(ctx, args.workspaceId, userId, "admin");
+    const rows = await ctx.db
+      .query("workspaceUserInvites")
+      .withIndex("by_workspace", (q) =>
+        q.eq("workspaceId", args.workspaceId),
+      )
+      .collect();
+    const out = [];
+    for (const row of rows) {
+      const u = await ctx.db.get(row.userId);
+      out.push({
+        _id: row._id,
+        userId: row.userId,
+        email: u?.email ?? null,
+        name: u?.name ?? null,
+        role: row.role,
+        createdAt: row.createdAt,
+      });
+    }
+    return out.sort((a, b) => b.createdAt - a.createdAt);
+  },
+});
+
+export const cancelWorkspaceUserInvite = mutation({
+  args: { inviteId: v.id("workspaceUserInvites") },
+  handler: async (ctx, args) => {
+    const userId = await requireUserId(ctx);
+    const row = await ctx.db.get(args.inviteId);
+    if (!row) {
+      throw new Error("Invitasjonen finnes ikke.");
+    }
+    await requireWorkspaceMember(ctx, row.workspaceId, userId, "admin");
+    await ctx.db.delete(args.inviteId);
+    return null;
   },
 });
 

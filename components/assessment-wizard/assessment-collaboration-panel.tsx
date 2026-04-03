@@ -1,6 +1,7 @@
 "use client";
 
 import { TaskGithubControls } from "@/components/tasks/task-github-controls";
+import { InviteEmailSuggestInput } from "@/components/user/invite-email-suggest-input";
 import { UserAvatar } from "@/components/user-avatar";
 import { AssessmentVersionsBlock } from "@/components/assessment-wizard/assessment-versions-block";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -315,17 +316,17 @@ export function AssessmentCollaborationPanel({
           <p className="font-medium text-sm">Tilgang og deling</p>
         </div>
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
-          <div className="min-w-0 flex-1 space-y-2">
-            <Label htmlFor="collab-email">E-post</Label>
-            <Input
-              id="collab-email"
-              value={inviteEmail}
-              onChange={(e) => setInviteEmail(e.target.value)}
-              placeholder="kollega@firma.no"
-              disabled={!canEdit}
-              autoComplete="email"
-            />
-          </div>
+          <InviteEmailSuggestInput
+            id="collab-email"
+            label="E-post"
+            value={inviteEmail}
+            onChange={setInviteEmail}
+            placeholder="kollega@firma.no"
+            disabled={!canEdit}
+            source={{ kind: "assessment", assessmentId }}
+            className="space-y-2"
+            inputClassName="rounded-lg"
+          />
           <div className="space-y-2 sm:w-44">
             <Label htmlFor="collab-role">Rolle</Label>
             <select
