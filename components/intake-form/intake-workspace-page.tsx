@@ -31,6 +31,7 @@ import {
   detectTechnicalTerms,
 } from "@/lib/intake-form";
 import { effectiveGithubDefaultRepos } from "@/lib/github-workspace-helpers";
+import { cn } from "@/lib/utils";
 import { toastDeleteWithUndo } from "@/lib/toast-delete-undo";
 import { formatUserFacingError } from "@/lib/user-facing-error";
 import { useAction, useMutation, useQuery } from "convex/react";
@@ -55,7 +56,7 @@ import {
   XCircle,
 } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 type EditableQuestion = {
   id: string;
@@ -965,10 +966,24 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
     >
   >({});
   const [formsView, setFormsView] = useState<"cards" | "compact">("compact");
+  /** Når false: kun kompakt sammendrag under listen — mer plass til køen til høyre. */
+  const [formWorkspacePanelExpanded, setFormWorkspacePanelExpanded] =
+    useState(true);
+  const prevActiveFormIdRef = useRef<Id<"intakeForms"> | null>(null);
   const [showFormOverview, setShowFormOverview] = useState(false);
   const [showResponses, setShowResponses] = useState(false);
 
   const selectedForm = forms.find((form) => form._id === activeFormId) ?? null;
+
+  useEffect(() => {
+    if (activeFormId !== prevActiveFormIdRef.current) {
+      prevActiveFormIdRef.current = activeFormId;
+      if (activeFormId !== null) {
+        setFormWorkspacePanelExpanded(true);
+      }
+    }
+  }, [activeFormId]);
+
   const selectedFormQuestions = useMemo(
     () => (editorData ? toEditableQuestions(editorData.questions) : []),
     [editorData],
@@ -1675,25 +1690,37 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
                 </CardDescription>
               </div>
               <div className="flex flex-wrap items-center gap-2">
-                <div className="rounded-xl border border-border/60 bg-muted/20 p-1">
+                <div
+                  className="inline-flex rounded-full border border-border/50 bg-muted/40 p-0.5 shadow-inner"
+                  role="group"
+                  aria-label="Visning av skjemaliste"
+                >
                   <Button
                     type="button"
                     size="sm"
-                    variant={formsView === "cards" ? "secondary" : "ghost"}
-                    className="rounded-lg"
+                    variant="ghost"
+                    className={cn(
+                      "gap-1.5 rounded-full px-3.5",
+                      formsView === "cards" &&
+                        "bg-background text-foreground shadow-sm ring-1 ring-border/60",
+                    )}
                     onClick={() => setFormsView("cards")}
                   >
-                    <LayoutGrid className="size-4" />
+                    <LayoutGrid className="size-3.5" />
                     Kort
                   </Button>
                   <Button
                     type="button"
                     size="sm"
-                    variant={formsView === "compact" ? "secondary" : "ghost"}
-                    className="rounded-lg"
+                    variant="ghost"
+                    className={cn(
+                      "gap-1.5 rounded-full px-3.5",
+                      formsView === "compact" &&
+                        "bg-background text-foreground shadow-sm ring-1 ring-border/60",
+                    )}
                     onClick={() => setFormsView("compact")}
                   >
-                    <List className="size-4" />
+                    <List className="size-3.5" />
                     Kompakt
                   </Button>
                 </div>
@@ -1713,56 +1740,92 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
               <div
                 className={
                   formsView === "cards"
-                    ? "grid gap-3 lg:grid-cols-2"
-                    : "grid gap-2"
+                    ? "grid gap-3 sm:grid-cols-2"
+                    : "flex flex-col gap-1"
                 }
               >
                 {forms.map((form) => {
                   const isSelected = activeFormId === form._id;
+                  const statusLabel =
+                    form.status === "published"
+                      ? "Publisert"
+                      : form.status === "archived"
+                        ? "Arkivert"
+                        : "Utkast";
                   return (
                     <button
                       key={form._id}
                       type="button"
                       onClick={() => setSelectedFormId(form._id)}
-                      className={`rounded-2xl border text-left transition ${
-                        formsView === "cards" ? "p-4" : "px-4 py-3"
-                      } ${
+                      className={cn(
+                        "rounded-2xl border text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+                        formsView === "cards" ? "p-4" : "px-3 py-2.5",
                         isSelected
-                          ? "border-primary bg-primary/5 shadow-sm"
-                          : "border-border/50 hover:bg-muted/10"
-                      }`}
+                          ? formsView === "cards"
+                            ? "border-primary/70 bg-primary/[0.06] shadow-md ring-2 ring-primary/25"
+                            : "border-primary/60 bg-primary/[0.07] shadow-sm ring-1 ring-primary/20"
+                          : "border-border/50 hover:border-border hover:bg-muted/15",
+                      )}
                     >
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0 space-y-1">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <p className="truncate font-medium">{form.title}</p>
-                            {form.isTemplate ? <Badge variant="outline">Mal</Badge> : null}
-                            {form.sourceTemplateFormId ? (
-                              <Badge variant="outline">Aktivert fra mal</Badge>
-                            ) : null}
+                      {formsView === "compact" ? (
+                        <div className="flex min-h-10 items-center gap-3">
+                          <FileText
+                            className={cn(
+                              "size-4 shrink-0",
+                              isSelected ? "text-primary" : "text-muted-foreground",
+                            )}
+                            aria-hidden
+                          />
+                          <div className="min-w-0 flex-1">
+                            <div className="flex min-w-0 items-center gap-2">
+                              <p className="truncate font-medium leading-tight">{form.title}</p>
+                              {form.isTemplate ? (
+                                <Badge variant="outline" className="hidden shrink-0 sm:inline-flex">
+                                  Mal
+                                </Badge>
+                              ) : null}
+                            </div>
+                            <p className="text-muted-foreground mt-0.5 truncate text-xs tabular-nums">
+                              {form.questionCount} spørsmål · {form.responseCount} svar
+                              {form.activeActivationCount > 0
+                                ? ` · ${form.activeActivationCount} aktiveringer`
+                                : ""}
+                            </p>
                           </div>
-                          <p className="text-sm text-muted-foreground">
-                            {form.questionCount} spørsmål · {form.responseCount} svar
-                            {form.activeActivationCount > 0
-                              ? ` · ${form.activeActivationCount} aktiveringer`
-                              : ""}
-                          </p>
-                          {formsView === "cards" ? (
+                          <Badge
+                            variant={form.status === "published" ? "secondary" : "outline"}
+                            className="shrink-0 text-[10px]"
+                          >
+                            {statusLabel}
+                          </Badge>
+                        </div>
+                      ) : (
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0 space-y-1.5">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <p className="truncate font-medium">{form.title}</p>
+                              {form.isTemplate ? <Badge variant="outline">Mal</Badge> : null}
+                              {form.sourceTemplateFormId ? (
+                                <Badge variant="outline">Aktivert fra mal</Badge>
+                              ) : null}
+                            </div>
+                            <p className="text-muted-foreground text-sm tabular-nums">
+                              {form.questionCount} spørsmål · {form.responseCount} svar
+                              {form.activeActivationCount > 0
+                                ? ` · ${form.activeActivationCount} aktiveringer`
+                                : ""}
+                            </p>
                             <p className="text-muted-foreground text-[11px]">
                               {form.confirmationMode === "email_copy"
                                 ? "E-post til svarer"
                                 : "Uten e-post"}
                             </p>
-                          ) : null}
+                          </div>
+                          <Badge variant={form.status === "published" ? "secondary" : "outline"}>
+                            {statusLabel}
+                          </Badge>
                         </div>
-                        <Badge variant={form.status === "published" ? "secondary" : "outline"}>
-                          {form.status === "published"
-                            ? "Publisert"
-                            : form.status === "archived"
-                              ? "Arkivert"
-                              : "Utkast"}
-                        </Badge>
-                      </div>
+                      )}
                     </button>
                   );
                 })}
@@ -1770,7 +1833,99 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
             )}
 
             {selectedForm ? (
-              <div className="space-y-4 rounded-[28px] border border-border/60 bg-card p-4 shadow-sm sm:p-5">
+              !formWorkspacePanelExpanded ? (
+                <div className="relative flex flex-col gap-3 rounded-2xl border border-border/60 bg-card/80 p-3 pt-3 pr-11 shadow-sm backdrop-blur-sm sm:flex-row sm:items-center sm:justify-between sm:gap-4 sm:p-3.5 sm:pr-12 sm:pt-3.5">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon-sm"
+                    className="absolute right-2 top-2 z-10 rounded-full shadow-sm"
+                    aria-label="Utvid skjemadetaljer"
+                    onClick={() => setFormWorkspacePanelExpanded(true)}
+                  >
+                    <ChevronDown className="size-4" />
+                  </Button>
+                  <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2 sm:gap-3">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex min-w-0 flex-wrap items-center gap-2">
+                        <p className="truncate font-heading text-base font-semibold sm:text-lg">
+                          {selectedForm.title}
+                        </p>
+                        <Badge
+                          variant={selectedForm.status === "published" ? "secondary" : "outline"}
+                          className="shrink-0"
+                        >
+                          {selectedForm.status === "published"
+                            ? "Publisert"
+                            : selectedForm.status === "archived"
+                              ? "Arkivert"
+                              : "Utkast"}
+                        </Badge>
+                      </div>
+                      <p className="text-muted-foreground mt-0.5 text-xs tabular-nums sm:text-sm">
+                        {selectedForm.questionCount} spørsmål · {activeFormResponseRows.length} svar
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2 border-t border-border/50 pt-3 sm:border-t-0 sm:pt-0 sm:pr-0">
+                    {selectedForm.status === "published" ? (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="rounded-xl"
+                        onClick={() => handleSetFormStatus("draft")}
+                      >
+                        Avpubliser
+                      </Button>
+                    ) : selectedForm.status === "draft" ? (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="rounded-xl"
+                        onClick={() => handleSetFormStatus("published")}
+                      >
+                        Publiser
+                      </Button>
+                    ) : null}
+                    <Button
+                      type="button"
+                      size="sm"
+                      className="rounded-xl"
+                      disabled={!editorData}
+                      onClick={() => {
+                        primeEditorState(editorData);
+                        setEditorOpen(true);
+                      }}
+                    >
+                      Rediger
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="rounded-xl"
+                      aria-label="ROS, mal, lenker"
+                      onClick={() => setSettingsOpen(true)}
+                    >
+                      <Settings2 className="size-4" />
+                      <span className="hidden sm:inline">ROS, mal, lenker</span>
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+              <div className="relative space-y-4 rounded-[28px] border border-border/60 bg-card p-4 pt-4 pr-11 shadow-sm sm:p-5 sm:pr-14">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon-sm"
+                  className="absolute right-3 top-3 z-10 rounded-full shadow-sm sm:right-4 sm:top-4"
+                  aria-label="Minimer skjemadetaljer"
+                  onClick={() => setFormWorkspacePanelExpanded(false)}
+                >
+                  <ChevronUp className="size-4" />
+                </Button>
                 <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
                   <div className="min-w-0 space-y-3">
                     <div className="flex flex-wrap items-center gap-2">
@@ -2066,6 +2221,7 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
                   ) : null}
                 </div>
               </div>
+              )
             ) : null}
           </CardContent>
         </Card>
