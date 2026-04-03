@@ -1,4 +1,5 @@
 import { v } from "convex/values";
+import { internal } from "./_generated/api";
 import { mutation, query, type MutationCtx } from "./_generated/server";
 import { getAuthUserId } from "@convex-dev/auth/server";
 import type { Id } from "./_generated/dataModel";
@@ -497,6 +498,11 @@ export const inviteMember = mutation({
         role: args.role,
         joinedAt: Date.now(),
       });
+      await ctx.scheduler.runAfter(
+        0,
+        internal.notificationEmails.sendWorkspaceDirectAddEmail,
+        { userId: foundUser._id, workspaceId: args.workspaceId },
+      );
       return { kind: "linked" as const };
     }
     const pending = await ctx.db
@@ -509,7 +515,7 @@ export const inviteMember = mutation({
       }
     }
     const token = `w_${Date.now()}_${Math.random().toString(36).slice(2)}_${Math.random().toString(36).slice(2)}`;
-    await ctx.db.insert("workspaceInvites", {
+    const inviteId = await ctx.db.insert("workspaceInvites", {
       workspaceId: args.workspaceId,
       email,
       role: args.role,
@@ -517,6 +523,11 @@ export const inviteMember = mutation({
       invitedByUserId: userId,
       createdAt: Date.now(),
     });
+    await ctx.scheduler.runAfter(
+      0,
+      internal.notificationEmails.sendPendingWorkspaceInvite,
+      { inviteId },
+    );
     return { kind: "pending" as const, token };
   },
 });

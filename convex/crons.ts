@@ -17,4 +17,11 @@ crons.interval(
   {},
 );
 
+crons.interval(
+  "weekly open assessments digest",
+  { hours: 168 },
+  internal.weeklyDraftDigest.runWeeklyDraftDigest,
+  {},
+);
+
 export default crons;

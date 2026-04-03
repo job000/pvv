@@ -120,13 +120,13 @@ function NavLink({
     <Comp
       href={href}
       className={cn(
-        "flex items-center gap-2.5 rounded-md px-2 py-1.5 text-[13px] font-medium transition-colors",
+        "flex min-h-10 items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] font-medium transition-colors lg:min-h-9 lg:py-1.5",
         active
           ? "bg-muted/80 text-foreground"
           : "text-muted-foreground hover:bg-muted/50 hover:text-foreground",
       )}
     >
-      <Icon className="size-3.5 shrink-0 opacity-70" aria-hidden />
+      <Icon className="size-4 shrink-0 opacity-70 lg:size-3.5" aria-hidden />
       {children}
     </Comp>
   );

@@ -73,8 +73,9 @@ export function AppShell({
   return (
     <div className="flex min-h-full flex-col bg-background">
       <header className="sticky top-0 z-40 pt-[env(safe-area-inset-top)]">
-        <div className="border-border/50 from-background/98 via-background/92 to-muted/15 bg-gradient-to-b border-b shadow-[0_8px_30px_-12px_rgba(0,0,0,0.12)] backdrop-blur-xl dark:shadow-[0_8px_32px_-12px_rgba(0,0,0,0.45)] supports-[backdrop-filter]:backdrop-saturate-150">
-          <div className="mx-auto flex min-h-14 w-full max-w-[100rem] items-center justify-between gap-3 px-3 py-2 sm:gap-4 sm:px-6">
+        <div className="border-border/50 from-background/98 via-background/92 to-muted/15 bg-gradient-to-b border-b shadow-[var(--shadow-elevated)] backdrop-blur-xl supports-[backdrop-filter]:backdrop-saturate-150 dark:shadow-[0_8px_32px_-12px_rgba(0,0,0,0.45)]">
+          <div className="mx-auto flex w-full max-w-[100rem] flex-col px-[var(--spacing-page-x,1rem)] sm:px-6">
+            <div className="flex min-h-[var(--app-header-height,3.5rem)] items-center justify-between gap-3 py-2 sm:gap-4">
             <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-3">
               {workspaceChrome?.hasWorkspace ? (
                 <Button
@@ -182,6 +183,21 @@ export function AppShell({
                 <LogOut className="size-[1.15rem]" aria-hidden />
               </Button>
             </div>
+            </div>
+
+            {workspaceChrome?.hasWorkspace && !isDesktop ? (
+              <div
+                className="border-border/40 max-w-full border-t px-1 py-2 md:hidden"
+                title={workspaceChrome.workspaceName}
+              >
+                <span className="text-[0.65rem] font-semibold uppercase tracking-wider text-muted-foreground">
+                  Aktivt område
+                </span>
+                <span className="mt-0.5 block truncate text-sm font-medium text-foreground">
+                  {workspaceChrome.workspaceName}
+                </span>
+              </div>
+            ) : null}
           </div>
         </div>
       </header>

@@ -1057,6 +1057,11 @@ export const inviteCollaborator = mutation({
           role: args.role,
           addedAt: Date.now(),
         });
+        await ctx.scheduler.runAfter(
+          0,
+          internal.notificationEmails.sendAssessmentDirectAddEmail,
+          { userId: foundUser._id, assessmentId: args.assessmentId },
+        );
         return { kind: "linked" as const };
       }
       if (existing.role === "owner") {
@@ -1069,7 +1074,7 @@ export const inviteCollaborator = mutation({
       return { kind: "already" as const };
     }
     const token = `inv_${Date.now()}_${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`;
-    await ctx.db.insert("assessmentInvites", {
+    const inviteId = await ctx.db.insert("assessmentInvites", {
       assessmentId: args.assessmentId,
       email,
       role: args.role,
@@ -1077,6 +1082,11 @@ export const inviteCollaborator = mutation({
       invitedByUserId: userId,
       createdAt: Date.now(),
     });
+    await ctx.scheduler.runAfter(
+      0,
+      internal.notificationEmails.sendPendingAssessmentInvite,
+      { inviteId },
+    );
     return { kind: "pending" as const, token };
   },
 });

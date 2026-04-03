@@ -233,6 +233,7 @@ export const save = mutation({
     status: intakeFormStatusValidator,
     layoutMode: intakeLayoutModeValidator,
     confirmationMode: intakeConfirmationModeValidator,
+    questionsPerPage: v.optional(v.number()),
     questions: v.array(intakeQuestionInputValidator),
   },
   handler: async (ctx, args) => {
@@ -250,6 +251,14 @@ export const save = mutation({
       throw new Error("Legg til minst ett spørsmål.");
     }
     validateConditionalQuestions(args.questions);
+    let questionsPerPagePatch: { questionsPerPage: number } | undefined;
+    if (args.questionsPerPage !== undefined) {
+      const n = Math.floor(args.questionsPerPage);
+      if (!Number.isFinite(n) || n < 1 || n > 25) {
+        throw new Error("Antall spørsmål per side må være mellom 1 og 25.");
+      }
+      questionsPerPagePatch = { questionsPerPage: n };
+    }
     const now = Date.now();
     await ctx.db.patch(args.formId, {
       title,
@@ -258,6 +267,7 @@ export const save = mutation({
       layoutMode: args.layoutMode,
       confirmationMode: args.confirmationMode,
       updatedAt: now,
+      ...questionsPerPagePatch,
     });
 
     const existingQuestions = await ctx.db
@@ -396,6 +406,7 @@ export const activateTemplate = mutation({
       description: sourceForm.description,
       status: "draft",
       layoutMode: sourceForm.layoutMode,
+      questionsPerPage: sourceForm.questionsPerPage,
       confirmationMode: sourceForm.confirmationMode ?? "none",
       rosIntegrationEnabled: Boolean(sourceForm.rosIntegrationEnabled),
       linkedRosTemplateId: undefined,

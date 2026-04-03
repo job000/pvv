@@ -114,6 +114,7 @@ type FormEditorData = {
     description?: string;
     status: "draft" | "published" | "archived";
     layoutMode: "one_per_screen" | "grouped";
+    questionsPerPage?: number;
     confirmationMode: "none" | "email_copy";
     rosIntegrationEnabled?: boolean;
     linkedRosTemplateId?: Id<"rosTemplates">;
@@ -550,17 +551,20 @@ function AdminFormPreview({
   title,
   description,
   layoutMode,
+  questionsPerPage,
   confirmationMode,
   questions,
 }: {
   title: string;
   description: string;
   layoutMode: "one_per_screen" | "grouped";
+  questionsPerPage: number;
   confirmationMode: "none" | "email_copy";
   questions: PreviewQuestion[];
 }) {
+  const perPage = Math.min(25, Math.max(1, Math.floor(questionsPerPage)));
   const previewQuestions =
-    layoutMode === "one_per_screen" ? questions.slice(0, 1) : questions;
+    layoutMode === "one_per_screen" ? questions.slice(0, perPage) : questions;
 
   return (
     <div className="space-y-4 rounded-[28px] border border-border/50 bg-background p-4 shadow-sm">
@@ -585,13 +589,21 @@ function AdminFormPreview({
         <div className="flex items-center justify-between text-xs text-muted-foreground">
           <span>
             {layoutMode === "one_per_screen"
-              ? "Ett spørsmål per skjerm"
+              ? perPage === 1
+                ? "Ett spørsmål per side"
+                : `Opptil ${perPage} spørsmål per side`
               : "Gruppert skjema"}
           </span>
           <span>{questions.length} spørsmål</span>
         </div>
         <Progress
-          value={questions.length > 0 ? (layoutMode === "one_per_screen" ? 25 : 100) : 0}
+          value={
+            questions.length > 0
+              ? layoutMode === "one_per_screen"
+                ? Math.min(100, (100 * perPage) / (questions.length + perPage))
+                : 100
+              : 0
+          }
           className="h-2 rounded-full"
         />
         {confirmationMode === "email_copy" ? (
@@ -672,10 +684,10 @@ function AdminFormPreview({
           Legg til spørsmål for å forhåndsvise skjemaet.
         </div>
       )}
-      {layoutMode === "one_per_screen" && questions.length > 1 ? (
+      {layoutMode === "one_per_screen" && questions.length > previewQuestions.length ? (
         <p className="text-xs text-muted-foreground">
-          Forhåndsvisningen viser første skjerm. Resten av spørsmålene vises ett og ett
-          i den offentlige flyten.
+          Forhåndsvisningen viser første side. Resten kommer når svarer blar videre i den
+          offentlige flyten.
         </p>
       ) : null}
     </div>
@@ -805,6 +817,7 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
   const [confirmationMode, setConfirmationMode] = useState<
     "none" | "email_copy"
   >("none");
+  const [questionsPerPage, setQuestionsPerPage] = useState(1);
   const [questions, setQuestions] = useState<EditableQuestion[]>([]);
   const [expandedQuestionIds, setExpandedQuestionIds] = useState<string[]>([]);
   const [mappingSectionOpenIds, setMappingSectionOpenIds] = useState<string[]>(
@@ -1001,13 +1014,16 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
         ? "E-postbekreftelse"
         : "Ingen bekreftelse",
       selectedFormLayoutMode === "one_per_screen"
-        ? "Ett spørsmål per skjerm"
+        ? (editorData?.form.questionsPerPage ?? 1) > 1
+          ? `Stegvis (${editorData?.form.questionsPerPage ?? 1} per side)`
+          : "Stegvis (1 per side)"
         : "Gruppert visning",
     ];
   }, [
     selectedForm,
     selectedFormConfirmationMode,
     selectedFormLayoutMode,
+    editorData?.form.questionsPerPage,
   ]);
   const updateQuestions = (updater: (prev: EditableQuestion[]) => EditableQuestion[]) =>
     setQuestions((prev) => normalizeQuestionVisibility(updater(prev)));
@@ -1034,6 +1050,9 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
     setTitle(source.form.title);
     setDescription(source.form.description ?? "");
     setLayoutMode(source.form.layoutMode);
+    setQuestionsPerPage(
+      Math.min(25, Math.max(1, Math.floor(source.form.questionsPerPage ?? 1))),
+    );
     setStatus(source.form.status);
     setConfirmationMode(source.form.confirmationMode);
     const nextQuestions = toEditableQuestions(source.questions);
@@ -1161,6 +1180,7 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
       setTitle("Nytt skjema");
       setDescription("");
       setLayoutMode("one_per_screen");
+      setQuestionsPerPage(1);
       setStatus("draft");
       setConfirmationMode("none");
       setEditorOpen(true);
@@ -1184,6 +1204,7 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
         status,
         layoutMode,
         confirmationMode,
+        questionsPerPage,
         questions: questions.map((question, index) => ({
           id: question.id || `question-${index + 1}`,
           label: question.label,
@@ -2203,10 +2224,34 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
                         )
                       }
                     >
-                      <option value="one_per_screen">Ett spørsmål per skjerm</option>
+                      <option value="one_per_screen">Steg for steg (flere spørsmål per side)</option>
                       <option value="grouped">Gruppert skjema</option>
                     </select>
                   </div>
+                  {layoutMode === "one_per_screen" ? (
+                    <div className="space-y-2">
+                      <Label htmlFor="intake-questions-per-page">Spørsmål per side</Label>
+                      <Input
+                        id="intake-questions-per-page"
+                        type="number"
+                        min={1}
+                        max={25}
+                        className="h-10 rounded-xl"
+                        value={questionsPerPage}
+                        onChange={(event) => {
+                          const parsed = Number.parseInt(event.target.value, 10);
+                          if (!Number.isFinite(parsed)) {
+                            return;
+                          }
+                          setQuestionsPerPage(Math.min(25, Math.max(1, parsed)));
+                        }}
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Hvor mange synlige spørsmål som vises før «Neste» i den offentlige
+                        flyten (1–25).
+                      </p>
+                    </div>
+                  ) : null}
                   <div className="space-y-2">
                     <Label>Bekreftelse til svarer</Label>
                     <select
@@ -3305,6 +3350,7 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
               title={title}
               description={description}
               layoutMode={layoutMode}
+              questionsPerPage={questionsPerPage}
               confirmationMode={confirmationMode}
               questions={questions}
             />

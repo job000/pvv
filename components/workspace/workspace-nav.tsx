@@ -30,9 +30,9 @@ type NavItem = {
 
 function navSections(wid: string): { heading: string; items: NavItem[] }[] {
   return [
-    {
-      heading: "Register",
-      items: [
+        {
+          heading: "Registre",
+          items: [
         {
           href: `/w/${wid}/vurderinger?fane=prosesser`,
           label: "Prosesser",
@@ -75,7 +75,7 @@ function navSections(wid: string): { heading: string; items: NavItem[] }[] {
         },
         {
           href: `/w/${wid}/ros`,
-          label: "Risikoanalyse",
+          label: "Risiko (ROS)",
           icon: Shield,
           exact: false,
           kind: "default",
@@ -200,10 +200,10 @@ function WorkspaceNavInner({
                         href={href}
                         onClick={() => onNavigate?.()}
                         className={cn(
-                          "flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-200",
+                          "flex min-h-11 items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-200 md:min-h-10",
                           active
                             ? "bg-foreground text-background shadow-md ring-1 ring-foreground/10"
-                            : "text-muted-foreground hover:bg-background/80 hover:text-foreground hover:shadow-sm",
+                            : "text-muted-foreground hover:bg-background/80 hover:text-foreground hover:shadow-sm active:bg-muted/60",
                         )}
                       >
                         <Icon className="size-4 shrink-0 opacity-90" aria-hidden />

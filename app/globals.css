@@ -46,6 +46,7 @@
   --radius-2xl: calc(var(--radius) * 1.8);
   --radius-3xl: calc(var(--radius) * 2.2);
   --radius-4xl: calc(var(--radius) * 2.6);
+  --spacing-page-x: 1rem;
 }
 
 :root {
@@ -81,6 +82,11 @@
   --sidebar-accent-foreground: oklch(0.205 0 0);
   --sidebar-border: oklch(0.922 0 0);
   --sidebar-ring: oklch(0.708 0 0);
+  --app-header-height: 3.5rem;
+  --page-max-width: 72rem;
+  --touch-target-min: 2.75rem;
+  --shadow-card: 0 1px 2px oklch(0 0 0 / 0.04), 0 4px 16px oklch(0 0 0 / 0.06);
+  --shadow-elevated: 0 8px 30px -12px oklch(0 0 0 / 0.12);
 }
 
 .dark {
@@ -115,6 +121,8 @@
   --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.556 0 0);
+  --shadow-card: 0 1px 2px oklch(0 0 0 / 0.08), 0 4px 20px oklch(0 0 0 / 0.2);
+  --shadow-elevated: 0 8px 32px -12px oklch(0 0 0 / 0.45);
 }
 
 @layer base {
@@ -130,6 +138,22 @@
   /* Ekstra plass når PWA-banner er synlig (unngår at innhold skjules bak bunnlinje) */
   html[data-pwa-hint="1"] main {
     padding-bottom: max(6.5rem, env(safe-area-inset-bottom));
+  }
+}
+
+@layer components {
+  /** Sidetittel — brukes med ProductPageHeader */
+  .product-page-title {
+    @apply font-heading text-2xl font-semibold tracking-tight text-foreground sm:text-3xl;
+  }
+  .product-page-desc {
+    @apply mt-1 max-w-prose text-sm leading-relaxed text-muted-foreground sm:text-base;
+  }
+  .product-section-eyebrow {
+    @apply text-xs font-semibold uppercase tracking-wider text-muted-foreground;
+  }
+  .product-focus {
+    @apply outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50;
   }
 }
 

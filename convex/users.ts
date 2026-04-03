@@ -19,6 +19,25 @@ function omitUndefined<T extends Record<string, unknown>>(obj: T): Partial<T> {
   ) as Partial<T>;
 }
 
+export const getMyNotificationSettings = query({
+  args: {},
+  handler: async (ctx) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) {
+      return null;
+    }
+    const settings = await ctx.db
+      .query("userSettings")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .unique();
+    return {
+      notifyEmailInvitations: settings?.notifyEmailInvitations !== false,
+      notifyEmailDraftSummaryWeekly: settings?.notifyEmailDraftSummaryWeekly !== false,
+      notifyEmailSecurityAlerts: settings?.notifyEmailSecurityAlerts !== false,
+    };
+  },
+});
+
 export const getMyProfile = query({
   args: {},
   handler: async (ctx) => {
@@ -59,6 +78,9 @@ export const patchMyUserSettings = mutation({
     appEntryPreference: v.optional(
       v.union(v.literal("dashboard"), v.literal("workspace")),
     ),
+    notifyEmailInvitations: v.optional(v.boolean()),
+    notifyEmailDraftSummaryWeekly: v.optional(v.boolean()),
+    notifyEmailSecurityAlerts: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
     const userId = await requireUserId(ctx);
@@ -97,6 +119,15 @@ export const patchMyUserSettings = mutation({
     }
     if (args.appEntryPreference !== undefined) {
       patch.appEntryPreference = args.appEntryPreference;
+    }
+    if (args.notifyEmailInvitations !== undefined) {
+      patch.notifyEmailInvitations = args.notifyEmailInvitations;
+    }
+    if (args.notifyEmailDraftSummaryWeekly !== undefined) {
+      patch.notifyEmailDraftSummaryWeekly = args.notifyEmailDraftSummaryWeekly;
+    }
+    if (args.notifyEmailSecurityAlerts !== undefined) {
+      patch.notifyEmailSecurityAlerts = args.notifyEmailSecurityAlerts;
     }
 
     const clean = omitUndefined(patch);

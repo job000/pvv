@@ -4,6 +4,8 @@ import { DashboardEntryRedirect } from "@/components/dashboard/dashboard-entry-r
 import { DashboardLayout } from "@/components/dashboard/dashboard-layout";
 import { TasksBoard } from "@/components/dashboard/tasks-board";
 import { WorkspaceDashboardGrid } from "@/components/dashboard/workspace-dashboard";
+import { ProductLoadingBlock, ProductPageHeader, ProductStack } from "@/components/product";
+import { buttonVariants } from "@/components/ui/button-variants";
 import { Badge } from "@/components/ui/badge";
 import { api } from "@/convex/_generated/api";
 import { PIPELINE_STATUS_LABELS } from "@/lib/assessment-pipeline";
@@ -53,14 +55,7 @@ export default function DashboardPage() {
   }, [ensureDefault, acceptInvites, acceptWorkspaceInvites]);
 
   if (workspaces === undefined) {
-    return (
-      <div className="flex min-h-[50vh] flex-col items-center justify-center gap-3">
-        <div className="border-primary size-8 animate-spin rounded-full border-2 border-t-transparent" />
-        <p className="text-muted-foreground text-sm">
-          Henter arbeidsområder …
-        </p>
-      </div>
-    );
+    return <ProductLoadingBlock label="Henter arbeidsområder …" className="min-h-[50vh]" />;
   }
 
   const defaultId = settings?.defaultWorkspaceId ?? null;
@@ -77,27 +72,27 @@ export default function DashboardPage() {
         <DashboardEntryRedirect />
       </Suspense>
 
-      <div className="w-full space-y-10 px-5 pb-20 pt-8 sm:px-8 lg:px-10">
-        {/* ── Header ── */}
-        <header className="flex items-center justify-between gap-4">
-          <div>
-            <h1 className="text-foreground text-2xl font-bold tracking-tight">
-              Arbeidsområder
-            </h1>
-            <p className="text-muted-foreground mt-1 text-sm">
-              Opprett, administrer og naviger til dine områder.
-            </p>
-          </div>
-          {defaultWorkspace ? (
-            <Link
-              href={`/w/${defaultWorkspace._id}`}
-              className="group bg-foreground text-background hover:bg-foreground/90 active:scale-[0.97] inline-flex h-10 items-center gap-2 rounded-xl px-4 text-sm font-semibold shadow-md transition-all duration-200"
-            >
-              {defaultWorkspace.name}
-              <ArrowRight className="size-4 transition-transform duration-200 group-hover:translate-x-0.5" />
-            </Link>
-          ) : null}
-        </header>
+      <div className="w-full px-5 pb-20 pt-8 sm:px-8 lg:px-10">
+        <ProductStack>
+        <ProductPageHeader
+          eyebrow="Oversikt"
+          title="Arbeidsområder"
+          description="Velg et område for å jobbe med prosesser, vurderinger og risiko. Opprett nytt område når du trenger det."
+          actions={
+            defaultWorkspace ? (
+              <Link
+                href={`/w/${defaultWorkspace._id}`}
+                className={cn(
+                  buttonVariants({ variant: "default", size: "lg" }),
+                  "group w-full justify-center sm:w-auto",
+                )}
+              >
+                Gå til {defaultWorkspace.name}
+                <ArrowRight className="size-4 transition-transform duration-200 group-hover:translate-x-0.5" />
+              </Link>
+            ) : null
+          }
+        />
 
         {/* ── Create + Workspaces grid ── */}
         <WorkspaceDashboardGrid
@@ -230,6 +225,7 @@ export default function DashboardPage() {
             </div>
           </section>
         ) : null}
+        </ProductStack>
       </div>
     </DashboardLayout>
   );

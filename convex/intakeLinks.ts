@@ -103,6 +103,7 @@ export const getPublicForm = query({
         title: form.title,
         description: form.description,
         layoutMode: form.layoutMode,
+        questionsPerPage: form.questionsPerPage,
         confirmationMode: form.confirmationMode ?? "none",
       },
       link: {

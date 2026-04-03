@@ -184,49 +184,34 @@ export function AssessmentObjectHeader({
           ) : evaluationContext?.kind === "draft_only" ? (
             <div className="border-border/50 mt-3 space-y-1 border-t pt-3">
               <p className="text-muted-foreground text-[0.65rem] font-semibold uppercase tracking-[0.12em]">
-                Du vurderer nå (utkast)
+                Du vurderer nå
               </p>
-              <p className="text-foreground font-heading text-base font-semibold leading-snug sm:text-lg">
+              <p
+                className="text-foreground font-heading text-base font-semibold leading-snug sm:text-lg"
+                title="Koble til prosess fra registeret under steget «Prosess» (valgfritt)."
+              >
                 {evaluationContext.processName}
-              </p>
-              <p className="text-muted-foreground max-w-prose text-xs leading-relaxed">
-                Ingen prosess fra registeret er koblet ennå. Velg prosess i
-                steget «Prosess» for sporbarhet mot GitHub og tavle.
               </p>
             </div>
           ) : evaluationContext?.kind === "unset" ? (
             <div className="border-border/50 mt-3 border-t border-dashed pt-3">
               <p className="text-muted-foreground text-[0.65rem] font-semibold uppercase tracking-[0.12em]">
-                Sak / prosess
+                Prosess
               </p>
-              <p className="text-amber-950/90 dark:text-amber-100 mt-1 max-w-prose text-sm leading-relaxed">
-                Ingen prosess valgt ennå. Gå til steget «Prosess» og koble til en
-                rad i prosessregisteret — da ser du tydelig hvilken sak denne
-                vurderingen gjelder (inkl. GitHub-referanse når den finnes).
+              <p className="text-muted-foreground mt-1 text-sm">
+                Velg under steget «Prosess» eller i{" "}
+                <Link
+                  href={processRegisterHref}
+                  className="text-primary font-medium underline-offset-4 hover:underline"
+                >
+                  prosessregisteret
+                </Link>
+                .
               </p>
-              <Link
-                href={processRegisterHref}
-                className={buttonVariants({
-                  variant: "outline",
-                  size: "sm",
-                  className: "mt-2 inline-flex gap-1.5",
-                })}
-              >
-                <ClipboardList className="size-3.5" aria-hidden />
-                Åpne prosessregister
-              </Link>
             </div>
           ) : null}
-          <p className="text-muted-foreground max-w-prose text-sm leading-relaxed">
-            <span className="text-foreground font-medium">Neste steg: </span>
+          <p className="text-muted-foreground text-sm leading-snug">
             {nextStepLabel}
-            {!hasRosAnalysisLink ? (
-              <>
-                {" "}
-                Opprett eller koble en ROS-analyse fra ROS-siden eller fra
-                kortet lenger ned i vurderingen.
-              </>
-            ) : null}
           </p>
         </div>
         <div className="flex shrink-0 flex-col items-stretch gap-2 sm:items-end">

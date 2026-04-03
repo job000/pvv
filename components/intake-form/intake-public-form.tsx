@@ -100,6 +100,18 @@ function getVisibleQuestions(questions: PublicQuestion[], answers: AnswerState) 
   });
 }
 
+function chunkQuestionPages<T>(items: T[], pageSize: number): T[][] {
+  if (items.length === 0) {
+    return [];
+  }
+  const size = Math.max(1, Math.min(25, Math.floor(pageSize)));
+  const pages: T[][] = [];
+  for (let i = 0; i < items.length; i += size) {
+    pages.push(items.slice(i, i + size));
+  }
+  return pages;
+}
+
 function storageKey(token: string) {
   return `intake-public-draft:${token}`;
 }
@@ -230,6 +242,7 @@ export function IntakePublicForm({ token }: { token: string }) {
             title: string;
             description?: string;
             layoutMode: "one_per_screen" | "grouped";
+            questionsPerPage?: number;
             confirmationMode: "none" | "email_copy";
           };
           link: {
@@ -247,16 +260,35 @@ export function IntakePublicForm({ token }: { token: string }) {
     [answers, questions],
   );
   const groupedMode = openData?.form.layoutMode === "grouped";
-  const stepIndex = groupedMode ? 0 : Math.min(step, visibleQuestions.length);
-  const totalSteps = groupedMode ? 1 : visibleQuestions.length + 1;
+  const steppedPageSize = useMemo(() => {
+    if (!openData || openData.form.layoutMode === "grouped") {
+      return 1;
+    }
+    const raw = openData.form.questionsPerPage;
+    const n = raw === undefined || raw === null ? 1 : Math.floor(raw);
+    return Math.min(25, Math.max(1, Number.isFinite(n) ? n : 1));
+  }, [openData]);
+
+  const questionPages = useMemo(() => {
+    if (!openData || groupedMode) {
+      return [];
+    }
+    return chunkQuestionPages(visibleQuestions, steppedPageSize);
+  }, [groupedMode, openData, steppedPageSize, visibleQuestions]);
+
+  const pageCount = questionPages.length;
+  const stepIndex = groupedMode ? 0 : Math.min(step, pageCount);
+  const totalSteps = groupedMode ? 1 : Math.max(1, pageCount + 1);
   const progressValue = totalSteps > 0 ? ((stepIndex + 1) / totalSteps) * 100 : 0;
-  const isFinalStep = !groupedMode && stepIndex === visibleQuestions.length;
+  const isFinalStep = !groupedMode && (pageCount === 0 || stepIndex === pageCount);
   const showContactSection = groupedMode || isFinalStep;
 
-  const currentQuestion = useMemo(() => {
-    if (groupedMode || isFinalStep) return null;
-    return visibleQuestions[stepIndex] ?? null;
-  }, [groupedMode, isFinalStep, stepIndex, visibleQuestions]);
+  const currentPageQuestions = useMemo(() => {
+    if (groupedMode || isFinalStep) {
+      return [];
+    }
+    return questionPages[stepIndex] ?? [];
+  }, [groupedMode, isFinalStep, questionPages, stepIndex]);
 
   useEffect(() => {
     if (typeof window === "undefined" || !token || submitted || !openData) {
@@ -289,18 +321,22 @@ export function IntakePublicForm({ token }: { token: string }) {
   }
 
   function validateCurrentStep() {
-    if (groupedMode || !currentQuestion) return true;
-    if (!currentQuestion.required) return true;
-    if (!isAnswered(currentQuestion._id)) {
-      toast.error("Svar på spørsmålet før du går videre.");
-      return false;
-    }
-    if (
-      currentQuestion.questionType === "number" &&
-      parseNumberAnswer(answers[currentQuestion._id]) === null
-    ) {
-      toast.error("Skriv inn et gyldig tall før du går videre.");
-      return false;
+    if (groupedMode || isFinalStep) return true;
+    for (const currentQuestion of currentPageQuestions) {
+      if (!currentQuestion.required) {
+        continue;
+      }
+      if (!isAnswered(currentQuestion._id)) {
+        toast.error("Svar på alle obligatoriske felt før du går videre.");
+        return false;
+      }
+      if (
+        currentQuestion.questionType === "number" &&
+        parseNumberAnswer(answers[currentQuestion._id]) === null
+      ) {
+        toast.error(`Skriv inn et gyldig tall for «${currentQuestion.label}».`);
+        return false;
+      }
     }
     return true;
   }
@@ -521,8 +557,10 @@ export function IntakePublicForm({ token }: { token: string }) {
           <div className="mb-2 flex items-center justify-between text-sm text-muted-foreground">
             <span>
               {isFinalStep
-                ? `Til slutt ${visibleQuestions.length + 1} av ${totalSteps}`
-                : `Spørsmål ${Math.min(stepIndex + 1, Math.max(visibleQuestions.length, 1))} av ${totalSteps}`}
+                ? `Til slutt ${pageCount + 1} av ${totalSteps}`
+                : pageCount > 0
+                  ? `Side ${stepIndex + 1} av ${pageCount}`
+                  : ""}
             </span>
             <span className="font-medium">{Math.round(progressValue)} %</span>
           </div>
@@ -543,13 +581,21 @@ export function IntakePublicForm({ token }: { token: string }) {
                 />
               ))}
             </div>
-          ) : currentQuestion ? (
-            <QuestionRenderer
-              question={currentQuestion}
-              index={stepIndex}
-              value={answers[currentQuestion._id]}
-              onChange={(value) => updateAnswer(currentQuestion._id, value)}
-            />
+          ) : currentPageQuestions.length > 0 ? (
+            <div className="space-y-10">
+              {currentPageQuestions.map((question) => {
+                const globalIndex = visibleQuestions.findIndex((q) => q._id === question._id);
+                return (
+                  <QuestionRenderer
+                    key={question._id}
+                    question={question}
+                    index={globalIndex >= 0 ? globalIndex : stepIndex}
+                    value={answers[question._id]}
+                    onChange={(value) => updateAnswer(question._id, value)}
+                  />
+                );
+              })}
+            </div>
           ) : null}
 
           {showContactSection ? (
@@ -601,7 +647,7 @@ export function IntakePublicForm({ token }: { token: string }) {
                 type="button"
                 variant="outline"
                 disabled={stepIndex === 0}
-                onClick={() => setStep((prev) => Math.max(Math.min(prev, visibleQuestions.length) - 1, 0))}
+                onClick={() => setStep((prev) => Math.max(Math.min(prev, pageCount) - 1, 0))}
               >
                 <ArrowLeft className="size-4" />
                 Tilbake
@@ -611,11 +657,11 @@ export function IntakePublicForm({ token }: { token: string }) {
                   type="button"
                   onClick={() => {
                     if (!validateCurrentStep()) return;
-                    setStep((prev) => Math.min(Math.min(prev, visibleQuestions.length) + 1, visibleQuestions.length));
+                    setStep((prev) => Math.min(Math.min(prev, pageCount) + 1, pageCount));
                   }}
                   className="h-12 rounded-2xl px-6"
                 >
-                  {stepIndex === visibleQuestions.length - 1 ? "Til slutt" : "Neste"}
+                  {pageCount > 0 && stepIndex === pageCount - 1 ? "Til slutt" : "Neste"}
                   <ArrowRight className="size-4" />
                 </Button>
               ) : (

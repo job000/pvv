@@ -6,6 +6,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { ProductEmptyState, ProductLoadingBlock, ProductPageHeader } from "@/components/product";
 import { WorkspaceOperationalDashboard } from "@/components/workspace/workspace-operational-dashboard";
 import { WorkspaceOverviewViewSettings } from "@/components/workspace/workspace-overview-view-settings";
 import { api } from "@/convex/_generated/api";
@@ -16,7 +17,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useMemo } from "react";
 import { WORKSPACE_ROLE_LABEL_NB } from "@/lib/role-labels-nb";
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, LayoutDashboard } from "lucide-react";
 
 export default function WorkspaceOverviewPage() {
   const params = useParams();
@@ -53,12 +54,7 @@ export default function WorkspaceOverviewPage() {
     membership === undefined ||
     candidates === undefined
   ) {
-    return (
-      <div className="flex min-h-[30vh] flex-col items-center justify-center gap-2">
-        <div className="size-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-        <p className="text-muted-foreground text-sm">Laster …</p>
-      </div>
-    );
+    return <ProductLoadingBlock label="Laster arbeidsområde …" className="min-h-[30vh]" />;
   }
 
   if (workspace === null) {
@@ -79,46 +75,34 @@ export default function WorkspaceOverviewPage() {
     visibleShortcuts.length > 0 ||
     viewPrefs.showBegreperSection;
 
+  const roleLabel = membership?.role
+    ? (WORKSPACE_ROLE_LABEL_NB[membership.role] ?? membership.role)
+    : "—";
+
   return (
     <div className="space-y-6 pb-4">
-      <header className="rounded-2xl bg-muted/10 px-4 py-4 ring-1 ring-black/[0.04] dark:ring-white/[0.06]">
-        <div className="flex flex-col gap-1 sm:flex-row sm:items-baseline sm:justify-between sm:gap-4">
-          <h1 className="font-heading text-lg font-semibold tracking-tight text-foreground sm:text-xl">
-            {workspace.name}
-          </h1>
-          <p className="text-muted-foreground shrink-0 text-xs sm:text-sm">
-            Rolle:{" "}
-            <span className="text-foreground font-medium">
-              {membership?.role
-                ? WORKSPACE_ROLE_LABEL_NB[membership.role] ?? membership.role
-                : "—"}
+      <ProductPageHeader
+        eyebrow="Arbeidsområde"
+        title={workspace.name}
+        description={
+          <>
+            <span className="text-foreground">
+              Din rolle: <strong>{roleLabel}</strong>
             </span>
-          </p>
-        </div>
-        {workspace.notes ? (
-          <p className="text-muted-foreground mt-2 max-w-prose text-sm leading-relaxed">
-            {workspace.notes}
-          </p>
-        ) : null}
-      </header>
-
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
-        <WorkspaceOverviewViewSettings workspaceId={workspaceId} />
-      </div>
+            {workspace.notes ? (
+              <span className="mt-2 block text-muted-foreground">{workspace.notes}</span>
+            ) : null}
+          </>
+        }
+        actions={<WorkspaceOverviewViewSettings workspaceId={workspaceId} />}
+      />
 
       {!showAnyDashboardContent && viewPrefs !== undefined ? (
-        <div
-          className="rounded-2xl border border-dashed border-border/50 bg-muted/15 px-4 py-12 text-center ring-1 ring-black/[0.03] dark:ring-white/[0.05]"
-          role="status"
-        >
-          <p className="text-foreground font-medium">
-            Alt innhold er skjult på ditt dashboard
-          </p>
-          <p className="text-muted-foreground mx-auto mt-2 max-w-md text-sm leading-relaxed">
-            Bruk «Tilpass visning» over for å slå på nøkkeltall, lister, snarveier
-            eller begreper igjen.
-          </p>
-        </div>
+        <ProductEmptyState
+          icon={LayoutDashboard}
+          title="Ingenting vises på dashboardet akkurat nå"
+          description="Slå på nøkkeltall, lister, snarveier eller begreper under «Tilpass visning»."
+        />
       ) : (
         <>
           {(viewPrefs === undefined ||
@@ -128,14 +112,12 @@ export default function WorkspaceOverviewPage() {
             viewPrefs.showRecentSection) && (
             <section aria-labelledby="dash-metrics-heading" className="space-y-4">
               <div>
-                <p className="text-muted-foreground text-[11px] font-semibold uppercase tracking-[0.12em]">
-                  Kontrollsenter
-                </p>
+                <p className="product-section-eyebrow">Kontrollsenter</p>
                 <h2
                   id="dash-metrics-heading"
                   className="font-heading mt-1 text-base font-semibold tracking-tight text-foreground sm:text-lg"
                 >
-                  Hva du bør gjøre videre
+                  Det viktigste først
                 </h2>
               </div>
               <WorkspaceOperationalDashboard
@@ -146,17 +128,15 @@ export default function WorkspaceOverviewPage() {
           )}
 
           <section className="space-y-4">
-            <div>
-              <p className="text-muted-foreground text-[11px] font-semibold uppercase tracking-[0.12em]">
-                Navigasjon
-              </p>
-              <h2 className="font-heading mt-1 text-base font-semibold tracking-tight text-foreground sm:text-lg">
-                Snarveier
-              </h2>
-              <p className="text-muted-foreground mt-1 text-sm">
-                Åpne de viktigste områdene raskt og gå videre med arbeidet.
-              </p>
-            </div>
+              <div>
+                <p className="product-section-eyebrow">Hurtigvalg</p>
+                <h2 className="font-heading mt-1 text-base font-semibold tracking-tight text-foreground sm:text-lg">
+                  Snarveier
+                </h2>
+                <p className="text-muted-foreground mt-1 text-sm">
+                  Gå rett til det du skal gjøre.
+                </p>
+              </div>
             {visibleShortcuts.length > 0 ? (
               <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                 {visibleShortcuts.map(({ href, title, desc, icon: Icon }) => (
@@ -195,9 +175,7 @@ export default function WorkspaceOverviewPage() {
           {showBegreperSection ? (
             <section className="space-y-4">
               <div>
-                <p className="text-muted-foreground text-[11px] font-semibold uppercase tracking-[0.12em]">
-                  Hjelp
-                </p>
+                <p className="product-section-eyebrow">Hjelp</p>
                 <h2 className="font-heading mt-1 text-base font-semibold tracking-tight text-foreground sm:text-lg">
                   Begreper
                 </h2>

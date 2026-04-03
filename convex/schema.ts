@@ -421,6 +421,14 @@ export default defineSchema({
     appEntryPreference: v.optional(
       v.union(v.literal("dashboard"), v.literal("workspace")),
     ),
+    /** false = ikke e-post ved direkte innmelding; ventende invitasjons-e-post sendes uansett. */
+    notifyEmailInvitations: v.optional(v.boolean()),
+    /** Ukentlig sammendrag av åpne vurderinger (ikke «ferdig»). false = av. */
+    notifyEmailDraftSummaryWeekly: v.optional(v.boolean()),
+    /** Forberedt for fremtidige sikkerhetsvarsler (innlogging m.m.). false = av. */
+    notifyEmailSecurityAlerts: v.optional(v.boolean()),
+    /** Siste gang ukentlig utkast-sammendrag ble sendt (kjøling). */
+    lastWeeklyDraftDigestSentAt: v.optional(v.number()),
   }).index("by_user", ["userId"]),
 
   /**
@@ -680,6 +688,8 @@ export default defineSchema({
     description: v.optional(v.string()),
     status: intakeFormStatusValidator,
     layoutMode: intakeLayoutModeValidator,
+    /** Når layoutMode er one_per_screen: antall synlige spørsmål per steg før «Neste». Standard 1 i klient. */
+    questionsPerPage: v.optional(v.number()),
     confirmationMode: v.optional(intakeConfirmationModeValidator),
     rosIntegrationEnabled: v.optional(v.boolean()),
     linkedRosTemplateId: v.optional(v.id("rosTemplates")),

@@ -98,22 +98,19 @@ export function AssessmentWizardMeta({
               <strong className="text-foreground font-semibold tabular-nums">
                 {versionCount}
               </strong>{" "}
-              {versionCount === 1
-                ? "navngitt milepæl"
-                : "navngitte milepæler"}
+              {versionCount === 1 ? "milepæl" : "milepæler"}
               {latestMilestone ? (
                 <>
                   {" "}
-                  · siste milepæl{" "}
+                  · siste{" "}
                   <time
                     dateTime={new Date(latestMilestone.createdAt).toISOString()}
                   >
                     {new Date(latestMilestone.createdAt).toLocaleDateString(
                       "nb-NO",
                       {
-                      day: "numeric",
-                      month: "short",
-                      year: "numeric",
+                        day: "numeric",
+                        month: "short",
                       },
                     )}
                   </time>
@@ -122,17 +119,15 @@ export function AssessmentWizardMeta({
             </span>
           </div>
         {draftLabel && draftUpdatedAt != null ? (
-          <p className="text-muted-foreground max-w-prose text-[11px] leading-snug">
-            Utkast auto-lagret{" "}
+          <p className="text-muted-foreground text-[11px] leading-snug">
+            Lagret{" "}
             <time dateTime={new Date(draftUpdatedAt).toISOString()}>
               {draftLabel}
             </time>
-            . Milepæler må du opprette selv under Samarbeid.
           </p>
         ) : (
-            <p className="text-muted-foreground max-w-prose text-[11px] leading-snug">
-              Skjemaet lagres fortløpende som utkast. Navngitte milepæler er
-              valgfrie og opprettes under Samarbeid.
+            <p className="text-muted-foreground text-[11px] leading-snug">
+              Milepæler er valgfrie — under Samarbeid.
             </p>
           )}
         </div>
@@ -141,7 +136,7 @@ export function AssessmentWizardMeta({
             htmlFor="meta-milepick"
             className="text-muted-foreground text-[10px] font-semibold uppercase tracking-wide"
           >
-            Forhåndsvis milepæl
+            Versjon
           </Label>
           <select
             id="meta-milepick"
@@ -161,8 +156,8 @@ export function AssessmentWizardMeta({
           >
             <option value="">
               {versionOptions.length === 0
-                ? "Ingen milepæler ennå — lagre under Samarbeid"
-                : "Forhåndsvis en lagret versjon …"}
+                ? "Ingen milepæler ennå"
+                : "Forhåndsvis versjon …"}
             </option>
             {versionOptions.map((v) => (
               <option key={v._id} value={String(v.version)}>

@@ -17,21 +17,21 @@ const PasswordInput = React.forwardRef<HTMLInputElement, PasswordInputProps>(
     const inputId = idProp ?? "password-input";
 
     return (
-      <div className="relative">
+      <div className="flex items-stretch gap-2">
         <Input
           ref={ref}
           id={inputId}
           type={show ? "text" : "password"}
           disabled={disabled}
-          className={cn("pr-10", className)}
+          className={cn("min-w-0 flex-1", className)}
           {...props}
         />
         <Button
           type="button"
-          variant="ghost"
-          size="icon-sm"
+          variant="outline"
+          size="icon"
           disabled={disabled}
-          className="text-muted-foreground hover:text-foreground absolute top-1/2 right-0.5 -translate-y-1/2 rounded-md"
+          className="text-muted-foreground hover:text-foreground size-11 shrink-0 rounded-xl border-input"
           onClick={() => setShow((v) => !v)}
           aria-controls={inputId}
           aria-pressed={show}

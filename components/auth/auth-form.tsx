@@ -129,31 +129,33 @@ export function AuthForm({
           {/* Form */}
           <form onSubmit={(e) => void submit(e)} className="mt-6 space-y-4">
             <div className="space-y-1.5">
-              <Label htmlFor="email" className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+              <Label
+                htmlFor="email"
+                className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground"
+              >
+                <Mail className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
                 E-post
               </Label>
-              <div className="relative">
-                <Mail
-                  className="text-muted-foreground pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2"
-                  aria-hidden
-                />
-                <Input
-                  id="email"
-                  type="email"
-                  autoComplete="email"
-                  inputMode="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  required
-                  className="h-11 rounded-xl pl-10 text-sm"
-                  placeholder="din@epost.no"
-                />
-              </div>
+              <Input
+                id="email"
+                type="email"
+                autoComplete="email"
+                inputMode="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+                className="h-11 rounded-xl text-sm"
+                placeholder="din@epost.no"
+              />
             </div>
 
             <div className="space-y-1.5">
               <div className="flex items-center justify-between gap-2">
-                <Label htmlFor="password" className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                <Label
+                  htmlFor="password"
+                  className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground"
+                >
+                  <Lock className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
                   Passord
                 </Label>
                 {isSignUp && (
@@ -162,24 +164,18 @@ export function AuthForm({
                   </span>
                 )}
               </div>
-              <div className="relative">
-                <Lock
-                  className="text-muted-foreground pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 z-10"
-                  aria-hidden
-                />
-                <PasswordInput
-                  id="password"
-                  autoComplete={
-                    isSignUp ? "new-password" : "current-password"
-                  }
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                  minLength={8}
-                  className="h-11 rounded-xl pl-10 text-sm"
-                  placeholder="••••••••"
-                />
-              </div>
+              <PasswordInput
+                id="password"
+                autoComplete={
+                  isSignUp ? "new-password" : "current-password"
+                }
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                minLength={8}
+                className="h-11 rounded-xl text-sm"
+                placeholder="••••••••"
+              />
             </div>
 
             {error && (

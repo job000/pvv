@@ -969,7 +969,7 @@ export function AssessmentWizard({ assessmentId }: Props) {
                 htmlFor="assessment-display-title"
                 className="text-muted-foreground text-xs font-medium"
               >
-                Tittel (vises på kort og i rapporter)
+                Tittel
               </Label>
               <Input
                 id="assessment-display-title"
@@ -977,12 +977,9 @@ export function AssessmentWizard({ assessmentId }: Props) {
                 onChange={(e) => setTitleDraft(e.target.value)}
                 placeholder="F.eks. Fakturamottak — leverandør"
                 autoComplete="off"
+                title="Skilles fra prosessnavn under «Prosess»."
                 className="font-heading h-auto max-w-2xl border-0 border-b border-border/60 bg-transparent px-0 py-1 text-xl font-semibold shadow-none focus-visible:border-primary focus-visible:ring-0 sm:text-2xl"
               />
-              <p className="text-muted-foreground max-w-2xl text-[11px] leading-snug">
-                Prosessnavn i steget «Prosess» er eget felt og oppdaterer ikke
-                tittelen automatisk.
-              </p>
             </>
           ) : (
             <>
@@ -1001,15 +998,25 @@ export function AssessmentWizard({ assessmentId }: Props) {
             </>
           )}
           {canEdit ? (
-            <p className="text-muted-foreground text-xs sm:text-sm">
-              Lagres automatisk. Ved samtidig redigering får du valg om å hente
-              siste utkast eller overskrive.
-              {access?.collaboratorRole
-                ? ` · Rolle: ${ASSESSMENT_COLLAB_ROLE_LABEL_NB[access.collaboratorRole] ?? access.collaboratorRole}`
-                : ""}
-              {access?.workspaceRole
-                ? ` · ${WORKSPACE_ROLE_LABEL_NB[access.workspaceRole] ?? access.workspaceRole} i arbeidsområdet`
-                : ""}
+            <p
+              className="text-muted-foreground text-[11px] sm:text-xs"
+              title="Ved samtidig redigering får du valg om å hente siste utkast eller overskrive."
+            >
+              Lagrer automatisk
+              {access?.collaboratorRole || access?.workspaceRole ? (
+                <>
+                  {" · "}
+                  {access?.collaboratorRole
+                    ? ASSESSMENT_COLLAB_ROLE_LABEL_NB[access.collaboratorRole] ??
+                      access.collaboratorRole
+                    : null}
+                  {access?.collaboratorRole && access?.workspaceRole ? " · " : null}
+                  {access?.workspaceRole
+                    ? WORKSPACE_ROLE_LABEL_NB[access.workspaceRole] ??
+                      access.workspaceRole
+                    : null}
+                </>
+              ) : null}
             </p>
           ) : null}
         </div>
@@ -1071,7 +1078,7 @@ export function AssessmentWizard({ assessmentId }: Props) {
               {ASSESSMENT_WIZARD_STEP_LABELS[slide]}
             </p>
             <p className="text-muted-foreground mt-1 text-xs">
-              Få fram en anbefaling først. Fyll bare ut detaljer hvis du trenger dem.
+              Fyll ut det du trenger — resten er valgfritt.
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -2107,11 +2114,8 @@ export function AssessmentWizard({ assessmentId }: Props) {
           </DialogHeader>
           <DialogBody>
             <p className="text-muted-foreground text-sm leading-relaxed">
-              Siste endringer er nettopp lagret til serveren før du går videre.
-              Du har ikke opprettet navngitte milepæler ennå (0 i loggen). Det er
-              helt normalt: utkastet lagres også fortløpende mens du jobber.
-              Milepæler er valgfrie «frys» av hele vurderingen — bruk dem når du
-              trenger spor i revisjon eller dokumentasjon.
+              Alt er lagret. Navngitte milepæler er valgfrie — du finner dem under
+              Samarbeid.
             </p>
           </DialogBody>
           <DialogFooter className="flex-wrap sm:justify-between">

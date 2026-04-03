@@ -86,7 +86,7 @@ export function SheetContent({
         role="dialog"
         aria-modal="true"
         className={cn(
-          "absolute inset-y-0 flex w-[min(20rem,88vw)] flex-col border-r bg-background shadow-xl",
+          "absolute inset-y-0 flex w-[min(20rem,88vw)] flex-col border-r bg-background pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] shadow-xl",
           side === "left" ? "left-0" : "right-0",
           className,
         )}
