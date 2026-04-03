@@ -8,6 +8,7 @@ import {
 import { LandingMesh } from "@/components/marketing/landing-mesh";
 import { BrandMark } from "@/components/brand-mark";
 import { ThemeModeToggle } from "@/components/theme-mode-toggle";
+import { UserAvatarNav } from "@/components/user/user-avatar-nav";
 import { cn } from "@/lib/utils";
 import {
   ArrowRight,
@@ -50,7 +51,11 @@ function FeatureCard({
   );
 }
 
-export function HomeLanding() {
+export function HomeLanding({
+  isAuthenticated,
+}: {
+  isAuthenticated: boolean;
+}) {
   return (
     <div className="relative flex min-h-dvh flex-col">
       <LandingMesh />
@@ -66,27 +71,50 @@ export function HomeLanding() {
           </Link>
           <nav className="flex flex-wrap items-center justify-end gap-2 sm:gap-3">
             <ThemeModeToggle />
-            <Link
-              href="/sign-in"
-              className={buttonVariants({ variant: "ghost", size: "sm" })}
-            >
-              Logg inn
-            </Link>
-            <Link
-              href="/sign-up"
-              className={cn(
-                buttonVariants({ size: "sm" }),
-                "hidden sm:inline-flex",
-              )}
-            >
-              Opprett konto
-            </Link>
-            <Link
-              href="/sign-up"
-              className={cn(buttonVariants({ size: "sm" }), "sm:hidden")}
-            >
-              Registrer
-            </Link>
+            {isAuthenticated ? (
+              <>
+                <Link
+                  href="/dashboard"
+                  className={cn(
+                    buttonVariants({ size: "sm" }),
+                    "hidden sm:inline-flex",
+                  )}
+                >
+                  Gå til oversikt
+                </Link>
+                <Link
+                  href="/dashboard"
+                  className={cn(buttonVariants({ size: "sm" }), "sm:hidden")}
+                >
+                  Oversikt
+                </Link>
+                <UserAvatarNav />
+              </>
+            ) : (
+              <>
+                <Link
+                  href="/sign-in"
+                  className={buttonVariants({ variant: "ghost", size: "sm" })}
+                >
+                  Logg inn
+                </Link>
+                <Link
+                  href="/sign-up"
+                  className={cn(
+                    buttonVariants({ size: "sm" }),
+                    "hidden sm:inline-flex",
+                  )}
+                >
+                  Opprett konto
+                </Link>
+                <Link
+                  href="/sign-up"
+                  className={cn(buttonVariants({ size: "sm" }), "sm:hidden")}
+                >
+                  Registrer
+                </Link>
+              </>
+            )}
           </nav>
         </div>
       </header>
@@ -109,28 +137,45 @@ export function HomeLanding() {
               må dokumentere og levere trygt.
             </p>
             <div className="mt-10 flex flex-col items-center justify-center gap-3 sm:flex-row sm:gap-4">
-              <Link
-                href="/sign-up"
-                className={cn(
-                  buttonVariants({ size: "lg" }),
-                  "h-12 min-w-[12rem] gap-2 px-8 text-base shadow-md",
-                )}
-              >
-                Kom i gang gratis
-                <ArrowRight className="size-4" />
-              </Link>
-              <Link
-                href="/sign-in"
-                className={cn(
-                  buttonVariants({ size: "lg", variant: "outline" }),
-                  "h-12 min-w-[12rem] border-border/80 bg-background/50 px-8 text-base backdrop-blur-sm",
-                )}
-              >
-                Logg inn
-              </Link>
+              {isAuthenticated ? (
+                <Link
+                  href="/dashboard"
+                  className={cn(
+                    buttonVariants({ size: "lg" }),
+                    "h-12 min-w-[12rem] gap-2 px-8 text-base shadow-md",
+                  )}
+                >
+                  Gå til oversikt
+                  <ArrowRight className="size-4" />
+                </Link>
+              ) : (
+                <>
+                  <Link
+                    href="/sign-up"
+                    className={cn(
+                      buttonVariants({ size: "lg" }),
+                      "h-12 min-w-[12rem] gap-2 px-8 text-base shadow-md",
+                    )}
+                  >
+                    Kom i gang gratis
+                    <ArrowRight className="size-4" />
+                  </Link>
+                  <Link
+                    href="/sign-in"
+                    className={cn(
+                      buttonVariants({ size: "lg", variant: "outline" }),
+                      "h-12 min-w-[12rem] border-border/80 bg-background/50 px-8 text-base backdrop-blur-sm",
+                    )}
+                  >
+                    Logg inn
+                  </Link>
+                </>
+              )}
             </div>
             <p className="text-muted-foreground mt-6 text-sm">
-              Roller, invitasjoner og sporbarhet — innebygd i hvert arbeidsområde.
+              {isAuthenticated
+                ? "Du er innlogget — fortsett der du slapp i oversikten."
+                : "Roller, invitasjoner og sporbarhet — innebygd i hvert arbeidsområde."}
             </p>
           </div>
         </section>
@@ -206,11 +251,14 @@ export function HomeLanding() {
         <section className="px-4 pb-20 sm:px-6 sm:pb-28">
           <div className="from-primary/[0.07] via-primary/[0.04] to-muted/40 dark:from-primary/15 dark:via-primary/8 dark:to-muted/20 mx-auto max-w-4xl rounded-3xl border border-border/50 bg-gradient-to-br px-6 py-14 text-center shadow-sm sm:px-12 sm:py-16">
             <h2 className="font-heading text-2xl font-semibold tracking-tight sm:text-3xl">
-              Klar til å samle teamet ett sted?
+              {isAuthenticated
+                ? "Velkommen tilbake"
+                : "Klar til å samle teamet ett sted?"}
             </h2>
             <p className="text-muted-foreground mx-auto mt-4 max-w-lg text-lg leading-relaxed">
-              Opprett konto på minutter, eller logg inn om du allerede er invitert
-              til et arbeidsområde.
+              {isAuthenticated
+                ? "Åpne oversikten for arbeidsområder, oppgaver og vurderinger."
+                : "Opprett konto på minutter, eller logg inn om du allerede er invitert til et arbeidsområde."}
             </p>
             <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
               <Link
@@ -223,15 +271,17 @@ export function HomeLanding() {
                 Gå til oversikt
                 <ArrowRight className="size-4" />
               </Link>
-              <Link
-                href="/sign-up"
-                className={cn(
-                  buttonVariants({ size: "lg", variant: "secondary" }),
-                  "h-12 min-w-[11rem] border border-border/60 bg-background/80 px-8 backdrop-blur-sm",
-                )}
-              >
-                Opprett konto
-              </Link>
+              {!isAuthenticated && (
+                <Link
+                  href="/sign-up"
+                  className={cn(
+                    buttonVariants({ size: "lg", variant: "secondary" }),
+                    "h-12 min-w-[11rem] border border-border/60 bg-background/80 px-8 backdrop-blur-sm",
+                  )}
+                >
+                  Opprett konto
+                </Link>
+              )}
             </div>
           </div>
         </section>
@@ -243,18 +293,29 @@ export function HomeLanding() {
             © {new Date().getFullYear()} FRO · prioriter og utfør
           </p>
           <div className="flex gap-6">
-            <Link
-              href="/sign-in"
-              className="hover:text-foreground transition-colors"
-            >
-              Logg inn
-            </Link>
-            <Link
-              href="/sign-up"
-              className="hover:text-foreground transition-colors"
-            >
-              Registrering
-            </Link>
+            {isAuthenticated ? (
+              <Link
+                href="/dashboard"
+                className="hover:text-foreground transition-colors"
+              >
+                Oversikt
+              </Link>
+            ) : (
+              <>
+                <Link
+                  href="/sign-in"
+                  className="hover:text-foreground transition-colors"
+                >
+                  Logg inn
+                </Link>
+                <Link
+                  href="/sign-up"
+                  className="hover:text-foreground transition-colors"
+                >
+                  Registrering
+                </Link>
+              </>
+            )}
           </div>
         </div>
       </footer>

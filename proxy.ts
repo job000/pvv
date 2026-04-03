@@ -4,10 +4,10 @@ import {
 } from "@convex-dev/auth/nextjs/server";
 
 /**
- * @convex-dev/auth patches: `patches/@convex-dev+auth+0.0.91.patch` — token refresh
- * must read cookies from the incoming NextRequest (proxy/middleware). Using only
- * `next/headers` cookies() could yield empty reads and clear the session on navigation
- * (e.g. til `/`).
+ * @convex-dev/auth patches: `patches/@convex-dev+auth+0.0.91.patch` — (1) token refresh
+ * from NextRequest + Cookie header; (2) do not clear cookies when refresh returns null;
+ * (3) `getRequestCookies()` falls back to parsing the Cookie header when `cookies()` is
+ * empty in RSC (fixes “logged out” on `/` in a new tab).
  */
 
 /**
