@@ -4,6 +4,13 @@ import {
 } from "@convex-dev/auth/nextjs/server";
 
 /**
+ * @convex-dev/auth patches: `patches/@convex-dev+auth+0.0.91.patch` — token refresh
+ * must read cookies from the incoming NextRequest (proxy/middleware). Using only
+ * `next/headers` cookies() could yield empty reads and clear the session on navigation
+ * (e.g. til `/`).
+ */
+
+/**
  * Seconds — must be at least as long as `session.totalDurationMs` in convex/auth.ts,
  * otherwise browser cookies expire before the Convex session, causing visual logouts.
  * 400 d ≈ practical upper bound for first-party cookies in modern browsers.
