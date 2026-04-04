@@ -123,6 +123,28 @@ function DashboardMetricCard({
   );
 }
 
+/**
+ * Hvor primærkortet «Én ting å gjøre nå» leder:
+ * - `ros_dialog` → bli på dashboard, ROS-popup (`?kobleRos=1`) — ikke vurderingssiden.
+ * - `assessment` → åpne konkret vurdering (`/w/.../a/...`).
+ * - `vurderinger_list` → listen over vurderinger.
+ */
+type PrimaryFocusNavigation =
+  | "ros_dialog"
+  | "assessment"
+  | "vurderinger_list";
+
+function focusCardLinkTitle(target: PrimaryFocusNavigation): string {
+  switch (target) {
+    case "ros_dialog":
+      return "Koble ROS: dialog på oversikten. Oppfølging og «sist arbeid» åpner vurderingen direkte.";
+    case "assessment":
+      return "Åpne vurderingen";
+    case "vurderinger_list":
+      return "Gå til vurderinger";
+  }
+}
+
 function FocusActionCard({
   eyebrow,
   title,
@@ -132,6 +154,7 @@ function FocusActionCard({
   icon: Icon,
   tone = "default",
   emphasize,
+  navigationTarget,
 }: {
   eyebrow: string;
   title: string;
@@ -143,7 +166,9 @@ function FocusActionCard({
   tone?: "default" | "warning" | "action";
   /** Primærkort — større type og tydeligere CTA */
   emphasize?: boolean;
+  navigationTarget: PrimaryFocusNavigation;
 }) {
+  const linkTitle = focusCardLinkTitle(navigationTarget);
   const iconWrapClass =
     tone === "warning"
       ? "bg-amber-500/10 text-amber-900 ring-amber-500/20 dark:text-amber-100"
@@ -155,6 +180,7 @@ function FocusActionCard({
     return (
       <Link
         href={href}
+        title={linkTitle}
         className={cn(
           "group bg-card flex gap-4 rounded-2xl border p-4 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md sm:gap-5 sm:p-5",
           tone === "warning"
@@ -197,6 +223,7 @@ function FocusActionCard({
   return (
     <Link
       href={href}
+      title={linkTitle}
       className={cn(
         "group rounded-2xl p-4 ring-1 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md",
         tone === "warning"
@@ -316,6 +343,8 @@ export function WorkspaceOperationalDashboard({
   type PrimaryKey = "ros" | "followup" | "recent" | "start";
   const primarySpec: {
     key: PrimaryKey;
+    /** Styrer href — kun `ros` bruker ROS-dialog på dashboard; ikke bland med vurderingslenker. */
+    navigationTarget: PrimaryFocusNavigation;
     eyebrow: string;
     title: string;
     detail: string;
@@ -327,13 +356,14 @@ export function WorkspaceOperationalDashboard({
     if (withoutRosLinkCount > 0 && rosTarget) {
       return {
         key: "ros",
+        navigationTarget: "ros_dialog",
         eyebrow: "Gjør dette først",
         title: rosTarget.title,
         detail:
           withoutRosLinkCount === 1
             ? "Mangler ROS-kobling"
             : `${withoutRosLinkCount} vurderinger uten ROS`,
-        href: `/w/${wid}/a/${rosTarget.assessmentId}`,
+        href: `/w/${wid}?kobleRos=1&assessmentId=${rosTarget.assessmentId}`,
         cta: "Koble ROS",
         icon: ShieldPlus,
         tone: "warning",
@@ -342,6 +372,7 @@ export function WorkspaceOperationalDashboard({
     if (followUpCount > 0 && nextActionTarget) {
       return {
         key: "followup",
+        navigationTarget: "assessment",
         eyebrow: "Gjør dette først",
         title: nextActionTarget.title,
         detail: nextActionTarget.nextStepHint,
@@ -354,6 +385,7 @@ export function WorkspaceOperationalDashboard({
     if (latestWork) {
       return {
         key: "recent",
+        navigationTarget: "assessment",
         eyebrow: "Sist du jobbet med",
         title: latestWork.title,
         detail: formatRelativeUpdatedAt(latestWork.updatedAt),
@@ -365,6 +397,7 @@ export function WorkspaceOperationalDashboard({
     }
     return {
       key: "start",
+      navigationTarget: "vurderinger_list",
       eyebrow: "Kom i gang",
       title: "Opprett eller åpne en vurdering",
       detail: "",
@@ -402,6 +435,7 @@ export function WorkspaceOperationalDashboard({
                 cta={primarySpec.cta}
                 icon={primarySpec.icon}
                 tone={primarySpec.tone}
+                navigationTarget={primarySpec.navigationTarget}
                 emphasize
               />
 
@@ -411,7 +445,7 @@ export function WorkspaceOperationalDashboard({
               >
                 {primarySpec.key !== "ros" && withoutRosLinkCount > 0 && rosTarget ? (
                   <Link
-                    href={`/w/${wid}/a/${rosTarget.assessmentId}`}
+                    href={`/w/${wid}?kobleRos=1&assessmentId=${rosTarget.assessmentId}`}
                     className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 font-medium transition-colors"
                   >
                     <ShieldPlus className="size-3.5 text-amber-600 dark:text-amber-400" aria-hidden />

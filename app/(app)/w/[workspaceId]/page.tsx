@@ -8,6 +8,7 @@ import {
 } from "@/components/ui/card";
 import { ProductEmptyState, ProductLoadingBlock, ProductPageHeader } from "@/components/product";
 import { WorkspaceOperationalDashboard } from "@/components/workspace/workspace-operational-dashboard";
+import { WorkspaceRosLinkDialogHost } from "@/components/workspace/workspace-ros-link-dialog-host";
 import { WorkspaceOverviewViewSettings } from "@/components/workspace/workspace-overview-view-settings";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
@@ -15,7 +16,7 @@ import { buildWorkspaceOverviewShortcuts } from "@/lib/workspace-overview-view";
 import { useQuery } from "convex/react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useMemo } from "react";
+import { Suspense, useMemo } from "react";
 import { WORKSPACE_ROLE_LABEL_NB } from "@/lib/role-labels-nb";
 import { ArrowRight, LayoutDashboard } from "lucide-react";
 
@@ -81,6 +82,9 @@ export default function WorkspaceOverviewPage() {
 
   return (
     <div className="space-y-6 pb-4">
+      <Suspense fallback={null}>
+        <WorkspaceRosLinkDialogHost workspaceId={workspaceId} />
+      </Suspense>
       <ProductPageHeader
         title={workspace.name}
         description={

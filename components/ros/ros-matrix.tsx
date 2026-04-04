@@ -363,26 +363,24 @@ export function RosMatrix({
         </details>
       ) : null}
 
-      <div className="relative overflow-x-auto rounded-2xl bg-card shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.06]">
-        <table className="w-full min-w-[min(100%,56rem)] table-fixed border-collapse text-left text-sm">
+      <div className="relative -mx-1 touch-pan-x overflow-x-auto px-1 sm:mx-0 sm:px-0 rounded-2xl bg-card shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.06]">
+        <table className="w-full min-w-full table-fixed border-collapse text-left text-sm md:min-w-[min(100%,56rem)]">
           <thead>
             <tr className="border-b border-border/20">
               <th
                 scope="col"
-                className="sticky top-0 left-0 z-20 w-[9rem] border-r border-border/20 bg-card/95 px-3 py-3.5 text-xs backdrop-blur-md"
+                className="sticky top-0 left-0 z-20 w-[4.75rem] border-r border-border/20 bg-card/95 px-1.5 py-2 text-xs backdrop-blur-md sm:w-[9rem] sm:px-3 sm:py-3.5"
               >
-                <span className="text-muted-foreground flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider">
-                  ↑ {rowAxisTitle}
-                </span>
-                <span className="text-muted-foreground flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider">
-                  → {colAxisTitle}
+                <span className="text-muted-foreground flex flex-col gap-0.5 text-[9px] font-bold uppercase tracking-wider sm:flex-row sm:items-center sm:gap-1 sm:text-[10px]">
+                  <span className="leading-tight">↑ {rowAxisTitle}</span>
+                  <span className="leading-tight">→ {colAxisTitle}</span>
                 </span>
               </th>
               {colLabels.map((label, j) => (
                 <th
                   key={j}
                   scope="col"
-                  className="sticky top-0 z-10 bg-card/95 px-2 py-3.5 text-center text-[11px] font-bold leading-snug text-foreground/80 backdrop-blur-md"
+                  className="sticky top-0 z-10 bg-card/95 px-1 py-2 text-center text-[10px] font-bold leading-tight text-foreground/80 backdrop-blur-md sm:px-2 sm:py-3.5 sm:text-[11px] sm:leading-snug"
                 >
                   {label}
                 </th>
@@ -397,9 +395,9 @@ export function RosMatrix({
               <tr key={i} className="border-b border-border/10 last:border-0">
                 <th
                   scope="row"
-                  className="sticky left-0 z-10 w-[9rem] overflow-hidden border-r border-border/20 bg-card/95 px-3 py-3 text-left text-[11px] font-bold leading-snug text-foreground/80 backdrop-blur-md"
+                  className="sticky left-0 z-10 w-[4.75rem] overflow-hidden border-r border-border/20 bg-card/95 px-1.5 py-2 text-left text-[10px] font-bold leading-tight text-foreground/80 backdrop-blur-md sm:w-[9rem] sm:px-3 sm:py-3 sm:text-[11px] sm:leading-snug"
                 >
-                  <span className="line-clamp-2">{rowLabel}</span>
+                  <span className="line-clamp-3 sm:line-clamp-2">{rowLabel}</span>
                 </th>
                 {colLabels.map((_, j) => {
                   const storedLevel = matrixValues[i]?.[j] ?? 0;
@@ -424,7 +422,7 @@ export function RosMatrix({
                   const otherLevel = otherPhaseValues?.[i]?.[j] ?? 0;
                   const showCrossRef = hasContent && otherLevel > 0 && otherLevel !== displayLevel;
                   return (
-                    <td key={j} className="overflow-hidden p-1 align-top sm:p-1.5">
+                    <td key={j} className="overflow-hidden p-0.5 align-top sm:p-1.5">
                       <button
                         id={`ros-mx-cell-${i}-${j}`}
                         type="button"
@@ -439,14 +437,15 @@ export function RosMatrix({
                           hasContent
                             ? cnCell(displayLevel, interactive)
                             : cn(
-                                "min-h-[4rem] min-w-[4.5rem] border px-1 py-2.5 text-center text-sm font-semibold tabular-nums transition-colors",
+                                "min-h-[3.25rem] min-w-0 border px-0.5 py-2 text-center text-sm font-semibold tabular-nums transition-colors sm:min-h-[4rem] sm:min-w-[4.5rem] sm:px-1 sm:py-2.5",
                                 cellRiskGhostClass(autoLevel),
                                 interactive && "cursor-pointer focus-visible:ring-ring focus-visible:ring-2 focus-visible:outline-none",
                               ),
-                          "group/cell relative flex w-full flex-col overflow-hidden rounded-xl transition-[transform,box-shadow] duration-150",
+                          "group/cell relative flex w-full min-w-0 max-w-full flex-col overflow-hidden rounded-xl transition-[transform,box-shadow] duration-150",
                           hasContent
-                            ? "min-h-[5.5rem] items-stretch gap-0 p-0 shadow-sm"
-                            : "min-h-[4.5rem] items-center justify-center gap-0.5",
+                            ? "min-h-[4rem] items-stretch gap-0 p-0 shadow-sm sm:min-h-[5.5rem]"
+                            : "items-center justify-center gap-0.5",
+                          "max-md:!min-w-0",
                           interactive &&
                             "hover:scale-[1.02] hover:shadow-lg active:scale-[0.98]",
                           !interactive && "cursor-default",
@@ -457,38 +456,40 @@ export function RosMatrix({
                       >
                         {hasContent ? (
                           <>
-                            <span className="flex min-w-0 items-center gap-1 overflow-hidden px-1.5 pt-1 pb-0.5">
-                              {isHighRisk && !hasActionFlag ? (
-                                <AlertTriangle
-                                  className="size-3.5 shrink-0 text-red-600 dark:text-red-400"
-                                  aria-label="Høy risiko uten behandling"
-                                />
-                              ) : null}
-                              <span className="inline-flex size-5 items-center justify-center rounded-md bg-black/10 text-[10px] font-bold tabular-nums leading-none dark:bg-white/15">
-                                {displayLevel}
-                              </span>
-                              {showCrossRef ? (
-                                <span
-                                  className={cn(
-                                    "inline-flex items-center gap-0.5 rounded px-1 py-px text-[9px] font-semibold tabular-nums leading-none",
-                                    otherLevel < displayLevel
-                                      ? "bg-emerald-500/20 text-emerald-700 dark:text-emerald-300"
-                                      : otherLevel > displayLevel
-                                        ? "bg-red-500/15 text-red-700 dark:text-red-300"
-                                        : "bg-muted text-muted-foreground",
-                                  )}
-                                  title={currentPhase === "before"
-                                    ? `Etter tiltak: nivå ${otherLevel}`
-                                    : `Før tiltak: nivå ${otherLevel}`}
-                                >
-                                  {otherLevel < displayLevel ? "→↓" : "→↑"}{otherLevel}
+                            <span className="flex min-w-0 flex-col gap-1 overflow-hidden px-1.5 pt-1 pb-0.5 sm:flex-row sm:items-center sm:gap-1 sm:pb-0.5">
+                              <span className="flex min-w-0 shrink-0 items-center gap-1">
+                                {isHighRisk && !hasActionFlag ? (
+                                  <AlertTriangle
+                                    className="size-3.5 shrink-0 text-red-600 dark:text-red-400"
+                                    aria-label="Høy risiko uten behandling"
+                                  />
+                                ) : null}
+                                <span className="inline-flex size-5 items-center justify-center rounded-md bg-black/10 text-[10px] font-bold tabular-nums leading-none dark:bg-white/15">
+                                  {displayLevel}
                                 </span>
-                              ) : null}
-                              <span className="truncate text-[10px] font-semibold leading-none opacity-80">
+                                {showCrossRef ? (
+                                  <span
+                                    className={cn(
+                                      "inline-flex items-center gap-0.5 rounded px-1 py-px text-[9px] font-semibold tabular-nums leading-none",
+                                      otherLevel < displayLevel
+                                        ? "bg-emerald-500/20 text-emerald-700 dark:text-emerald-300"
+                                        : otherLevel > displayLevel
+                                          ? "bg-red-500/15 text-red-700 dark:text-red-300"
+                                          : "bg-muted text-muted-foreground",
+                                    )}
+                                    title={currentPhase === "before"
+                                      ? `Etter tiltak: nivå ${otherLevel}`
+                                      : `Før tiltak: nivå ${otherLevel}`}
+                                  >
+                                    {otherLevel < displayLevel ? "→↓" : "→↑"}{otherLevel}
+                                  </span>
+                                ) : null}
+                              </span>
+                              <span className="min-w-0 text-[9px] font-semibold leading-snug opacity-80 sm:truncate sm:text-[10px] sm:leading-none">
                                 {riskLegend.find((x) => x.level === displayLevel)?.label ?? "—"}
                               </span>
                             </span>
-                            <span className="flex min-w-0 flex-1 flex-col gap-0.5 overflow-hidden px-1.5 pb-1.5">
+                            <span className="flex min-h-0 min-w-0 flex-1 flex-col gap-0.5 overflow-hidden px-1.5 pb-1.5 pt-0.5 sm:pt-0">
                               {filledItems.slice(0, 3).map((it, idx) => {
                                 const hasWatch = it.flags?.includes(ROS_CELL_FLAG_WATCH);
                                 const hasAction = it.flags?.includes(ROS_CELL_FLAG_REQUIRES_ACTION);

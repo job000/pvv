@@ -1,6 +1,9 @@
 import { jsPDF } from "jspdf";
 
-import type { RosIdentifiedRiskPdfRow } from "@/lib/ros-cell-items";
+import type {
+  RosCellRiskPointPdfRow,
+  RosIdentifiedRiskPdfRow,
+} from "@/lib/ros-cell-items";
 import { ROS_COMPLIANCE_PDF_DISCLAIMER_NB } from "@/lib/ros-compliance";
 import { ROS_COMPLIANCE_SCOPE_TAGS } from "@/lib/ros-requirement-catalog";
 import { legendItems, pdfRiskLevelStyle } from "@/lib/ros-risk-colors";
@@ -18,16 +21,38 @@ export type RosPdfJournalLine = {
 export type RosPdfPvvLinkDetail = {
   title: string;
   pddLabel: string;
+  /** Lenke til PDD-dokument fra vurderingen */
+  pddUrl?: string;
   linkNote?: string;
   pvvLinkNote?: string;
   flagsText?: string;
   highlightForPvv: boolean;
+  /** Strukturerte kravhenvisninger på koblingen */
+  requirementRefLines?: string[];
 };
 
 export type RosPdfTaskLine = {
   line: string;
   /** Kort status, f.eks. «Åpen» / «Fullført» */
   statusLabel: string;
+  description?: string;
+  assigneeName?: string | null;
+  linkedRiskSummary?: string | null;
+  /** Lesbar behandlingstype */
+  riskTreatmentLabel?: string;
+};
+
+export type RosPdfMetadata = {
+  revision?: number;
+  createdAtMs?: number;
+  updatedAtMs?: number;
+  templateName?: string | null;
+};
+
+export type RosPdfVersionSnapshot = {
+  version: number;
+  note?: string;
+  createdAt: number;
 };
 
 export type RosPdfInput = {
@@ -73,11 +98,20 @@ export type RosPdfInput = {
   openTaskLines?: string[];
   /** Alle risiko-punkter fra matrisen med full tekst og tiltak/følg (egen seksjon i PDF) */
   identifiedRisks?: RosIdentifiedRiskPdfRow[];
+  /**
+   * Alle registrerte punkter per celle (før og etter) — komplett liste utover
+   * «Identifiserte risikoer» som følger flytting før→etter.
+   */
+  cellRiskPointsComplete?: RosCellRiskPointPdfRow[];
   linkedPvvTitles: string[];
   /** Full tekst per PVV-kobling (fanen PVV-koblinger) */
   pvvLinksDetailed?: RosPdfPvvLinkDetail[];
   journalEntries: RosPdfJournalLine[];
   generatedAt: Date;
+  /** Revisjon, mal, tidsstempler */
+  metadata?: RosPdfMetadata;
+  /** Lagrede øyeblikksbilder (fanen Versjoner) */
+  versionSnapshots?: RosPdfVersionSnapshot[];
 };
 
 function formatTs(ms: number) {
@@ -91,6 +125,50 @@ function formatTs(ms: number) {
   }
 }
 
+/** Én lesbar linje per strukturert kravhenvisning (ROS / PVV-kobling). */
+export function formatRosRequirementRefLine(r: {
+  source: string;
+  article?: string;
+  note?: string;
+  documentationUrl?: string;
+}): string {
+  const src =
+    r.source === "gdpr"
+      ? "GDPR"
+      : r.source === "nis2"
+        ? "NIS2"
+        : r.source === "iso31000"
+          ? "ISO 31000"
+          : r.source === "iso27005"
+            ? "ISO/IEC 27005"
+            : r.source === "norwegian_law"
+              ? "Norsk lov"
+              : r.source === "internal"
+                ? "Internt"
+                : r.source;
+  return [src, r.article, r.note, r.documentationUrl]
+    .filter((x) => Boolean(x && String(x).trim()))
+    .join(" · ");
+}
+
+const JOURNAL_PDF_MAX = 100;
+
+function applyFooters(doc: jsPDF, margin: number, shortTitle: string) {
+  const pageCount = doc.getNumberOfPages();
+  const pw = doc.internal.pageSize.getWidth();
+  const ph = doc.internal.pageSize.getHeight();
+  const safe = shortTitle.slice(0, 52) || "ROS-analyse";
+  for (let i = 1; i <= pageCount; i++) {
+    doc.setPage(i);
+    doc.setFontSize(7);
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(130, 130, 130);
+    doc.text(`ROS · ${safe}`, margin, ph - 5.5, { maxWidth: pw - margin * 2 - 28 });
+    doc.text(`Side ${i} av ${pageCount}`, pw - margin, ph - 5.5, { align: "right" });
+    doc.setTextColor(0);
+  }
+}
+
 /** Laster ned A4-PDF med ROS-analyse (tekst + matrise + logg). */
 export function downloadRosAnalysisPdf(data: RosPdfInput): void {
   const doc = new jsPDF({ unit: "mm", format: "a4" });
@@ -99,6 +177,14 @@ export function downloadRosAnalysisPdf(data: RosPdfInput): void {
 
   const pageW = () => doc.internal.pageSize.getWidth();
   const pageH = () => doc.internal.pageSize.getHeight();
+  const shortTitle = (data.title || "ROS-analyse").trim().slice(0, 60);
+
+  doc.setProperties({
+    title: data.title,
+    subject: "ROS-analyse (risiko og sårbarhet)",
+    keywords: "ROS, risiko, PVV, personvern",
+    creator: "PVV",
+  });
 
   const legend = legendItems();
   const levelLabel = (n: number) =>
@@ -141,18 +227,31 @@ export function downloadRosAnalysisPdf(data: RosPdfInput): void {
     y += Math.max(vlines.length * 4.5, 6);
   };
 
-  addHeading("ROS-analyse (risiko og sårbarhet)", 18);
-  doc.setFontSize(9);
-  doc.setTextColor(90);
-  addPara(
-    `Generert ${data.generatedAt.toLocaleString("nb-NO", { dateStyle: "long", timeStyle: "short" })}`,
-    9,
+  doc.setFillColor(30, 41, 59);
+  doc.rect(0, 0, pageW(), 40, "F");
+  doc.setTextColor(255, 255, 255);
+  doc.setFontSize(10);
+  doc.setFont("helvetica", "bold");
+  doc.text("ROS-RAPPORT", margin, 14);
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(8.5);
+  doc.text(
+    `Eksportert ${data.generatedAt.toLocaleString("nb-NO", { dateStyle: "long", timeStyle: "short" })}`,
+    margin,
+    22,
   );
   doc.setTextColor(0);
+  y = 48;
 
-  y += 2;
-  addPara(data.title, 13);
+  doc.setFontSize(18);
+  doc.setFont("helvetica", "bold");
+  const titleLines = doc.splitTextToSize(data.title, pageW() - margin * 2);
+  ensureSpace(titleLines.length * 7 + 10);
+  doc.text(titleLines, margin, y);
+  y += titleLines.length * 7 + 6;
+  doc.setFont("helvetica", "normal");
   doc.setFontSize(10);
+
   if (data.workspaceName) {
     addRow("Arbeidsområde", data.workspaceName);
   }
@@ -161,10 +260,39 @@ export function downloadRosAnalysisPdf(data: RosPdfInput): void {
   }
   addRow("Akser", `${data.rowAxisTitle} × ${data.colAxisTitle}`);
 
+  if (data.metadata) {
+    const m = data.metadata;
+    y += 4;
+    doc.setDrawColor(220, 226, 232);
+    doc.setLineWidth(0.25);
+    doc.line(margin, y, pageW() - margin, y);
+    y += 5;
+    addHeading("Dokumentinformasjon", 11);
+    if (m.revision != null) {
+      addRow("Revisjon (utkast)", String(m.revision));
+    }
+    if (m.templateName) {
+      addRow("Mal", m.templateName);
+    }
+    if (m.createdAtMs) {
+      addRow("Opprettet", formatTs(m.createdAtMs));
+    }
+    if (m.updatedAtMs) {
+      addRow("Sist oppdatert", formatTs(m.updatedAtMs));
+    }
+  }
+
   if (data.linkedPvvTitles.length > 0) {
     ensureSpace(8);
     addRow("Koblede PVV-vurderinger", data.linkedPvvTitles.join("; "));
   }
+
+  y += 4;
+  addHeading("Innhold i denne rapporten", 11);
+  addPara(
+    "Oppsummering og notater · PVV-koblinger · Livssyklus og krav · Revisjon · Oppgaver · Identifiserte risikoer · Alle matrisepunkter (valgfritt) · Risikologg · Matriser før/etter tiltak.",
+    9,
+  );
 
   if (data.summaryLines && data.summaryLines.length > 0) {
     y += 4;
@@ -195,11 +323,20 @@ export function downloadRosAnalysisPdf(data: RosPdfInput): void {
       y += 5;
       doc.setFont("helvetica", "normal");
       addRow("PDD-status (PVV)", p.pddLabel);
+      if (p.pddUrl?.trim()) {
+        addRow("PDD-lenke", p.pddUrl.trim());
+      }
       if (p.highlightForPvv) {
         addRow("Merkes for PVV", "Ja");
       }
       if (p.flagsText?.trim()) {
         addRow("Flagg", p.flagsText.trim());
+      }
+      if (p.requirementRefLines && p.requirementRefLines.length > 0) {
+        addRow(
+          "Krav på kobling",
+          p.requirementRefLines.join("\n\n"),
+        );
       }
       if (p.linkNote?.trim()) {
         addRow("Notat (kobling)", p.linkNote.trim());
@@ -296,7 +433,37 @@ export function downloadRosAnalysisPdf(data: RosPdfInput): void {
       8,
     );
     for (const t of taskLinesResolved) {
-      addPara(`• [${t.statusLabel}] ${t.line}`, 9);
+      const parts: string[] = [`[${t.statusLabel}] ${t.line}`];
+      if (t.description?.trim()) {
+        parts.push(`Beskrivelse: ${t.description.trim()}`);
+      }
+      if (t.assigneeName?.trim()) {
+        parts.push(`Ansvarlig: ${t.assigneeName.trim()}`);
+      }
+      if (t.linkedRiskSummary?.trim()) {
+        parts.push(`Kobling: ${t.linkedRiskSummary.trim()}`);
+      }
+      if (t.riskTreatmentLabel?.trim()) {
+        parts.push(`Behandling: ${t.riskTreatmentLabel.trim()}`);
+      }
+      addPara(`• ${parts.join("\n")}`, 9);
+      y += 1;
+    }
+  }
+
+  if (data.versionSnapshots && data.versionSnapshots.length > 0) {
+    y += 4;
+    addHeading("Lagrede versjoner (øyeblikksbilder)", 12);
+    addPara(
+      "Historikk fra fanen Versjoner — hvert lagret øyeblikksbilde med notat.",
+      8,
+    );
+    const sorted = [...data.versionSnapshots].sort((a, b) => b.version - a.version);
+    for (const v of sorted) {
+      const head = `v${v.version} · ${formatTs(v.createdAt)}`;
+      const note = v.note?.trim();
+      addPara(note ? `${head}\n${note}` : head, 9);
+      y += 1;
     }
   }
 
@@ -335,14 +502,41 @@ export function downloadRosAnalysisPdf(data: RosPdfInput): void {
     }
   }
 
-  /** Risikologg: siste 40 hendelser, kronologisk (eldste først i utdraget). */
+  if (data.cellRiskPointsComplete && data.cellRiskPointsComplete.length > 0) {
+    y += 4;
+    addHeading("Alle registrerte punkt i matrisen", 12);
+    addPara(
+      "Full liste over alle risikopunkter i før- og etter-matrise (inkl. kun etter-fase). Er utfyllende sammen med «Identifiserte risikoer».",
+      8,
+    );
+    const flagNb = (flags: string[]) => {
+      const out: string[] = [];
+      if (flags.includes("requires_action")) out.push("Må håndteres");
+      if (flags.includes("watch")) out.push("Følg med");
+      return out.length ? out.join(" · ") : "";
+    };
+    for (const p of data.cellRiskPointsComplete) {
+      const phaseNb = p.phase === "before" ? "Før tiltak" : "Etter tiltak";
+      const flagStr = flagNb(p.flags);
+      const bits = [
+        `[${phaseNb}] ${p.rowLabel} × ${p.colLabel} — nivå ${p.level} (${levelLabel(p.level)})`,
+        p.text ? p.text : "(ingen fritekst)",
+        flagStr ? `Markeringer: ${flagStr}` : "",
+        p.afterChangeNote ? `Notat endring: ${p.afterChangeNote}` : "",
+      ].filter(Boolean);
+      addPara(bits.join("\n"), 9);
+      y += 1;
+    }
+  }
+
+  /** Risikologg: siste N hendelser, kronologisk (eldste først i utdraget). */
   const journalSorted = [...data.journalEntries].sort(
     (a, b) => a.createdAt - b.createdAt,
   );
   const journal =
-    journalSorted.length <= 40
+    journalSorted.length <= JOURNAL_PDF_MAX
       ? journalSorted
-      : journalSorted.slice(-40);
+      : journalSorted.slice(-JOURNAL_PDF_MAX);
   if (journal.length > 0) {
     y += 4;
     addHeading("Risikologg (utdrag)", 12);
@@ -365,9 +559,9 @@ export function downloadRosAnalysisPdf(data: RosPdfInput): void {
       y += lines.length * 3.6 + 3;
     }
     doc.setFontSize(10);
-    if (data.journalEntries.length > 40) {
+    if (data.journalEntries.length > JOURNAL_PDF_MAX) {
       addPara(
-        `… og ${data.journalEntries.length - 40} eldre innlegg er ikke med i PDF-en. Se full logg i appen.`,
+        `… og ${data.journalEntries.length - JOURNAL_PDF_MAX} eldre innlegg er ikke med i PDF-en. Se full logg i appen.`,
         8,
       );
     }
@@ -674,6 +868,8 @@ export function downloadRosAnalysisPdf(data: RosPdfInput): void {
   doc.setTextColor(85, 90, 100);
   addPara(ROS_COMPLIANCE_PDF_DISCLAIMER_NB, 6.5);
   doc.setTextColor(0);
+
+  applyFooters(doc, margin, shortTitle);
 
   const safe = data.title
     .replace(/[^\wæøåÆØÅ\- ]/gi, "")

@@ -20,6 +20,7 @@ import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import { useMutation, useQuery } from "convex/react";
 import {
+  collectAllCellRiskPointsForPdf,
   collectIdentifiedRisksForPdf,
   flattenCellItemsMatrixToLegacyNotes,
   newRosCellItemId,
@@ -46,7 +47,10 @@ import { toastDeleteWithUndo } from "@/lib/toast-delete-undo";
 import { cellRiskClass } from "@/lib/ros-risk-colors";
 import { cn } from "@/lib/utils";
 import type { RosRequirementRef } from "@/lib/ros-requirement-catalog";
-import { downloadRosAnalysisPdf } from "@/lib/ros-pdf";
+import {
+  downloadRosAnalysisPdf,
+  formatRosRequirementRefLine,
+} from "@/lib/ros-pdf";
 import {
   buildRosTaskRiskLinkOptions,
   parseRosTaskRiskLink,
@@ -372,6 +376,7 @@ export function RosAnalysisEditor({
   const versions = useQuery(api.ros.listVersions, rosChildQueryArgs);
   const tasks = useQuery(api.ros.listTasksByRosAnalysis, rosChildQueryArgs);
   const members = useQuery(api.workspaces.listMembers, { workspaceId });
+  const rosTemplates = useQuery(api.ros.listTemplates, { workspaceId });
 
   const updateAnalysis = useMutation(api.ros.updateAnalysis);
   const removeAnalysis = useMutation(api.ros.removeAnalysis);
@@ -1383,12 +1388,25 @@ export function RosAnalysisEditor({
         .filter(Boolean)
         .join(" · ");
     });
+    const riskTreatmentNb: Record<string, string> = {
+      mitigate: "Reduksjon",
+      accept: "Akseptere",
+      transfer: "Overføre",
+      avoid: "Unngå",
+    };
     const taskLinesAll =
       tasks?.map((t) => {
         const due = t.dueAt ? ` · frist ${formatTs(t.dueAt)}` : "";
         return {
           line: `${t.title}${due}`,
           statusLabel: t.status === "open" ? "Åpen" : "Fullført",
+          description: t.description?.trim() || undefined,
+          assigneeName: t.assigneeName ?? null,
+          linkedRiskSummary: t.linkedRiskSummary ?? null,
+          riskTreatmentLabel:
+            t.riskTreatmentKind != null
+              ? riskTreatmentNb[t.riskTreatmentKind] ?? t.riskTreatmentKind
+              : undefined,
         };
       }) ?? [];
 
@@ -1398,10 +1416,15 @@ export function RosAnalysisEditor({
         COMPLIANCE_STATUS_LABELS[
           (l.pddStatus ?? "not_started") as ComplianceStatusKey
         ],
+      pddUrl: l.pddUrl?.trim() || undefined,
       linkNote: l.note?.trim() || undefined,
       pvvLinkNote: l.pvvLinkNote?.trim() || undefined,
       flagsText: l.flags?.length ? l.flags.join(", ") : undefined,
       highlightForPvv: Boolean(l.highlightForPvv),
+      requirementRefLines:
+        l.requirementRefs && l.requirementRefs.length > 0
+          ? l.requirementRefs.map((r) => formatRosRequirementRefLine(r))
+          : undefined,
     }));
 
     const summaryLines = [
@@ -1443,6 +1466,28 @@ export function RosAnalysisEditor({
       matrixValuesAfter: mvAfterPdf,
     });
 
+    const cellRiskPointsComplete = [
+      ...collectAllCellRiskPointsForPdf({
+        cellItemsMatrix,
+        rowLabels: data.rowLabels,
+        colLabels: data.colLabels,
+        matrixValues: matrix,
+        phase: "before",
+      }),
+      ...collectAllCellRiskPointsForPdf({
+        cellItemsMatrix: cellItemsAfterMatrix,
+        rowLabels: afterRowLabelsPdf,
+        colLabels: afterColLabelsPdf,
+        matrixValues: mvAfterPdf,
+        phase: "after",
+      }),
+    ];
+
+    const templateName =
+      data.templateId && rosTemplates
+        ? rosTemplates.find((x) => x._id === data.templateId)?.name ?? null
+        : null;
+
     downloadRosAnalysisPdf({
       title: title.trim() || data.title,
       workspaceName: workspace?.name ?? null,
@@ -1480,6 +1525,8 @@ export function RosAnalysisEditor({
       taskLinesAll: taskLinesAll.length > 0 ? taskLinesAll : undefined,
       identifiedRisks:
         identifiedRisks.length > 0 ? identifiedRisks : undefined,
+      cellRiskPointsComplete:
+        cellRiskPointsComplete.length > 0 ? cellRiskPointsComplete : undefined,
       linkedPvvTitles: data.linkedAssessments.map((l) => l.title),
       pvvLinksDetailed:
         pvvLinksDetailed.length > 0 ? pvvLinksDetailed : undefined,
@@ -1492,6 +1539,17 @@ export function RosAnalysisEditor({
         matrixPhase: e.matrixPhase,
       })),
       generatedAt: new Date(),
+      metadata: {
+        revision: data.revision ?? undefined,
+        createdAtMs: data.createdAt,
+        updatedAtMs: data.updatedAt,
+        templateName: templateName ?? undefined,
+      },
+      versionSnapshots: (versions ?? []).map((v) => ({
+        version: v.version,
+        note: v.note?.trim(),
+        createdAt: v.createdAt,
+      })),
     });
   }
 
@@ -1814,7 +1872,7 @@ export function RosAnalysisEditor({
                     Skala
                   </button>
                 </div>
-              <div className="px-5 pb-5 sm:px-6 sm:pb-6">
+              <div className="min-w-0 px-5 pb-5 sm:px-6 sm:pb-6">
                 {afterMatrixInvalid ? (
                   <Alert>
                     <AlertTitle>Ugyldig etter-matrise</AlertTitle>

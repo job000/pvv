@@ -139,6 +139,59 @@ export function collectIdentifiedRisksForPdf(args: {
   });
 }
 
+/** Én linje per risikopunkt i en matrise (før eller etter fase) — full eksport til PDF. */
+export type RosCellRiskPointPdfRow = {
+  phase: "before" | "after";
+  rowLabel: string;
+  colLabel: string;
+  level: number;
+  text: string;
+  flags: string[];
+  afterChangeNote?: string;
+};
+
+/** Alle ikke-tomme punkter i en celle-matrise (én rad per punkt). */
+export function collectAllCellRiskPointsForPdf(args: {
+  cellItemsMatrix: RosCellItemMatrix;
+  rowLabels: string[];
+  colLabels: string[];
+  matrixValues: number[][];
+  phase: "before" | "after";
+}): RosCellRiskPointPdfRow[] {
+  const out: RosCellRiskPointPdfRow[] = [];
+  for (let r = 0; r < args.cellItemsMatrix.length; r++) {
+    const row = args.cellItemsMatrix[r];
+    if (!row) continue;
+    for (let c = 0; c < row.length; c++) {
+      const cell = row[c];
+      if (!cell) continue;
+      for (const item of cell) {
+        const t = item.text.trim();
+        const hasFlags = (item.flags?.length ?? 0) > 0;
+        const hasNote = Boolean(item.afterChangeNote?.trim());
+        if (!t && !hasFlags && !hasNote) continue;
+        out.push({
+          phase: args.phase,
+          rowLabel: args.rowLabels[r] ?? `Rad ${r + 1}`,
+          colLabel: args.colLabels[c] ?? `Kolonne ${c + 1}`,
+          level: args.matrixValues[r]?.[c] ?? 0,
+          text: t,
+          flags: item.flags ? [...item.flags] : [],
+          afterChangeNote: item.afterChangeNote?.trim() || undefined,
+        });
+      }
+    }
+  }
+  return out.sort((a, b) => {
+    const k = `${a.rowLabel}|${a.colLabel}|${a.text}`.localeCompare(
+      `${b.rowLabel}|${b.colLabel}|${b.text}`,
+      "nb",
+    );
+    if (k !== 0) return k;
+    return a.phase.localeCompare(b.phase);
+  });
+}
+
 export function flattenCellItemsMatrixToLegacyNotes(
   items: RosCellItemMatrix,
 ): string[][] {
