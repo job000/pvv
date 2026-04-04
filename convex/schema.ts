@@ -96,6 +96,46 @@ export const assessmentPayloadFields = {
   hfCriticalManualGapNotes: v.optional(v.string()),
   /** Krav og forventning til utviklere, drift, avtaler (SLA), beredskap */
   hfOperationsSupportNotes: v.optional(v.string()),
+
+  /** Portefølje / RPA-kandidat (Likert 1–5; påvirker ikke modellscore — prioritering og arkiv) */
+  rpaExpectedBenefitVsEffort: v.optional(v.number()),
+  /** Hvor raskt oppnåelig gevinst (lav hengende frukt) */
+  rpaQuickWinPotential: v.optional(v.number()),
+  /** 1 = lignende prosess finnes mange steder, 5 = svært spesifikk eller unik for oss */
+  rpaProcessSpecificity: v.optional(v.number()),
+  /** Selvvurdert hovedbarriere eller grunn til å ikke prioritere RPA */
+  rpaBarrierSelfAssessment: v.optional(
+    v.union(
+      v.literal("none"),
+      v.literal("low_payback"),
+      v.literal("not_rpa_suitable"),
+      v.literal("integration_preferred"),
+      v.literal("organizational_block"),
+      v.literal("unsure"),
+    ),
+  ),
+  /** Kort begrunnelse — kan støtte ROS og økonomisk vurdering */
+  rpaBarrierNotes: v.optional(v.string()),
+  /** Har dere lignende automatisering fra før? (RPA eller tilsvarende) */
+  rpaSimilarAutomationExists: v.optional(
+    v.union(
+      v.literal("unsure"),
+      v.literal("yes_here"),
+      v.literal("yes_elsewhere_or_similar"),
+      v.literal("no"),
+    ),
+  ),
+  /** Hvor krevende tror dere det er å få løsningen i drift? (Likert 1–5) */
+  rpaImplementationDifficulty: v.optional(v.number()),
+  /** Kontaktperson som følger saken til den er i produksjon */
+  rpaLifecycleContact: v.optional(v.string()),
+  /** Hvem tar manuelt arbeid hvis roboten stopper eller feiler */
+  rpaManualFallbackWhenRobotFails: v.optional(v.string()),
+  /**
+   * Fritekst: hvilken gevinst (tid, kvalitet, ventetid), manuell tid vs. tid med robot,
+   * at oppgaver ikke blir liggende / glemt — for alle roller (ikke IT-språk).
+   */
+  rpaBenefitKindsAndOperationsNotes: v.optional(v.string()),
 };
 
 export const assessmentPayloadValidator = v.object(assessmentPayloadFields);
@@ -200,6 +240,10 @@ export const intakeMappingTargetValidator = v.union(
       v.literal("hfEconomicRationaleNotes"),
       v.literal("hfCriticalManualGapNotes"),
       v.literal("hfOperationsSupportNotes"),
+      v.literal("rpaBarrierNotes"),
+      v.literal("rpaLifecycleContact"),
+      v.literal("rpaManualFallbackWhenRobotFails"),
+      v.literal("rpaBenefitKindsAndOperationsNotes"),
     ),
   }),
   v.object({
@@ -207,7 +251,17 @@ export const intakeMappingTargetValidator = v.union(
     field: v.union(
       v.literal("criticalityBusinessImpact"),
       v.literal("criticalityRegulatoryRisk"),
+      v.literal("rpaExpectedBenefitVsEffort"),
+      v.literal("rpaQuickWinPotential"),
+      v.literal("rpaProcessSpecificity"),
+      v.literal("rpaImplementationDifficulty"),
     ),
+  }),
+  v.object({
+    kind: v.literal("assessmentRpaBarrier"),
+  }),
+  v.object({
+    kind: v.literal("assessmentRpaSimilar"),
   }),
   v.object({
     kind: v.literal("assessmentNumber"),
