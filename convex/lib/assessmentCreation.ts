@@ -91,6 +91,8 @@ export async function createAssessmentWithPayload(
     shareWithWorkspace: boolean;
     payload: AssessmentPayload;
     orgUnitId?: Id<"orgUnits">;
+    /** Satt ved godkjenning av inntak — styrer veiviser (beslutningsspørsmål kun under Resultat). */
+    sourcedFromIntake?: boolean;
   },
 ) {
   const now = Date.now();
@@ -107,6 +109,7 @@ export async function createAssessmentWithPayload(
     createdByUserId: args.userId,
     updatedAt: now,
     shareWithWorkspace: args.shareWithWorkspace,
+    sourcedFromIntake: args.sourcedFromIntake === true ? true : undefined,
     pipelineStatus,
     cachedPriorityScore: computed.priorityScore,
     cachedAp: computed.ap,

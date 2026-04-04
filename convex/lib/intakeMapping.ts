@@ -5,6 +5,10 @@ import type {
   IntakeRosSuggestion,
 } from "../schema";
 import type { AssessmentPayload } from "../schema";
+import {
+  RPA_BARRIER_SELF_ASSESSMENT_VALUES,
+  RPA_SIMILAR_AUTOMATION_VALUES,
+} from "../../lib/rpa-portfolio-labels";
 import { defaultAssessmentPayload } from "./assessmentCreation";
 
 type IntakeQuestionDoc = {
@@ -163,7 +167,7 @@ function applyFrequencyPreset(
       reworkHours: 120,
       auditHours: 80,
       structuredInput: 5,
-      processVariability: 1,
+      processVariability: 5,
       digitization: 5,
       processLength: 4,
     };
@@ -175,7 +179,7 @@ function applyFrequencyPreset(
       reworkHours: 80,
       auditHours: 60,
       structuredInput: 4,
-      processVariability: 2,
+      processVariability: 4,
       digitization: 4,
     };
   }
@@ -197,7 +201,7 @@ function applyFrequencyPreset(
       reworkHours: 20,
       auditHours: 20,
       structuredInput: 3,
-      processVariability: 4,
+      processVariability: 2,
       digitization: 3,
     };
   }
@@ -207,7 +211,7 @@ function applyFrequencyPreset(
     reworkHours: 10,
     auditHours: 10,
     structuredInput: 2,
-    processVariability: 5,
+    processVariability: 1,
     digitization: 2,
   };
 }
@@ -358,6 +362,40 @@ export function generateIntakeSuggestion(
             [target.field]: scale,
           };
           autoFilledFields.add(target.field);
+        }
+        continue;
+      }
+      if (target.kind === "assessmentRpaBarrier") {
+        if (answer.kind === "multiple_choice") {
+          const id = answer.optionId;
+          if (
+            (RPA_BARRIER_SELF_ASSESSMENT_VALUES as readonly string[]).includes(
+              id,
+            )
+          ) {
+            payload = {
+              ...payload,
+              rpaBarrierSelfAssessment:
+                id as AssessmentPayload["rpaBarrierSelfAssessment"],
+            };
+            autoFilledFields.add("rpaBarrierSelfAssessment");
+          }
+        }
+        continue;
+      }
+      if (target.kind === "assessmentRpaSimilar") {
+        if (answer.kind === "multiple_choice") {
+          const id = answer.optionId;
+          if (
+            (RPA_SIMILAR_AUTOMATION_VALUES as readonly string[]).includes(id)
+          ) {
+            payload = {
+              ...payload,
+              rpaSimilarAutomationExists:
+                id as AssessmentPayload["rpaSimilarAutomationExists"],
+            };
+            autoFilledFields.add("rpaSimilarAutomationExists");
+          }
         }
         continue;
       }

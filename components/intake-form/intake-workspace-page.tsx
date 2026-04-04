@@ -83,6 +83,8 @@ type EditableQuestion = {
     | { kind: "rosConsequence" }
     | { kind: "rosRiskDescription" }
     | { kind: "pvvPersonalData" }
+    | { kind: "assessmentRpaBarrier" }
+    | { kind: "assessmentRpaSimilar" }
   >;
 };
 
@@ -269,6 +271,10 @@ const REVIEW_FIELDS = [
   ["processVolumeNotes", "Volum og frekvens"],
   ["processConstraints", "Begrensninger / risiko"],
   ["hfSecurityInformationNotes", "Sikkerhet og personvern"],
+  ["rpaBarrierNotes", "Beslutningsgrunnlag — forklaring (hindring)"],
+  ["rpaBenefitKindsAndOperationsNotes", "Gevinst, tid, robot vs. manuelt"],
+  ["rpaLifecycleContact", "Kontaktperson til produksjon"],
+  ["rpaManualFallbackWhenRobotFails", "Manuell reserve ved robotfeil"],
 ] as const satisfies ReadonlyArray<readonly [keyof AssessmentPayload, string]>;
 
 function emptyQuestion(): EditableQuestion {

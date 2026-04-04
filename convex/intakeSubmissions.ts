@@ -506,6 +506,7 @@ export const approve = mutation({
       title: args.generatedAssessmentDraft.title,
       shareWithWorkspace: true,
       payload: args.generatedAssessmentDraft.payload,
+      sourcedFromIntake: true,
     });
 
     const form = await ctx.db.get(submission.formId);

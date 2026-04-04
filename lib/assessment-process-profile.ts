@@ -19,6 +19,10 @@ export const PROCESS_TEXT_FIELD_KEYS = [
   "hfEconomicRationaleNotes",
   "hfCriticalManualGapNotes",
   "hfOperationsSupportNotes",
+  "rpaBarrierNotes",
+  "rpaLifecycleContact",
+  "rpaManualFallbackWhenRobotFails",
+  "rpaBenefitKindsAndOperationsNotes",
 ] as const;
 
 export type ProcessTextFieldKey = (typeof PROCESS_TEXT_FIELD_KEYS)[number];

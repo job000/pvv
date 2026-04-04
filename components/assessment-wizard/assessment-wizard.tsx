@@ -9,6 +9,7 @@ import { AssessmentContextCard } from "@/components/assessment-wizard/assessment
 import { AssessmentExportPanel } from "@/components/assessment-wizard/assessment-export-panel";
 import { HfRequirementsSection } from "@/components/assessment-wizard/hf-requirements-section";
 import { ProcessProfileSection } from "@/components/assessment-wizard/process-profile-section";
+import { AssessmentPortfolioSummarySection } from "@/components/assessment-wizard/assessment-portfolio-summary-section";
 import { AssessmentWizardSchemaHelp } from "@/components/assessment-wizard/assessment-wizard-schema-help";
 import { AssessmentWizardMeta } from "@/components/assessment-wizard/assessment-wizard-meta";
 import { LikertField } from "@/components/rpa-assessment/likert-field";
@@ -46,7 +47,10 @@ import {
 } from "@/lib/assessment-pipeline";
 import { cn } from "@/lib/utils";
 import { payloadToSnapshot } from "@/convex/lib/payloadSnapshot";
-import { ASSESSMENT_WIZARD_STEP_LABELS } from "@/lib/assessment-wizard-steps";
+import {
+  ASSESSMENT_WIZARD_STEP_LABELS_FROM_INTAKE,
+  ASSESSMENT_WIZARD_STEP_LABELS_WITH_PORTFOLIO,
+} from "@/lib/assessment-wizard-steps";
 import {
   ASSESSMENT_COLLAB_ROLE_LABEL_NB,
   WORKSPACE_ROLE_LABEL_NB,
@@ -66,9 +70,6 @@ import {
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-
-const DETAILS_SLIDE_INDEX =
-  ASSESSMENT_WIZARD_STEP_LABELS.indexOf("Detaljer");
 
 /** Én kilde til utkast-form — brukes ved første lasting og etter gjenoppretting fra versjon. */
 function normalizeDraftPayload(raw: AssessmentPayload): AssessmentPayload {
@@ -111,6 +112,16 @@ function normalizeDraftPayload(raw: AssessmentPayload): AssessmentPayload {
     hfEconomicRationaleNotes: raw.hfEconomicRationaleNotes ?? "",
     hfCriticalManualGapNotes: raw.hfCriticalManualGapNotes ?? "",
     hfOperationsSupportNotes: raw.hfOperationsSupportNotes ?? "",
+    rpaExpectedBenefitVsEffort: raw.rpaExpectedBenefitVsEffort ?? 3,
+    rpaQuickWinPotential: raw.rpaQuickWinPotential ?? 3,
+    rpaProcessSpecificity: raw.rpaProcessSpecificity ?? 3,
+    rpaImplementationDifficulty: raw.rpaImplementationDifficulty ?? 3,
+    rpaBarrierSelfAssessment: raw.rpaBarrierSelfAssessment,
+    rpaBarrierNotes: raw.rpaBarrierNotes ?? "",
+    rpaLifecycleContact: raw.rpaLifecycleContact ?? "",
+    rpaManualFallbackWhenRobotFails: raw.rpaManualFallbackWhenRobotFails ?? "",
+    rpaBenefitKindsAndOperationsNotes:
+      raw.rpaBenefitKindsAndOperationsNotes ?? "",
     timePerCaseValue,
     timePerCaseUnit,
     caseVolumeValue,
@@ -138,7 +149,7 @@ const QUICK_AUTOMATION_PRESETS: Record<
     reworkHours: 10,
     auditHours: 10,
     structuredInput: 2,
-    processVariability: 5,
+    processVariability: 1,
     digitization: 2,
   },
   2: {
@@ -146,7 +157,7 @@ const QUICK_AUTOMATION_PRESETS: Record<
     reworkHours: 20,
     auditHours: 20,
     structuredInput: 3,
-    processVariability: 4,
+    processVariability: 2,
     digitization: 3,
   },
   3: {
@@ -162,7 +173,7 @@ const QUICK_AUTOMATION_PRESETS: Record<
     reworkHours: 80,
     auditHours: 60,
     structuredInput: 4,
-    processVariability: 2,
+    processVariability: 4,
     digitization: 4,
   },
   5: {
@@ -170,7 +181,7 @@ const QUICK_AUTOMATION_PRESETS: Record<
     reworkHours: 120,
     auditHours: 80,
     structuredInput: 5,
-    processVariability: 1,
+    processVariability: 5,
     digitization: 5,
   },
 };
@@ -302,16 +313,16 @@ function workloadSummaryFromPayload(payload: AssessmentPayload): {
     const timeUnitLabel =
       effectiveTimePerCaseUnit(payload) === "hours" ? "timer" : "min";
     return {
-      title: "Bruker tid per sak og volum",
-      description: `${roundKpiValue(timePerCaseValue)} ${timeUnitLabel} per sak og ${roundKpiValue(caseVolumeValue)} saker per ${caseVolumeUnitLabel} gir ca. ${Math.round(derivedBaselineHoursFromPayload(payload) ?? 0)} timer per år.`,
+      title: "Tid per runde og hvor ofte",
+      description: `Vi regner med ${roundKpiValue(timePerCaseValue)} ${timeUnitLabel} per gang og ${roundKpiValue(caseVolumeValue)} ganger per ${caseVolumeUnitLabel} → omtrent ${Math.round(derivedBaselineHoursFromPayload(payload) ?? 0)} timer med manuelt arbeid i året.`,
     };
   }
 
   const manualFteEstimate = payload.manualFteEstimate;
   if (typeof manualFteEstimate === "number" && manualFteEstimate > 0) {
     return {
-      title: "Bruker FTE som grunnlag",
-      description: `${roundKpiValue(manualFteEstimate)} årsverk med ${roundKpiValue(payload.workingHoursPerDay)} timer per dag og ${Math.round(payload.workingDays)} arbeidsdager gir ca. ${Math.round(manualFteEstimate * payload.workingDays * payload.workingHoursPerDay)} timer per år.`,
+      title: "Årsverk som grunnlag",
+      description: `${roundKpiValue(manualFteEstimate)} årsverk (heltidsår), ${roundKpiValue(payload.workingHoursPerDay)} timer per dag og ${Math.round(payload.workingDays)} arbeidsdager i året → omtrent ${Math.round(manualFteEstimate * payload.workingDays * payload.workingHoursPerDay)} timer med manuelt arbeid i året.`,
     };
   }
 
@@ -372,6 +383,11 @@ export function AssessmentWizard({ assessmentId }: Props) {
   const [leavingBusy, setLeavingBusy] = useState(false);
   const router = useRouter();
   const assessmentRow = data?.assessment ?? null;
+  const sourcedFromIntake = assessmentRow?.sourcedFromIntake === true;
+  const stepLabels = sourcedFromIntake
+    ? ASSESSMENT_WIZARD_STEP_LABELS_FROM_INTAKE
+    : ASSESSMENT_WIZARD_STEP_LABELS_WITH_PORTFOLIO;
+  const detailsSlideIndex = stepLabels.indexOf("Detaljer");
 
   const goneFromServer =
     data !== undefined &&
@@ -671,14 +687,14 @@ export function AssessmentWizard({ assessmentId }: Props) {
   }, [persist]);
 
   const openTeamAndVersions = useCallback(() => {
-    emblaApi?.scrollTo(DETAILS_SLIDE_INDEX);
+    emblaApi?.scrollTo(detailsSlideIndex);
     requestAnimationFrame(() => {
       document.getElementById("versjoner")?.scrollIntoView({
         behavior: "smooth",
         block: "start",
       });
     });
-  }, [emblaApi]);
+  }, [emblaApi, detailsSlideIndex]);
 
   const onPickVersionPreview = useCallback(
     (v: number) => {
@@ -814,7 +830,7 @@ export function AssessmentWizard({ assessmentId }: Props) {
     const go = () => {
       if (typeof window === "undefined") return;
       if (window.location.hash === "#versjoner") {
-        emblaApi.scrollTo(DETAILS_SLIDE_INDEX);
+        emblaApi.scrollTo(detailsSlideIndex);
         requestAnimationFrame(() => {
           document.getElementById("versjoner")?.scrollIntoView({
             behavior: "smooth",
@@ -826,7 +842,7 @@ export function AssessmentWizard({ assessmentId }: Props) {
     go();
     window.addEventListener("hashchange", go);
     return () => window.removeEventListener("hashchange", go);
-  }, [emblaApi]);
+  }, [emblaApi, detailsSlideIndex]);
 
   const [candidatePickerKey, setCandidatePickerKey] = useState(0);
 
@@ -1072,10 +1088,10 @@ export function AssessmentWizard({ assessmentId }: Props) {
           <div>
             <p className="text-foreground text-sm font-semibold">
               <span className="text-muted-foreground font-normal">
-                Steg {slide + 1}/{ASSESSMENT_WIZARD_STEP_LABELS.length}
+                Steg {slide + 1}/{stepLabels.length}
               </span>
               {" · "}
-              {ASSESSMENT_WIZARD_STEP_LABELS[slide]}
+              {stepLabels[slide]}
             </p>
             <p className="text-muted-foreground mt-1 text-xs">
               Fyll ut det du trenger — resten er valgfritt.
@@ -1090,7 +1106,7 @@ export function AssessmentWizard({ assessmentId }: Props) {
               onChange={(e) => emblaApi?.scrollTo(Number(e.target.value))}
               aria-label="Hopp til steg"
             >
-              {ASSESSMENT_WIZARD_STEP_LABELS.map((label, i) => (
+              {stepLabels.map((label, i) => (
                 <option key={label} value={i}>
                   {i + 1}. {label}
                 </option>
@@ -1099,7 +1115,7 @@ export function AssessmentWizard({ assessmentId }: Props) {
           </div>
         </div>
         <div className="flex gap-1" aria-label="Fremdrift" role="navigation">
-          {ASSESSMENT_WIZARD_STEP_LABELS.map((label, i) => (
+          {stepLabels.map((label, i) => (
             <button
               key={label}
               type="button"
@@ -1134,10 +1150,29 @@ export function AssessmentWizard({ assessmentId }: Props) {
             <Slide>
               <div className="space-y-1">
                 <h2 className="text-foreground text-xl font-semibold sm:text-2xl">
-                  Screening
+                  RPA-kandidat — start
                 </h2>
                 <p className="text-muted-foreground text-sm">
-                  Først avgjør dere om dette er verdt å se nærmere på.
+                  Her kartlegger dere det som vanligvis inngår i en RPA-kandidatvurdering:{" "}
+                  <span className="text-foreground/90">
+                    forretningsverdi, volum og gjentakelse, og hvor mye manuelt arbeid som kan
+                    erstattes
+                  </span>{" "}
+                  (tilsvarende dimensjoner som i f.eks. UiPath Automation Hub og andre
+                  porteføljeverktøy). Dette styrer tallene i resultatet.{" "}
+                  {sourcedFromIntake ? (
+                    <>
+                      Spørsmål om gevinst, risiko og portefølje (for dialog med bestillere) fyller
+                      dere inn under <span className="text-foreground/90">Resultat</span> — samme
+                      som i inntak, ikke gjentatt som eget steg.
+                    </>
+                  ) : (
+                    <>
+                      Spørsmål om gevinst, risiko og portefølje fyller dere inn under steget{" "}
+                      <span className="text-foreground/90">Gevinst og drift</span> før dere ser
+                      modellresultat.
+                    </>
+                  )}
                 </p>
               </div>
               <div className="space-y-6">
@@ -1173,29 +1208,32 @@ export function AssessmentWizard({ assessmentId }: Props) {
                 <div className="space-y-4 rounded-2xl bg-muted/10 p-5 ring-1 ring-black/[0.04] dark:ring-white/[0.06]">
                   <div className="space-y-1">
                     <h3 className="text-base font-semibold text-foreground">
-                      Tallgrunnlag
+                      Hvor mye tid bruker folk på dette i dag?
                     </h3>
                     <p className="text-sm text-muted-foreground">
-                      Legg inn volum og tidsbruk tidlig, så får dere et bedre grunnlag for
-                      vurderingen med en gang.
+                      Robot lønner seg når <span className="text-foreground/90">mye</span> av det
+                      samme gjøres igjen og igjen. Da trenger vi et enkelt bilde av hvor mye
+                      manuelt arbeid som ligger her — dere trenger ikke være økonom for å svare.
                     </p>
                   </div>
                   <div className="rounded-2xl border border-primary/15 bg-background/80 p-4">
                     <p className="text-sm font-medium text-foreground">
-                      Dette brukes direkte i vurderingen
+                      Hvorfor spør vi?
                     </p>
                     <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                      Tallene under styrer beregningen av `Timer / år`, `FTE` og dermed hvor
-                      mye manuelt arbeid vurderingen legger til grunn. Hvis du lar feltene stå
-                      tomme, brukes det grove anslaget i spørsmålet om manuelt arbeid lenger
-                      ned.
+                      Svarene brukes til å regne ut omtrent hvor mange timer i året som kan ligge
+                      bak en robot (og dermed prioritering). Tomme felt her erstattes av det
+                      grove anslaget i spørsmålet om manuelt arbeid lenger ned på siden.
                     </p>
                     <div className="mt-3 flex flex-wrap gap-2">
-                      <Badge variant="outline">Påvirker Timer / år</Badge>
-                      <Badge variant="outline">Påvirker FTE</Badge>
-                      <Badge variant="outline">Påvirker prioritering</Badge>
+                      <Badge variant="outline">Timer per år</Badge>
+                      <Badge variant="outline">Arbeidsmengde</Badge>
+                      <Badge variant="outline">Prioritering</Badge>
                     </div>
                   </div>
+                  <p className="text-xs text-muted-foreground">
+                    Velg én av måtene under — bare den som passer best for dere.
+                  </p>
                   <div className="grid gap-3 md:grid-cols-2">
                     <button
                       type="button"
@@ -1214,11 +1252,12 @@ export function AssessmentWizard({ assessmentId }: Props) {
                       disabled={!canEdit}
                     >
                       <p className="text-sm font-semibold text-foreground">
-                        Jeg vet tid per sak og volum
+                        Jeg vet omtrent tid per gang og hvor ofte
                       </p>
                       <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                        Bruk denne når dere vet omtrent hvor lang tid en sak tar, og hvor mange
-                        saker dere håndterer.
+                        Passer når dere kan si «så mange minutter/timer per oppgave» og «så mange
+                        ganger per dag, uke eller måned» — f.eks. journalnotat, bestilling,
+                        saksbehandling.
                       </p>
                     </button>
                     <button
@@ -1244,11 +1283,11 @@ export function AssessmentWizard({ assessmentId }: Props) {
                       disabled={!canEdit}
                     >
                       <p className="text-sm font-semibold text-foreground">
-                        Jeg vet bare omtrent total ressursbruk
+                        Jeg vet bare omtrent hvor mye stilling som går med
                       </p>
                       <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                        Bruk denne når dere ikke kjenner tid per sak, men vet omtrent hvor mange
-                        årsverk som går med.
+                        Passer når dere tenker i «hvor mange heltidsår» eller «én halv stilling»
+                        — ikke minutter per oppgave. Vi forklarer årsverk under feltet.
                       </p>
                     </button>
                   </div>
@@ -1257,7 +1296,7 @@ export function AssessmentWizard({ assessmentId }: Props) {
                       <>
                     <div className="space-y-2 xl:col-span-2">
                       <Label htmlFor="screening-time-per-case">
-                        Hvor mye tid bruker dere vanligvis per sak?
+                        Hvor lang tid bruker dere vanligvis på én runde av oppgaven?
                       </Label>
                       <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_11rem]">
                         <Input
@@ -1299,13 +1338,13 @@ export function AssessmentWizard({ assessmentId }: Props) {
                         </select>
                       </div>
                       <p className="text-xs text-muted-foreground">
-                        Velg først tall, og deretter om det gjelder minutter eller timer per
-                        sak.
+                        Skriv tallet først — deretter om det er minutter eller timer for én
+                        runde.
                       </p>
                     </div>
                     <div className="space-y-2 xl:col-span-2">
                       <Label htmlFor="screening-case-volume">
-                        Hvor mange saker gjør dere vanligvis?
+                        Hvor mange ganger skjer dette i vanlig drift?
                       </Label>
                       <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_11rem]">
                         <Input
@@ -1350,8 +1389,8 @@ export function AssessmentWizard({ assessmentId }: Props) {
                         </select>
                       </div>
                       <p className="text-xs text-muted-foreground">
-                        Velg volumet slik dere vanligvis snakker om det: per dag, uke eller
-                        måned.
+                        Velg om tallet er per dag, per uke eller per måned — slik dere selv
+                        tenker på det.
                       </p>
                     </div>
                       </>
@@ -1359,7 +1398,7 @@ export function AssessmentWizard({ assessmentId }: Props) {
                     {effectiveWorkloadInputMode(payload) === "fte" ? (
                     <div className="space-y-2">
                       <Label htmlFor="screening-manual-fte">
-                        Omtrent hvor mange årsverk går med
+                        Omtrent hvor mange heltidsstillinger (år) brukes på dette?
                       </Label>
                       <Input
                         id="screening-manual-fte"
@@ -1378,12 +1417,13 @@ export function AssessmentWizard({ assessmentId }: Props) {
                           })
                         }
                         disabled={!canEdit}
-                        placeholder="F.eks. 1.5"
+                        placeholder="F.eks. 1,5 eller 0,25"
                         className="h-10 rounded-xl bg-background shadow-sm"
                       />
                       <p className="text-xs text-muted-foreground">
-                        Bruk dette hvis dere ikke kjenner tid per sak, men vet omtrent total
-                        ressursbruk.
+                        <span className="text-foreground/90">Årsverk</span> betyr én heltidsjobb
+                        gjennom ett år. 0,25 er én firedel stilling, 1,5 er én og en halv
+                        stilling — skriv det som passer.
                       </p>
                     </div>
                     ) : null}
@@ -1391,7 +1431,7 @@ export function AssessmentWizard({ assessmentId }: Props) {
                       <>
                     <div className="space-y-2">
                       <Label htmlFor="screening-working-days">
-                        Hvor mange arbeidsdager brukes i året
+                        Hvor mange arbeidsdager i året regner dere med?
                       </Label>
                       <Input
                         id="screening-working-days"
@@ -1411,12 +1451,13 @@ export function AssessmentWizard({ assessmentId }: Props) {
                         className="h-10 rounded-xl bg-background shadow-sm"
                       />
                       <p className="text-xs text-muted-foreground">
-                        Standard er 230, men juster hvis dere bruker en annen norm.
+                        Mange bruker 220–230. Her står 230 som forslag — endre bare hvis dere har
+                        avtalt noe annet (f.eks. turnus).
                       </p>
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="screening-working-hours">
-                        Hvor mange timer er en vanlig arbeidsdag
+                        Hvor mange timer er en vanlig arbeidsdag hos dere?
                       </Label>
                       <Input
                         id="screening-working-hours"
@@ -1436,14 +1477,15 @@ export function AssessmentWizard({ assessmentId }: Props) {
                         className="h-10 rounded-xl bg-background shadow-sm"
                       />
                       <p className="text-xs text-muted-foreground">
-                        Brukes sammen med årsverk og arbeidsdager for å regne timer per år.
+                        Ofte 7,5 i offentlig sektor. Vi bruker dette sammen med årsverk og
+                        arbeidsdager for å finne omtrentlig timeforbruk i året.
                       </p>
                     </div>
                       </>
                     ) : null}
                   </div>
                   <div className="rounded-2xl border border-border/50 bg-background/80 p-4">
-                    <p className="text-sm font-medium text-foreground">Slik regner vi nå</p>
+                    <p className="text-sm font-medium text-foreground">Oppsummering av tallene</p>
                     {workloadSummary ? (
                       <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
                         <span className="font-medium text-foreground">
@@ -1453,42 +1495,20 @@ export function AssessmentWizard({ assessmentId }: Props) {
                       </p>
                     ) : (
                       <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
-                        Velg først hvordan dere vil oppgi arbeidsmengden. Deretter viser vi bare
-                        de feltene som trengs for den metoden.
+                        Velg først hvordan dere vil beskrive arbeidsmengden (tid per gang, eller
+                        stillingsbruk). Da viser vi bare feltene som trengs.
                       </p>
                     )}
                     <p className="mt-2 text-xs text-muted-foreground">
-                      Dette gjør det enklere å fylle riktig og reduserer risikoen for at flere
-                      forskjellige felter sier ulike ting.
+                      Dere trenger ikke perfekte tall — et godt anslag er nok til første
+                      vurdering.
                     </p>
                   </div>
                 </div>
                 <LikertField
-                  id="quick-importance"
-                  label="Hvor viktig er dette for virksomheten?"
-                  hint="Dette er screeningen: hvis det ikke er viktig, er det sjelden verdt å bruke tid på RPA-vurdering."
-                  value={clampLikert5(payload.criticalityBusinessImpact)}
-                  onChange={(v) =>
-                    updateMany({
-                      criticalityBusinessImpact: v,
-                      criticalityRegulatoryRisk: v,
-                    })
-                  }
-                  left="Lav betydning"
-                  right="Svært viktig"
-                  scaleLabels={[
-                    "Lav",
-                    "Noe viktig",
-                    "Middels",
-                    "Høy",
-                    "Kritisk",
-                  ]}
-                  disabled={readOnly}
-                />
-                <LikertField
                   id="quick-automation"
-                  label="Hvor mye manuelt arbeid skjer i dag?"
-                  hint="Mye manuelt, repetitivt arbeid gir grunn til å gå videre til egnethetsvurdering."
+                  label="Hvor mye manuelt, gjentakende arbeid kan en robot realistisk ta over?"
+                  hint="RPA erstatter konkrete tastetrykk og overføringer — jo mer slikt arbeid, jo sterkere kandidat (prosessvolum og -karakter)."
                   value={clampLikert5(
                     payload.baselineHours >= 1800
                       ? 5
@@ -1553,39 +1573,45 @@ export function AssessmentWizard({ assessmentId }: Props) {
             <Slide>
               <div className="space-y-1">
                 <h2 className="text-foreground text-xl font-semibold sm:text-2xl">
-                  RPA-egnethet
+                  Prosess og systemer (RPA-egnethet)
                 </h2>
                 <p className="text-muted-foreground text-sm">
-                  Her vurderer dere bare det som avgjør om en robot faktisk er realistisk.
+                  Her vurderer dere typiske RPA-kriterier:{" "}
+                  <span className="text-foreground/90">
+                    strukturerte data, forutsigbare regler vs. unntak, stabile systemer og digital
+                    flyt
+                  </span>{" "}
+                  — i tråd med det som brukes i bl.a. UiPath sitt detaljerte vurderingsopplegg og
+                  tilsvarende CoE-maler. Formulert for alle roller (ikke IT-språk).
                 </p>
               </div>
               <div className="space-y-8">
                 <LikertField
                   id="fit-structured-input"
-                  label="Hvor strukturert er input-dataene?"
-                  hint="RPA fungerer best når data kommer i faste felter, ikke som fritekst, PDF-bilder eller skannede dokumenter."
+                  label="Dataattributter: kommer opplysningene som strukturerte felt, eller mest fritekst og skjermbilder?"
+                  hint="I RPA-vurdering vektlegges strukturerte inndata — ustrukturert tekst krever ofte ekstra løsninger."
                   value={clampLikert5(payload.structuredInput)}
                   onChange={(v) => update("structuredInput", v)}
-                  left="Ustrukturert"
-                  right="Fullt strukturert"
-                  scaleLabels={["Fritekst/PDF", "Mest fritekst", "Blanding", "Mest felt", "Kun faste felt"]}
+                  left="Mye fritekst / uklart"
+                  right="For det meste faste felt"
+                  scaleLabels={["Mye fritekst", "Mest fritekst", "Blanding", "Mest felt", "Nesten bare felt"]}
                   disabled={readOnly}
                 />
                 <LikertField
                   id="fit-variability"
-                  label="Hvor like er sakene?"
-                  hint="Mange unntak og variasjoner betyr at prosessen ofte er dårligere egnet for klassisk RPA."
+                  label="Prosessattributter: følger flyten mest faste regler, eller mange unntak og skjønn?"
+                  hint="RPA passer best for regelstyrte, repeterbare steg — mange unntak svekker egnetheten."
                   value={clampLikert5(payload.processVariability)}
                   onChange={(v) => update("processVariability", v)}
                   left="Svært ulike"
-                  right="Nesten identiske"
-                  scaleLabels={["Mange unntak", "Noen unntak", "Blandet", "Ganske like", "Nesten likt hver gang"]}
+                  right="Nesten like hver gang"
+                  scaleLabels={["Svært ulike", "Ganske ulike", "Blandet", "Ganske like", "Nesten like"]}
                   disabled={readOnly}
                 />
                 <LikertField
                   id="fit-stability"
-                  label="Hvor stabil er prosessen og systemene?"
-                  hint="Hvis skjermbilder, regler eller flyt endrer seg ofte, blir roboten dyr og skjør."
+                  label="Teknologi og stabilitet: endrer rutiner og systembilder seg ofte, eller er det stabilt?"
+                  hint="Ustabile applikasjoner og hyppige UI-endringer øker vedlikehold — vanlig vurderingspunkt i RPA."
                   value={clampLikert5(
                     Math.round((payload.processStability + payload.applicationStability) / 2),
                   )}
@@ -1595,20 +1621,20 @@ export function AssessmentWizard({ assessmentId }: Props) {
                       applicationStability: v,
                     })
                   }
-                  left="Ustabilt"
-                  right="Svært stabilt"
-                  scaleLabels={["Ustabilt", "Noe ustabilt", "Middels", "Stabilt", "Svært stabilt"]}
+                  left="Endrer seg ofte"
+                  right="Stabilt"
+                  scaleLabels={["Endrer seg ofte", "Noe ustabilt", "Middels", "Ganske stabilt", "Svært stabilt"]}
                   disabled={readOnly}
                 />
                 <LikertField
                   id="fit-digital"
-                  label="Hvor digital er prosessen?"
-                  hint="Papir, skanning og manuell tolking gjør RPA mindre realistisk uten ekstra teknologi."
+                  label="Digital modenhet: går arbeidet mest på papir og skanning, eller digitalt?"
+                  hint="Digital prosess gir enklere automatisering; papir og skanning er vanlige RPA-begrensninger."
                   value={clampLikert5(payload.digitization)}
                   onChange={(v) => update("digitization", v)}
                   left="Mye papir"
-                  right="Heldigital"
-                  scaleLabels={["Papir", "Mest papir", "Blandet", "Mest digitalt", "Heldigitalt"]}
+                  right="Helt digitalt"
+                  scaleLabels={["Mye papir", "Mest papir", "Blandet", "Mest digitalt", "Helt digitalt"]}
                   disabled={readOnly}
                 />
                 <div className="rounded-2xl bg-muted/10 p-4 ring-1 ring-black/[0.04] dark:ring-white/[0.06]">
@@ -1624,10 +1650,10 @@ export function AssessmentWizard({ assessmentId }: Props) {
                     />
                     <div>
                       <Label htmlFor="fit-ocr" className="text-sm font-medium">
-                        Kreves skanning / OCR?
+                        Må tekst leses ut av skannede bilder eller bilder av dokumenter?
                       </Label>
                       <p className="text-muted-foreground mt-1 text-xs leading-relaxed">
-                        Hvis ja, er dette fortsatt mulig, men ofte mindre rett fram enn klassisk RPA.
+                        Hvis ja, er det ofte tyngre enn når alt ligger som tekst og felt fra før.
                       </p>
                     </div>
                   </div>
@@ -1635,15 +1661,57 @@ export function AssessmentWizard({ assessmentId }: Props) {
               </div>
             </Slide>
 
+            {!sourcedFromIntake ? (
+              <Slide>
+                <div className="space-y-1">
+                  <h2 className="text-foreground text-xl font-semibold sm:text-2xl">
+                    Gevinst, kompleksitet og drift
+                  </h2>
+                  <p className="text-muted-foreground text-sm">
+                    Tillegg til modellberegningen: forretningskasse, gjennomføring, hindringer og
+                    drift — typisk i RPA-porteføljer. Samme type spørsmål som i inntaksskjema.
+                    Endrer ikke modellscore automatisk.
+                  </p>
+                </div>
+                <AssessmentPortfolioSummarySection
+                  payload={payload}
+                  canEdit={canEdit}
+                  readOnly={readOnly}
+                  update={update}
+                />
+              </Slide>
+            ) : null}
+
             <Slide>
               <div className="space-y-1">
                 <h2 className="text-foreground text-xl font-semibold sm:text-2xl">
                   Resultat
                 </h2>
                 <p className="text-muted-foreground text-sm">
-                  Dette er den samlede vurderingen etter screening og RPA-egnethet.
+                  {sourcedFromIntake ? (
+                    <>
+                      Først kort beslutningsgrunnlag (samme spørsmål som i inntak) — deretter
+                      modellbasert score fra kandidat/volum og prosess/system. Porteføljefeltene
+                      endrer ikke modelltallene direkte; de støtter prioritering og dialog med
+                      bestillere.
+                    </>
+                  ) : (
+                    <>
+                      Modellbasert score fra kandidat/volum og prosess/system. Beslutningsgrunnlag
+                      (gevinst, risiko, portefølje) fylte dere inn under «Gevinst og drift».
+                    </>
+                  )}
                 </p>
               </div>
+              <div className="space-y-6">
+                {sourcedFromIntake ? (
+                  <AssessmentPortfolioSummarySection
+                    payload={payload}
+                    canEdit={canEdit}
+                    readOnly={readOnly}
+                    update={update}
+                  />
+                ) : null}
               {computed ? (
                 <div className="space-y-6">
                   <QuickResultHero
@@ -1667,12 +1735,12 @@ export function AssessmentWizard({ assessmentId }: Props) {
                     <ScoreCard
                       label="Automasjon"
                       value={`${computed.ap.toFixed(0)} %`}
-                      sub="Screening + egnethet"
+                      sub="Volum + prosess/system"
                     />
                     <ScoreCard
-                      label="Viktighet"
+                      label="Nytte & risiko"
                       value={`${computed.criticality.toFixed(0)} %`}
-                      sub="Betydning for virksomheten"
+                      sub="Gevinst og compliance (modell)"
                     />
                     <ScoreCard
                       label="Anbefaling"
@@ -1687,7 +1755,7 @@ export function AssessmentWizard({ assessmentId }: Props) {
                   <div className="space-y-2">
                     <div className="flex justify-between gap-3 text-sm">
                       <span className="text-muted-foreground">
-                        RPA-egnethet / gjennomførbarhet
+                        Gjennomførbarhet (prosesslengde, systemer m.m.)
                       </span>
                       <span className="shrink-0 font-semibold tabular-nums">
                         {computed.ease.toFixed(1)} % · {computed.easeLabel}
@@ -1706,6 +1774,7 @@ export function AssessmentWizard({ assessmentId }: Props) {
                   </div>
                 </div>
               ) : null}
+              </div>
             </Slide>
 
             <Slide>
@@ -1814,14 +1883,14 @@ export function AssessmentWizard({ assessmentId }: Props) {
                     className="rounded-2xl bg-muted/10 px-4 ring-1 ring-black/[0.04] dark:ring-white/[0.06]"
                   >
                     <AccordionTrigger className="py-4 text-left text-sm font-semibold hover:no-underline">
-                      Utvidede justeringer
+                      Finjuster RPA-modell (valgfritt)
                     </AccordionTrigger>
                     <AccordionContent className="pb-4">
                       <div className="space-y-8">
                         <LikertField
                           id="detail-reg-risk"
-                          label="Hvor strenge er regulatoriske krav?"
-                          hint="Juster hvis den raske viktighetsvurderingen trenger mer presisjon."
+                          label="Compliance: hvor strenge er krav til dokumentasjon og sporbarhet?"
+                          hint="Finjustering av compliance-risiko hvis første steg ikke treffer."
                           value={clampLikert5(payload.criticalityRegulatoryRisk)}
                           onChange={(v) => update("criticalityRegulatoryRisk", v)}
                           left="Få krav"
@@ -1831,8 +1900,8 @@ export function AssessmentWizard({ assessmentId }: Props) {
                         />
                         <LikertField
                           id="detail-process-length"
-                          label="Hvor lang er arbeidsflyten?"
-                          hint="Lengre flyter kan være mer krevende å bygge og vedlikeholde."
+                          label="Prosesskompleksitet: hvor lang er arbeidsflyten?"
+                          hint="Lengre flyt = ofte høyere RPA-kompleksitet og vedlikehold."
                           value={clampLikert5(payload.processLength)}
                           onChange={(v) => update("processLength", v)}
                           left="Kort"
@@ -1842,8 +1911,8 @@ export function AssessmentWizard({ assessmentId }: Props) {
                         />
                         <LikertField
                           id="detail-app-count"
-                          label="Hvor mange systemer brukes?"
-                          hint="Flere systemer gir mer kompleksitet."
+                          label="Systemlandskap: hvor mange applikasjoner inngår?"
+                          hint="Flere systemer øker typisk integrasjons- og RPA-kompleksitet."
                           value={clampLikert5(payload.applicationCount)}
                           onChange={(v) => update("applicationCount", v)}
                           left="Få"
@@ -2152,9 +2221,9 @@ export function AssessmentWizard({ assessmentId }: Props) {
             Forrige
           </Button>
           <span className="text-muted-foreground text-xs tabular-nums">
-            {slide + 1} / {ASSESSMENT_WIZARD_STEP_LABELS.length}
+            {slide + 1} / {stepLabels.length}
           </span>
-          {slide >= ASSESSMENT_WIZARD_STEP_LABELS.length - 1 ? (
+          {slide >= stepLabels.length - 1 ? (
             <Button
               type="button"
               className="gap-1.5 rounded-xl px-5 shadow-sm"
@@ -2197,7 +2266,8 @@ function QuickResultHero({
     computed.priorityScore >= 60
       ? {
           label: "Høyt potensial",
-          summary: "Screeningen ser lovende ut, og kandidaten virker realistisk for RPA.",
+          summary:
+            "Volum og prosess/system peker på en sterk RPA-kandidat i tråd med vanlige vurderingskriterier.",
           action: "Gå videre til ROS",
           tone:
             "from-emerald-500/[0.14] via-background to-primary/[0.08] ring-emerald-500/20",
@@ -2205,14 +2275,16 @@ function QuickResultHero({
       : computed.priorityScore >= 35
         ? {
             label: "Middels potensial",
-            summary: "Kandidaten kan være aktuell, men egnethet eller gevinst bør avklares litt mer.",
+            summary:
+              "Kandidaten kan være aktuell — vurder nærmere mot RPA-kriterier (data, regler, systemer, gevinst).",
             action: "Gå videre til ROS",
             tone:
               "from-amber-500/[0.14] via-background to-primary/[0.06] ring-amber-500/20",
           }
         : {
             label: "Lavt potensial",
-            summary: "Screeningen eller egnetheten er for svak til å prioritere dette nå.",
+            summary:
+              "Modellen tilsier lav prioritet: sjekk volum, manuelt arbeid og prosess-/systemegnethet før RPA.",
             action: "Ikke prioritert",
             tone:
               "from-slate-500/[0.12] via-background to-muted/30 ring-black/[0.06] dark:ring-white/[0.06]",
@@ -2232,7 +2304,7 @@ function QuickResultHero({
         <div className="max-w-2xl space-y-3">
           <div className="inline-flex items-center gap-2 rounded-full bg-background/80 px-3 py-1 text-[11px] font-semibold text-muted-foreground shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.08]">
             <Sparkles className="size-3.5 text-primary" />
-            Screening + egnethet
+            Kandidat + prosess/system
           </div>
           <div>
             <p className="font-heading text-2xl font-semibold tracking-tight text-foreground">

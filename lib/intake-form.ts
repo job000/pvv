@@ -44,11 +44,19 @@ export const INTAKE_ASSESSMENT_TEXT_FIELDS = [
   "hfEconomicRationaleNotes",
   "hfCriticalManualGapNotes",
   "hfOperationsSupportNotes",
+  "rpaBarrierNotes",
+  "rpaLifecycleContact",
+  "rpaManualFallbackWhenRobotFails",
+  "rpaBenefitKindsAndOperationsNotes",
 ] as const;
 
 export const INTAKE_ASSESSMENT_SCALE_FIELDS = [
   "criticalityBusinessImpact",
   "criticalityRegulatoryRisk",
+  "rpaExpectedBenefitVsEffort",
+  "rpaQuickWinPotential",
+  "rpaProcessSpecificity",
+  "rpaImplementationDifficulty",
 ] as const;
 
 export const INTAKE_ASSESSMENT_NUMBER_FIELDS = [
@@ -118,12 +126,62 @@ export const INTAKE_MAPPING_TARGET_LABELS = [
   {
     kind: "assessmentScale",
     value: "criticalityBusinessImpact",
-    label: "Bruk som viktighet for drift og tjeneste",
+    label: "Bruk som forventet gevinst av automatisering (RPA)",
   },
   {
     kind: "assessmentScale",
     value: "criticalityRegulatoryRisk",
-    label: "Bruk som viktighet for regelverk og kontroll",
+    label: "Bruk som kritikalitet ved feil / compliance (RPA)",
+  },
+  {
+    kind: "assessmentScale",
+    value: "rpaExpectedBenefitVsEffort",
+    label: "Bruk som forventet gevinst sammenlignet med innsats",
+  },
+  {
+    kind: "assessmentScale",
+    value: "rpaQuickWinPotential",
+    label: "Bruk som hvor raskt dere kan få effekt",
+  },
+  {
+    kind: "assessmentScale",
+    value: "rpaProcessSpecificity",
+    label: "Bruk som hvor spesifikk prosessen er (vs. lignende mange steder)",
+  },
+  {
+    kind: "assessmentScale",
+    value: "rpaImplementationDifficulty",
+    label: "Bruk som hvor krevende det er å få til",
+  },
+  {
+    kind: "assessmentRpaSimilar",
+    value: "assessmentRpaSimilar",
+    label: "Lagre som «lignende automatisering fra før»",
+  },
+  {
+    kind: "assessmentRpaBarrier",
+    value: "assessmentRpaBarrier",
+    label: "Lagre som hindring / annen løsning",
+  },
+  {
+    kind: "assessmentText",
+    value: "rpaBarrierNotes",
+    label: "Fyll inn kort begrunnelse (hindring)",
+  },
+  {
+    kind: "assessmentText",
+    value: "rpaBenefitKindsAndOperationsNotes",
+    label: "Fyll inn gevinst, tid, ventetid, robot vs. manuelt",
+  },
+  {
+    kind: "assessmentText",
+    value: "rpaLifecycleContact",
+    label: "Fyll inn kontaktperson til løsningen er i drift",
+  },
+  {
+    kind: "assessmentText",
+    value: "rpaManualFallbackWhenRobotFails",
+    label: "Fyll inn hvem som tar over manuelt ved feil",
   },
   {
     kind: "assessmentNumber",
@@ -235,6 +293,54 @@ export function defaultIntakeQuestions() {
       options: [],
       mappingTargets: [
         { kind: "assessmentText" as const, field: "processGoal" as const },
+      ],
+    },
+    {
+      id: crypto.randomUUID(),
+      label:
+        "Hvor stor forventet gevinst gir nettopp denne automatiseringen for dere?",
+      helpText:
+        "Tenk tid, kvalitet, kostnad eller pasientsikkerhet — ikke «hvor viktig faget er generelt», men om nettopp denne automatiseringen gir nok nytte. Skala 1–5 (samme felt som under «Resultat» i vurderingen).",
+      questionType: "scale" as const,
+      required: false,
+      options: [],
+      mappingTargets: [
+        {
+          kind: "assessmentScale" as const,
+          field: "criticalityBusinessImpact" as const,
+        },
+      ],
+    },
+    {
+      id: crypto.randomUUID(),
+      label:
+        "Hvor kritiske er feil eller manglende sporbarhet i denne prosessen?",
+      helpText:
+        "Compliance og kontroll: journal, avvik, HR, økonomi. Skala 1–5 (samme som i vurderingens resultatsteg).",
+      questionType: "scale" as const,
+      required: false,
+      options: [],
+      mappingTargets: [
+        {
+          kind: "assessmentScale" as const,
+          field: "criticalityRegulatoryRisk" as const,
+        },
+      ],
+    },
+    {
+      id: crypto.randomUUID(),
+      label:
+        "Hvor spesifikk er prosessen for dere — eller finnes lignende mange steder?",
+      helpText:
+        "1 = lignende prosess finnes mange steder hos dere, 5 = svært spesifikk eller unik. Skala 1–5.",
+      questionType: "scale" as const,
+      required: false,
+      options: [],
+      mappingTargets: [
+        {
+          kind: "assessmentScale" as const,
+          field: "rpaProcessSpecificity" as const,
+        },
       ],
     },
     {
@@ -416,6 +522,151 @@ export function defaultIntakeQuestions() {
         {
           kind: "assessmentText" as const,
           field: "processConstraints" as const,
+        },
+      ],
+    },
+    {
+      id: crypto.randomUUID(),
+      label:
+        "Har dere fra før noe som ligner — med robot eller annen automatisering?",
+      helpText:
+        "Gjelder lege, saksbehandler, HR, IT eller andre. Samme valg som i vurderingen.",
+      questionType: "multiple_choice" as const,
+      required: false,
+      options: [
+        { id: "unsure", label: "Vet ikke ennå" },
+        { id: "yes_here", label: "Ja — vi har noe lignende hos oss" },
+        {
+          id: "yes_elsewhere_or_similar",
+          label: "Ja — kjent fra andre steder eller tidligere",
+        },
+        { id: "no", label: "Nei — dette er nytt for oss" },
+      ],
+      mappingTargets: [{ kind: "assessmentRpaSimilar" as const }],
+    },
+    {
+      id: crypto.randomUUID(),
+      label:
+        "Tror dere det blir nok igjen å hente i tid, kvalitet eller penger — sammenlignet med jobben med å få det på plass?",
+      helpText:
+        "1 = lite å hente sammenlignet med innsatsen, 5 = mye å hente. Skala 1–5.",
+      questionType: "scale" as const,
+      required: false,
+      options: [],
+      mappingTargets: [
+        {
+          kind: "assessmentScale" as const,
+          field: "rpaExpectedBenefitVsEffort" as const,
+        },
+      ],
+    },
+    {
+      id: crypto.randomUUID(),
+      label: "Hvor raskt kan dere få effekt — uten et stort prosjekt først?",
+      helpText:
+        "1 = lang vei, 5 = kan gi effekt ganske raskt. Skala 1–5.",
+      questionType: "scale" as const,
+      required: false,
+      options: [],
+      mappingTargets: [
+        {
+          kind: "assessmentScale" as const,
+          field: "rpaQuickWinPotential" as const,
+        },
+      ],
+    },
+    {
+      id: crypto.randomUUID(),
+      label: "Hvor krevende tror dere det er å få dette trygt i drift?",
+      helpText:
+        "1 = enkelt, 5 = svært krevende. Skala 1–5 — eget anslag, ikke IT-prøve.",
+      questionType: "scale" as const,
+      required: false,
+      options: [],
+      mappingTargets: [
+        {
+          kind: "assessmentScale" as const,
+          field: "rpaImplementationDifficulty" as const,
+        },
+      ],
+    },
+    {
+      id: crypto.randomUUID(),
+      label:
+        "Er det noe som gjør at dette ikke bør løses med robot i skjermbilder — eller at annen løsning er bedre?",
+      helpText: "Valgfritt.",
+      questionType: "multiple_choice" as const,
+      required: false,
+      options: [
+        { id: "none", label: "Nei / ingen slik grunn" },
+        { id: "low_payback", label: "Lite å hente i tid eller penger" },
+        {
+          id: "not_rpa_suitable",
+          label: "Passer ikke med robot som jobber i skjermbilder",
+        },
+        {
+          id: "integration_preferred",
+          label: "Bedre med direkte kobling mellom systemer (ikke robot)",
+        },
+        {
+          id: "organizational_block",
+          label: "Vanskelig å få til hos oss akkurat nå",
+        },
+        { id: "unsure", label: "Usikker — må avklares" },
+      ],
+      mappingTargets: [{ kind: "assessmentRpaBarrier" as const }],
+    },
+    {
+      id: crypto.randomUUID(),
+      label: "Kort forklaring på forrige svar (valgfritt)",
+      helpText: "Ett avsnitt holder.",
+      questionType: "text" as const,
+      required: false,
+      options: [],
+      mappingTargets: [
+        { kind: "assessmentText" as const, field: "rpaBarrierNotes" as const },
+      ],
+    },
+    {
+      id: crypto.randomUUID(),
+      label:
+        "Hvilken gevinst håper dere på — og hva gjør dere i dag kontra hva roboten skal gjøre?",
+      helpText:
+        "Skriv gjerne om manuell tid vs. tid med robot, ventetid (ting som sjeldent gjøres nå men bør gjøres med en gang), og at oppgaver ikke blir liggende eller glemt.",
+      questionType: "text" as const,
+      required: false,
+      options: [],
+      mappingTargets: [
+        {
+          kind: "assessmentText" as const,
+          field: "rpaBenefitKindsAndOperationsNotes" as const,
+        },
+      ],
+    },
+    {
+      id: crypto.randomUUID(),
+      label:
+        "Hvem er kontaktperson som skal følge saken til løsningen er i vanlig bruk (produksjon)?",
+      helpText: "Navn og rolle — valgfritt.",
+      questionType: "text" as const,
+      required: false,
+      options: [],
+      mappingTargets: [
+        { kind: "assessmentText" as const, field: "rpaLifecycleContact" as const },
+      ],
+    },
+    {
+      id: crypto.randomUUID(),
+      label:
+        "Hvis roboten stopper eller gjør feil: hvem tar manuelt over — og hvordan når dere dem?",
+      helpText: "Valgfritt. Viktig for beredskap.",
+      questionType: "text" as const,
+      required: false,
+      options: [],
+      mappingTargets: [
+        {
+          kind: "assessmentText" as const,
+          field: "rpaManualFallbackWhenRobotFails" as const,
         },
       ],
     },

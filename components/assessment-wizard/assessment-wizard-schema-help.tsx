@@ -47,8 +47,11 @@ export function AssessmentWizardSchemaHelp() {
               id="schema-help-desc"
               className="text-muted-foreground text-sm leading-relaxed"
             >
-              Kort oversikt for dokumentasjon og etterlevelse: hva som er
-              faglig/kvalitativt, og hva som er tall for kost/nytte.
+              Skjemaet følger vanlig RPA-praksis: forretningsverdi og volum,
+              deretter prosess- og datakriterier (liknende dimensjoner som i f.eks.
+              UiPath Automation Hub). Spørsmål om gevinst, risiko og portefølje (for
+              bestillere) samles under «Resultat» — samme felt som i inntak, ikke
+              gjentatt som eget hovedsteg. Til slutt valgfrie detaljer.
             </p>
           </DialogHeader>
           <DialogBody className="space-y-4">
@@ -58,13 +61,14 @@ export function AssessmentWizardSchemaHelp() {
               </div>
               <div className="min-w-0 space-y-1 text-sm">
                 <p className="font-medium text-foreground">
-                  Faglig innhold (kan fylles ut uten økonomitall)
+                  Kvalitative vurderinger (Likert og tekst)
                 </p>
                 <p className="text-muted-foreground leading-relaxed">
-                  Prosessbeskrivelse, organisasjon, ROS/PDD, Likert-vurderinger
-                  (1–5) og tekstfelt om krav og sikkerhet. Gir grunnlag for
-                  vurdering og prioritering uten at dere trenger fullt
-                  merkantilt datagrunnlag.
+                  Under «Resultat» fyller dere inn beslutningsgrunnlag (Likert og
+                  tekst) som også finnes i inntaksskjema — for å unngå dobbelt
+                  arbeid. Volum og tid under «Kandidat og volum» styrker
+                  modellens automatiseringsscore; porteføljefeltene støtter
+                  prioritering og dialog.
                 </p>
               </div>
             </div>
@@ -74,13 +78,12 @@ export function AssessmentWizardSchemaHelp() {
               </div>
               <div className="min-w-0 space-y-1 text-sm">
                 <p className="font-medium text-foreground">
-                  Tall og kost (merkantile nøkkeltall)
+                  Tallgrunnlag (timer, årsverk, kost)
                 </p>
                 <p className="text-muted-foreground leading-relaxed">
-                  Steget «Tall og kost» — timer, årsverk, kostnad per årsverk
-                  osv. Uten realistiske anslag her blir ikke tids- og
-                  kronbesparelse i modellen meningsfull for beslutninger om
-                  automatisering.
+                  Under «Kandidat og volum» — brukes til timer per år, FTE og
+                  besparelsesestimat. Uten realistiske anslag blir ikke
+                  tids-/kronbesparelse i modellen meningsfull for RPA-beslutning.
                 </p>
               </div>
             </div>

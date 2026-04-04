@@ -1,6 +1,10 @@
 import { jsPDF } from "jspdf";
 
 import { OPERATIONS_SUPPORT_LEVEL_LABELS } from "@/lib/helsesector-labels";
+import {
+  RPA_BARRIER_SELF_ASSESSMENT_LABELS_NB,
+  RPA_SIMILAR_AUTOMATION_LABELS_NB,
+} from "@/lib/rpa-portfolio-labels";
 
 export type AssessmentPdfInput = {
   title: string;
@@ -21,6 +25,26 @@ export type AssessmentPdfInput = {
   hfEconomicRationaleNotes?: string;
   hfCriticalManualGapNotes?: string;
   hfOperationsSupportNotes?: string;
+  rpaExpectedBenefitVsEffort?: number;
+  rpaQuickWinPotential?: number;
+  rpaProcessSpecificity?: number;
+  rpaBarrierSelfAssessment?:
+    | "none"
+    | "low_payback"
+    | "not_rpa_suitable"
+    | "integration_preferred"
+    | "organizational_block"
+    | "unsure";
+  rpaBarrierNotes?: string;
+  rpaSimilarAutomationExists?:
+    | "unsure"
+    | "yes_here"
+    | "yes_elsewhere_or_similar"
+    | "no";
+  rpaImplementationDifficulty?: number;
+  rpaLifecycleContact?: string;
+  rpaManualFallbackWhenRobotFails?: string;
+  rpaBenefitKindsAndOperationsNotes?: string;
   pipelineLabel: string;
   rosLabel: string;
   pddLabel: string;
@@ -101,6 +125,42 @@ export function downloadAssessmentPdf(data: AssessmentPdfInput): void {
   addRow("Automatiseringspotensial", `${data.computed.ap.toFixed(1)} %`);
   addRow("Viktighet og konsekvens", `${data.computed.criticality.toFixed(1)} %`);
   addRow("Porteføljeprioritet", `${data.computed.priorityScore.toFixed(1)} / 100`);
+  if (data.rpaExpectedBenefitVsEffort !== undefined) {
+    addRow(
+      "Beslutningsgrunnlag: nok å hente vs. innsats (1–5)",
+      String(data.rpaExpectedBenefitVsEffort),
+    );
+  }
+  if (data.rpaQuickWinPotential !== undefined) {
+    addRow(
+      "Beslutningsgrunnlag: rask effekt (1–5)",
+      String(data.rpaQuickWinPotential),
+    );
+  }
+  if (data.rpaProcessSpecificity !== undefined) {
+    addRow(
+      "Beslutningsgrunnlag: spesifikk vs. lignende mange steder (1–5)",
+      String(data.rpaProcessSpecificity),
+    );
+  }
+  if (data.rpaSimilarAutomationExists) {
+    addRow(
+      "Lignende automatisering fra før",
+      RPA_SIMILAR_AUTOMATION_LABELS_NB[data.rpaSimilarAutomationExists],
+    );
+  }
+  if (data.rpaImplementationDifficulty !== undefined) {
+    addRow(
+      "Anslått vanskelig å få i drift (1–5)",
+      String(data.rpaImplementationDifficulty),
+    );
+  }
+  if (data.rpaBarrierSelfAssessment && data.rpaBarrierSelfAssessment !== "none") {
+    addRow(
+      "Hindring eller annen løsning",
+      RPA_BARRIER_SELF_ASSESSMENT_LABELS_NB[data.rpaBarrierSelfAssessment],
+    );
+  }
   addRow(
     "Stabil nok for robot",
     data.computed.feasible ? "Ja" : "Nei — ustabil, avklar før oppstart",
@@ -145,6 +205,10 @@ export function downloadAssessmentPdf(data: AssessmentPdfInput): void {
     ["Besparelse og økonomisk gevinst", data.hfEconomicRationaleNotes],
     ["Kritisk gap (ikke gjøres i dag)", data.hfCriticalManualGapNotes],
     ["Krav til utvikling og drift", data.hfOperationsSupportNotes],
+    ["Beslutningsgrunnlag — forklaring (hindring)", data.rpaBarrierNotes],
+    ["Gevinst, tid, ventetid, robot vs. manuelt", data.rpaBenefitKindsAndOperationsNotes],
+    ["Kontaktperson til produksjon", data.rpaLifecycleContact],
+    ["Manuell reserve ved robotfeil", data.rpaManualFallbackWhenRobotFails],
   ];
   for (const [heading, text] of processSections) {
     const t = text?.trim();

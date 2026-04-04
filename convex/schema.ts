@@ -686,6 +686,11 @@ export default defineSchema({
     rosPvvReviewRoutineNotes: v.optional(v.string()),
     /** Siste e-post om forfalt planlagt gjennomgang (PVV) */
     lastReviewDueReminderAt: v.optional(v.number()),
+    /**
+     * True når vurderingen er opprettet fra godkjent inntak — grunnleggende beslutningsspørsmål
+     * vises da kun under Resultat (ikke som eget hovedsteg).
+     */
+    sourcedFromIntake: v.optional(v.boolean()),
   })
     .index("by_workspace", ["workspaceId"])
     .index("by_workspace_updated", ["workspaceId", "updatedAt"]),

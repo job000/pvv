@@ -35,6 +35,16 @@ export const ASSESSMENT_PAYLOAD_FIELD_LABELS_NB: Record<string, string> = {
   hfEconomicRationaleNotes: "Økonomisk begrunnelse",
   hfCriticalManualGapNotes: "Manuelle gap / risiko",
   hfOperationsSupportNotes: "Krav til drift",
+  rpaExpectedBenefitVsEffort: "Forventet gevinst vs. innsats",
+  rpaQuickWinPotential: "Rask gevinst (lav hengende frukt)",
+  rpaProcessSpecificity: "Unik vs. standard prosess",
+  rpaBarrierSelfAssessment: "RPA-barriere (egen vurdering)",
+  rpaBarrierNotes: "Begrunnelse portefølje / barriere",
+  rpaSimilarAutomationExists: "Lignende automatisering fra før",
+  rpaImplementationDifficulty: "Anslått vanskelighetsgrad (gjennomføring)",
+  rpaLifecycleContact: "Kontaktperson til produksjon",
+  rpaManualFallbackWhenRobotFails: "Manuell reserve ved robotfeil",
+  rpaBenefitKindsAndOperationsNotes: "Gevinst, tid og drift (fritekst)",
 };
 
 export function labelAssessmentPayloadField(key: string): string {

@@ -19,8 +19,12 @@ export function likert5ToUnit01(s: Likert5): number {
   return (s - 1) / 4;
 }
 
-export function variabilityFavorability(s: Likert5): number {
-  return (5 - s) / 4;
+/**
+ * Hvor like sakene er (1 = svært ulike, 5 = nesten like hver gang).
+ * Høyere likhet → bedre RPA-kandidat — samme retning som andre Likert-felt.
+ */
+export function caseSimilarityFavorability(s: Likert5): number {
+  return likert5ToUnit01(s);
 }
 
 export function lengthFavorability(s: Likert5): number {
@@ -53,11 +57,11 @@ export function automationPotentialPercent(args: {
   manualHoursPerYear?: number;
 }): number {
   const struct = likert5ToUnit01(args.structuredInput);
-  const varLow = variabilityFavorability(args.processVariability);
+  const caseSim = caseSimilarityFavorability(args.processVariability);
   const dig = likert5ToUnit01(args.digitization);
   const vol = volumeFactor(args.manualHoursPerYear ?? 800);
   const raw =
-    W_AP_STRUCT * struct + W_AP_VAR * varLow + W_AP_DIG * dig + W_AP_VOL * vol;
+    W_AP_STRUCT * struct + W_AP_VAR * caseSim + W_AP_DIG * dig + W_AP_VOL * vol;
   return Math.round(raw * 1000) / 10;
 }
 
@@ -91,14 +95,14 @@ export function easeOfImplementationBasePercent(args: {
   const pStab = likert5ToUnit01(args.processStability);
   const aStab = likert5ToUnit01(args.applicationStability);
   const struct = likert5ToUnit01(args.structuredInput);
-  const varLow = variabilityFavorability(args.processVariability);
+  const caseSim = caseSimilarityFavorability(args.processVariability);
   const len = lengthFavorability(args.processLength);
   const apps = appCountFavorability(args.applicationCount);
   const raw =
     W_E_PSTAB * pStab +
     W_E_ASTAB * aStab +
     W_E_STRUCT * struct +
-    W_E_VAR * varLow +
+    W_E_VAR * caseSim +
     W_E_LEN * len +
     W_E_APPS * apps;
   return Math.round(raw * 1000) / 10;

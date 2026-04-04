@@ -53,4 +53,26 @@ export type AssessmentPayload = {
   hfEconomicRationaleNotes?: string;
   hfCriticalManualGapNotes?: string;
   hfOperationsSupportNotes?: string;
+
+  /** Portefølje / RPA-kandidat (Likert 1–5; ikke i modellscore) */
+  rpaExpectedBenefitVsEffort?: number;
+  rpaQuickWinPotential?: number;
+  rpaProcessSpecificity?: number;
+  rpaBarrierSelfAssessment?:
+    | "none"
+    | "low_payback"
+    | "not_rpa_suitable"
+    | "integration_preferred"
+    | "organizational_block"
+    | "unsure";
+  rpaBarrierNotes?: string;
+  rpaSimilarAutomationExists?:
+    | "unsure"
+    | "yes_here"
+    | "yes_elsewhere_or_similar"
+    | "no";
+  rpaImplementationDifficulty?: number;
+  rpaLifecycleContact?: string;
+  rpaManualFallbackWhenRobotFails?: string;
+  rpaBenefitKindsAndOperationsNotes?: string;
 };

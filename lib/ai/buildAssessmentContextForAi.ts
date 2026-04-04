@@ -1,4 +1,8 @@
 import { OPERATIONS_SUPPORT_LEVEL_LABELS } from "@/lib/helsesector-labels";
+import {
+  RPA_BARRIER_SELF_ASSESSMENT_LABELS_NB,
+  RPA_SIMILAR_AUTOMATION_LABELS_NB,
+} from "@/lib/rpa-portfolio-labels";
 
 /**
  * Bygger én tekstblokk som kan sendes til KI for sortering, oppsummering eller
@@ -25,6 +29,26 @@ export function buildAssessmentContextForAi(args: {
   hfEconomicRationaleNotes?: string;
   hfCriticalManualGapNotes?: string;
   hfOperationsSupportNotes?: string;
+  rpaExpectedBenefitVsEffort?: number;
+  rpaQuickWinPotential?: number;
+  rpaProcessSpecificity?: number;
+  rpaBarrierSelfAssessment?:
+    | "none"
+    | "low_payback"
+    | "not_rpa_suitable"
+    | "integration_preferred"
+    | "organizational_block"
+    | "unsure";
+  rpaBarrierNotes?: string;
+  rpaSimilarAutomationExists?:
+    | "unsure"
+    | "yes_here"
+    | "yes_elsewhere_or_similar"
+    | "no";
+  rpaImplementationDifficulty?: number;
+  rpaLifecycleContact?: string;
+  rpaManualFallbackWhenRobotFails?: string;
+  rpaBenefitKindsAndOperationsNotes?: string;
 }): string {
   const scopeLine =
     args.processScope === "single"
@@ -65,6 +89,42 @@ export function buildAssessmentContextForAi(args: {
   pushIf("Besparelse og økonomisk gevinst", args.hfEconomicRationaleNotes);
   pushIf("Kritisk gap (ikke gjøres i dag)", args.hfCriticalManualGapNotes);
   pushIf("Krav til utvikling og drift", args.hfOperationsSupportNotes);
+
+  const b = args.rpaBarrierSelfAssessment;
+  if (b && b !== "none") {
+    parts.push(
+      `Beslutningsgrunnlag — hindring eller annen løsning: ${RPA_BARRIER_SELF_ASSESSMENT_LABELS_NB[b]}`,
+    );
+  }
+  pushIf("Beslutningsgrunnlag — kort forklaring (hindring)", args.rpaBarrierNotes);
+  if (args.rpaExpectedBenefitVsEffort !== undefined) {
+    parts.push(
+      `Beslutningsgrunnlag — nok å hente sammenlignet med innsats (1–5): ${args.rpaExpectedBenefitVsEffort}`,
+    );
+  }
+  if (args.rpaQuickWinPotential !== undefined) {
+    parts.push(
+      `Beslutningsgrunnlag — rask effekt (1–5): ${args.rpaQuickWinPotential}`,
+    );
+  }
+  if (args.rpaImplementationDifficulty !== undefined) {
+    parts.push(
+      `Beslutningsgrunnlag — krevende å få i drift (1–5, 5 = mest krevende): ${args.rpaImplementationDifficulty}`,
+    );
+  }
+  if (args.rpaSimilarAutomationExists) {
+    parts.push(
+      `Lignende automatisering fra før: ${RPA_SIMILAR_AUTOMATION_LABELS_NB[args.rpaSimilarAutomationExists]}`,
+    );
+  }
+  if (args.rpaProcessSpecificity !== undefined) {
+    parts.push(
+      `Beslutningsgrunnlag — spesifikk vs. lignende mange steder (1–5): ${args.rpaProcessSpecificity}`,
+    );
+  }
+  pushIf("Kontaktperson til produksjon", args.rpaLifecycleContact);
+  pushIf("Manuell reserve ved robotfeil", args.rpaManualFallbackWhenRobotFails);
+  pushIf("Gevinst, tid, ventetid, robot vs. manuelt", args.rpaBenefitKindsAndOperationsNotes);
 
   if (args.priorityScore !== undefined) {
     parts.push(`Foreslått prioritet (modell): ${args.priorityScore.toFixed(1)}`);
