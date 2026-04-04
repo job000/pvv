@@ -136,7 +136,7 @@ export const INTAKE_MAPPING_TARGET_LABELS = [
   {
     kind: "assessmentScale",
     value: "rpaExpectedBenefitVsEffort",
-    label: "Bruk som forventet gevinst sammenlignet med innsats",
+    label: "Bruk som gevinst mot innsats (lønner det seg?)",
   },
   {
     kind: "assessmentScale",
@@ -547,9 +547,9 @@ export function defaultIntakeQuestions() {
     {
       id: crypto.randomUUID(),
       label:
-        "Tror dere det blir nok igjen å hente i tid, kvalitet eller penger — sammenlignet med jobben med å få det på plass?",
+        "Blir gevinsten større enn jobben med å få det på plass? (tid, kvalitet, penger …)",
       helpText:
-        "1 = lite å hente sammenlignet med innsatsen, 5 = mye å hente. Skala 1–5.",
+        "1 = neppe verdt innsatsen, 5 = klart verdt det. Skala 1–5 — eget anslag.",
       questionType: "scale" as const,
       required: false,
       options: [],

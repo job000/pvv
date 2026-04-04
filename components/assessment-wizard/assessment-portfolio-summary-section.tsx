@@ -13,6 +13,7 @@ import {
   type RpaSimilarAutomation,
 } from "@/lib/rpa-portfolio-labels";
 import { clampLikert5 } from "@/lib/rpa-assessment/scoring";
+import { cn } from "@/lib/utils";
 
 type Props = {
   payload: AssessmentPayload;
@@ -95,35 +96,39 @@ export function AssessmentPortfolioSummarySection({
             Object.keys(
               RPA_SIMILAR_AUTOMATION_LABELS_NB,
             ) as RpaSimilarAutomation[]
-          ).map((value) => (
-            <Button
-              key={value}
-              type="button"
-              variant={
-                (payload.rpaSimilarAutomationExists ?? "unsure") === value
-                  ? "secondary"
-                  : "outline"
-              }
-              size="sm"
-              className="h-auto min-h-10 justify-start whitespace-normal rounded-xl px-4 py-2.5 text-left"
-              disabled={!canEdit}
-              onClick={() => update("rpaSimilarAutomationExists", value)}
-            >
-              {RPA_SIMILAR_AUTOMATION_LABELS_NB[value]}
-            </Button>
-          ))}
+          ).map((value) => {
+            const selected =
+              (payload.rpaSimilarAutomationExists ?? "unsure") === value;
+            return (
+              <Button
+                key={value}
+                type="button"
+                variant={selected ? "default" : "outline"}
+                size="sm"
+                aria-pressed={selected}
+                className={cn(
+                  "h-auto min-h-10 justify-start whitespace-normal rounded-xl px-4 py-2.5 text-left transition-colors",
+                  selected && "shadow-md ring-0",
+                )}
+                disabled={!canEdit}
+                onClick={() => update("rpaSimilarAutomationExists", value)}
+              >
+                {RPA_SIMILAR_AUTOMATION_LABELS_NB[value]}
+              </Button>
+            );
+          })}
         </div>
       </div>
 
       <LikertField
         id="summary-benefit-effort"
-        label="Tror dere det blir nok igjen å hente — sammenlignet med jobben med å få det på plass?"
-        hint="Tenk tid, kvalitet, færre feil eller penger. Ikke «riktig svar» — dere vurderer som fagfolk."
+        label="Blir gevinsten større enn jobben med å få det på plass?"
+        hint="Altså om nytte (tid spart, færre feil, lavere kost, bedre kvalitet …) blir større enn innsatsen. Ikke fasit — dere vurderer som fagfolk."
         value={clampLikert5(payload.rpaExpectedBenefitVsEffort ?? 3)}
         onChange={(v) => update("rpaExpectedBenefitVsEffort", v)}
-        left="Lite å hente"
-        right="Mye å hente"
-        scaleLabels={["Lite", "Noe", "Middels", "Mye", "Svært mye"]}
+        left="Ikke verdt det"
+        right="Klart verdt det"
+        scaleLabels={["Svært lite", "Lite", "Middels", "Mye", "Svært mye"]}
         disabled={readOnly}
       />
       <LikertField
@@ -176,23 +181,26 @@ export function AssessmentPortfolioSummarySection({
             Object.keys(
               RPA_BARRIER_SELF_ASSESSMENT_LABELS_NB,
             ) as RpaBarrierSelfAssessment[]
-          ).map((value) => (
-            <Button
-              key={value}
-              type="button"
-              variant={
-                (payload.rpaBarrierSelfAssessment ?? "none") === value
-                  ? "secondary"
-                  : "outline"
-              }
-              size="sm"
-              className="h-auto min-h-10 justify-start whitespace-normal rounded-xl px-4 py-2.5 text-left"
-              disabled={!canEdit}
-              onClick={() => update("rpaBarrierSelfAssessment", value)}
-            >
-              {RPA_BARRIER_SELF_ASSESSMENT_LABELS_NB[value]}
-            </Button>
-          ))}
+          ).map((value) => {
+            const selected = (payload.rpaBarrierSelfAssessment ?? "none") === value;
+            return (
+              <Button
+                key={value}
+                type="button"
+                variant={selected ? "default" : "outline"}
+                size="sm"
+                aria-pressed={selected}
+                className={cn(
+                  "h-auto min-h-10 justify-start whitespace-normal rounded-xl px-4 py-2.5 text-left transition-colors",
+                  selected && "shadow-md ring-0",
+                )}
+                disabled={!canEdit}
+                onClick={() => update("rpaBarrierSelfAssessment", value)}
+              >
+                {RPA_BARRIER_SELF_ASSESSMENT_LABELS_NB[value]}
+              </Button>
+            );
+          })}
         </div>
       </div>
 

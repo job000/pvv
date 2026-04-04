@@ -99,7 +99,7 @@ export function buildAssessmentContextForAi(args: {
   pushIf("Beslutningsgrunnlag — kort forklaring (hindring)", args.rpaBarrierNotes);
   if (args.rpaExpectedBenefitVsEffort !== undefined) {
     parts.push(
-      `Beslutningsgrunnlag — nok å hente sammenlignet med innsats (1–5): ${args.rpaExpectedBenefitVsEffort}`,
+      `Beslutningsgrunnlag — gevinst vs. innsats / lønner det seg (1–5): ${args.rpaExpectedBenefitVsEffort}`,
     );
   }
   if (args.rpaQuickWinPotential !== undefined) {

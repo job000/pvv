@@ -167,7 +167,7 @@ export function LikertField({
             className="text-muted-foreground text-[11px] font-normal"
             id={`${id}-manual-label`}
           >
-            Skriv verdi direkte
+            Skriv 1–5
           </Label>
           <Input
             id={`${id}-manual`}

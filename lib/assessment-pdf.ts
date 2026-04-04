@@ -127,7 +127,7 @@ export function downloadAssessmentPdf(data: AssessmentPdfInput): void {
   addRow("Porteføljeprioritet", `${data.computed.priorityScore.toFixed(1)} / 100`);
   if (data.rpaExpectedBenefitVsEffort !== undefined) {
     addRow(
-      "Beslutningsgrunnlag: nok å hente vs. innsats (1–5)",
+      "Beslutningsgrunnlag: gevinst vs. innsats (1–5)",
       String(data.rpaExpectedBenefitVsEffort),
     );
   }

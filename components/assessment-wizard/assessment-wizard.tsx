@@ -407,6 +407,8 @@ export function AssessmentWizard({ assessmentId }: Props) {
   const canEditRef = useRef(false);
   /** Begrenser hvor ofte musehjul/trackpad kan bytte steg (unngår «hopping»). */
   const lastWheelStepAtRef = useRef(0);
+  /** Unngå lagring ved første slide-synk; lagre ved hvert påfølgende stegbytte. */
+  const prevSlideForSaveRef = useRef<number | null>(null);
   if (payload) payloadRef.current = payload;
   const [emblaRef, emblaApi] = useEmblaCarousel({
     align: "center",
@@ -431,6 +433,7 @@ export function AssessmentWizard({ assessmentId }: Props) {
     draftRevisionRef.current = null;
     setDraftConflict(null);
     saveQueueTailRef.current = Promise.resolve();
+    prevSlideForSaveRef.current = null;
   }, [assessmentId]);
 
   /** Ikke synk `data.draft` inn etter hver lagring — det overskriver tastatur mens du skriver. */
@@ -662,6 +665,16 @@ export function AssessmentWizard({ assessmentId }: Props) {
       }
     };
   }, [payload, persist]);
+
+  /** Lagre utkast ved hvert stegbytte (1→2, 2→3, …) slik at arbeid ikke bare ligger i minnet. */
+  useEffect(() => {
+    if (!canEdit || !payloadRef.current) return;
+    if (draftRevisionRef.current === null) return;
+    const prev = prevSlideForSaveRef.current;
+    prevSlideForSaveRef.current = slide;
+    if (prev === null) return;
+    void persist(payloadRef.current);
+  }, [slide, persist, canEdit]);
 
   useEffect(() => {
     const flush = () => {
@@ -1094,7 +1107,9 @@ export function AssessmentWizard({ assessmentId }: Props) {
               {stepLabels[slide]}
             </p>
             <p className="text-muted-foreground mt-1 text-xs">
-              Fyll ut det du trenger — resten er valgfritt.
+              {slide === stepLabels.length - 1
+                ? "Hele dette steget kan hoppes over — se forklaring øverst på siden."
+                : "Fyll ut det du trenger — resten er valgfritt."}
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -1778,12 +1793,17 @@ export function AssessmentWizard({ assessmentId }: Props) {
             </Slide>
 
             <Slide>
-              <div className="space-y-1">
+              <div className="space-y-2">
                 <h2 className="text-foreground text-xl font-semibold sm:text-2xl">
-                  Detaljer ved behov
+                  Ekstra informasjon
                 </h2>
-                <p className="text-muted-foreground text-sm">
-                  Alt under er valgfritt og skjult som standard.
+                <p className="text-muted-foreground text-sm leading-relaxed">
+                  <span className="text-foreground/90 font-medium">
+                    Du trenger ikke fylle ut noe her
+                  </span>{" "}
+                  for at vurderingen skal være «ferdig»: resultatet bygger på de foregående
+                  stegene. Åpne en seksjon under bare når du vil utdype prosessen, finjustere
+                  tall i modellen, fylle inn ROS/personvern eller samarbeide med team og milepæler.
                 </p>
               </div>
               <div className="space-y-6">
@@ -2065,10 +2085,10 @@ export function AssessmentWizard({ assessmentId }: Props) {
                 <div className="space-y-6 rounded-2xl bg-muted/10 p-4 ring-1 ring-black/[0.04] dark:ring-white/[0.06]">
                   <div className="space-y-1">
                     <h3 className="text-base font-semibold text-foreground">
-                      Team og versjoner
+                      Samarbeid og milepæler
                     </h3>
-                    <p className="text-sm text-muted-foreground">
-                      Bruk dette når den raske vurderingen er klar og dere vil samarbeide videre.
+                    <p className="text-muted-foreground text-sm">
+                      Invitasjoner, notater, oppfølging og navngitte versjoner — valgfritt.
                     </p>
                   </div>
                   <AssessmentCollaborationPanel

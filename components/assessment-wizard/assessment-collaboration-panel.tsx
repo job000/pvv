@@ -38,6 +38,7 @@ import {
   CalendarDays,
   CheckCircle2,
   CircleDot,
+  ListChecks,
   MessageSquareText,
   Share2,
   Users,
@@ -161,7 +162,7 @@ export function AssessmentCollaborationPanel({
               <div>
                 <CardTitle className="text-base">Team på denne vurderingen</CardTitle>
                 <CardDescription>
-                  Alle som er invitert ser aktivitet, oppgaver og notater her.
+                  Alle som er invitert ser aktivitet, oppfølging og notater her.
                 </CardDescription>
               </div>
             </div>
@@ -432,23 +433,19 @@ export function AssessmentCollaborationPanel({
         </CardContent>
       </Card>
 
-      {/* Oppgaver — hvem gjør hva */}
+      {/* Oppfølging: konkrete steg knyttet til denne vurderingen */}
       <div className="space-y-3">
         <div className="flex items-center gap-2">
-          <CheckCircle2 className="text-primary size-5" />
-          <div>
-            <h3 className="font-heading text-base font-semibold">Oppgaver</h3>
-            <p className="text-muted-foreground text-sm">
-              Tildel ansvar, sett frist og prioritet. Alle med tilgang ser
-              status.
-            </p>
-          </div>
+          <CheckCircle2 className="text-primary size-5 shrink-0" aria-hidden />
+          <h3 className="font-heading text-base font-semibold leading-tight">
+            Oppfølging på denne vurderingen
+          </h3>
         </div>
 
         <div className="space-y-3">
           {(assessmentTasks ?? []).length === 0 ? (
             <p className="text-muted-foreground rounded-xl border border-dashed px-4 py-8 text-center text-sm">
-              Ingen oppgaver ennå — opprett den første under.
+              Ingen oppfølgingspunkter ennå.
             </p>
           ) : (
             <ul className="space-y-2.5">
@@ -566,10 +563,17 @@ export function AssessmentCollaborationPanel({
           )}
 
           <div className="bg-muted/15 space-y-4 rounded-2xl border p-4">
-            <p className="font-medium text-sm">Ny oppgave</p>
+            <div className="flex items-center gap-2.5 border-b border-border/60 pb-3">
+              <div className="bg-primary/10 flex size-8 shrink-0 items-center justify-center rounded-lg">
+                <ListChecks className="text-primary size-4" aria-hidden />
+              </div>
+              <p className="text-sm font-medium leading-snug">
+                Nytt oppfølgingspunkt
+              </p>
+            </div>
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="space-y-1.5 sm:col-span-2">
-                <Label htmlFor="new-task-title">Tittel</Label>
+                <Label htmlFor="new-task-title">Hva skal gjøres?</Label>
                 <Input
                   id="new-task-title"
                   value={taskTitle}
@@ -579,18 +583,18 @@ export function AssessmentCollaborationPanel({
                 />
               </div>
               <div className="space-y-1.5 sm:col-span-2">
-                <Label htmlFor="new-task-desc">Beskrivelse (valgfritt)</Label>
+                <Label htmlFor="new-task-desc">Mer detaljer (valgfritt)</Label>
                 <Textarea
                   id="new-task-desc"
                   value={taskDescription}
                   onChange={(e) => setTaskDescription(e.target.value)}
-                  placeholder="Kort om hva som forventes levert …"
+                  placeholder="Kort om forventet leveranse …"
                   disabled={!canEdit}
                   className="min-h-[72px]"
                 />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="new-task-assignee">Tildelt til</Label>
+                <Label htmlFor="new-task-assignee">Ansvarlig</Label>
                 <select
                   id="new-task-assignee"
                   className="border-input bg-background flex h-9 w-full rounded-lg border px-2 text-sm"
@@ -604,7 +608,7 @@ export function AssessmentCollaborationPanel({
                   }
                   disabled={!canEdit}
                 >
-                  <option value="">— Velg person —</option>
+                  <option value="">Velg hvem som eier steget</option>
                   {(workspaceMembers ?? []).map((m) => (
                     <option key={m.userId} value={m.userId}>
                       {m.name ?? m.email ?? m.userId}
@@ -613,7 +617,7 @@ export function AssessmentCollaborationPanel({
                 </select>
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="new-task-prio">Prioritet</Label>
+                <Label htmlFor="new-task-prio">Hvor haster det?</Label>
                 <select
                   id="new-task-prio"
                   className="border-input bg-background flex h-9 w-full rounded-lg border px-2 text-sm"
@@ -647,6 +651,7 @@ export function AssessmentCollaborationPanel({
               disabled={
                 !canEdit || !taskTitle.trim() || workspaceMembers === undefined
               }
+              aria-label="Legg til oppfølgingspunkt på denne vurderingen"
               onClick={() => {
                 const title = taskTitle.trim();
                 if (!title) return;
@@ -667,7 +672,7 @@ export function AssessmentCollaborationPanel({
                 });
               }}
             >
-              Legg til oppgave
+              Legg til
             </Button>
           </div>
         </div>
