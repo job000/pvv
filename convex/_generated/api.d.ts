@@ -36,6 +36,7 @@ import type * as lib_intakeDerivedIds from "../lib/intakeDerivedIds.js";
 import type * as lib_intakeGithubOccupiedRefs from "../lib/intakeGithubOccupiedRefs.js";
 import type * as lib_intakeMapping from "../lib/intakeMapping.js";
 import type * as lib_intakePublicScreening from "../lib/intakePublicScreening.js";
+import type * as lib_intakePublicSecurity from "../lib/intakePublicSecurity.js";
 import type * as lib_intakeSubmissionGithubBody from "../lib/intakeSubmissionGithubBody.js";
 import type * as lib_payloadSnapshot from "../lib/payloadSnapshot.js";
 import type * as lib_rosIntakePlacement from "../lib/rosIntakePlacement.js";
@@ -92,6 +93,7 @@ declare const fullApi: ApiFromModules<{
   "lib/intakeGithubOccupiedRefs": typeof lib_intakeGithubOccupiedRefs;
   "lib/intakeMapping": typeof lib_intakeMapping;
   "lib/intakePublicScreening": typeof lib_intakePublicScreening;
+  "lib/intakePublicSecurity": typeof lib_intakePublicSecurity;
   "lib/intakeSubmissionGithubBody": typeof lib_intakeSubmissionGithubBody;
   "lib/payloadSnapshot": typeof lib_payloadSnapshot;
   "lib/rosIntakePlacement": typeof lib_rosIntakePlacement;

@@ -8,6 +8,9 @@ import {
  * from NextRequest + Cookie header; (2) do not clear cookies when refresh returns null;
  * (3) `getRequestCookies()` falls back to parsing the Cookie header when `cookies()` is
  * empty in RSC (fixes “logged out” on `/` in a new tab).
+ *
+ * Offentlige ruter (`/f/…` inntaksskjema): ingen innlogging her — tilgang styres av
+ * hemmelig lenketoken + validering/rate limit i Convex (`getPublicForm` / `submitPublic`).
  */
 
 /**

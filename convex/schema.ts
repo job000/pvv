@@ -857,6 +857,16 @@ export default defineSchema({
     .index("by_form_and_created_at", ["formId", "createdAt"])
     .index("by_workspace_and_created_at", ["workspaceId", "createdAt"]),
 
+  /**
+   * Rate limiting for offentlig innsending (per lenke per minutt).
+   * Ikke bruker- eller IP-basert — token i URL er hemmeligheten.
+   */
+  intakePublicSubmitBuckets: defineTable({
+    linkId: v.id("intakeFormLinks"),
+    minuteBucket: v.number(),
+    count: v.number(),
+  }).index("by_link_and_minute_bucket", ["linkId", "minuteBucket"]),
+
   intakeSubmissions: defineTable({
     workspaceId: v.id("workspaces"),
     formId: v.id("intakeForms"),

@@ -3,6 +3,7 @@ import { getAuthUserId } from "@convex-dev/auth/server";
 import { mutation, query } from "./_generated/server";
 import { intakeLinkAccessModeValidator } from "./schema";
 import { requireUserId, requireWorkspaceMember } from "./lib/access";
+import { parsePublicIntakeToken } from "./lib/intakePublicSecurity";
 
 function randomToken(): string {
   const bytes = new Uint8Array(24);
@@ -64,7 +65,7 @@ export const listByForm = query({
 export const getPublicForm = query({
   args: { token: v.string() },
   handler: async (ctx, args) => {
-    const token = args.token.trim();
+    const token = parsePublicIntakeToken(args.token);
     if (!token) {
       return null;
     }

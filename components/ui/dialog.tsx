@@ -31,14 +31,14 @@ export function Dialog({
 export function DialogContent({
   className,
   children,
-  /** max width: sm | md | lg | xl | 2xl */
+  /** max width: sm … 7xl — bruk 5xl–7xl for brede redigeringsvinduer på skjerm. */
   size = "lg",
   titleId,
   descriptionId,
 }: {
   className?: string;
   children: React.ReactNode;
-  size?: "sm" | "md" | "lg" | "xl" | "2xl";
+  size?: "sm" | "md" | "lg" | "xl" | "2xl" | "3xl" | "4xl" | "5xl" | "6xl" | "7xl";
   titleId?: string;
   descriptionId?: string;
 }) {
@@ -77,10 +77,15 @@ export function DialogContent({
     lg: "max-w-lg",
     xl: "max-w-xl",
     "2xl": "max-w-2xl",
+    "3xl": "max-w-3xl",
+    "4xl": "max-w-4xl",
+    "5xl": "max-w-5xl",
+    "6xl": "max-w-6xl",
+    "7xl": "max-w-7xl",
   }[size];
 
   return createPortal(
-    <div className="fixed inset-0 z-50 flex items-end justify-center p-4 sm:items-center">
+    <div className="fixed inset-0 z-50 flex items-end justify-center p-3 sm:items-center sm:p-6">
       <button
         type="button"
         aria-label="Lukk"
@@ -93,7 +98,7 @@ export function DialogContent({
         aria-labelledby={titleId}
         aria-describedby={descriptionId}
         className={cn(
-          "border-border/80 bg-background relative z-10 flex max-h-[min(92vh,44rem)] w-full flex-col overflow-hidden rounded-2xl border shadow-2xl",
+          "border-border/80 bg-background relative z-10 flex max-h-[min(92vh,56rem)] w-full flex-col overflow-hidden rounded-2xl border shadow-2xl sm:rounded-3xl",
           maxW,
           className,
         )}
@@ -115,7 +120,7 @@ export function DialogHeader({
   return (
     <div
       className={cn(
-        "border-border/60 bg-muted/15 shrink-0 border-b px-5 py-4",
+        "border-border/60 bg-muted/15 shrink-0 border-b px-5 py-4 sm:px-8 sm:py-5",
         className,
       )}
     >
@@ -132,7 +137,7 @@ export function DialogBody({
   children: React.ReactNode;
 }) {
   return (
-    <div className={cn("min-h-0 flex-1 overflow-y-auto px-5 py-4", className)}>
+    <div className={cn("min-h-0 flex-1 overflow-y-auto px-5 py-4 sm:px-8 sm:py-6", className)}>
       {children}
     </div>
   );
@@ -148,7 +153,7 @@ export function DialogFooter({
   return (
     <div
       className={cn(
-        "border-border/60 bg-muted/10 flex shrink-0 flex-wrap items-center justify-end gap-2 border-t px-5 py-3",
+        "border-border/60 bg-muted/10 flex shrink-0 flex-wrap items-center justify-end gap-2 border-t px-5 py-3 sm:px-8 sm:py-4",
         className,
       )}
     >

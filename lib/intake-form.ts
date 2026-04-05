@@ -310,8 +310,8 @@ export function detectTechnicalTerms(input: string): string[] {
 }
 
 /**
- * Kort screening for RPA-kandidater — få spørsmål, grovt anslag,
- * tydelig hva en RPA-kandidat er. Standardmal for nye skjema.
+ * Kort screening for gjentakende oppgaver — få spørsmål, hverdagslig språk,
+ * grovt anslag. Standardmal for nye skjema.
  */
 export function buildIntakeQuestionsRpaScreening() {
   const personalDataQuestionId = crypto.randomUUID();
@@ -321,8 +321,8 @@ export function buildIntakeQuestionsRpaScreening() {
       id: crypto.randomUUID(),
       label: "Hva heter oppgaven eller arbeidsflyten?",
       helpText:
-        "En RPA-kandidat er en konkret, gjentakende oppgave der en digital medarbeider kan gjøre det samme dere gjør i skjermbilder i dag — uten å bytte system. Det passer ofte når oppgaven er lik fra gang til gang, data ligger digitalt, og reglene er tydelige.\n\n" +
-        "Dette skjemaet er bare en kort screening: vi vil vite om det er grunnlag for å vurdere videre, ikke en full analyse.",
+        "Et kort navn kollegaer ville brukt — f.eks. «Innkommende fakturaer» eller «Timeføring».\n\n" +
+        "Skjemaet er en kort avklaring: vi vil vite om det er grunnlag for å se nærmere på å gjøre jobben enklere (mindre manuelt arbeid), ikke en full teknisk analyse.",
       questionType: "text" as const,
       required: true,
       options: [],
@@ -334,7 +334,7 @@ export function buildIntakeQuestionsRpaScreening() {
       id: crypto.randomUUID(),
       label: "Hva gjør dere i dag — i to–tre setninger?",
       helpText:
-        "Nok til at en kollega skjønner flyten. Grovt holder.",
+        "Hvem gjør hva, og i hvilken rekkefølge? Nok til at en kollega som ikke kjenner faget skjønner det grovt.",
       questionType: "text" as const,
       required: true,
       options: [],
@@ -349,7 +349,7 @@ export function buildIntakeQuestionsRpaScreening() {
       id: crypto.randomUUID(),
       label: "Hva ønsker dere å oppnå?",
       helpText:
-        "F.eks. mindre manuelt arbeid, færre feil eller kortere ventetid.",
+        "F.eks. mindre manuelt arbeid, færre feil, kortere ventetid eller bedre kvalitet — i vanlig språk.",
       questionType: "text" as const,
       required: true,
       options: [],
@@ -359,8 +359,9 @@ export function buildIntakeQuestionsRpaScreening() {
     },
     {
       id: crypto.randomUUID(),
-      label: "Hvor ofte kommer dette opp?",
-      helpText: "Velg det som er nærmest — grovt anslag for omfanget.",
+      label: "Omtrent hvor ofte må noen gjøre denne jobben?",
+      helpText:
+        "Det gjelder oppgaven dere har beskrevet over — ikke noe annet. Velg det som er nærmest; et grovt anslag holder.",
       questionType: "multiple_choice" as const,
       required: true,
       options: [
@@ -374,9 +375,9 @@ export function buildIntakeQuestionsRpaScreening() {
     {
       id: crypto.randomUUID(),
       label:
-        "Hvor stor er forventet nytte for avdelingen eller virksomheten hvis dette løses?",
+        "Hvor mye vil det bety for dere om denne jobben blir enklere eller mindre manuell?",
       helpText:
-        "Tenk på tid spart, færre feil, bedre tjeneste eller lavere kost — ikke på om dere vil at vi skal følge opp. 1 = begrenset nytte · 5 = stor forventet effekt.",
+        "Tenk på tid spart, færre feil, bedre tjeneste eller lavere kost — ikke på om dere ønsker mer oppfølging fra oss. 1 = lite å hente · 5 = veldig mye å hente.",
       questionType: "scale" as const,
       required: true,
       options: [],
@@ -389,9 +390,9 @@ export function buildIntakeQuestionsRpaScreening() {
     },
     {
       id: crypto.randomUUID(),
-      label: "Gjøres jobben stort sett på samme måte hver gang?",
+      label: "Skjer jobben på omtrent samme måte hver gang?",
       helpText:
-        "1 = veldig ulikt fra gang til gang · 5 = nesten alltid likt. Robot passer best når det er forutsigbart.",
+        "1 = veldig ulikt fra gang til gang · 5 = nesten alltid likt. Jo mer likt, jo enklere er det ofte å få hjelp fra digitale verktøy uten å bytte systemer dere bruker i dag.",
       questionType: "scale" as const,
       required: true,
       options: [],
@@ -404,9 +405,10 @@ export function buildIntakeQuestionsRpaScreening() {
     },
     {
       id: crypto.randomUUID(),
-      label: "Ligger det meste digitalt i systemer — eller mye papir og skjønn?",
+      label:
+        "Hvor mye av jobben skjer allerede digitalt (PC og programmer) — og hvor mye er papir eller håndskrift?",
       helpText:
-        "1 = mye papir og manuelt skjønn · 5 = mest digitalt i faste skjermbilder. Grovt signal for om det er naturlig å automatisere.",
+        "1 = mye papir eller manuelle notater · 5 = det meste ligger i skjema og systemer på skjerm. Vi spør for å forstå omfanget — ikke for å teste IT-kunnskaper.",
       questionType: "scale" as const,
       required: true,
       options: [],
@@ -417,9 +419,9 @@ export function buildIntakeQuestionsRpaScreening() {
     {
       id: crypto.randomUUID(),
       label:
-        "Valgfritt: er det noe som gjør at dette kanskje ikke passer som robot?",
+        "Valgfritt: er det noe som gjør at dette blir vanskelig å gjøre enklere med digital hjelp?",
       helpText:
-        "F.eks. mye unntak, uklare regler, eller at annen løsning er mer naturlig. Hopp over hvis ingenting faller deg inn.",
+        "F.eks. mange unntak, uklare regler, eller at en annen løsning passer bedre. Hopp over hvis ingenting faller deg inn.",
       questionType: "text" as const,
       required: false,
       options: [],
@@ -429,9 +431,10 @@ export function buildIntakeQuestionsRpaScreening() {
     },
     {
       id: personalDataQuestionId,
-      label: "Berører oppgaven personopplysninger (navn, kontakt, helse, ID-nummer e.l.)?",
+      label:
+        "Berører oppgaven personopplysninger (navn, kontakt, helse, fødselsnummer e.l.)?",
       helpText:
-        "Vi spør for å vite om personvern må inn i en eventuell videre vurdering.",
+        "Vi spør for å vite om personvern kan bli relevant i en eventuell videre vurdering.",
       questionType: "yes_no" as const,
       required: true,
       options: [],
@@ -1328,7 +1331,7 @@ export const INTAKE_FORM_TEMPLATE_CATALOG: readonly IntakeFormTemplateDefinition
     category: "Automatisering og RPA",
     title: "RPA-kandidat (screening)",
     description:
-      "Kort inntak: forklarer hva en RPA-kandidat er, og grovt om det er grunnlag for videre vurdering — få og enkle spørsmål.",
+      "Kort inntak i vanlig språk: omfanget av jobben, hvor mye gevinst dere kan hente, og om den er enkel nok å forenkle — få spørsmål.",
     buildQuestions: buildIntakeQuestionsRpaScreening,
   },
   {

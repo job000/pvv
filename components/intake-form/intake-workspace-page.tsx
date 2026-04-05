@@ -2514,12 +2514,19 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
           }
         }}
       >
-        <DialogContent size="xl" titleId="intake-editor-title">
+        <DialogContent
+          size="6xl"
+          className="max-h-[min(92vh,85vh)]"
+          titleId="intake-editor-title"
+        >
           <DialogHeader>
-            <p id="intake-editor-title" className="font-heading text-lg font-semibold">
+            <p
+              id="intake-editor-title"
+              className="font-heading text-xl font-semibold tracking-tight sm:text-2xl"
+            >
               {isCreatingNewForm ? "Opprett skjema" : "Rediger skjema"}
             </p>
-            <p className="text-muted-foreground text-sm">
+            <p className="text-muted-foreground max-w-3xl text-sm leading-relaxed sm:text-base">
               Spørsmål, layout og koblinger til vurdering / ROS / PVV.
               {isCreatingNewForm ? (
                 <>
@@ -2530,17 +2537,17 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
             </p>
           </DialogHeader>
           <DialogBody className="space-y-6">
-            <div className="rounded-[28px] border border-border/60 bg-muted/20 p-4 sm:p-5">
+            <div className="rounded-[28px] border border-border/60 bg-muted/20 p-5 sm:p-7">
               <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                 <div className="space-y-1">
                   <div className="inline-flex items-center gap-2 rounded-full border border-border/60 bg-background px-3 py-1 text-xs font-medium text-muted-foreground">
                     <Settings2 className="size-3.5" />
                     Skjemaoppsett
                   </div>
-                  <h3 className="font-heading text-xl font-semibold">
+                  <h3 className="font-heading text-xl font-semibold sm:text-2xl">
                     Navn og visning
                   </h3>
-                  <p className="text-muted-foreground max-w-2xl text-sm leading-snug">
+                  <p className="text-muted-foreground max-w-2xl text-sm leading-relaxed sm:text-base">
                     Tittel, beskrivelse og hvordan spørsmålene vises.
                   </p>
                 </div>
@@ -2556,30 +2563,32 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
                   </Badge>
                 </div>
               </div>
-              <div className="mt-5 grid gap-4 lg:grid-cols-[1.3fr_0.9fr]">
-                <div className="space-y-4 rounded-2xl border border-border/60 bg-background p-4">
+              <div className="mt-6 grid gap-5 lg:grid-cols-[1.35fr_0.85fr] lg:gap-8">
+                <div className="space-y-4 rounded-2xl border border-border/60 bg-background p-5 sm:p-6">
                   <div className="space-y-2">
-                    <Label>Navn</Label>
+                    <Label className="text-sm font-medium sm:text-base">Navn</Label>
                     <Input
                       value={title}
                       onChange={(event) => setTitle(event.target.value)}
                       placeholder="F.eks. Innmelding av ny prosess"
+                      className="h-11 rounded-xl text-base sm:h-12"
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label>Beskrivelse</Label>
+                    <Label className="text-sm font-medium sm:text-base">Beskrivelse</Label>
                     <Textarea
                       value={description}
                       onChange={(event) => setDescription(event.target.value)}
                       placeholder="Kort hjelpetekst som forklarer hvorfor skjemaet fylles ut."
+                      className="min-h-[7.5rem] resize-y rounded-xl text-base sm:min-h-[8.5rem]"
                     />
                   </div>
                 </div>
-                <div className="space-y-4 rounded-2xl border border-border/60 bg-background p-4">
+                <div className="space-y-5 rounded-2xl border border-border/60 bg-background p-5 sm:p-6">
                   <div className="space-y-2">
-                    <Label>Layout</Label>
+                    <Label className="text-sm font-medium sm:text-base">Layout</Label>
                     <select
-                      className="h-10 rounded-xl border border-input bg-background px-3 text-sm"
+                      className="h-11 w-full rounded-xl border border-input bg-background px-3 text-sm sm:h-12 sm:text-base"
                       value={layoutMode}
                       onChange={(event) =>
                         setLayoutMode(
@@ -2593,13 +2602,18 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
                   </div>
                   {layoutMode === "one_per_screen" ? (
                     <div className="space-y-2">
-                      <Label htmlFor="intake-questions-per-page">Spørsmål per side</Label>
+                      <Label
+                        className="text-sm font-medium sm:text-base"
+                        htmlFor="intake-questions-per-page"
+                      >
+                        Spørsmål per side
+                      </Label>
                       <Input
                         id="intake-questions-per-page"
                         type="number"
                         min={1}
                         max={25}
-                        className="h-10 rounded-xl"
+                        className="h-11 rounded-xl sm:h-12"
                         value={questionsPerPage}
                         onChange={(event) => {
                           const parsed = Number.parseInt(event.target.value, 10);
@@ -2616,9 +2630,11 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
                     </div>
                   ) : null}
                   <div className="space-y-2">
-                    <Label>Bekreftelse til svarer</Label>
+                    <Label className="text-sm font-medium sm:text-base">
+                      Bekreftelse til svarer
+                    </Label>
                     <select
-                      className="h-10 rounded-xl border border-input bg-background px-3 text-sm"
+                      className="h-11 w-full rounded-xl border border-input bg-background px-3 text-sm sm:h-12 sm:text-base"
                       value={confirmationMode}
                       onChange={(event) =>
                         setConfirmationMode(
@@ -3185,19 +3201,33 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
               </div>
             </div>
           </DialogBody>
-          <DialogFooter className="flex flex-wrap justify-between gap-2">
+          <DialogFooter className="flex flex-wrap justify-between gap-3 sm:gap-4">
             <div className="flex gap-2">
               {isCreatingNewForm ? null : (
-                <Button type="button" variant="outline" onClick={() => void handleArchiveForm()}>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-11 rounded-xl px-5 sm:h-12"
+                  onClick={() => void handleArchiveForm()}
+                >
                   Arkiver
                 </Button>
               )}
             </div>
-            <div className="flex gap-2">
-              <Button type="button" variant="outline" onClick={() => setEditorOpen(false)}>
+            <div className="flex flex-wrap gap-2 sm:gap-3">
+              <Button
+                type="button"
+                variant="outline"
+                className="h-11 min-w-[5.5rem] rounded-xl px-5 sm:h-12"
+                onClick={() => setEditorOpen(false)}
+              >
                 Lukk
               </Button>
-              <Button type="button" onClick={() => void handleSaveForm()}>
+              <Button
+                type="button"
+                className="h-11 min-w-[10rem] rounded-xl px-6 text-base font-medium sm:h-12"
+                onClick={() => void handleSaveForm()}
+              >
                 {isCreatingNewForm ? "Opprett skjema" : "Lagre skjema"}
               </Button>
             </div>
@@ -3206,7 +3236,7 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
       </Dialog>
 
       <Dialog open={intakeTemplatePickerOpen} onOpenChange={setIntakeTemplatePickerOpen}>
-        <DialogContent size="lg" titleId="intake-template-picker-title">
+        <DialogContent size="3xl" titleId="intake-template-picker-title">
           <DialogHeader>
             <p id="intake-template-picker-title" className="font-heading text-lg font-semibold">
               Velg eksempelmal

@@ -26,6 +26,11 @@ import {
   cascadeDeleteAssessmentData,
   cascadeDeleteRosAnalysisData,
 } from "./lib/cascadeDeletePvv";
+import {
+  assertPublicIntakePayloadBounds,
+  parsePublicIntakeToken,
+  PUBLIC_INTAKE_SUBMITS_PER_LINK_PER_MINUTE,
+} from "./lib/intakePublicSecurity";
 import { placeIntakeRisksOnRosMatrix } from "./lib/rosIntakePlacement";
 import {
   DEFAULT_ROS_COL_LABELS,
@@ -339,10 +344,14 @@ export const submitPublic = mutation({
     answers: v.array(intakeAnswerValidator),
   },
   handler: async (ctx, args) => {
-    const token = args.token.trim();
+    const token = parsePublicIntakeToken(args.token);
     if (!token) {
       throw new Error("Lenken er ugyldig.");
     }
+    assertPublicIntakePayloadBounds({
+      submitterMeta: args.submitterMeta,
+      answers: args.answers,
+    });
     const link = await ctx.db
       .query("intakeFormLinks")
       .withIndex("by_token", (q) => q.eq("token", token))
@@ -373,6 +382,19 @@ export const submitPublic = mutation({
     ) {
       throw new Error(
         "Dette skjemaet sender bekreftelse på e-post, så e-postadresse er påkrevd.",
+      );
+    }
+    const rateMinuteBucket = Math.floor(Date.now() / 60_000);
+    const rateBuckets = await ctx.db
+      .query("intakePublicSubmitBuckets")
+      .withIndex("by_link_and_minute_bucket", (q) =>
+        q.eq("linkId", link._id).eq("minuteBucket", rateMinuteBucket),
+      )
+      .collect();
+    const submitsInWindow = rateBuckets.reduce((sum, b) => sum + b.count, 0);
+    if (submitsInWindow >= PUBLIC_INTAKE_SUBMITS_PER_LINK_PER_MINUTE) {
+      throw new Error(
+        "For mange innsendinger akkurat nå. Vent et minutt og prøv igjen.",
       );
     }
     const questions = await ctx.db
@@ -434,6 +456,12 @@ export const submitPublic = mutation({
     });
     await ctx.db.patch(link._id, {
       responseCount: link.responseCount + 1,
+    });
+    /** Én rad per innsending i vinduet; sum(count) = antall forsøk i minuttet (korrekt ved race). */
+    await ctx.db.insert("intakePublicSubmitBuckets", {
+      linkId: link._id,
+      minuteBucket: rateMinuteBucket,
+      count: 1,
     });
     if (
       confirmationMode === "email_copy" &&
