@@ -18,6 +18,7 @@ import {
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { requireUserId, requireWorkspaceMember } from "./lib/access";
 import { generateIntakeSuggestion } from "./lib/intakeMapping";
+import { buildPublicIntakeScreeningSummary } from "./lib/intakePublicScreening";
 import { createAssessmentWithPayload } from "./lib/assessmentCreation";
 import { normalizeGithubRepoFullName } from "./lib/github";
 import { loadIntakeGithubOccupiedRefs } from "./lib/intakeGithubOccupiedRefs";
@@ -25,6 +26,26 @@ import {
   cascadeDeleteAssessmentData,
   cascadeDeleteRosAnalysisData,
 } from "./lib/cascadeDeletePvv";
+import { placeIntakeRisksOnRosMatrix } from "./lib/rosIntakePlacement";
+import {
+  DEFAULT_ROS_COL_LABELS,
+  isRpaIntakeRosTemplate,
+  RPA_INTAKE_ROS_COL_LABELS_AFTER,
+  RPA_INTAKE_ROS_COL_AXIS,
+  RPA_INTAKE_ROS_COL_AXIS_AFTER,
+  RPA_INTAKE_ROS_ROW_AXIS,
+  RPA_INTAKE_ROS_ROW_AXIS_AFTER,
+  RPA_INTAKE_ROS_ROW_DESCRIPTIONS,
+  RPA_INTAKE_ROS_ROW_LABELS,
+  RPA_INTAKE_ROS_ROW_LABELS_AFTER,
+  RPA_INTAKE_ROS_TEMPLATE_DESCRIPTION,
+  RPA_INTAKE_ROS_TEMPLATE_NAME,
+  emptyMatrix,
+} from "../lib/ros-defaults";
+import {
+  emptyCellItemsMatrix,
+  flattenCellItemsToNote,
+} from "../lib/ros-cell-items";
 
 function requireNonEmptyAnswers(questionCount: number, answersCount: number) {
   if (questionCount === 0) {
@@ -384,6 +405,9 @@ export const submitPublic = mutation({
     }
 
     const suggestion = generateIntakeSuggestion(visibleQuestions, visibleAnswers);
+    const screening = buildPublicIntakeScreeningSummary(
+      suggestion.generatedAssessment.payload as Record<string, unknown>,
+    );
     const now = Date.now();
     const submissionId = await ctx.db.insert("intakeSubmissions", {
       workspaceId: form.workspaceId,
@@ -450,6 +474,7 @@ export const submitPublic = mutation({
       title: suggestion.generatedAssessment.title,
       shouldCreateRos: suggestion.rosSuggestion.shouldCreateRos,
       confirmationMode,
+      screening,
     };
   },
 });
@@ -529,8 +554,13 @@ export const approve = mutation({
       if (!templateId) {
         templateId = await ctx.runMutation(api.ros.createTemplate, {
           workspaceId: submission.workspaceId,
-          name: "Standard ROS-mal",
-          description: "Automatisk opprettet fra skjema-kobling.",
+          name: RPA_INTAKE_ROS_TEMPLATE_NAME,
+          description: RPA_INTAKE_ROS_TEMPLATE_DESCRIPTION,
+          rowAxisTitle: RPA_INTAKE_ROS_ROW_AXIS,
+          colAxisTitle: RPA_INTAKE_ROS_COL_AXIS,
+          rowLabels: [...RPA_INTAKE_ROS_ROW_LABELS],
+          colLabels: [...DEFAULT_ROS_COL_LABELS],
+          rowDescriptions: [...RPA_INTAKE_ROS_ROW_DESCRIPTIONS],
         });
       }
       const analysisId: Id<"rosAnalyses"> = await ctx.runMutation(
@@ -545,35 +575,63 @@ export const approve = mutation({
       );
       const analysis = await ctx.db.get(analysisId);
       if (analysis) {
-        const rowCount = analysis.rowLabels.length;
-        const colCount = analysis.colLabels.length;
-        const cellItems = Array.from({ length: rowCount }, (_, rowIndex) =>
-          Array.from({ length: colCount }, (_, colIndex) =>
-            rowIndex === 0 && colIndex === 0
-              ? submission.generatedRosSuggestion.risks.map((risk) => ({
-                  id: risk.id,
-                  text: `${risk.title}: ${risk.description}`,
-                  flags: submission.generatedPvvFlags,
-                }))
-              : [],
-          ),
+        const { cellItems, cellNotes, matrixValues } = placeIntakeRisksOnRosMatrix(
+          submission.generatedRosSuggestion.risks.map((risk) => ({
+            id: risk.id,
+            title: risk.title,
+            description: risk.description,
+            severity: risk.severity,
+            source: risk.source,
+          })),
+          analysis.rowLabels,
+          analysis.colLabels,
+          analysis.matrixValues,
+          submission.generatedPvvFlags ?? [],
         );
-        const cellNotes = Array.from({ length: rowCount }, (_, rowIndex) =>
-          Array.from({ length: colCount }, (_, colIndex) =>
-            rowIndex === 0 && colIndex === 0
-              ? submission.generatedRosSuggestion.risks
-                  .map((risk) => `${risk.title}: ${risk.description}`)
-                  .join("\n")
-              : "",
-          ),
-        );
-        await ctx.db.patch(analysis._id, {
+
+        const patch: Record<string, unknown> = {
           notes: submission.generatedRosSuggestion.summary,
           contextSummary: args.generatedAssessmentDraft.payload.processDescription,
           cellItems,
           cellNotes,
+          matrixValues,
           updatedAt: Date.now(),
-        });
+        };
+
+        if (isRpaIntakeRosTemplate(analysis.rowLabels)) {
+          const ar = RPA_INTAKE_ROS_ROW_LABELS_AFTER.length;
+          const ac = RPA_INTAKE_ROS_COL_LABELS_AFTER.length;
+          const cellItemsAfter = emptyCellItemsMatrix(ar, ac);
+          const hintId =
+            typeof crypto !== "undefined" && "randomUUID" in crypto
+              ? crypto.randomUUID()
+              : `ros_hint_${Date.now()}`;
+          cellItemsAfter[0]![0]!.push({
+            id: hintId,
+            text: "Planlagte tiltak: bruk radene som sjekkliste (samme tema som risiko-radene over). Fyll «Planlagt tiltak» og «Ansvar / status».",
+          });
+          const cellNotesAfter: string[][] = [];
+          for (let r = 0; r < ar; r++) {
+            const row: string[] = [];
+            for (let c = 0; c < ac; c++) {
+              row.push(
+                flattenCellItemsToNote(cellItemsAfter[r]?.[c] ?? []),
+              );
+            }
+            cellNotesAfter.push(row);
+          }
+          patch.rowAxisTitleAfter = RPA_INTAKE_ROS_ROW_AXIS_AFTER;
+          patch.colAxisTitleAfter = RPA_INTAKE_ROS_COL_AXIS_AFTER;
+          patch.rowLabelsAfter = [...RPA_INTAKE_ROS_ROW_LABELS_AFTER];
+          patch.colLabelsAfter = [...RPA_INTAKE_ROS_COL_LABELS_AFTER];
+          patch.matrixValuesAfter = emptyMatrix(ar, ac);
+          patch.cellNotesAfter = cellNotesAfter;
+          patch.cellItemsAfter = cellItemsAfter;
+          patch.methodologyStatement =
+            "ROS opprettet fra inntaksskjema med RPA-mal: risiko er fordelt på typiske RPA-risikoområder; kolonnene er konsekvens dersom feil oppstår. Etter-delen er for planlagte tiltak per rad.";
+        }
+
+        await ctx.db.patch(analysis._id, patch);
       }
       approvedRosAnalysisId = analysisId;
     }

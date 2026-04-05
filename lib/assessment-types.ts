@@ -75,4 +75,8 @@ export type AssessmentPayload = {
   rpaLifecycleContact?: string;
   rpaManualFallbackWhenRobotFails?: string;
   rpaBenefitKindsAndOperationsNotes?: string;
+
+  /** Flervalg verdisteg (arkiv) */
+  valuePainPointIds?: string[];
+  valueGainIds?: string[];
 };

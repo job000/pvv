@@ -34,6 +34,8 @@ type LikertFieldProps = {
   className?: string;
   disabled?: boolean;
   scaleLabels?: readonly [string, string, string, string, string];
+  /** Tekst ved tallfeltet nederst (tilgjengelighet / tastatur). */
+  manualInputLabel?: string;
 };
 
 export function LikertField({
@@ -47,6 +49,7 @@ export function LikertField({
   className,
   disabled = false,
   scaleLabels,
+  manualInputLabel = "Skriv 1–5",
 }: LikertFieldProps) {
   const hintId = hint ? `${id}-hint` : undefined;
   const buttonsRef = useRef<Array<HTMLButtonElement | null>>([]);
@@ -149,7 +152,7 @@ export function LikertField({
                 {scaleLabel ? (
                   <span
                     className={cn(
-                      "text-center text-[9px] leading-tight sm:text-[10px]",
+                      "hyphens-auto text-center text-[10px] leading-snug break-words sm:text-[11px]",
                       selected ? "text-foreground font-medium" : "text-muted-foreground",
                     )}
                   >
@@ -167,7 +170,7 @@ export function LikertField({
             className="text-muted-foreground text-[11px] font-normal"
             id={`${id}-manual-label`}
           >
-            Skriv 1–5
+            {manualInputLabel}
           </Label>
           <Input
             id={`${id}-manual`}

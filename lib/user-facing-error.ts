@@ -27,7 +27,13 @@ export function formatUserFacingError(
 
   const lines = cleaned
     .split("\n")
-    .map((l) => l.trim())
+    .map((l) =>
+      l
+        .trim()
+        .replace(/^Uncaught Error:\s*/i, "")
+        .replace(/^Server Error\s*$/i, "")
+        .trim(),
+    )
     .filter(Boolean);
 
   const humanLines = lines.filter(
@@ -36,10 +42,14 @@ export function formatUserFacingError(
       !l.includes("/convex/") &&
       !l.includes(".ts:") &&
       !l.includes("async handler") &&
-      !l.includes("requireUserId"),
+      !l.includes("requireUserId") &&
+      !/^server error$/i.test(l),
   );
 
-  const candidate = humanLines[0] ?? lines[0] ?? "";
+  const substantive = humanLines.find(
+    (l) => l.length >= 8 && !/^server error$/i.test(l),
+  );
+  const candidate = substantive ?? humanLines[0] ?? lines[0] ?? "";
 
   if (!candidate) {
     return fallback;

@@ -10,6 +10,8 @@ import { AssessmentExportPanel } from "@/components/assessment-wizard/assessment
 import { HfRequirementsSection } from "@/components/assessment-wizard/hf-requirements-section";
 import { ProcessProfileSection } from "@/components/assessment-wizard/process-profile-section";
 import { AssessmentPortfolioSummarySection } from "@/components/assessment-wizard/assessment-portfolio-summary-section";
+import { AssessmentProcessSimpleStep } from "@/components/assessment-wizard/assessment-process-simple-step";
+import { AssessmentValueImpactStep } from "@/components/assessment-wizard/assessment-value-impact-step";
 import { AssessmentWizardSchemaHelp } from "@/components/assessment-wizard/assessment-wizard-schema-help";
 import { AssessmentWizardMeta } from "@/components/assessment-wizard/assessment-wizard-meta";
 import { LikertField } from "@/components/rpa-assessment/likert-field";
@@ -33,10 +35,6 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  Progress,
-  ProgressLabel,
-} from "@/components/ui/progress";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import type { AssessmentPayload } from "@/lib/assessment-types";
@@ -47,10 +45,7 @@ import {
 } from "@/lib/assessment-pipeline";
 import { cn } from "@/lib/utils";
 import { payloadToSnapshot } from "@/convex/lib/payloadSnapshot";
-import {
-  ASSESSMENT_WIZARD_STEP_LABELS_FROM_INTAKE,
-  ASSESSMENT_WIZARD_STEP_LABELS_WITH_PORTFOLIO,
-} from "@/lib/assessment-wizard-steps";
+import { ASSESSMENT_WIZARD_STEP_LABELS } from "@/lib/assessment-wizard-steps";
 import {
   ASSESSMENT_COLLAB_ROLE_LABEL_NB,
   WORKSPACE_ROLE_LABEL_NB,
@@ -58,15 +53,7 @@ import {
 import { clampLikert5, computeAllResults } from "@/lib/rpa-assessment/scoring";
 import { useMutation, useQuery } from "convex/react";
 import useEmblaCarousel from "embla-carousel-react";
-import {
-  ChevronLeft,
-  ChevronRight,
-  CircleGauge,
-  Sparkles,
-  Target,
-  Share2,
-  Trash2,
-} from "lucide-react";
+import { ChevronLeft, ChevronRight, Share2, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -122,6 +109,8 @@ function normalizeDraftPayload(raw: AssessmentPayload): AssessmentPayload {
     rpaManualFallbackWhenRobotFails: raw.rpaManualFallbackWhenRobotFails ?? "",
     rpaBenefitKindsAndOperationsNotes:
       raw.rpaBenefitKindsAndOperationsNotes ?? "",
+    valuePainPointIds: raw.valuePainPointIds ?? [],
+    valueGainIds: raw.valueGainIds ?? [],
     timePerCaseValue,
     timePerCaseUnit,
     caseVolumeValue,
@@ -383,11 +372,8 @@ export function AssessmentWizard({ assessmentId }: Props) {
   const [leavingBusy, setLeavingBusy] = useState(false);
   const router = useRouter();
   const assessmentRow = data?.assessment ?? null;
-  const sourcedFromIntake = assessmentRow?.sourcedFromIntake === true;
-  const stepLabels = sourcedFromIntake
-    ? ASSESSMENT_WIZARD_STEP_LABELS_FROM_INTAKE
-    : ASSESSMENT_WIZARD_STEP_LABELS_WITH_PORTFOLIO;
-  const detailsSlideIndex = stepLabels.indexOf("Detaljer");
+  const stepLabels = ASSESSMENT_WIZARD_STEP_LABELS;
+  const detailsSlideIndex = stepLabels.indexOf("Valgfritt mer");
 
   const goneFromServer =
     data !== undefined &&
@@ -461,14 +447,6 @@ export function AssessmentWizard({ assessmentId }: Props) {
       payloadToSnapshot(payload as unknown as Record<string, unknown>),
     );
   }, [payload]);
-  const annualCasesEstimate = useMemo(
-    () => (payload ? annualCasesFromPayload(payload) : null),
-    [payload],
-  );
-  const derivedBaselineHoursEstimate = useMemo(
-    () => (payload ? derivedBaselineHoursFromPayload(payload) : null),
-    [payload],
-  );
   const workloadSummary = useMemo(
     () => (payload ? workloadSummaryFromPayload(payload) : null),
     [payload],
@@ -1081,81 +1059,95 @@ export function AssessmentWizard({ assessmentId }: Props) {
         </div>
       </div>
 
-      <AssessmentWizardMeta
-        collaborators={collaborators}
-        versions={versions}
-        draftUpdatedAt={data?.draft?.updatedAt}
-        onOpenTeamAndVersions={openTeamAndVersions}
-        onPickVersionPreview={onPickVersionPreview}
-      />
-
-      <AssessmentExportPanel
-        assessmentId={assessmentId}
-        workspaceId={assessment.workspaceId}
-        canEdit={canEdit}
-      />
-
-      {/* ── Stepper ── */}
-      <div className="rounded-2xl bg-muted/15 p-4">
-        <div className="mb-3 flex items-center justify-between gap-3">
-          <div>
-            <p className="text-foreground text-sm font-semibold">
-              <span className="text-muted-foreground font-normal">
-                Steg {slide + 1}/{stepLabels.length}
-              </span>
-              {" · "}
-              {stepLabels[slide]}
-            </p>
-            <p className="text-muted-foreground mt-1 text-xs">
-              {slide === stepLabels.length - 1
-                ? "Hele dette steget kan hoppes over — se forklaring øverst på siden."
-                : "Fyll ut det du trenger — resten er valgfritt."}
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            <AssessmentWizardSchemaHelp />
-            <select
-              id="wizard-step-jump"
-              className="border-input bg-background h-8 rounded-lg border px-2 text-xs shadow-sm"
-              value={slide}
-              onChange={(e) => emblaApi?.scrollTo(Number(e.target.value))}
-              aria-label="Hopp til steg"
-            >
-              {stepLabels.map((label, i) => (
-                <option key={label} value={i}>
-                  {i + 1}. {label}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
-        <div className="flex gap-1" aria-label="Fremdrift" role="navigation">
-          {stepLabels.map((label, i) => (
-            <button
-              key={label}
-              type="button"
-              aria-label={`Gå til ${label}`}
-              aria-current={slide === i ? "step" : undefined}
-              onClick={() => emblaApi?.scrollTo(i)}
-              className={cn(
-                "h-1.5 min-w-0 flex-1 rounded-full transition-all duration-200",
-                i < slide
-                  ? "bg-primary"
-                  : i === slide
-                    ? "bg-primary scale-y-[1.4]"
-                    : "bg-muted-foreground/20 hover:bg-muted-foreground/30",
-              )}
-            />
-          ))}
-        </div>
-      </div>
-
       <p id="wizard-gesture-hint" className="sr-only">
         Sveip horisontalt med finger, eller dra med mus på steget, for å gå til
         neste eller forrige hovedsteg.
       </p>
 
-      <div className="overflow-hidden rounded-2xl bg-card shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.06]">
+      <section
+        className="overflow-hidden rounded-2xl bg-card shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.06]"
+        aria-labelledby="wizard-step-heading"
+      >
+        <header className="border-border/60 bg-muted/20 border-b px-4 py-4 sm:px-6 sm:py-5">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div className="min-w-0">
+              <p className="text-muted-foreground text-[11px] font-semibold uppercase tracking-wider sm:text-xs">
+                Vurdering · {stepLabels.length} steg
+              </p>
+              <h2
+                id="wizard-step-heading"
+                className="font-heading text-foreground mt-1 text-lg font-semibold leading-snug sm:text-xl"
+              >
+                Steg {slide + 1} av {stepLabels.length}: {stepLabels[slide]}
+              </h2>
+              <p className="text-muted-foreground mt-1.5 max-w-2xl text-sm leading-relaxed">
+                {slide === stepLabels.length - 1
+                  ? "Siste steg kan hoppes over — se forklaring øverst på siden."
+                  : "Gå gjennom steg 1–" +
+                    stepLabels.length +
+                    " i rekkefølge. Fyll ut det du trenger — resten er valgfritt."}
+              </p>
+            </div>
+            <div className="flex shrink-0 flex-wrap items-center gap-2 sm:justify-end">
+              <AssessmentWizardSchemaHelp />
+              <label className="text-muted-foreground sr-only" htmlFor="wizard-step-jump">
+                Hopp til steg
+              </label>
+              <select
+                id="wizard-step-jump"
+                className="border-input bg-background h-9 max-w-full rounded-lg border px-2.5 text-xs shadow-sm sm:max-w-[16rem]"
+                value={slide}
+                onChange={(e) => emblaApi?.scrollTo(Number(e.target.value))}
+              >
+                {stepLabels.map((label, i) => (
+                  <option key={label} value={i}>
+                    Steg {i + 1}: {label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <nav
+            className="mt-4 flex gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] sm:flex-wrap sm:overflow-visible [&::-webkit-scrollbar]:hidden"
+            aria-label="Hovedsteg i vurderingen"
+          >
+            {stepLabels.map((label, i) => (
+              <button
+                key={label}
+                type="button"
+                aria-label={`Steg ${i + 1}: ${label}`}
+                aria-current={slide === i ? "step" : undefined}
+                onClick={() => emblaApi?.scrollTo(i)}
+                className={cn(
+                  "flex min-w-[calc(50%-0.25rem)] shrink-0 items-center gap-2 rounded-xl border px-2.5 py-2 text-left transition sm:min-w-0 sm:flex-1 sm:basis-0",
+                  i === slide
+                    ? "border-primary bg-primary/12 ring-primary/30 shadow-sm ring-2"
+                    : i < slide
+                      ? "border-primary/35 bg-primary/[0.07] hover:bg-primary/12"
+                      : "border-border/60 bg-background/60 hover:bg-muted/40",
+                )}
+              >
+                <span
+                  className={cn(
+                    "flex size-8 shrink-0 items-center justify-center rounded-full text-sm font-semibold tabular-nums",
+                    i === slide
+                      ? "bg-primary text-primary-foreground"
+                      : i < slide
+                        ? "bg-primary/25 text-primary"
+                        : "bg-muted text-muted-foreground",
+                  )}
+                >
+                  {i + 1}
+                </span>
+                <span className="text-foreground min-w-0 text-xs font-medium leading-snug">
+                  {label}
+                </span>
+              </button>
+            ))}
+          </nav>
+        </header>
+
         <div
           ref={emblaRef}
           className="cursor-grab touch-manipulation active:cursor-grabbing"
@@ -1165,29 +1157,11 @@ export function AssessmentWizard({ assessmentId }: Props) {
             <Slide>
               <div className="space-y-1">
                 <h2 className="text-foreground text-xl font-semibold sm:text-2xl">
-                  RPA-kandidat — start
+                  Kandidat og volum
                 </h2>
                 <p className="text-muted-foreground text-sm">
-                  Her kartlegger dere det som vanligvis inngår i en RPA-kandidatvurdering:{" "}
-                  <span className="text-foreground/90">
-                    forretningsverdi, volum og gjentakelse, og hvor mye manuelt arbeid som kan
-                    erstattes
-                  </span>{" "}
-                  (tilsvarende dimensjoner som i f.eks. UiPath Automation Hub og andre
-                  porteføljeverktøy). Dette styrer tallene i resultatet.{" "}
-                  {sourcedFromIntake ? (
-                    <>
-                      Spørsmål om gevinst, risiko og portefølje (for dialog med bestillere) fyller
-                      dere inn under <span className="text-foreground/90">Resultat</span> — samme
-                      som i inntak, ikke gjentatt som eget steg.
-                    </>
-                  ) : (
-                    <>
-                      Spørsmål om gevinst, risiko og portefølje fyller dere inn under steget{" "}
-                      <span className="text-foreground/90">Gevinst og drift</span> før dere ser
-                      modellresultat.
-                    </>
-                  )}
+                  Navn på jobben, omtrent hvor lang tid den tar og hvor ofte den gjøres — grovt
+                  anslag holder.
                 </p>
               </div>
               <div className="space-y-6">
@@ -1223,32 +1197,12 @@ export function AssessmentWizard({ assessmentId }: Props) {
                 <div className="space-y-4 rounded-2xl bg-muted/10 p-5 ring-1 ring-black/[0.04] dark:ring-white/[0.06]">
                   <div className="space-y-1">
                     <h3 className="text-base font-semibold text-foreground">
-                      Hvor mye tid bruker folk på dette i dag?
+                      Hvor mye tid tar dette i dag — og hvor ofte?
                     </h3>
                     <p className="text-sm text-muted-foreground">
-                      Robot lønner seg når <span className="text-foreground/90">mye</span> av det
-                      samme gjøres igjen og igjen. Da trenger vi et enkelt bilde av hvor mye
-                      manuelt arbeid som ligger her — dere trenger ikke være økonom for å svare.
+                      Velg én måte å svare på under.
                     </p>
                   </div>
-                  <div className="rounded-2xl border border-primary/15 bg-background/80 p-4">
-                    <p className="text-sm font-medium text-foreground">
-                      Hvorfor spør vi?
-                    </p>
-                    <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                      Svarene brukes til å regne ut omtrent hvor mange timer i året som kan ligge
-                      bak en robot (og dermed prioritering). Tomme felt her erstattes av det
-                      grove anslaget i spørsmålet om manuelt arbeid lenger ned på siden.
-                    </p>
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      <Badge variant="outline">Timer per år</Badge>
-                      <Badge variant="outline">Arbeidsmengde</Badge>
-                      <Badge variant="outline">Prioritering</Badge>
-                    </div>
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    Velg én av måtene under — bare den som passer best for dere.
-                  </p>
                   <div className="grid gap-3 md:grid-cols-2">
                     <button
                       type="button"
@@ -1267,12 +1221,10 @@ export function AssessmentWizard({ assessmentId }: Props) {
                       disabled={!canEdit}
                     >
                       <p className="text-sm font-semibold text-foreground">
-                        Jeg vet omtrent tid per gang og hvor ofte
+                        Tid per gang + hvor ofte
                       </p>
-                      <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                        Passer når dere kan si «så mange minutter/timer per oppgave» og «så mange
-                        ganger per dag, uke eller måned» — f.eks. journalnotat, bestilling,
-                        saksbehandling.
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        F.eks. 10 minutter og 40 ganger i uken.
                       </p>
                     </button>
                     <button
@@ -1298,11 +1250,10 @@ export function AssessmentWizard({ assessmentId }: Props) {
                       disabled={!canEdit}
                     >
                       <p className="text-sm font-semibold text-foreground">
-                        Jeg vet bare omtrent hvor mye stilling som går med
+                        Jeg tenker i årsverk / stilling
                       </p>
-                      <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                        Passer når dere tenker i «hvor mange heltidsår» eller «én halv stilling»
-                        — ikke minutter per oppgave. Vi forklarer årsverk under feltet.
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        F.eks. «omtrent en halv stilling».
                       </p>
                     </button>
                   </div>
@@ -1522,8 +1473,8 @@ export function AssessmentWizard({ assessmentId }: Props) {
                 </div>
                 <LikertField
                   id="quick-automation"
-                  label="Hvor mye manuelt, gjentakende arbeid kan en robot realistisk ta over?"
-                  hint="RPA erstatter konkrete tastetrykk og overføringer — jo mer slikt arbeid, jo sterkere kandidat (prosessvolum og -karakter)."
+                  label="Hvor mye av jobben er gjentakende manuelt arbeid (tasting, kopiering)?"
+                  hint="Jo mer som gjøres likt om igjen, jo mer kan ofte spares."
                   value={clampLikert5(
                     payload.baselineHours >= 1800
                       ? 5
@@ -1547,155 +1498,27 @@ export function AssessmentWizard({ assessmentId }: Props) {
                   ]}
                   disabled={readOnly}
                 />
-                <div className="grid gap-3 sm:grid-cols-4">
-                  <ScoreCard
-                    label="Saker / år"
-                    value={
-                      annualCasesEstimate === null
-                        ? "—"
-                        : String(Math.round(annualCasesEstimate))
-                    }
-                    sub="Utledet fra volum"
-                  />
-                  <ScoreCard
-                    label="Timer / år"
-                    value={String(Math.round(payload.baselineHours))}
-                    sub={
-                      derivedBaselineHoursEstimate !== null
-                        ? "Utledet fra tallgrunnlag"
-                        : "Raskt anslag"
-                    }
-                  />
-                  <ScoreCard
-                    label="FTE"
-                    value={computed ? computed.fte.toFixed(2) : "—"}
-                    sub="Beregnet behov"
-                  />
-                  <ScoreCard
-                    label="Datastruktur"
-                    value={`${payload.structuredInput}/5`}
-                    sub="Justeres automatisk"
-                  />
-                  <ScoreCard
-                    label="Digitalisering"
-                    value={`${payload.digitization}/5`}
-                    sub="Justeres automatisk"
-                  />
-                </div>
               </div>
             </Slide>
 
             <Slide>
-              <div className="space-y-1">
-                <h2 className="text-foreground text-xl font-semibold sm:text-2xl">
-                  Prosess og systemer (RPA-egnethet)
-                </h2>
-                <p className="text-muted-foreground text-sm">
-                  Her vurderer dere typiske RPA-kriterier:{" "}
-                  <span className="text-foreground/90">
-                    strukturerte data, forutsigbare regler vs. unntak, stabile systemer og digital
-                    flyt
-                  </span>{" "}
-                  — i tråd med det som brukes i bl.a. UiPath sitt detaljerte vurderingsopplegg og
-                  tilsvarende CoE-maler. Formulert for alle roller (ikke IT-språk).
-                </p>
-              </div>
-              <div className="space-y-8">
-                <LikertField
-                  id="fit-structured-input"
-                  label="Dataattributter: kommer opplysningene som strukturerte felt, eller mest fritekst og skjermbilder?"
-                  hint="I RPA-vurdering vektlegges strukturerte inndata — ustrukturert tekst krever ofte ekstra løsninger."
-                  value={clampLikert5(payload.structuredInput)}
-                  onChange={(v) => update("structuredInput", v)}
-                  left="Mye fritekst / uklart"
-                  right="For det meste faste felt"
-                  scaleLabels={["Mye fritekst", "Mest fritekst", "Blanding", "Mest felt", "Nesten bare felt"]}
-                  disabled={readOnly}
-                />
-                <LikertField
-                  id="fit-variability"
-                  label="Prosessattributter: følger flyten mest faste regler, eller mange unntak og skjønn?"
-                  hint="RPA passer best for regelstyrte, repeterbare steg — mange unntak svekker egnetheten."
-                  value={clampLikert5(payload.processVariability)}
-                  onChange={(v) => update("processVariability", v)}
-                  left="Svært ulike"
-                  right="Nesten like hver gang"
-                  scaleLabels={["Svært ulike", "Ganske ulike", "Blandet", "Ganske like", "Nesten like"]}
-                  disabled={readOnly}
-                />
-                <LikertField
-                  id="fit-stability"
-                  label="Teknologi og stabilitet: endrer rutiner og systembilder seg ofte, eller er det stabilt?"
-                  hint="Ustabile applikasjoner og hyppige UI-endringer øker vedlikehold — vanlig vurderingspunkt i RPA."
-                  value={clampLikert5(
-                    Math.round((payload.processStability + payload.applicationStability) / 2),
-                  )}
-                  onChange={(v) =>
-                    updateMany({
-                      processStability: v,
-                      applicationStability: v,
-                    })
-                  }
-                  left="Endrer seg ofte"
-                  right="Stabilt"
-                  scaleLabels={["Endrer seg ofte", "Noe ustabilt", "Middels", "Ganske stabilt", "Svært stabilt"]}
-                  disabled={readOnly}
-                />
-                <LikertField
-                  id="fit-digital"
-                  label="Digital modenhet: går arbeidet mest på papir og skanning, eller digitalt?"
-                  hint="Digital prosess gir enklere automatisering; papir og skanning er vanlige RPA-begrensninger."
-                  value={clampLikert5(payload.digitization)}
-                  onChange={(v) => update("digitization", v)}
-                  left="Mye papir"
-                  right="Helt digitalt"
-                  scaleLabels={["Mye papir", "Mest papir", "Blandet", "Mest digitalt", "Helt digitalt"]}
-                  disabled={readOnly}
-                />
-                <div className="rounded-2xl bg-muted/10 p-4 ring-1 ring-black/[0.04] dark:ring-white/[0.06]">
-                  <div className="flex items-start gap-3">
-                    <Checkbox
-                      id="fit-ocr"
-                      checked={payload.ocrRequired}
-                      onCheckedChange={(c) =>
-                        canEdit && update("ocrRequired", c === true)
-                      }
-                      disabled={!canEdit}
-                      className="mt-0.5"
-                    />
-                    <div>
-                      <Label htmlFor="fit-ocr" className="text-sm font-medium">
-                        Må tekst leses ut av skannede bilder eller bilder av dokumenter?
-                      </Label>
-                      <p className="text-muted-foreground mt-1 text-xs leading-relaxed">
-                        Hvis ja, er det ofte tyngre enn når alt ligger som tekst og felt fra før.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </div>
+              <AssessmentProcessSimpleStep
+                payload={payload}
+                canEdit={canEdit}
+                readOnly={readOnly}
+                update={update}
+                updateMany={updateMany}
+              />
             </Slide>
 
-            {!sourcedFromIntake ? (
-              <Slide>
-                <div className="space-y-1">
-                  <h2 className="text-foreground text-xl font-semibold sm:text-2xl">
-                    Gevinst, kompleksitet og drift
-                  </h2>
-                  <p className="text-muted-foreground text-sm">
-                    Tillegg til modellberegningen: forretningskasse, gjennomføring, hindringer og
-                    drift — typisk i RPA-porteføljer. Samme type spørsmål som i inntaksskjema.
-                    Endrer ikke modellscore automatisk.
-                  </p>
-                </div>
-                <AssessmentPortfolioSummarySection
-                  payload={payload}
-                  canEdit={canEdit}
-                  readOnly={readOnly}
-                  update={update}
-                />
-              </Slide>
-            ) : null}
+            <Slide>
+              <AssessmentValueImpactStep
+                payload={payload}
+                canEdit={canEdit}
+                readOnly={readOnly}
+                update={update}
+              />
+            </Slide>
 
             <Slide>
               <div className="space-y-1">
@@ -1703,111 +1526,56 @@ export function AssessmentWizard({ assessmentId }: Props) {
                   Resultat
                 </h2>
                 <p className="text-muted-foreground text-sm">
-                  {sourcedFromIntake ? (
-                    <>
-                      Først kort beslutningsgrunnlag (samme spørsmål som i inntak) — deretter
-                      modellbasert score fra kandidat/volum og prosess/system. Porteføljefeltene
-                      endrer ikke modelltallene direkte; de støtter prioritering og dialog med
-                      bestillere.
-                    </>
-                  ) : (
-                    <>
-                      Modellbasert score fra kandidat/volum og prosess/system. Beslutningsgrunnlag
-                      (gevinst, risiko, portefølje) fylte dere inn under «Gevinst og drift».
-                    </>
-                  )}
+                  En enkel oppsummering. Tallene under er fra det dere har svart — ikke en
+                  fasit.
                 </p>
               </div>
               <div className="space-y-6">
-                {sourcedFromIntake ? (
-                  <AssessmentPortfolioSummarySection
-                    payload={payload}
-                    canEdit={canEdit}
-                    readOnly={readOnly}
-                    update={update}
-                  />
-                ) : null}
-              {computed ? (
-                <div className="space-y-6">
+                {computed ? (
                   <QuickResultHero
                     computed={computed}
                     workspaceId={assessment.workspaceId}
                     title={titleDraft.trim() || assessment.title}
                     payload={payload}
                   />
-                  <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-                    <ScoreCard
-                      label="Kategori"
-                      value={
-                        computed.priorityScore >= 60
-                          ? "Høy"
-                          : computed.priorityScore >= 35
-                            ? "Middels"
-                            : "Lav"
-                      }
-                      sub="Samlet vurdering"
-                    />
-                    <ScoreCard
-                      label="Automasjon"
-                      value={`${computed.ap.toFixed(0)} %`}
-                      sub="Volum + prosess/system"
-                    />
-                    <ScoreCard
-                      label="Nytte & risiko"
-                      value={`${computed.criticality.toFixed(0)} %`}
-                      sub="Gevinst og compliance (modell)"
-                    />
-                    <ScoreCard
-                      label="Anbefaling"
-                      value={computed.priorityScore >= 35 ? "Gå til ROS" : "Ikke prioritert"}
-                      sub={
-                        computed.priorityScore >= 35
-                          ? "Verdt å gå videre med"
-                          : "Bør vente eller vurderes senere"
-                      }
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <div className="flex justify-between gap-3 text-sm">
-                      <span className="text-muted-foreground">
-                        Gjennomførbarhet (prosesslengde, systemer m.m.)
-                      </span>
-                      <span className="shrink-0 font-semibold tabular-nums">
-                        {computed.ease.toFixed(1)} % · {computed.easeLabel}
-                      </span>
-                    </div>
-                    <Progress value={computed.ease}>
-                      <div className="flex w-full justify-between gap-2 pb-2">
-                        <ProgressLabel className="text-muted-foreground">
-                          Mindre realistisk
-                        </ProgressLabel>
-                        <ProgressLabel className="text-muted-foreground">
-                          Mer realistisk
-                        </ProgressLabel>
-                      </div>
-                    </Progress>
-                  </div>
-                </div>
-              ) : null}
+                ) : null}
               </div>
             </Slide>
 
             <Slide>
               <div className="space-y-2">
                 <h2 className="text-foreground text-xl font-semibold sm:text-2xl">
-                  Ekstra informasjon
+                  Valgfritt mer
                 </h2>
                 <p className="text-muted-foreground text-sm leading-relaxed">
-                  <span className="text-foreground/90 font-medium">
-                    Du trenger ikke fylle ut noe her
-                  </span>{" "}
-                  for at vurderingen skal være «ferdig»: resultatet bygger på de foregående
-                  stegene. Åpne en seksjon under bare når du vil utdype prosessen, finjustere
-                  tall i modellen, fylle inn ROS/personvern eller samarbeide med team og milepæler.
+                  <span className="text-foreground/90 font-medium">Alt her er valgfritt.</span>{" "}
+                  Bruk det når dere vil utdype, justere tall eller samarbeide tettere.
                 </p>
               </div>
               <div className="space-y-6">
                 <Accordion multiple defaultValue={[]} className="space-y-3">
+                  <AccordionItem
+                    value="details-portfolio-extra"
+                    className="rounded-2xl bg-muted/10 px-4 ring-1 ring-black/[0.04] dark:ring-white/[0.06]"
+                  >
+                    <AccordionTrigger className="py-4 text-left text-sm font-semibold hover:no-underline">
+                      Utdypende beslutningsspørsmål (valgfritt)
+                    </AccordionTrigger>
+                    <AccordionContent className="pb-4">
+                      <p className="text-muted-foreground mb-4 text-xs">
+                        Samme type spørsmål som i inntak — for portefølje og dialog. Påvirker ikke
+                        hovedtallene direkte.
+                      </p>
+                      <AssessmentPortfolioSummarySection
+                        payload={payload}
+                        canEdit={canEdit}
+                        readOnly={readOnly}
+                        update={update}
+                        omitCoreValueLikerts
+                      />
+                    </AccordionContent>
+                  </AccordionItem>
+
                   <AccordionItem
                     value="details-process"
                     className="rounded-2xl bg-muted/10 px-4 ring-1 ring-black/[0.04] dark:ring-white/[0.06]"
@@ -2112,6 +1880,21 @@ export function AssessmentWizard({ assessmentId }: Props) {
             </Slide>
           </div>
         </div>
+      </section>
+
+      <div className="space-y-3">
+        <AssessmentWizardMeta
+          collaborators={collaborators}
+          versions={versions}
+          draftUpdatedAt={data?.draft?.updatedAt}
+          onOpenTeamAndVersions={openTeamAndVersions}
+          onPickVersionPreview={onPickVersionPreview}
+        />
+        <AssessmentExportPanel
+          assessmentId={assessmentId}
+          workspaceId={assessment.workspaceId}
+          canEdit={canEdit}
+        />
       </div>
 
       <Dialog
@@ -2271,6 +2054,12 @@ export function AssessmentWizard({ assessmentId }: Props) {
   );
 }
 
+function riskLevelLabel(criticality: number): "Høy" | "Middels" | "Lav" {
+  if (criticality >= 60) return "Høy";
+  if (criticality >= 38) return "Middels";
+  return "Lav";
+}
+
 function QuickResultHero({
   computed,
   workspaceId,
@@ -2282,110 +2071,105 @@ function QuickResultHero({
   title: string;
   payload: AssessmentPayload;
 }) {
+  const potensialBand: "Høy" | "Middels" | "Lav" =
+    computed.priorityScore >= 60 ? "Høy" : computed.priorityScore >= 35 ? "Middels" : "Lav";
+
   const tier =
-    computed.priorityScore >= 60
+    potensialBand === "Høy"
       ? {
-          label: "Høyt potensial",
-          summary:
-            "Volum og prosess/system peker på en sterk RPA-kandidat i tråd med vanlige vurderingskriterier.",
+          headline: "Høy prioritet",
+          hint: "Mye manuelt arbeid og/eller sterk nytte i forhold til hvor enkel jobben er å automatisere.",
           action: "Gå videre til ROS",
           tone:
             "from-emerald-500/[0.14] via-background to-primary/[0.08] ring-emerald-500/20",
         }
-      : computed.priorityScore >= 35
+      : potensialBand === "Middels"
         ? {
-            label: "Middels potensial",
-            summary:
-              "Kandidaten kan være aktuell — vurder nærmere mot RPA-kriterier (data, regler, systemer, gevinst).",
+            headline: "Middels prioritet",
+            hint: "Kan være verdt å se nærmere på — avklar gjerne volum og hvor stabilt opplegget er.",
             action: "Gå videre til ROS",
             tone:
               "from-amber-500/[0.14] via-background to-primary/[0.06] ring-amber-500/20",
           }
         : {
-            label: "Lavt potensial",
-            summary:
-              "Modellen tilsier lav prioritet: sjekk volum, manuelt arbeid og prosess-/systemegnethet før RPA.",
-            action: "Ikke prioritert",
+            headline: "Lav prioritet",
+            hint: "Ifølge det dere har svart, ligger andre saker ofte foran i køen.",
+            action: "Vent eller vurder på nytt senere",
             tone:
               "from-slate-500/[0.12] via-background to-muted/30 ring-black/[0.06] dark:ring-white/[0.06]",
           };
 
   const summaryLine =
     payload.processDescription?.trim() || payload.processName?.trim() || title;
+  const hoursSaved = Math.max(0, Math.round(computed.benH));
+  const risk = riskLevelLabel(computed.criticality);
 
   return (
     <div
       className={cn(
-        "rounded-3xl bg-gradient-to-br p-5 shadow-sm ring-1",
+        "rounded-3xl bg-gradient-to-br p-5 shadow-sm ring-1 sm:p-6",
         tier.tone,
       )}
     >
-      <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
-        <div className="max-w-2xl space-y-3">
-          <div className="inline-flex items-center gap-2 rounded-full bg-background/80 px-3 py-1 text-[11px] font-semibold text-muted-foreground shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.08]">
-            <Sparkles className="size-3.5 text-primary" />
-            Kandidat + prosess/system
+      <div className="space-y-5">
+        <div className="space-y-2">
+          <p className="font-heading text-2xl font-semibold tracking-tight text-foreground">
+            {tier.headline}
+          </p>
+          <p className="text-muted-foreground text-sm leading-relaxed">
+            {tier.hint}
+            {!computed.feasible ? " Stabilitet i prosess/system bør avklares før dere starter." : ""}
+          </p>
+          <p className="text-foreground/90 text-sm font-medium">{summaryLine}</p>
+        </div>
+
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div className="rounded-2xl bg-background/85 px-4 py-4 shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.08]">
+            <p className="text-muted-foreground text-xs font-semibold">Potensial</p>
+            <p className="font-heading mt-1 text-2xl font-semibold text-foreground">
+              {potensialBand}
+            </p>
           </div>
-          <div>
-            <p className="font-heading text-2xl font-semibold tracking-tight text-foreground">
-              {tier.label}
-            </p>
-            <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-              {tier.summary}
-              {!computed.feasible
-                ? " Stabilitet virker fortsatt svak, så avklar teknikk og prosess før oppstart."
-                : ""}
+          <div className="rounded-2xl bg-background/85 px-4 py-4 shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.08]">
+            <p className="text-muted-foreground text-xs font-semibold">Timer spart (ca.)</p>
+            <p className="font-heading mt-1 text-2xl font-semibold tabular-nums text-foreground">
+              {hoursSaved} <span className="text-base font-medium">t/år</span>
             </p>
           </div>
-          <div className="rounded-2xl bg-background/70 px-4 py-3 shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.08]">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-              Vurdering
+          <div className="rounded-2xl bg-background/85 px-4 py-4 shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.08]">
+            <p className="text-muted-foreground text-xs font-semibold">Risiko og viktighet</p>
+            <p className="font-heading mt-1 text-2xl font-semibold text-foreground">{risk}</p>
+            <p className="text-muted-foreground mt-1 text-[11px]">Fra gevinst og konsekvens av feil</p>
+          </div>
+          <div className="rounded-2xl bg-background/85 px-4 py-4 shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.08]">
+            <p className="text-muted-foreground text-xs font-semibold">Automasjonspotensial</p>
+            <p className="font-heading mt-1 text-2xl font-semibold tabular-nums text-foreground">
+              {computed.ap.toFixed(0)}%
             </p>
-            <p className="mt-1 text-sm font-medium text-foreground">
-              {summaryLine}
-            </p>
+            <p className="text-muted-foreground mt-1 text-[11px]">Hvor mye som kan automatiseres av dagens manuelle tid</p>
           </div>
         </div>
 
-        <div className="flex w-full max-w-sm flex-col gap-3">
-          <div className="grid gap-3 sm:grid-cols-2">
-            <div className="rounded-2xl bg-background/80 px-4 py-3 shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.08]">
-              <div className="flex items-center gap-2">
-                <Target className="size-4 text-primary" />
-                <p className="text-xs font-semibold text-muted-foreground">
-                  Prioritet
-                </p>
-              </div>
-              <p className="font-heading mt-2 text-2xl font-semibold text-foreground">
-                {computed.priorityScore.toFixed(0)}
-              </p>
-            </div>
-            <div className="rounded-2xl bg-background/80 px-4 py-3 shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.08]">
-              <div className="flex items-center gap-2">
-                <CircleGauge className="size-4 text-primary" />
-                <p className="text-xs font-semibold text-muted-foreground">
-                  Gjennomførbarhet
-                </p>
-              </div>
-              <p className="font-heading mt-2 text-2xl font-semibold text-foreground">
-                {computed.ease.toFixed(0)} %
-              </p>
-            </div>
-          </div>
+        <p className="text-muted-foreground text-[11px]">
+          Prioritetsscore (internt): {computed.priorityScore.toFixed(0)} av 100 — brukes til
+          sortering, ikke som eneste beslutning.
+        </p>
 
-          {computed.priorityScore >= 35 ? (
-            <Link
-              href={`/w/${workspaceId}/ros`}
-              className={cn(buttonVariants({ size: "sm" }), "h-11 rounded-xl")}
-            >
-              {tier.action}
-            </Link>
-          ) : (
-            <div className="rounded-2xl bg-background/80 px-4 py-3 text-sm font-semibold text-foreground shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.08]">
-              {tier.action}
-            </div>
-          )}
-        </div>
+        {computed.priorityScore >= 35 ? (
+          <Link
+            href={`/w/${workspaceId}/ros`}
+            className={cn(
+              buttonVariants({ size: "default" }),
+              "h-12 w-full rounded-xl text-base sm:w-auto",
+            )}
+          >
+            {tier.action}
+          </Link>
+        ) : (
+          <div className="rounded-2xl bg-background/85 px-4 py-3 text-center text-sm font-semibold text-foreground shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.08]">
+            {tier.action}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -2411,24 +2195,3 @@ function Slide({
   );
 }
 
-function ScoreCard({
-  label,
-  value,
-  sub,
-}: {
-  label: string;
-  value: string;
-  sub?: string;
-}) {
-  return (
-    <div className="rounded-xl border bg-muted/30 px-4 py-3">
-      <p className="text-muted-foreground text-xs">{label}</p>
-      <p className="font-heading text-xl font-semibold">{value}</p>
-      {sub ? (
-        <p className="text-muted-foreground mt-1 text-[11px] leading-snug">
-          {sub}
-        </p>
-      ) : null}
-    </div>
-  );
-}

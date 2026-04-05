@@ -1,27 +1,22 @@
 /**
- * Full veiviser: eget steg for beslutningsgrunnlag når vurderingen ikke kommer fra inntak.
+ * Én fast flyt for alle vurderinger (også fra inntak).
+ * Steg 3 samler verdi; utfyllende porteføljespørsmål ligger valgfritt under steg 5.
  */
-export const ASSESSMENT_WIZARD_STEP_LABELS_WITH_PORTFOLIO = [
+export const ASSESSMENT_WIZARD_STEP_LABELS = [
   "Kandidat og volum",
   "Prosess og systemer",
-  "Gevinst og drift",
+  "Verdi og effekt",
   "Resultat",
-  "Detaljer",
+  "Valgfritt mer",
 ] as const;
 
-/**
- * Etter godkjent inntak: samme felt som i skjema, samlet under Resultat (ikke eget hovedsteg).
- */
-export const ASSESSMENT_WIZARD_STEP_LABELS_FROM_INTAKE = [
-  "Kandidat og volum",
-  "Prosess og systemer",
-  "Resultat",
-  "Detaljer",
-] as const;
+/** @deprecated Bruk ASSESSMENT_WIZARD_STEP_LABELS */
+export const ASSESSMENT_WIZARD_STEP_LABELS_WITH_PORTFOLIO =
+  ASSESSMENT_WIZARD_STEP_LABELS;
 
-/** @deprecated Bruk WITH_PORTFOLIO eller FROM_INTAKE avhengig av `assessment.sourcedFromIntake` */
-export const ASSESSMENT_WIZARD_STEP_LABELS = ASSESSMENT_WIZARD_STEP_LABELS_FROM_INTAKE;
+/** @deprecated Bruk ASSESSMENT_WIZARD_STEP_LABELS */
+export const ASSESSMENT_WIZARD_STEP_LABELS_FROM_INTAKE =
+  ASSESSMENT_WIZARD_STEP_LABELS;
 
 export type AssessmentWizardStepLabel =
-  | (typeof ASSESSMENT_WIZARD_STEP_LABELS_WITH_PORTFOLIO)[number]
-  | (typeof ASSESSMENT_WIZARD_STEP_LABELS_FROM_INTAKE)[number];
+  (typeof ASSESSMENT_WIZARD_STEP_LABELS)[number];

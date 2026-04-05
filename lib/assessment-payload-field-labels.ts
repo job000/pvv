@@ -27,7 +27,7 @@ export const ASSESSMENT_PAYLOAD_FIELD_LABELS_NB: Record<string, string> = {
   workingDays: "Arbeidsdager/år",
   workingHoursPerDay: "Timer per dag",
   employees: "Antall involverte",
-  criticalityBusinessImpact: "Konsekvens ved stopp",
+  criticalityBusinessImpact: "Forventet gevinst (skala)",
   criticalityRegulatoryRisk: "Regelkrav",
   hfOperationsSupportLevel: "Driftsstøttenivå",
   hfSecurityInformationNotes: "Sikkerhet og informasjon",
@@ -45,6 +45,8 @@ export const ASSESSMENT_PAYLOAD_FIELD_LABELS_NB: Record<string, string> = {
   rpaLifecycleContact: "Kontaktperson til produksjon",
   rpaManualFallbackWhenRobotFails: "Manuell reserve ved robotfeil",
   rpaBenefitKindsAndOperationsNotes: "Gevinst, tid og drift (fritekst)",
+  valuePainPointIds: "Problemer i dag (flervalg)",
+  valueGainIds: "Forventet forbedring (flervalg)",
 };
 
 export function labelAssessmentPayloadField(key: string): string {

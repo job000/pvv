@@ -215,17 +215,40 @@ export function perEmployee(
   return companyTotal / numberOfEmployees;
 }
 
+/** Maks antall valg per flervelgsliste i verdisteg (synk med UI). */
+const MAX_VALUE_TAG_OPTIONS = 6;
+
+/**
+ * 0–1 fra antall valgte problemer/forbedringer — brukes som moderat løft i criticality
+ * slik at flervalget samsvarer med tallene brukeren ser.
+ */
+export function valueTagContextUnit01(painCount: number, gainCount: number): number {
+  const p =
+    Math.min(Math.max(painCount, 0), MAX_VALUE_TAG_OPTIONS) / MAX_VALUE_TAG_OPTIONS;
+  const g =
+    Math.min(Math.max(gainCount, 0), MAX_VALUE_TAG_OPTIONS) / MAX_VALUE_TAG_OPTIONS;
+  return (p + g) / 2;
+}
+
 export function criticalityPercent(args: {
   businessImpact: Likert5;
   regulatoryRisk: Likert5;
   manualHoursPerYear: number;
+  /** 0–1 fra flervalg under verdi (problem/gevinst); maks. +8 prosentpoeng */
+  valueContext01?: number;
 }): number {
   const bi = likert5ToUnit01(args.businessImpact);
   const rr = likert5ToUnit01(args.regulatoryRisk);
   const cap = 2500;
   const h = Math.min(Math.max(args.manualHoursPerYear / cap, 0), 1);
   const raw = 0.42 * h + 0.33 * bi + 0.25 * rr;
-  return Math.round(raw * 1000) / 10;
+  let pct = Math.round(raw * 1000) / 10;
+  const ctx = args.valueContext01 ?? 0;
+  if (ctx > 0) {
+    const bump = ctx * 8;
+    pct = Math.min(100, Math.round((pct + bump) * 10) / 10);
+  }
+  return pct;
 }
 
 export type AssessmentInputSnapshot = {
@@ -249,6 +272,8 @@ export type AssessmentInputSnapshot = {
   employees: number;
   criticalityBusinessImpact: Likert5;
   criticalityRegulatoryRisk: Likert5;
+  /** 0–1 fra valuePainPointIds + valueGainIds */
+  valueContext01: number;
 };
 
 export type ComputedSnapshot = {
@@ -305,6 +330,7 @@ export function computeAllResults(input: AssessmentInputSnapshot): ComputedSnaps
     businessImpact: input.criticalityBusinessImpact,
     regulatoryRisk: input.criticalityRegulatoryRisk,
     manualHoursPerYear: hoursY,
+    valueContext01: input.valueContext01,
   });
   const fte = fteRequired({
     totalHoursPerYear: hoursY,

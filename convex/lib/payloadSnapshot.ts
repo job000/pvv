@@ -1,5 +1,6 @@
 import {
   clampLikert5,
+  valueTagContextUnit01,
   type AssessmentInputSnapshot,
 } from "./rpaScoring";
 
@@ -25,6 +26,7 @@ const SNAPSHOT_DEFAULTS: AssessmentInputSnapshot = {
   employees: 3,
   criticalityBusinessImpact: 3,
   criticalityRegulatoryRisk: 3,
+  valueContext01: 0,
 };
 
 function readNum(
@@ -55,6 +57,14 @@ function readBool(p: Record<string, unknown>, key: string, fallback: boolean) {
   return fallback;
 }
 
+function readStringIdArray(p: Record<string, unknown>, key: string): string[] {
+  const v = p[key];
+  if (!Array.isArray(v)) {
+    return [];
+  }
+  return v.filter((x): x is string => typeof x === "string" && x.length > 0);
+}
+
 export function payloadToSnapshot(
   p: Record<string, unknown>,
 ): AssessmentInputSnapshot {
@@ -71,6 +81,10 @@ export function payloadToSnapshot(
     0.01,
     readNum(p, "employees", SNAPSHOT_DEFAULTS.employees),
   );
+
+  const painIds = readStringIdArray(p, "valuePainPointIds");
+  const gainIds = readStringIdArray(p, "valueGainIds");
+  const valueContext01 = valueTagContextUnit01(painIds.length, gainIds.length);
 
   return {
     processName: String(p.processName ?? SNAPSHOT_DEFAULTS.processName),
@@ -122,5 +136,6 @@ export function payloadToSnapshot(
         SNAPSHOT_DEFAULTS.criticalityRegulatoryRisk,
       ),
     ),
+    valueContext01,
   };
 }

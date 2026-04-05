@@ -233,6 +233,16 @@ export function IntakePublicForm({ token }: { token: string }) {
     title: string;
     shouldCreateRos: boolean;
     confirmationMode?: "none" | "email_copy";
+    screening: {
+      headline: string;
+      body: string;
+      valueLine: string;
+      priorityBand: "hoy" | "middels" | "lav";
+      priorityScore: number;
+      automationPercent: number;
+      hoursSavedEstimate: number;
+      feasible: boolean;
+    };
   } | null>(null);
   const openData =
     data && data.kind === "open"
@@ -496,22 +506,45 @@ export function IntakePublicForm({ token }: { token: string }) {
             <div className="mx-auto mb-3 flex size-14 items-center justify-center rounded-full bg-emerald-500/10">
               <CheckCircle2 className="size-7 text-emerald-600" />
             </div>
-            <CardTitle>Takk for innsendingen</CardTitle>
+            <CardTitle>Takk for henvendelsen</CardTitle>
             <CardDescription>
-              Forslaget er sendt inn til gjennomgang før det eventuelt blir opprettet
-              vurdering og ROS.
+              Vi har mottatt forslaget ditt. Under ser du et <strong>foreløpig anslag</strong>{" "}
+              basert på de samme enkle reglene som i vår vurdering — ikke en endelig
+              beslutning.
             </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-3 text-center text-sm text-muted-foreground">
-            <p>Foreslått sak: {submitted.title}</p>
-            <p>
-              {submitted.shouldCreateRos
-                ? "Svarene peker på mulig behov for ROS."
-                : "Svarene er registrert som forslag til vurdering."}
-            </p>
-            {submitted.confirmationMode === "email_copy" ? (
-              <p>En kopi av svarene dine blir sendt til e-posten du oppga.</p>
-            ) : null}
+          <CardContent className="space-y-5 text-left text-sm">
+            <div className="rounded-2xl border border-border/60 bg-muted/20 px-4 py-4 dark:border-white/10">
+              <p className="font-heading text-base font-semibold text-foreground">
+                {submitted.screening.headline}
+              </p>
+              <p className="mt-2 leading-relaxed text-muted-foreground">
+                {submitted.screening.body}
+              </p>
+              <p className="mt-3 text-foreground/90">{submitted.screening.valueLine}</p>
+              <p className="mt-3 text-xs text-muted-foreground">
+                Automatiseringsscore (ca.): {Math.round(submitted.screening.automationPercent)}%
+                {" · "}
+                Prioritetstall (internt): {submitted.screening.priorityScore.toFixed(0)} av 100
+              </p>
+            </div>
+            <div className="space-y-2 text-center text-muted-foreground">
+              <p>
+                <span className="font-medium text-foreground">Sak:</span> {submitted.title}
+              </p>
+              <p>
+                {submitted.shouldCreateRos
+                  ? "Svarene kan tyde på behov for risikovurdering (ROS) — vi vurderer det når vi har lest gjennom."
+                  : "Alt er lagret som forslag til gjennomgang hos oss."}
+              </p>
+              <p className="text-pretty">
+                Vi tar kontakt så snart vi har gått gjennom kandidaten du har sendt inn. Trenger
+                du å følge opp før det, bruk kontaktkanalen dere vanligvis bruker til oss.
+              </p>
+              {submitted.confirmationMode === "email_copy" ? (
+                <p>En kopi av svarene dine sendes til e-posten du oppga.</p>
+              ) : null}
+            </div>
           </CardContent>
         </Card>
         </div>

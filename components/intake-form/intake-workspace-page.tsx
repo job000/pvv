@@ -30,6 +30,15 @@ import {
   defaultIntakeQuestions,
   detectTechnicalTerms,
 } from "@/lib/intake-form";
+import {
+  DEFAULT_ROS_COL_LABELS,
+  RPA_INTAKE_ROS_COL_AXIS,
+  RPA_INTAKE_ROS_ROW_AXIS,
+  RPA_INTAKE_ROS_ROW_DESCRIPTIONS,
+  RPA_INTAKE_ROS_ROW_LABELS,
+  RPA_INTAKE_ROS_TEMPLATE_DESCRIPTION,
+  RPA_INTAKE_ROS_TEMPLATE_NAME,
+} from "@/lib/ros-defaults";
 import { effectiveGithubDefaultRepos } from "@/lib/github-workspace-helpers";
 import { cn } from "@/lib/utils";
 import { toastDeleteWithUndo } from "@/lib/toast-delete-undo";
@@ -40,8 +49,6 @@ import {
   ChevronDown,
   ChevronUp,
   ClipboardCheck,
-  Eye,
-  EyeOff,
   ExternalLink,
   FileText,
   GitBranch,
@@ -56,7 +63,7 @@ import {
   XCircle,
 } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 type EditableQuestion = {
   id: string;
@@ -85,6 +92,8 @@ type EditableQuestion = {
     | { kind: "pvvPersonalData" }
     | { kind: "assessmentRpaBarrier" }
     | { kind: "assessmentRpaSimilar" }
+    | { kind: "assessmentStabilityBoth" }
+    | { kind: "assessmentScaleInvertedLength" }
   >;
 };
 
@@ -701,6 +710,61 @@ function AdminFormPreview({
   );
 }
 
+function FormWorkspaceDisclosure({
+  instanceId,
+  open,
+  onToggle,
+  title,
+  description,
+  trailing,
+  children,
+}: {
+  instanceId: string;
+  open: boolean;
+  onToggle: () => void;
+  title: string;
+  description: string;
+  trailing?: ReactNode;
+  children: ReactNode;
+}) {
+  const triggerId = `form-workspace-disclosure-${instanceId}-trigger`;
+  const contentId = `form-workspace-disclosure-${instanceId}-panel`;
+  return (
+    <div className="border-border/50 bg-background/70 overflow-hidden rounded-2xl border">
+      <button
+        type="button"
+        id={triggerId}
+        aria-expanded={open}
+        aria-controls={contentId}
+        onClick={onToggle}
+        className="hover:bg-muted/35 flex w-full items-center gap-3 px-3 py-3.5 text-left transition-colors sm:px-4"
+      >
+        <ChevronDown
+          className={cn(
+            "text-muted-foreground size-5 shrink-0 transition-transform duration-200 ease-out",
+            open && "rotate-180",
+          )}
+          aria-hidden
+        />
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-medium">{title}</p>
+          <p className="text-muted-foreground text-xs leading-snug">{description}</p>
+        </div>
+        {trailing ? <div className="shrink-0">{trailing}</div> : null}
+      </button>
+      <div
+        id={contentId}
+        role="region"
+        aria-labelledby={triggerId}
+        hidden={!open}
+        className="border-border/40 border-t"
+      >
+        {open ? <div className="p-3 pt-3 sm:p-4 sm:pt-4">{children}</div> : null}
+      </div>
+    </div>
+  );
+}
+
 export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspaces"> }) {
   const formsQuery = useQuery(api.intakeForms.listByWorkspace, { workspaceId });
   const myWorkspacesQuery = useQuery(api.workspaces.listMine, {});
@@ -738,6 +802,9 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
   );
 
   const [selectedFormId, setSelectedFormId] = useState<Id<"intakeForms"> | null>(null);
+  /** True mens redigeringsvinduet er for et helt nytt skjema — ikke opprettet i databasen før bruker trykker «Opprett skjema». */
+  const [isCreatingNewForm, setIsCreatingNewForm] = useState(false);
+  const selectedFormIdBeforeCreateRef = useRef<Id<"intakeForms"> | null>(null);
   const [editorOpen, setEditorOpen] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -762,8 +829,9 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
         form.status !== "archived" && !pendingDeletedFormIds.includes(form._id),
     )
     .map((form) => form._id);
-  const activeFormId =
-    selectedFormId && visibleFormIds.includes(selectedFormId)
+  const activeFormId = isCreatingNewForm
+    ? null
+    : selectedFormId && visibleFormIds.includes(selectedFormId)
       ? selectedFormId
       : (visibleFormIds[0] ?? null);
 
@@ -981,6 +1049,14 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
 
   const selectedForm = forms.find((form) => form._id === activeFormId) ?? null;
 
+  /** Valgt skjema vises alltid i panelet under — aldri duplisert som eget kort i listen. */
+  const formsForSidebarList = useMemo(() => {
+    if (!activeFormId) {
+      return forms;
+    }
+    return forms.filter((f) => f._id !== activeFormId);
+  }, [forms, activeFormId]);
+
   useEffect(() => {
     if (activeFormId !== prevActiveFormIdRef.current) {
       prevActiveFormIdRef.current = activeFormId;
@@ -1068,6 +1144,7 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
     if (!source) {
       return;
     }
+    setIsCreatingNewForm(false);
     setTitle(source.form.title);
     setDescription(source.form.description ?? "");
     setLayoutMode(source.form.layoutMode);
@@ -1191,35 +1268,50 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
     });
   }
 
-  async function handleCreateForm() {
-    try {
-      const formId = await createForm({
-        workspaceId,
-        title: "Nytt skjema",
-      });
-      setSelectedFormId(formId);
-      setTitle("Nytt skjema");
-      setDescription("");
-      setLayoutMode("one_per_screen");
-      setQuestionsPerPage(1);
-      setStatus("draft");
-      setConfirmationMode("none");
-      setEditorOpen(true);
-      const nextQuestions = defaultIntakeQuestions();
-      setQuestions(nextQuestions);
-      setExpandedQuestionIds(nextQuestions.map((question) => question.id));
-      setMappingSectionOpenIds(questionIdsWithMappingSectionInitiallyOpen(nextQuestions));
-      toast.success("Nytt skjema opprettet.");
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Kunne ikke opprette skjema.");
-    }
+  function handleCreateForm() {
+    selectedFormIdBeforeCreateRef.current = selectedFormId;
+    setIsCreatingNewForm(true);
+    setSelectedFormId(null);
+    setTitle("Nytt skjema");
+    setDescription("");
+    setLayoutMode("one_per_screen");
+    setQuestionsPerPage(1);
+    setStatus("draft");
+    setConfirmationMode("none");
+    const nextQuestions = defaultIntakeQuestions();
+    setQuestions(nextQuestions);
+    setExpandedQuestionIds(nextQuestions.map((question) => question.id));
+    setMappingSectionOpenIds(questionIdsWithMappingSectionInitiallyOpen(nextQuestions));
+    setEditorOpen(true);
+  }
+
+  /** Velg skjema i listen — må avslutte «nytt skjema»-utkast, ellers er activeFormId låst til null. */
+  function selectWorkspaceForm(formId: Id<"intakeForms">) {
+    setIsCreatingNewForm(false);
+    selectedFormIdBeforeCreateRef.current = null;
+    setSelectedFormId(formId);
+    setEditorOpen(false);
+    setFormWorkspacePanelExpanded(true);
   }
 
   async function handleSaveForm() {
-    if (!activeFormId) return;
+    const wasCreating = isCreatingNewForm;
+    let formId: Id<"intakeForms"> | null = wasCreating ? null : activeFormId;
+    let createdFormId: Id<"intakeForms"> | null = null;
     try {
+      if (wasCreating) {
+        createdFormId = await createForm({
+          workspaceId,
+          title: title.trim() || "Nytt skjema",
+        });
+        formId = createdFormId;
+      }
+      if (!formId) {
+        toast.error("Kunne ikke lagre — mangler skjema.");
+        return;
+      }
       await saveForm({
-        formId: activeFormId,
+        formId,
         title,
         description,
         status,
@@ -1242,9 +1334,19 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
               : undefined,
         })),
       });
-      toast.success("Skjema lagret.");
+      if (wasCreating) {
+        setIsCreatingNewForm(false);
+        selectedFormIdBeforeCreateRef.current = null;
+        setSelectedFormId(formId);
+      }
+      toast.success(wasCreating ? "Skjema opprettet." : "Skjema lagret.");
       setEditorOpen(false);
     } catch (error) {
+      if (wasCreating && createdFormId) {
+        setIsCreatingNewForm(false);
+        setSelectedFormId(createdFormId);
+        selectedFormIdBeforeCreateRef.current = null;
+      }
       toast.error(error instanceof Error ? error.message : "Kunne ikke lagre skjema.");
     }
   }
@@ -1299,7 +1401,10 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
       );
     } catch (error) {
       toast.error(
-        error instanceof Error ? error.message : "Kunne ikke oppdatere skjema-status.",
+        formatUserFacingError(
+          error,
+          "Kunne ikke oppdatere skjema-status. Prøv igjen.",
+        ),
       );
     }
   }
@@ -1310,12 +1415,20 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
       let nextTemplateId = linkedRosTemplateId;
       if (rosIntegrationEnabled && !nextTemplateId) {
         if ((rosTemplates?.length ?? 0) > 0) {
-          nextTemplateId = rosTemplates[0]!._id;
+          const preferred = rosTemplates.find(
+            (t) => t.name === RPA_INTAKE_ROS_TEMPLATE_NAME,
+          );
+          nextTemplateId = preferred?._id ?? rosTemplates[0]!._id;
         } else {
           nextTemplateId = await createRosTemplate({
             workspaceId,
-            name: selectedForm ? `ROS-mal · ${selectedForm.title}` : "Standard ROS-mal",
-            description: "Automatisk opprettet fra skjema-kobling.",
+            name: RPA_INTAKE_ROS_TEMPLATE_NAME,
+            description: RPA_INTAKE_ROS_TEMPLATE_DESCRIPTION,
+            rowAxisTitle: RPA_INTAKE_ROS_ROW_AXIS,
+            colAxisTitle: RPA_INTAKE_ROS_COL_AXIS,
+            rowLabels: [...RPA_INTAKE_ROS_ROW_LABELS],
+            colLabels: [...DEFAULT_ROS_COL_LABELS],
+            rowDescriptions: [...RPA_INTAKE_ROS_ROW_DESCRIPTIONS],
           });
         }
       }
@@ -1348,8 +1461,13 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
     try {
       const templateId = await createRosTemplate({
         workspaceId,
-        name: selectedForm ? `ROS-mal · ${selectedForm.title}` : "Standard ROS-mal",
-        description: "Automatisk opprettet fra skjema-kobling.",
+        name: RPA_INTAKE_ROS_TEMPLATE_NAME,
+        description: RPA_INTAKE_ROS_TEMPLATE_DESCRIPTION,
+        rowAxisTitle: RPA_INTAKE_ROS_ROW_AXIS,
+        colAxisTitle: RPA_INTAKE_ROS_COL_AXIS,
+        rowLabels: [...RPA_INTAKE_ROS_ROW_LABELS],
+        colLabels: [...DEFAULT_ROS_COL_LABELS],
+        rowDescriptions: [...RPA_INTAKE_ROS_ROW_DESCRIPTIONS],
       });
       await updateFormIntegrations({
         formId: activeFormId,
@@ -1363,7 +1481,7 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
           linkedRosTemplateId: templateId,
         },
       }));
-      toast.success("Standard ROS-mal opprettet og koblet til skjemaet.");
+      toast.success("RPA-tilpasset ROS-mal opprettet og koblet til skjemaet.");
     } catch (error) {
       toast.error(
         error instanceof Error ? error.message : "Kunne ikke opprette ROS-mal for skjemaet.",
@@ -1556,6 +1674,11 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
           acc.pvv += 1;
         } else if (target.kind === "derivedFrequency") {
           acc.assessment += 1;
+        } else if (
+          target.kind === "assessmentStabilityBoth" ||
+          target.kind === "assessmentScaleInvertedLength"
+        ) {
+          acc.assessment += 1;
         }
       }
       return acc;
@@ -1742,6 +1865,23 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
                   Trykk «Nytt skjema» over.
                 </p>
               </div>
+            ) : formsForSidebarList.length === 0 ? (
+              <div className="border-border/60 bg-muted/10 space-y-2 rounded-2xl border border-dashed px-3 py-3 text-sm text-muted-foreground">
+                <p>
+                  Skjemaet vises i panelet under — vi gjentar det ikke som rad her, så du slipper to
+                  like kort.
+                </p>
+                {formWorkspacePanelExpanded ? (
+                  <p className="text-xs">
+                    Pil opp øverst til høyre gjør oversikten kompakt; detaljene ligger fortsatt rett
+                    under.
+                  </p>
+                ) : (
+                  <p className="text-xs">
+                    Trykk på oversiktsfeltet under for å utvide til full visning.
+                  </p>
+                )}
+              </div>
             ) : (
               <div
                 className={
@@ -1750,7 +1890,7 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
                     : "flex flex-col gap-1"
                 }
               >
-                {forms.map((form) => {
+                {formsForSidebarList.map((form) => {
                   const isSelected = activeFormId === form._id;
                   const statusLabel =
                     form.status === "published"
@@ -1762,7 +1902,7 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
                     <button
                       key={form._id}
                       type="button"
-                      onClick={() => setSelectedFormId(form._id)}
+                      onClick={() => selectWorkspaceForm(form._id)}
                       className={cn(
                         "rounded-2xl border text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
                         formsView === "cards" ? "p-4" : "px-3 py-2.5",
@@ -1840,19 +1980,13 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
 
             {selectedForm ? (
               !formWorkspacePanelExpanded ? (
-                <div className="relative flex flex-col gap-3 rounded-2xl border border-border/60 bg-card/80 p-3 pt-3 pr-11 shadow-sm backdrop-blur-sm sm:flex-row sm:items-center sm:justify-between sm:gap-4 sm:p-3.5 sm:pr-12 sm:pt-3.5">
-                  <Button
+                <div className="overflow-hidden rounded-2xl border border-border/60 bg-card/80 shadow-sm backdrop-blur-sm">
+                  <button
                     type="button"
-                    variant="outline"
-                    size="icon-sm"
-                    className="absolute right-2 top-2 z-10 rounded-full shadow-sm"
-                    aria-label="Utvid skjemadetaljer"
+                    className="hover:bg-muted/30 flex w-full items-start gap-3 px-3 py-3.5 text-left transition-colors sm:px-4 sm:py-4"
                     onClick={() => setFormWorkspacePanelExpanded(true)}
                   >
-                    <ChevronDown className="size-4" />
-                  </Button>
-                  <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2 sm:gap-3">
-                    <div className="min-w-0 flex-1">
+                    <div className="min-w-0 flex-1 space-y-1">
                       <div className="flex min-w-0 flex-wrap items-center gap-2">
                         <p className="truncate font-heading text-base font-semibold sm:text-lg">
                           {selectedForm.title}
@@ -1868,12 +2002,19 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
                               : "Utkast"}
                         </Badge>
                       </div>
-                      <p className="text-muted-foreground mt-0.5 text-xs tabular-nums sm:text-sm">
+                      <p className="text-muted-foreground text-xs tabular-nums sm:text-sm">
                         {selectedForm.questionCount} spørsmål · {activeFormResponseRows.length} svar
                       </p>
+                      <p className="text-muted-foreground text-[11px] sm:text-xs">
+                        Trykk her for full oversikt · snarveier under
+                      </p>
                     </div>
-                  </div>
-                  <div className="flex flex-wrap items-center gap-2 border-t border-border/50 pt-3 sm:border-t-0 sm:pt-0 sm:pr-0">
+                    <ChevronDown
+                      className="text-muted-foreground mt-0.5 size-5 shrink-0"
+                      aria-hidden
+                    />
+                  </button>
+                  <div className="border-border/50 flex flex-wrap gap-2 border-t px-3 py-3 sm:px-4">
                     {selectedForm.status === "published" ? (
                       <Button
                         type="button"
@@ -1890,6 +2031,12 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
                         variant="outline"
                         size="sm"
                         className="rounded-xl"
+                        disabled={selectedForm.questionCount === 0}
+                        title={
+                          selectedForm.questionCount === 0
+                            ? "Åpne «Rediger skjema», legg til minst ett spørsmål og lagre før du publiserer."
+                            : undefined
+                        }
                         onClick={() => handleSetFormStatus("published")}
                       >
                         Publiser
@@ -1921,18 +2068,19 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
                   </div>
                 </div>
               ) : (
-              <div className="relative space-y-4 rounded-[28px] border border-border/60 bg-card p-4 pt-4 pr-11 shadow-sm sm:p-5 sm:pr-14">
+              <div className="relative space-y-4 rounded-[28px] border border-border/60 bg-card p-4 shadow-sm sm:p-5">
                 <Button
                   type="button"
-                  variant="outline"
-                  size="icon-sm"
-                  className="absolute right-3 top-3 z-10 rounded-full shadow-sm sm:right-4 sm:top-4"
-                  aria-label="Minimer skjemadetaljer"
+                  variant="ghost"
+                  size="icon"
+                  className="text-muted-foreground hover:text-foreground absolute right-2 top-2 z-10 size-10 rounded-full sm:right-3 sm:top-3"
+                  aria-label="Skjul oversikt"
+                  title="Skjul oversikt"
                   onClick={() => setFormWorkspacePanelExpanded(false)}
                 >
-                  <ChevronUp className="size-4" />
+                  <ChevronUp className="size-5" />
                 </Button>
-                <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+                <div className="border-border/50 flex flex-col gap-3 border-b pb-4 pr-11 pt-0.5 sm:flex-row sm:items-start sm:justify-between sm:pr-12">
                   <div className="min-w-0 space-y-3">
                     <div className="flex flex-wrap items-center gap-2">
                       <p className="font-heading text-xl font-semibold">{selectedForm.title}</p>
@@ -1961,7 +2109,7 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
                       ))}
                     </div>
                   </div>
-                  <div className="flex flex-wrap gap-2">
+                  <div className="flex w-full flex-wrap gap-2 sm:w-auto sm:justify-end">
                     {selectedForm.status === "published" ? (
                       <Button
                         type="button"
@@ -1976,6 +2124,12 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
                         type="button"
                         variant="outline"
                         className="rounded-xl"
+                        disabled={selectedForm.questionCount === 0}
+                        title={
+                          selectedForm.questionCount === 0
+                            ? "Åpne «Rediger skjema», legg til minst ett spørsmål og lagre før du publiserer."
+                            : undefined
+                        }
                         onClick={() => handleSetFormStatus("published")}
                       >
                         Publiser
@@ -2061,94 +2215,58 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
                   </div>
                 </div>
 
-                <div className="border-border/50 bg-background/70 rounded-2xl border p-3 sm:p-4">
-                  <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                    <div>
-                      <p className="text-sm font-medium">Flere detaljer</p>
-                      <p className="text-muted-foreground text-xs">
-                        Oppsett og koblinger (valgfritt).
+                <FormWorkspaceDisclosure
+                  instanceId="overview"
+                  open={showFormOverview}
+                  onToggle={() => setShowFormOverview((prev) => !prev)}
+                  title="Flere detaljer"
+                  description="Oppsett, koblinger og auto-utfylling (valgfritt å utvide)."
+                >
+                  <div className="grid gap-4 lg:grid-cols-2">
+                    <div className="rounded-2xl border border-border/50 bg-muted/10 p-4">
+                      <p className="text-sm font-medium">Skjemaoppsett</p>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <Badge variant="outline">
+                          {selectedFormConfirmationMode === "email_copy"
+                            ? "E-postbekreftelse"
+                            : "Ingen bekreftelse"}
+                        </Badge>
+                        <Badge variant="outline">
+                          {selectedFormLayoutMode === "one_per_screen"
+                            ? "Ett spørsmål per skjerm"
+                            : "Gruppert visning"}
+                        </Badge>
+                      </div>
+                      <p className="text-muted-foreground mt-2 text-xs leading-snug">
+                        Juster i «ROS, mal, lenker» på hovedsiden.
                       </p>
                     </div>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className="rounded-xl"
-                      onClick={() => setShowFormOverview((prev) => !prev)}
-                    >
-                      {showFormOverview ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
-                      {showFormOverview ? "Skjul detaljer" : "Vis detaljer"}
-                    </Button>
-                  </div>
-                  {showFormOverview ? (
-                    <div className="mt-4 grid gap-4 lg:grid-cols-2">
-                      <div className="rounded-2xl border border-border/50 bg-muted/10 p-4">
-                        <p className="text-sm font-medium">Skjemaoppsett</p>
-                        <div className="mt-3 flex flex-wrap gap-2">
-                          <Badge variant="outline">
-                            {selectedFormConfirmationMode === "email_copy"
-                              ? "E-postbekreftelse"
-                              : "Ingen bekreftelse"}
-                          </Badge>
-                          <Badge variant="outline">
-                            {selectedFormLayoutMode === "one_per_screen"
-                              ? "Ett spørsmål per skjerm"
-                              : "Gruppert visning"}
-                          </Badge>
-                        </div>
-                        <p className="text-muted-foreground mt-2 text-xs leading-snug">
-                          Juster i «Innstillinger».
-                        </p>
-                      </div>
-                      <div className="rounded-2xl border border-border/50 bg-muted/10 p-4">
-                        <p className="text-sm font-medium">Auto-utfylling</p>
-                        <div className="mt-2 flex flex-wrap gap-2">
-                          <Badge variant="outline">Vurdering {mappingSummary.assessment}</Badge>
-                          <Badge variant="outline">ROS {mappingSummary.ros}</Badge>
-                          <Badge variant="outline">PVV {mappingSummary.pvv}</Badge>
-                        </div>
+                    <div className="rounded-2xl border border-border/50 bg-muted/10 p-4">
+                      <p className="text-sm font-medium">Auto-utfylling</p>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        <Badge variant="outline">Vurdering {mappingSummary.assessment}</Badge>
+                        <Badge variant="outline">ROS {mappingSummary.ros}</Badge>
+                        <Badge variant="outline">PVV {mappingSummary.pvv}</Badge>
                       </div>
                     </div>
-                  ) : null}
-                </div>
+                  </div>
+                </FormWorkspaceDisclosure>
 
-                <div className="border-border/50 bg-background/70 space-y-3 rounded-2xl border p-3 sm:p-4">
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                    <div>
-                      <p className="text-sm font-medium">Svar på dette skjemaet</p>
-                      <p className="text-muted-foreground text-xs">
-                        Klikk for gjennomgang og godkjenning.
-                      </p>
-                    </div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Badge variant="outline">{activeFormResponseRows.length} svar</Badge>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        className="rounded-xl"
-                        onClick={() => setShowResponses((prev) => !prev)}
-                      >
-                        {showResponses ? (
-                          <>
-                            <ChevronUp className="size-4" />
-                            Skjul
-                          </>
-                        ) : (
-                          <>
-                            <ChevronDown className="size-4" />
-                            Vis
-                          </>
-                        )}
-                      </Button>
-                    </div>
-                  </div>
-                  {showResponses ? (
-                    activeFormResponseRows.length === 0 ? (
-                      <p className="text-sm text-muted-foreground">
-                        Ingen har sendt inn dette skjemaet ennå.
-                      </p>
-                    ) : (
-                      <div className="space-y-2">
-                        {activeFormResponseRows.map((submission) => (
+                <FormWorkspaceDisclosure
+                  instanceId="responses"
+                  open={showResponses}
+                  onToggle={() => setShowResponses((prev) => !prev)}
+                  title="Svar på dette skjemaet"
+                  description="Åpne listen for gjennomgang og godkjenning."
+                  trailing={<Badge variant="secondary">{activeFormResponseRows.length} svar</Badge>}
+                >
+                  {activeFormResponseRows.length === 0 ? (
+                    <p className="text-muted-foreground text-sm">
+                      Ingen har sendt inn dette skjemaet ennå.
+                    </p>
+                  ) : (
+                    <div className="space-y-2">
+                      {activeFormResponseRows.map((submission) => (
                           <div
                             key={submission._id}
                             className="rounded-2xl border border-border/50 bg-muted/10 p-4 transition hover:bg-muted/20"
@@ -2222,12 +2340,19 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
                             {renderSubmissionGithubStrip(submission)}
                           </div>
                         ))}
-                      </div>
-                    )
-                  ) : null}
-                </div>
+                    </div>
+                  )}
+                </FormWorkspaceDisclosure>
               </div>
               )
+            ) : isCreatingNewForm ? (
+              <div className="border-border/60 bg-muted/15 mt-3 rounded-2xl border border-dashed p-5 text-center sm:text-left">
+                <p className="text-sm font-medium">Du oppretter et nytt skjema</p>
+                <p className="text-muted-foreground mt-1 text-sm leading-snug">
+                  Ingenting lagres i listen før du trykker «Opprett skjema» i vinduet over. Lukk for å
+                  avbryte.
+                </p>
+              </div>
             ) : null}
           </CardContent>
         </Card>
@@ -2327,14 +2452,32 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
         </Card>
       </section>
 
-      <Dialog open={editorOpen} onOpenChange={setEditorOpen}>
+      <Dialog
+        open={editorOpen}
+        onOpenChange={(open) => {
+          setEditorOpen(open);
+          if (!open && isCreatingNewForm) {
+            setIsCreatingNewForm(false);
+            setSelectedFormId(
+              selectedFormIdBeforeCreateRef.current ?? forms[0]?._id ?? null,
+            );
+            selectedFormIdBeforeCreateRef.current = null;
+          }
+        }}
+      >
         <DialogContent size="xl" titleId="intake-editor-title">
           <DialogHeader>
             <p id="intake-editor-title" className="font-heading text-lg font-semibold">
-              Rediger skjema
+              {isCreatingNewForm ? "Opprett skjema" : "Rediger skjema"}
             </p>
             <p className="text-muted-foreground text-sm">
               Spørsmål, layout og koblinger til vurdering / ROS / PVV.
+              {isCreatingNewForm ? (
+                <>
+                  {" "}
+                  Skjemaet opprettes i listen først når du trykker «Opprett skjema».
+                </>
+              ) : null}
             </p>
           </DialogHeader>
           <DialogBody className="space-y-6">
@@ -3001,16 +3144,18 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
           </DialogBody>
           <DialogFooter className="flex flex-wrap justify-between gap-2">
             <div className="flex gap-2">
-              <Button type="button" variant="outline" onClick={handleArchiveForm}>
-                Arkiver
-              </Button>
+              {isCreatingNewForm ? null : (
+                <Button type="button" variant="outline" onClick={() => void handleArchiveForm()}>
+                  Arkiver
+                </Button>
+              )}
             </div>
             <div className="flex gap-2">
               <Button type="button" variant="outline" onClick={() => setEditorOpen(false)}>
                 Lukk
               </Button>
-              <Button type="button" onClick={handleSaveForm}>
-                Lagre skjema
+              <Button type="button" onClick={() => void handleSaveForm()}>
+                {isCreatingNewForm ? "Opprett skjema" : "Lagre skjema"}
               </Button>
             </div>
           </DialogFooter>

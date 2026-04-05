@@ -43,6 +43,8 @@ export function defaultAssessmentPayload(): AssessmentPayload {
     hfEconomicRationaleNotes: "",
     hfCriticalManualGapNotes: "",
     hfOperationsSupportNotes: "",
+    valuePainPointIds: [],
+    valueGainIds: [],
   };
 }
 

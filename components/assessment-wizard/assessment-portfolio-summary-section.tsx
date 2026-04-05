@@ -23,17 +23,19 @@ type Props = {
     key: K,
     value: AssessmentPayload[K],
   ) => void;
+  /** Når true: hopp over gevinst/feil-likert (allerede i steg «Verdi og effekt»). */
+  omitCoreValueLikerts?: boolean;
 };
 
 /**
  * Grunnleggende beslutningsspørsmål (gevinst, risiko, portefølje) som også brukes i inntak.
- * Vises kun her i vurderingsveiviseren — ikke som eget hovedsteg — for å unngå gjentakelse.
  */
 export function AssessmentPortfolioSummarySection({
   payload,
   canEdit,
   readOnly,
   update,
+  omitCoreValueLikerts = false,
 }: Props) {
   return (
     <div className="space-y-8 rounded-2xl bg-muted/10 p-5 ring-1 ring-black/[0.04] dark:ring-white/[0.06]">
@@ -48,17 +50,33 @@ export function AssessmentPortfolioSummarySection({
         </p>
       </div>
 
+      {omitCoreValueLikerts ? (
+        <p className="text-muted-foreground text-xs">
+          Forventet gevinst og konsekvens av feil fylte du ut under «Verdi og effekt».
+        </p>
+      ) : null}
+
+      {!omitCoreValueLikerts ? (
       <LikertField
         id="summary-importance-business"
-        label="Hvor stor er forventet gevinst av å automatisere denne prosessen?"
-        hint="Tenk tid, kvalitet, kostnad eller pasientsikkerhet — ikke «hvor viktig faget er generelt», men om nettopp denne automatiseringen gir nok nytte (forretningsdriver i RPA-vurdering)."
+        label="Hvor stor er den forventede økonomiske og operative gevinsten?"
+        hint="Dere trenger ikke eksakte kroner — skalaen er en grov prioritering. Tenk likevel som til økonomi eller ledelse: sparte timer (× timelønn), færre feil som koster penger eller omdømme, raskere gjennomløp som gir bedre inntekt eller lavere lager, eller frigjort kapasitet som ellers må kjøpes inn. Ikke «hvor viktig faget er», men om nettopp denne automatiseringen gir tydelig nytte i kroner, tid eller kapasitet."
         value={clampLikert5(payload.criticalityBusinessImpact)}
         onChange={(v) => update("criticalityBusinessImpact", v)}
-        left="Liten gevinst"
-        right="Stor gevinst"
-        scaleLabels={["Liten", "Noe", "Middels", "Stor", "Svært stor"]}
+        left="Lite å spare / frigjøre"
+        right="Mye å spare / frigjøre"
+        scaleLabels={[
+          "Ingen tydelig nytte",
+          "Liten besparelse",
+          "Merkbar årlig effekt",
+          "Stor forventet gevinst",
+          "Topp økonomisk gevinst",
+        ]}
+        manualInputLabel="Tast verdi (1–5)"
         disabled={readOnly}
       />
+      ) : null}
+      {!omitCoreValueLikerts ? (
       <LikertField
         id="summary-importance-regulatory"
         label="Hvor kritiske er feil eller manglende sporbarhet i denne prosessen?"
@@ -70,6 +88,7 @@ export function AssessmentPortfolioSummarySection({
         scaleLabels={["Lite", "Noe", "Middels", "Høyt", "Svært høyt"]}
         disabled={readOnly}
       />
+      ) : null}
       <LikertField
         id="summary-process-specificity"
         label="Hvor spesifikk er prosessen for dere — eller finnes lignende mange steder?"

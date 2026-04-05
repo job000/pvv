@@ -57,6 +57,12 @@ export const INTAKE_ASSESSMENT_SCALE_FIELDS = [
   "rpaQuickWinPotential",
   "rpaProcessSpecificity",
   "rpaImplementationDifficulty",
+  "processVariability",
+  "structuredInput",
+  "digitization",
+  "applicationCount",
+  "processStability",
+  "applicationStability",
 ] as const;
 
 export const INTAKE_ASSESSMENT_NUMBER_FIELDS = [
@@ -126,7 +132,7 @@ export const INTAKE_MAPPING_TARGET_LABELS = [
   {
     kind: "assessmentScale",
     value: "criticalityBusinessImpact",
-    label: "Bruk som forventet gevinst av automatisering (RPA)",
+    label: "Bruk som forventet økonomisk/operativ gevinst (skala)",
   },
   {
     kind: "assessmentScale",
@@ -152,6 +158,46 @@ export const INTAKE_MAPPING_TARGET_LABELS = [
     kind: "assessmentScale",
     value: "rpaImplementationDifficulty",
     label: "Bruk som hvor krevende det er å få til",
+  },
+  {
+    kind: "assessmentScale",
+    value: "processVariability",
+    label: "Skala: gjøres det likt hver gang (RPA-egnethet)",
+  },
+  {
+    kind: "assessmentScale",
+    value: "structuredInput",
+    label: "Skala: data i felt vs. fritekst (RPA-egnethet)",
+  },
+  {
+    kind: "assessmentScale",
+    value: "digitization",
+    label: "Skala: papir vs. digitalt (RPA-egnethet)",
+  },
+  {
+    kind: "assessmentScale",
+    value: "applicationCount",
+    label: "Skala: antall systemer i flyten",
+  },
+  {
+    kind: "assessmentScale",
+    value: "processStability",
+    label: "Skala: prosessstabilitet",
+  },
+  {
+    kind: "assessmentScale",
+    value: "applicationStability",
+    label: "Skala: systemstabilitet",
+  },
+  {
+    kind: "assessmentStabilityBoth",
+    value: "assessmentStabilityBoth",
+    label: "Én skala → både prosess- og systemstabilitet",
+  },
+  {
+    kind: "assessmentScaleInvertedLength",
+    value: "assessmentScaleInvertedLength",
+    label: "Skala: mye/lite skjønn → prosesslengde (som i vurdering)",
   },
   {
     kind: "assessmentRpaSimilar",
@@ -271,12 +317,23 @@ export function defaultIntakeQuestions() {
       id: crypto.randomUUID(),
       label: "Hva heter oppgaven eller arbeidsflyten hos dere?",
       helpText:
-        "Ett kort navn eller en setning i vanlig språk. Brukes som prosessnavn og kort beskrivelse av hvordan dere jobber i dag når forslaget gjøres om til vurdering.",
+        "Kort navn, slik kollegaer ville sagt det — f.eks. «Innkommende fakturaer». (Går inn som «Prosessnavn» i vurderingen.)",
       questionType: "text" as const,
       required: true,
       options: [],
       mappingTargets: [
         { kind: "assessmentText" as const, field: "processName" as const },
+      ],
+    },
+    {
+      id: crypto.randomUUID(),
+      label: "I korte trekk: hva gjør dere i dag i denne flyten?",
+      helpText:
+        "Valgfritt, men hjelper oss. Samme felt som «Helhetlig beskrivelse» under Prosess i vurderingen — ikke bare mål, men dagens gjøremål.",
+      questionType: "text" as const,
+      required: false,
+      options: [],
+      mappingTargets: [
         {
           kind: "assessmentText" as const,
           field: "processDescription" as const,
@@ -285,9 +342,9 @@ export function defaultIntakeQuestions() {
     },
     {
       id: crypto.randomUUID(),
-      label: "Hva ønsker dere å automatisere, støtte med teknologi eller forbedre?",
+      label: "Hva ønsker dere å slippe manuelt arbeid på — eller få gjort raskere og tryggere?",
       helpText:
-        "Beskriv ønsket endring, f.eks. «mindre manuell tasting mellom systemer», «raskere svar til innbyggere» eller «færre feil i registrering». Går inn som mål og ønsket verdi (feltet «Mål og verdi») i vurderingen og er sentralt for RPA-/automatiseringssporet.",
+        "I vanlig språk: f.eks. «kopiere mellom to systemer», «mindre tastefeil» eller «kortere ventetid for brukere».",
       questionType: "text" as const,
       required: true,
       options: [],
@@ -298,9 +355,9 @@ export function defaultIntakeQuestions() {
     {
       id: crypto.randomUUID(),
       label:
-        "Hvor stor forventet gevinst gir nettopp denne automatiseringen for dere?",
+        "Hvor stor nytte tror dere dette kan gi? (tid, færre feil, lavere kost eller bedre tjeneste)",
       helpText:
-        "Tenk tid, kvalitet, kostnad eller pasientsikkerhet — ikke «hvor viktig faget er generelt», men om nettopp denne automatiseringen gir nok nytte. Skala 1–5 (samme felt som under «Resultat» i vurderingen).",
+        "1 = lite å hente · 5 = mye å hente. Grovt anslag holder — samme skala som i vår vurdering.",
       questionType: "scale" as const,
       required: false,
       options: [],
@@ -314,9 +371,9 @@ export function defaultIntakeQuestions() {
     {
       id: crypto.randomUUID(),
       label:
-        "Hvor kritiske er feil eller manglende sporbarhet i denne prosessen?",
+        "Hvor alvorlig er det om noe går galt her? (feil i saksbehandling, pasient/bruker, økonomi …)",
       helpText:
-        "Compliance og kontroll: journal, avvik, HR, økonomi. Skala 1–5 (samme som i vurderingens resultatsteg).",
+        "1 = lite alvorlig · 5 = svært alvorlig. Samme som i vår vurdering.",
       questionType: "scale" as const,
       required: false,
       options: [],
@@ -330,9 +387,9 @@ export function defaultIntakeQuestions() {
     {
       id: crypto.randomUUID(),
       label:
-        "Hvor spesifikk er prosessen for dere — eller finnes lignende mange steder?",
+        "Er dette «vår egen» måte å gjøre ting på — eller skjer det likt mange steder hos dere?",
       helpText:
-        "1 = lignende prosess finnes mange steder hos dere, 5 = svært spesifikk eller unik. Skala 1–5.",
+        "1 = skjer mange steder · 5 = mest unikt for oss. Hjelper oss å prioritere.",
       questionType: "scale" as const,
       required: false,
       options: [],
@@ -345,9 +402,9 @@ export function defaultIntakeQuestions() {
     },
     {
       id: crypto.randomUUID(),
-      label: "Hvor ofte utføres dette i praksis?",
+      label: "Hvor ofte gjør dere dette i en vanlig uke eller måned?",
       helpText:
-        "Velg det som ligner mest. Brukes i vurderingen for å forstå omtrent hvor ofte oppgaven kjøres.",
+        "Velg det som er nærmest — brukes til å anslå hvor mye tid som ligger her.",
       questionType: "multiple_choice" as const,
       required: true,
       options: [
@@ -454,6 +511,74 @@ export function defaultIntakeQuestions() {
     },
     {
       id: crypto.randomUUID(),
+      label: "Gjøres jobben stort sett på samme måte hver gang?",
+      helpText:
+        "1 = veldig ulikt fra gang til gang · 5 = nesten alltid likt. (Samme spørsmål som i vår vurdering.)",
+      questionType: "scale" as const,
+      required: false,
+      options: [],
+      mappingTargets: [
+        { kind: "assessmentScale" as const, field: "processVariability" as const },
+      ],
+    },
+    {
+      id: crypto.randomUUID(),
+      label: "Hvor mye skjønn og vurdering trengs underveis?",
+      helpText:
+        "1 = mye menneskelig vurdering · 5 = lite, mest faste regler. (Samme som i vurderingen.)",
+      questionType: "scale" as const,
+      required: false,
+      options: [],
+      mappingTargets: [{ kind: "assessmentScaleInvertedLength" as const }],
+    },
+    {
+      id: crypto.randomUUID(),
+      label: "Ligger opplysningene klart i skjema og felt — eller mye fri tekst og notater?",
+      helpText:
+        "1 = mye fritekst · 5 = mest i faste felt. Enklere felt gjør automatisering enklere.",
+      questionType: "scale" as const,
+      required: false,
+      options: [],
+      mappingTargets: [
+        { kind: "assessmentScale" as const, field: "structuredInput" as const },
+      ],
+    },
+    {
+      id: crypto.randomUUID(),
+      label: "Hvor stabile er rutinene og skjermbildene i systemene — endrer de seg ofte?",
+      helpText:
+        "1 = endrer seg ofte · 5 = ganske stabilt. Samme som «prosess og system» i vurderingen.",
+      questionType: "scale" as const,
+      required: false,
+      options: [],
+      mappingTargets: [{ kind: "assessmentStabilityBoth" as const }],
+    },
+    {
+      id: crypto.randomUUID(),
+      label: "Er arbeidet mest på papir og skanning — eller digitalt i systemer?",
+      helpText:
+        "1 = mye papir · 5 = helt digitalt. Samme som i vurderingen.",
+      questionType: "scale" as const,
+      required: false,
+      options: [],
+      mappingTargets: [
+        { kind: "assessmentScale" as const, field: "digitization" as const },
+      ],
+    },
+    {
+      id: crypto.randomUUID(),
+      label: "Hvor mange ulike systemer må dere vanligvis inn i for én runde?",
+      helpText:
+        "1 = ett system · 5 = sju eller flere. Færre systemer gjør det ofte enklere.",
+      questionType: "scale" as const,
+      required: false,
+      options: [],
+      mappingTargets: [
+        { kind: "assessmentScale" as const, field: "applicationCount" as const },
+      ],
+    },
+    {
+      id: crypto.randomUUID(),
       label: "Hva kan gå galt for brukere, drift eller regelverk hvis noe feiler?",
       helpText:
         "Én eller noen få setninger om konsekvens. Brukes i vurderingen (blant annet risiko og begrensninger) og kan bidra til ROS (risikoanalyse) når forslaget er godkjent.",
@@ -467,6 +592,17 @@ export function defaultIntakeQuestions() {
           field: "processConstraints" as const,
         },
       ],
+    },
+    {
+      id: crypto.randomUUID(),
+      label:
+        "Valgfritt: beskriv et konkret scenario der noe går galt (hendelse eller feil)",
+      helpText:
+        "F.eks. «roboten stopper midt i flyten» eller «feil tall inn i økonomisystemet». Går inn som eget ROS-punkt (annen rad enn konsekvens-spørsmålet over).",
+      questionType: "text" as const,
+      required: false,
+      options: [],
+      mappingTargets: [{ kind: "rosRiskDescription" as const }],
     },
     {
       id: personalDataQuestionId,
@@ -518,10 +654,6 @@ export function defaultIntakeQuestions() {
         {
           kind: "assessmentText" as const,
           field: "hfSecurityInformationNotes" as const,
-        },
-        {
-          kind: "assessmentText" as const,
-          field: "processConstraints" as const,
         },
       ],
     },

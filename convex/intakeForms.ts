@@ -533,7 +533,9 @@ export const setStatus = mutation({
         .withIndex("by_form_and_order", (q) => q.eq("formId", args.formId))
         .take(1);
       if (questions.length === 0) {
-        throw new Error("Legg til minst ett spørsmål før du publiserer skjemaet.");
+        throw new Error(
+          "Skjemaet kan ikke publiseres uten spørsmål. Åpne «Rediger skjema», legg til minst ett spørsmål og lagre — deretter kan du trykke «Publiser» igjen.",
+        );
       }
     }
 

@@ -129,68 +129,75 @@ export function AssessmentExportPanel({
   }
 
   return (
-    <div className="space-y-4 rounded-2xl border bg-muted/15 p-4">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h2 className="font-heading text-sm font-semibold">Eksport og deling</h2>
-          <p className="text-muted-foreground text-xs">
-            PDF for arkiv og møter. Lenke gir kun lesetilgang til sammendrag og
-            slutter å virke når den utløper.
-          </p>
-        </div>
+    <div className="rounded-xl border bg-muted/15 p-3">
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5">
+        <h2 className="font-heading text-sm font-semibold">Eksport og deling</h2>
         <Button
           type="button"
           variant="secondary"
           size="sm"
-          className="gap-1.5 shrink-0"
+          className="h-8 gap-1.5 shrink-0 px-2.5 text-xs"
           disabled={!pdfReady}
           onClick={() => handlePdf()}
         >
-          <FileDown className="size-4" aria-hidden />
+          <FileDown className="size-3.5" aria-hidden />
           Last ned PDF
         </Button>
       </div>
+      <p className="text-muted-foreground mt-1 text-[11px] leading-snug">
+        PDF til arkiv/møter. Delingslenker: kun sammendrag (les), utløper
+        automatisk.
+      </p>
 
       {canEdit ? (
-        <div className="border-t pt-4 space-y-3">
-          <div className="flex flex-wrap items-end gap-3">
-            <div className="space-y-1">
-              <Label htmlFor="share-hours" className="text-xs">
-                Gyldig i (timer)
+        <div className="mt-2 border-t border-border/50 pt-2">
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
+            <div className="flex items-center gap-1.5">
+              <Label
+                htmlFor="share-hours"
+                className="text-muted-foreground whitespace-nowrap text-xs"
+              >
+                Timer
               </Label>
               <Input
                 id="share-hours"
                 type="number"
                 min={1}
                 max={720}
-                className="h-9 w-28"
+                className="h-8 w-[4.25rem] px-2 text-xs"
                 value={hours}
                 onChange={(e) => setHours(Number(e.target.value) || 24)}
+                aria-describedby="share-hours-hint"
               />
             </div>
-            <p className="text-muted-foreground max-w-sm pb-1 text-xs">
-              Maks. 720 t (30 d). Kun sammendrag — ikke redigering.
-            </p>
             <Button
               type="button"
               size="sm"
-              className="gap-1.5"
+              className="h-8 gap-1 px-2.5 text-xs"
               disabled={busy}
               onClick={() => void handleCreateLink()}
             >
-              <Link2 className="size-4" aria-hidden />
-              {busy ? "Oppretter …" : "Opprett ny lenke"}
+              <Link2 className="size-3.5" aria-hidden />
+              {busy ? "Oppretter …" : "Ny lenke"}
             </Button>
+            <span
+              id="share-hours-hint"
+              className="text-muted-foreground text-[11px] leading-tight sm:max-w-[14rem]"
+            >
+              Maks 720 t. Ikke redigering.
+            </span>
           </div>
 
           {(links ?? []).length === 0 ? (
-            <p className="text-muted-foreground text-xs">Ingen aktive lenker.</p>
+            <p className="text-muted-foreground mt-1.5 text-[11px]">
+              Ingen aktive lenker.
+            </p>
           ) : (
-            <ul className="space-y-2">
+            <ul className="mt-2 space-y-1.5">
               {(links ?? []).map((L) => (
                 <li
                   key={L._id}
-                  className="bg-card flex flex-col gap-2 rounded-lg border px-3 py-2 text-sm sm:flex-row sm:items-center sm:justify-between"
+                  className="bg-card flex flex-col gap-1.5 rounded-md border px-2.5 py-1.5 text-sm sm:flex-row sm:items-center sm:justify-between"
                 >
                   <div className="min-w-0">
                     <p className="text-muted-foreground text-xs">
@@ -242,7 +249,7 @@ export function AssessmentExportPanel({
           )}
         </div>
       ) : (
-        <p className="text-muted-foreground border-t pt-3 text-xs">
+        <p className="text-muted-foreground mt-2 border-t border-border/50 pt-2 text-[11px] leading-snug">
           Kun redaktører kan opprette tidsbegrensede lenker.
         </p>
       )}

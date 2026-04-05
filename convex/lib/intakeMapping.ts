@@ -365,6 +365,30 @@ export function generateIntakeSuggestion(
         }
         continue;
       }
+      if (target.kind === "assessmentScaleInvertedLength") {
+        const scale = normalizedScale(answer);
+        if (scale !== null) {
+          payload = {
+            ...payload,
+            processLength: clampLikert(6 - scale),
+          };
+          autoFilledFields.add("processLength");
+        }
+        continue;
+      }
+      if (target.kind === "assessmentStabilityBoth") {
+        const scale = normalizedScale(answer);
+        if (scale !== null) {
+          payload = {
+            ...payload,
+            processStability: scale,
+            applicationStability: scale,
+          };
+          autoFilledFields.add("processStability");
+          autoFilledFields.add("applicationStability");
+        }
+        continue;
+      }
       if (target.kind === "assessmentRpaBarrier") {
         if (answer.kind === "multiple_choice") {
           const id = answer.optionId;
@@ -453,6 +477,7 @@ export function generateIntakeSuggestion(
             title: buildRiskTitle(question.label),
             description: text,
             severity: 4,
+            source: "rosConsequence",
           });
           riskSignals.add("consequence_reported");
         }
@@ -466,6 +491,7 @@ export function generateIntakeSuggestion(
             title: buildRiskTitle(question.label),
             description: text,
             severity: 3,
+            source: "rosRiskDescription",
           });
           riskSignals.add("risk_described");
         }
@@ -489,6 +515,20 @@ export function generateIntakeSuggestion(
         }
       }
     }
+  }
+
+  if (
+    personDataSignal &&
+    !risks.some((r) => r.source === "personal_data")
+  ) {
+    risks.push({
+      id: crypto.randomUUID(),
+      title: "Personopplysninger i flyten",
+      description:
+        "Skjemaet angir at oppgaven håndterer personopplysninger. Vurder tilgang, dokumentasjon, beredskap og behov for PVV/DPIA i ROS-arbeidet.",
+      severity: 3,
+      source: "personal_data",
+    });
   }
 
   const titleBase =

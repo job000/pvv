@@ -136,6 +136,11 @@ export const assessmentPayloadFields = {
    * at oppgaver ikke blir liggende / glemt — for alle roller (ikke IT-språk).
    */
   rpaBenefitKindsAndOperationsNotes: v.optional(v.string()),
+
+  /** Flervalg: problemer i dag (verdisteg — arkiv, ikke i scoreformel) */
+  valuePainPointIds: v.optional(v.array(v.string())),
+  /** Flervalg: forventet forbedring (verdisteg — arkiv) */
+  valueGainIds: v.optional(v.array(v.string())),
 };
 
 export const assessmentPayloadValidator = v.object(assessmentPayloadFields);
@@ -255,7 +260,20 @@ export const intakeMappingTargetValidator = v.union(
       v.literal("rpaQuickWinPotential"),
       v.literal("rpaProcessSpecificity"),
       v.literal("rpaImplementationDifficulty"),
+      v.literal("processVariability"),
+      v.literal("structuredInput"),
+      v.literal("digitization"),
+      v.literal("processLength"),
+      v.literal("applicationCount"),
+      v.literal("processStability"),
+      v.literal("applicationStability"),
     ),
+  }),
+  v.object({
+    kind: v.literal("assessmentStabilityBoth"),
+  }),
+  v.object({
+    kind: v.literal("assessmentScaleInvertedLength"),
   }),
   v.object({
     kind: v.literal("assessmentRpaBarrier"),
@@ -323,11 +341,20 @@ export const intakeAnswerValidator = v.union(
   }),
 );
 
+export const intakeRiskSourceValidator = v.union(
+  v.literal("rosConsequence"),
+  v.literal("rosRiskDescription"),
+  v.literal("personal_data"),
+  v.literal("other"),
+);
+
 export const intakeRiskSuggestionValidator = v.object({
   id: v.string(),
   title: v.string(),
   description: v.string(),
   severity: v.number(),
+  /** Styrer plassering i RPA-ROS-mal (rad per kategori) */
+  source: v.optional(intakeRiskSourceValidator),
 });
 
 export const intakeRosSuggestionValidator = v.object({
