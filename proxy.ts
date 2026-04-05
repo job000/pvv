@@ -35,6 +35,9 @@ export default convexAuthNextjsMiddleware(
       pathname === "/sign-in" ||
       pathname === "/sign-up" ||
       pathname.startsWith("/s/") ||
+      /** Offentlige inntaksskjemaer via delt lenke (Convex validerer token). */
+      pathname === "/f" ||
+      pathname.startsWith("/f/") ||
       pathname === "/manifest.webmanifest" ||
       pathname === "/sw.js" ||
       pathname === "/icon" ||
