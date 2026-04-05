@@ -114,16 +114,18 @@ export function LikertField({
           <span>{right}</span>
         </div>
 
+        {/** To rader (knapper / etiketter): unngå at én kolonne med lang tekst strekker hele kortet vertikalt. */}
         <div
-          className="flex touch-manipulation gap-2 sm:gap-3"
+          className="touch-manipulation space-y-1.5"
           style={{ WebkitTapHighlightColor: "transparent" }}
         >
-          {SCALE.map((n) => {
-            const selected = value === n;
-            const scaleLabel = scaleLabels?.[n - 1];
-            return (
-              <div key={n} className="flex min-w-0 flex-1 flex-col items-stretch gap-1.5">
+          <div className="flex gap-2 sm:gap-3">
+            {SCALE.map((n) => {
+              const selected = value === n;
+              const scaleLabel = scaleLabels?.[n - 1];
+              return (
                 <button
+                  key={n}
                   ref={(el) => {
                     buttonsRef.current[n - 1] = el;
                   }}
@@ -136,7 +138,7 @@ export function LikertField({
                   onClick={() => onChange(clampLikert5(n))}
                   onKeyDown={(e) => handleRadioKeyDown(n, e)}
                   className={cn(
-                    "focus-visible:ring-ring relative flex min-h-[52px] min-w-0 flex-col items-center justify-center gap-0.5 rounded-xl text-lg font-bold tabular-nums transition-all duration-150 outline-none focus-visible:ring-2 sm:min-h-12 sm:rounded-xl",
+                    "focus-visible:ring-ring relative flex min-h-[52px] min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-xl text-lg font-bold tabular-nums transition-all duration-150 outline-none focus-visible:ring-2 sm:min-h-12 sm:rounded-xl",
                     selected
                       ? cn(
                           "text-white shadow-lg ring-2 scale-[1.05]",
@@ -149,19 +151,33 @@ export function LikertField({
                 >
                   {n}
                 </button>
-                {scaleLabel ? (
-                  <span
-                    className={cn(
-                      "hyphens-auto text-center text-[10px] leading-snug break-words sm:text-[11px]",
-                      selected ? "text-foreground font-medium" : "text-muted-foreground",
-                    )}
+              );
+            })}
+          </div>
+          {scaleLabels ? (
+            <div className="flex gap-2 sm:gap-3">
+              {SCALE.map((n) => {
+                const selected = value === n;
+                const scaleLabel = scaleLabels[n - 1];
+                return (
+                  <div
+                    key={n}
+                    className="flex min-w-0 flex-1 justify-center"
+                    aria-hidden
                   >
-                    {scaleLabel}
-                  </span>
-                ) : null}
-              </div>
-            );
-          })}
+                    <span
+                      className={cn(
+                        "hyphens-auto line-clamp-2 max-w-full text-center text-[10px] leading-snug break-words sm:text-[11px]",
+                        selected ? "text-foreground font-medium" : "text-muted-foreground",
+                      )}
+                    >
+                      {scaleLabel}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          ) : null}
         </div>
 
         <div className="mt-4 flex items-center justify-between gap-3 border-t border-border/30 pt-3">

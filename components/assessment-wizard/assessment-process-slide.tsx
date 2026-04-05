@@ -146,7 +146,7 @@ export function AssessmentProcessSlide({
         })}
       </div>
 
-      <div className="min-h-[8rem]">
+      <div className="min-h-0">
         {sub === "grunnlag" ? (
           <div
             role="tabpanel"

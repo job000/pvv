@@ -921,7 +921,7 @@ export function AssessmentWizard({ assessmentId }: Props) {
     draftConflict.updatedByUserId === access.userId;
 
   return (
-    <div className="space-y-4 pb-24">
+    <div className="space-y-4 pb-28 sm:pb-[7.5rem]">
       {isBehindServer ? (
         <Alert className="border-amber-500/35 bg-amber-500/[0.06]">
           <AlertTitle className="text-amber-950 dark:text-amber-100">
@@ -1059,6 +1059,21 @@ export function AssessmentWizard({ assessmentId }: Props) {
         </div>
       </div>
 
+      <div className="space-y-3">
+        <AssessmentWizardMeta
+          collaborators={collaborators}
+          versions={versions}
+          draftUpdatedAt={data?.draft?.updatedAt}
+          onOpenTeamAndVersions={openTeamAndVersions}
+          onPickVersionPreview={onPickVersionPreview}
+        />
+        <AssessmentExportPanel
+          assessmentId={assessmentId}
+          workspaceId={assessment.workspaceId}
+          canEdit={canEdit}
+        />
+      </div>
+
       <p id="wizard-gesture-hint" className="sr-only">
         Sveip horisontalt med finger, eller dra med mus på steget, for å gå til
         neste eller forrige hovedsteg.
@@ -1068,7 +1083,7 @@ export function AssessmentWizard({ assessmentId }: Props) {
         className="overflow-hidden rounded-2xl bg-card shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.06]"
         aria-labelledby="wizard-step-heading"
       >
-        <header className="border-border/60 bg-muted/20 border-b px-4 py-4 sm:px-6 sm:py-5">
+        <header className="border-border/60 bg-muted/20 border-b px-4 py-3 sm:px-6 sm:py-4">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div className="min-w-0">
               <p className="text-muted-foreground text-[11px] font-semibold uppercase tracking-wider sm:text-xs">
@@ -1109,7 +1124,7 @@ export function AssessmentWizard({ assessmentId }: Props) {
           </div>
 
           <nav
-            className="mt-4 flex gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] sm:flex-wrap sm:overflow-visible [&::-webkit-scrollbar]:hidden"
+            className="mt-3 flex gap-1.5 overflow-x-auto pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] sm:flex-wrap sm:overflow-visible [&::-webkit-scrollbar]:hidden"
             aria-label="Hovedsteg i vurderingen"
           >
             {stepLabels.map((label, i) => (
@@ -1120,7 +1135,7 @@ export function AssessmentWizard({ assessmentId }: Props) {
                 aria-current={slide === i ? "step" : undefined}
                 onClick={() => emblaApi?.scrollTo(i)}
                 className={cn(
-                  "flex min-w-[calc(50%-0.25rem)] shrink-0 items-center gap-2 rounded-xl border px-2.5 py-2 text-left transition sm:min-w-0 sm:flex-1 sm:basis-0",
+                  "flex min-w-[calc(50%-0.25rem)] shrink-0 items-center gap-1.5 rounded-lg border px-2 py-1.5 text-left transition sm:min-w-0 sm:flex-1 sm:basis-0",
                   i === slide
                     ? "border-primary bg-primary/12 ring-primary/30 shadow-sm ring-2"
                     : i < slide
@@ -1130,7 +1145,7 @@ export function AssessmentWizard({ assessmentId }: Props) {
               >
                 <span
                   className={cn(
-                    "flex size-8 shrink-0 items-center justify-center rounded-full text-sm font-semibold tabular-nums",
+                    "flex size-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold tabular-nums sm:text-sm",
                     i === slide
                       ? "bg-primary text-primary-foreground"
                       : i < slide
@@ -1153,7 +1168,8 @@ export function AssessmentWizard({ assessmentId }: Props) {
           className="cursor-grab touch-manipulation active:cursor-grabbing"
           aria-describedby="wizard-gesture-hint"
         >
-          <div className="flex">
+          {/** items-start: unngå at korteste steg får lik høyde som det lengste (tomt rom). */}
+          <div className="flex items-start">
             <Slide>
               <div className="space-y-1">
                 <h2 className="text-foreground text-xl font-semibold sm:text-2xl">
@@ -1882,21 +1898,6 @@ export function AssessmentWizard({ assessmentId }: Props) {
         </div>
       </section>
 
-      <div className="space-y-3">
-        <AssessmentWizardMeta
-          collaborators={collaborators}
-          versions={versions}
-          draftUpdatedAt={data?.draft?.updatedAt}
-          onOpenTeamAndVersions={openTeamAndVersions}
-          onPickVersionPreview={onPickVersionPreview}
-        />
-        <AssessmentExportPanel
-          assessmentId={assessmentId}
-          workspaceId={assessment.workspaceId}
-          canEdit={canEdit}
-        />
-      </div>
-
       <Dialog
         open={draftConflict !== null}
         onOpenChange={(open) => {
@@ -2183,11 +2184,11 @@ function Slide({
   bare?: boolean;
 }) {
   return (
-    <div className="min-w-0 shrink-0 grow-0 basis-[100%] px-2 pb-12 sm:px-4">
+    <div className="min-w-0 shrink-0 grow-0 basis-[100%] self-start px-2 pb-10 sm:px-4">
       {bare ? (
         children
       ) : (
-        <div className="mx-auto max-w-3xl space-y-6 py-6 sm:py-8">
+        <div className="mx-auto max-w-3xl space-y-6 py-5 sm:py-6">
           {children}
         </div>
       )}

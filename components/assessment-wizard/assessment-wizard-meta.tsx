@@ -61,7 +61,7 @@ export function AssessmentWizardMeta({
       : null;
 
   return (
-    <div className="border-border/60 bg-card/50 flex flex-col gap-3 rounded-xl border px-3 py-3 shadow-sm sm:flex-row sm:items-center sm:justify-between sm:gap-4 sm:px-4">
+    <div className="border-border/60 bg-card/50 flex flex-col gap-3 rounded-xl border px-3 py-3 shadow-sm sm:flex-row sm:items-start sm:justify-between sm:gap-4 sm:px-4">
       <div className="flex min-w-0 flex-1 flex-wrap items-center gap-3">
         <div className="flex items-center gap-2">
           <Users className="text-muted-foreground size-4 shrink-0" aria-hidden />
