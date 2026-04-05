@@ -1,7 +1,13 @@
 import { payloadToSnapshot } from "./payloadSnapshot";
-import { computeAllResults } from "./rpaScoring";
+import { clampLikert5, computeAllResults } from "./rpaScoring";
+
+export type PublicIntakeScreeningVerdict = "egnet" | "middels" | "lite_egnet";
 
 export type PublicIntakeScreeningSummary = {
+  /** Tydelig konklusjon for innsender (RPA-screening). */
+  verdict: PublicIntakeScreeningVerdict;
+  verdictTitle: string;
+  verdictDescription: string;
   /** Kort, menneskelig: f.eks. «Ser lovende ut» */
   headline: string;
   /** 2–4 setninger, enkelt språk */
@@ -15,6 +21,95 @@ export type PublicIntakeScreeningSummary = {
   feasible: boolean;
 };
 
+function readLikertFromPayload(
+  payload: Record<string, unknown>,
+  key: string,
+  fallback: number,
+): number {
+  const v = payload[key];
+  const n = typeof v === "number" ? v : typeof v === "string" ? Number(v) : NaN;
+  if (!Number.isFinite(n)) {
+    return fallback;
+  }
+  return clampLikert5(n);
+}
+
+/**
+ * Grov RPA-screening ut fra forventet virkningsnytte, saksvariasjon og digital modenhet.
+ * Bruker samme felt som skjemaet kartlegger (1–5).
+ */
+export function computeRpaScreeningVerdict(
+  payload: Record<string, unknown>,
+  options: { feasible: boolean },
+): {
+  verdict: PublicIntakeScreeningVerdict;
+  verdictTitle: string;
+  verdictDescription: string;
+} {
+  const businessImpact = readLikertFromPayload(
+    payload,
+    "criticalityBusinessImpact",
+    3,
+  );
+  const variability = readLikertFromPayload(payload, "processVariability", 3);
+  const digitization = readLikertFromPayload(payload, "digitization", 3);
+
+  let verdict: PublicIntakeScreeningVerdict;
+
+  const lowImpact = businessImpact <= 2;
+  const lowRepeatability = variability <= 2;
+  const lowDigital = digitization <= 2;
+  const veryVariable = variability === 1;
+
+  if (
+    lowImpact ||
+    veryVariable ||
+    (lowRepeatability && lowDigital)
+  ) {
+    verdict = "lite_egnet";
+  } else if (
+    businessImpact >= 4 &&
+    variability >= 3 &&
+    digitization >= 3
+  ) {
+    verdict = "egnet";
+  } else {
+    verdict = "middels";
+  }
+
+  if (!options.feasible && verdict === "egnet") {
+    verdict = "middels";
+  }
+
+  let verdictTitle: string;
+  let verdictDescription: string;
+
+  switch (verdict) {
+    case "egnet":
+      verdictTitle = "Foreløpig vurdering: Egnet som RPA-kandidat";
+      verdictDescription =
+        "Ut fra svarene på forventet nytte, hvor like tilfellene er, og hvor digitalt arbeidet er, " +
+        "ser dette ut som en type oppgave som ofte kan passe for automatisering med digital medarbeider (robot). " +
+        "Dette er et foreløpig signal, ikke en endelig beslutning.";
+      break;
+    case "middels":
+      verdictTitle = "Foreløpig vurdering: Bør vurderes nærmere";
+      verdictDescription = !options.feasible
+        ? "Ut fra svarene virker rutiner eller systemer potensielt ustabile nok til at vi bør avklare mer før vi anbefaler robot. " +
+          "Det betyr ikke at forslaget er avvist — bare at vi trenger mer innsikt."
+        : "Svarene er ikke entydige: det kan være verdt å se nærmere på, eller vi trenger mer informasjon før vi kan si om dette er en god RPA-kandidat.";
+      break;
+    default:
+      verdictTitle = "Foreløpig vurdering: Lite egnet akkurat nå";
+      verdictDescription =
+        "Ut fra det du har svart (begrenset forventet nytte for virksomheten, mye variasjon i sakene, og/eller lite digitalt grunnlag) " +
+        "ligner dette mindre på den typen oppgave som vanligvis passer best for robot i skjermbilder. " +
+        "Vi kan likevel ta kontakt — noen ganger er det mer å hente enn det grove bildet viser.";
+  }
+
+  return { verdict, verdictTitle, verdictDescription };
+}
+
 /**
  * Samme modell som PVV-vurdering (screening) — vises til innsender på bekreftelsessiden.
  */
@@ -24,34 +119,27 @@ export function buildPublicIntakeScreeningSummary(
   const snap = payloadToSnapshot(payload);
   const c = computeAllResults(snap);
 
+  const { verdict, verdictTitle, verdictDescription } = computeRpaScreeningVerdict(
+    payload,
+    { feasible: c.feasible },
+  );
+
   const band: PublicIntakeScreeningSummary["priorityBand"] =
     c.priorityScore >= 60 ? "hoy" : c.priorityScore >= 35 ? "middels" : "lav";
 
   const hours = Math.max(0, Math.round(c.benH));
 
-  let headline: string;
-  let body: string;
+  const headline = verdictTitle;
+  let body = verdictDescription;
 
-  if (!c.feasible) {
-    headline = "Trenger nærmere avklaring";
-    body =
-      "Ut fra svarene virker rutiner eller systemer ustabile nok til at vi bør se nærmere på det før vi anbefaler robot. " +
-      "Det betyr ikke at forslaget er avvist — bare at vi vil vurdere det manuelt.";
-  } else if (band === "hoy") {
-    headline = "Ser ut som et sterkt forslag";
-    body =
-      "Basert på det du har beskrevet, ligger forslaget høyt i vår enkle prioritering: " +
-      "det er ofte mye å hente når mye gjøres likt og ofte. Vi vil likevel gå gjennom alt manuelt før vi konkluderer.";
-  } else if (band === "middels") {
-    headline = "Kan være aktuelt";
-    body =
-      "Svarene peker på at forslaget kan være verdt å se nærmere på. " +
-      "Den endelige vurderingen gjør vi når vi har lest gjennom hele saken.";
-  } else {
-    headline = "Ikke øverst på lista foreløpig";
-    body =
-      "Ut fra det du har oppgitt, ligger andre typer saker ofte foran i køen hos oss. " +
-      "Vi tar likevel kontakt etter gjennomgang — noen ganger er det mer å hente enn tallene viser.";
+  if (c.feasible && verdict !== "lite_egnet") {
+    if (band === "hoy") {
+      body +=
+        " I tillegg ligger forslaget høyt i vår enkle prioritering ut fra volum og gevinst.";
+    } else if (band === "lav") {
+      body +=
+        " Samtidig ligger ikke forslaget øverst i vår interne prioriteringsliste foreløpig — vi tar likevel kontakt etter gjennomgang.";
+    }
   }
 
   const valueLine =
@@ -60,6 +148,9 @@ export function buildPublicIntakeScreeningSummary(
       : "Vi har ikke nok tall fra svarene til å anslå timer — det avklarer vi i gjennomgangen.";
 
   return {
+    verdict,
+    verdictTitle,
+    verdictDescription,
     headline,
     body,
     valueLine,

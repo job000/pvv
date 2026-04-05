@@ -309,7 +309,157 @@ export function detectTechnicalTerms(input: string): string[] {
   return INTAKE_TECHNICAL_TERMS.filter((term) => lower.includes(term));
 }
 
-export function defaultIntakeQuestions() {
+/**
+ * Kort screening for RPA-kandidater — få spørsmål, grovt anslag,
+ * tydelig hva en RPA-kandidat er. Standardmal for nye skjema.
+ */
+export function buildIntakeQuestionsRpaScreening() {
+  const personalDataQuestionId = crypto.randomUUID();
+
+  return [
+    {
+      id: crypto.randomUUID(),
+      label: "Hva heter oppgaven eller arbeidsflyten?",
+      helpText:
+        "En RPA-kandidat er en konkret, gjentakende oppgave der en digital medarbeider kan gjøre det samme dere gjør i skjermbilder i dag — uten å bytte system. Det passer ofte når oppgaven er lik fra gang til gang, data ligger digitalt, og reglene er tydelige.\n\n" +
+        "Dette skjemaet er bare en kort screening: vi vil vite om det er grunnlag for å vurdere videre, ikke en full analyse.",
+      questionType: "text" as const,
+      required: true,
+      options: [],
+      mappingTargets: [
+        { kind: "assessmentText" as const, field: "processName" as const },
+      ],
+    },
+    {
+      id: crypto.randomUUID(),
+      label: "Hva gjør dere i dag — i to–tre setninger?",
+      helpText:
+        "Nok til at en kollega skjønner flyten. Grovt holder.",
+      questionType: "text" as const,
+      required: true,
+      options: [],
+      mappingTargets: [
+        {
+          kind: "assessmentText" as const,
+          field: "processDescription" as const,
+        },
+      ],
+    },
+    {
+      id: crypto.randomUUID(),
+      label: "Hva ønsker dere å oppnå?",
+      helpText:
+        "F.eks. mindre manuelt arbeid, færre feil eller kortere ventetid.",
+      questionType: "text" as const,
+      required: true,
+      options: [],
+      mappingTargets: [
+        { kind: "assessmentText" as const, field: "processGoal" as const },
+      ],
+    },
+    {
+      id: crypto.randomUUID(),
+      label: "Hvor ofte kommer dette opp?",
+      helpText: "Velg det som er nærmest — grovt anslag for omfanget.",
+      questionType: "multiple_choice" as const,
+      required: true,
+      options: [
+        { id: "daily", label: "Daglig" },
+        { id: "weekly", label: "Ukentlig" },
+        { id: "monthly", label: "Månedlig" },
+        { id: "rarely", label: "Sjelden" },
+      ],
+      mappingTargets: [{ kind: "derivedFrequency" as const }],
+    },
+    {
+      id: crypto.randomUUID(),
+      label:
+        "Hvor stor er forventet nytte for avdelingen eller virksomheten hvis dette løses?",
+      helpText:
+        "Tenk på tid spart, færre feil, bedre tjeneste eller lavere kost — ikke på om dere vil at vi skal følge opp. 1 = begrenset nytte · 5 = stor forventet effekt.",
+      questionType: "scale" as const,
+      required: true,
+      options: [],
+      mappingTargets: [
+        {
+          kind: "assessmentScale" as const,
+          field: "criticalityBusinessImpact" as const,
+        },
+      ],
+    },
+    {
+      id: crypto.randomUUID(),
+      label: "Gjøres jobben stort sett på samme måte hver gang?",
+      helpText:
+        "1 = veldig ulikt fra gang til gang · 5 = nesten alltid likt. Robot passer best når det er forutsigbart.",
+      questionType: "scale" as const,
+      required: true,
+      options: [],
+      mappingTargets: [
+        {
+          kind: "assessmentScale" as const,
+          field: "processVariability" as const,
+        },
+      ],
+    },
+    {
+      id: crypto.randomUUID(),
+      label: "Ligger det meste digitalt i systemer — eller mye papir og skjønn?",
+      helpText:
+        "1 = mye papir og manuelt skjønn · 5 = mest digitalt i faste skjermbilder. Grovt signal for om det er naturlig å automatisere.",
+      questionType: "scale" as const,
+      required: true,
+      options: [],
+      mappingTargets: [
+        { kind: "assessmentScale" as const, field: "digitization" as const },
+      ],
+    },
+    {
+      id: crypto.randomUUID(),
+      label:
+        "Valgfritt: er det noe som gjør at dette kanskje ikke passer som robot?",
+      helpText:
+        "F.eks. mye unntak, uklare regler, eller at annen løsning er mer naturlig. Hopp over hvis ingenting faller deg inn.",
+      questionType: "text" as const,
+      required: false,
+      options: [],
+      mappingTargets: [
+        { kind: "assessmentText" as const, field: "rpaBarrierNotes" as const },
+      ],
+    },
+    {
+      id: personalDataQuestionId,
+      label: "Berører oppgaven personopplysninger (navn, kontakt, helse, ID-nummer e.l.)?",
+      helpText:
+        "Vi spør for å vite om personvern må inn i en eventuell videre vurdering.",
+      questionType: "yes_no" as const,
+      required: true,
+      options: [],
+      mappingTargets: [{ kind: "pvvPersonalData" as const }],
+    },
+    {
+      id: crypto.randomUUID(),
+      label: "Kort om hvilke opplysninger det gjelder (valgfritt)",
+      helpText: "Bare hvis dere svarte ja over — én setning holder.",
+      questionType: "text" as const,
+      required: false,
+      options: [],
+      visibilityRule: {
+        parentQuestionKey: personalDataQuestionId,
+        match: { kind: "yes_no" as const, value: true },
+      },
+      mappingTargets: [
+        {
+          kind: "assessmentText" as const,
+          field: "hfSecurityInformationNotes" as const,
+        },
+      ],
+    },
+  ];
+}
+
+/** Full RPA-/automatisering-mal — omfattende inntak (volum, ROS, portefølje). */
+export function buildIntakeQuestionsRpaFull() {
   const personalDataQuestionId = crypto.randomUUID();
 
   return [
@@ -803,4 +953,418 @@ export function defaultIntakeQuestions() {
       ],
     },
   ];
+}
+
+/** Kort mal for ethvert forbedringsforslag (ikke bare RPA). */
+export function buildIntakeQuestionsGeneralShort() {
+  const personalDataQuestionId = crypto.randomUUID();
+  return [
+    {
+      id: crypto.randomUUID(),
+      label: "Hva heter saken eller tiltaket (kort tittel)?",
+      helpText: "Slik kollegaer ville sagt det — f.eks. «Enklere bestilling av utstyr».",
+      questionType: "text" as const,
+      required: true,
+      options: [],
+      mappingTargets: [
+        { kind: "assessmentText" as const, field: "processName" as const },
+      ],
+    },
+    {
+      id: crypto.randomUUID(),
+      label: "Hva gjør dere i dag — og hva er problemstillingen?",
+      helpText: "Noen setninger holder. Går til beskrivelse i vurderingen.",
+      questionType: "text" as const,
+      required: true,
+      options: [],
+      mappingTargets: [
+        {
+          kind: "assessmentText" as const,
+          field: "processDescription" as const,
+        },
+      ],
+    },
+    {
+      id: crypto.randomUUID(),
+      label: "Hva ønsker dere å oppnå?",
+      helpText: "Mål, gevinst eller «slik vil vi at det skal fungere».",
+      questionType: "text" as const,
+      required: true,
+      options: [],
+      mappingTargets: [
+        { kind: "assessmentText" as const, field: "processGoal" as const },
+      ],
+    },
+    {
+      id: crypto.randomUUID(),
+      label: "Hvem er involvert eller berørt?",
+      helpText: "Roller, enheter eller eksterne — kort.",
+      questionType: "text" as const,
+      required: false,
+      options: [],
+      mappingTargets: [
+        { kind: "assessmentText" as const, field: "processActors" as const },
+      ],
+    },
+    {
+      id: crypto.randomUUID(),
+      label: "Hvor ofte kommer dette opp?",
+      helpText: "Velg det som er nærmest.",
+      questionType: "multiple_choice" as const,
+      required: true,
+      options: [
+        { id: "daily", label: "Daglig" },
+        { id: "weekly", label: "Ukentlig" },
+        { id: "monthly", label: "Månedlig" },
+        { id: "rarely", label: "Sjelden" },
+      ],
+      mappingTargets: [{ kind: "derivedFrequency" as const }],
+    },
+    {
+      id: crypto.randomUUID(),
+      label: "Hvor viktig er det å få dette på plass? (1–5)",
+      helpText: "1 = kan vente · 5 = bør prioriteres.",
+      questionType: "scale" as const,
+      required: false,
+      options: [],
+      mappingTargets: [
+        {
+          kind: "assessmentScale" as const,
+          field: "criticalityBusinessImpact" as const,
+        },
+      ],
+    },
+    {
+      id: crypto.randomUUID(),
+      label: "Hva kan gå galt om dette ikke blir bedre?",
+      helpText: "Konsekvens for brukere, drift eller regelverk — brukes blant annet til ROS.",
+      questionType: "text" as const,
+      required: true,
+      options: [],
+      mappingTargets: [
+        { kind: "rosConsequence" as const },
+        {
+          kind: "assessmentText" as const,
+          field: "processConstraints" as const,
+        },
+      ],
+    },
+    {
+      id: personalDataQuestionId,
+      label: "Berører dette personopplysninger?",
+      helpText: "Ja hvis navn, kontakt, helse, ID-nummer e.l. brukes.",
+      questionType: "yes_no" as const,
+      required: true,
+      options: [],
+      mappingTargets: [{ kind: "pvvPersonalData" as const }],
+    },
+    {
+      id: crypto.randomUUID(),
+      label: "Hvilken type opplysninger er mest sentralt?",
+      questionType: "multiple_choice" as const,
+      required: true,
+      options: [
+        { id: "name", label: "Navn" },
+        { id: "contact", label: "Kontaktopplysninger" },
+        { id: "national_id", label: "ID-nummer" },
+        { id: "mixed", label: "Flere typer" },
+      ],
+      visibilityRule: {
+        parentQuestionKey: personalDataQuestionId,
+        match: { kind: "yes_no" as const, value: true },
+      },
+      mappingTargets: [
+        {
+          kind: "assessmentText" as const,
+          field: "hfSecurityInformationNotes" as const,
+        },
+      ],
+    },
+  ];
+}
+
+/** Fokus på risiko og ROS — kort spor for hendelser og konsekvenser. */
+export function buildIntakeQuestionsRiskRos() {
+  return [
+    {
+      id: crypto.randomUUID(),
+      label: "Navn eller kort tittel på risiko/saken",
+      helpText: "F.eks. «Tilgang til journalsystem ved avvik».",
+      questionType: "text" as const,
+      required: true,
+      options: [],
+      mappingTargets: [
+        { kind: "assessmentText" as const, field: "processName" as const },
+      ],
+    },
+    {
+      id: crypto.randomUUID(),
+      label: "Bakgrunn og kontekst (hva gjelder det)?",
+      helpText: "Prosess, system eller situasjon — kort.",
+      questionType: "text" as const,
+      required: true,
+      options: [],
+      mappingTargets: [
+        {
+          kind: "assessmentText" as const,
+          field: "processDescription" as const,
+        },
+      ],
+    },
+    {
+      id: crypto.randomUUID(),
+      label: "Hva kan gå galt — og hva blir konsekvensen?",
+      helpText: "For brukere, drift, økonomi eller etterlevelse.",
+      questionType: "text" as const,
+      required: true,
+      options: [],
+      mappingTargets: [
+        { kind: "rosConsequence" as const },
+        {
+          kind: "assessmentText" as const,
+          field: "processConstraints" as const,
+        },
+      ],
+    },
+    {
+      id: crypto.randomUUID(),
+      label: "Valgfritt: konkret hendelse eller scenario dere frykter",
+      helpText: "Eget punkt i ROS-forslag.",
+      questionType: "text" as const,
+      required: false,
+      options: [],
+      mappingTargets: [{ kind: "rosRiskDescription" as const }],
+    },
+    {
+      id: crypto.randomUUID(),
+      label: "Hvor ofte er dette relevant?",
+      questionType: "multiple_choice" as const,
+      required: false,
+      options: [
+        { id: "daily", label: "Daglig" },
+        { id: "weekly", label: "Ukentlig" },
+        { id: "monthly", label: "Månedlig" },
+        { id: "rarely", label: "Sjelden / ved hendelse" },
+      ],
+      mappingTargets: [{ kind: "derivedFrequency" as const }],
+    },
+    {
+      id: crypto.randomUUID(),
+      label: "Involverer det personopplysninger?",
+      questionType: "yes_no" as const,
+      required: true,
+      options: [],
+      mappingTargets: [{ kind: "pvvPersonalData" as const }],
+    },
+  ];
+}
+
+/** Personvern og behandling — egnet før PVV-arbeid. */
+export function buildIntakeQuestionsPrivacy() {
+  const personalDataQuestionId = crypto.randomUUID();
+  return [
+    {
+      id: crypto.randomUUID(),
+      label: "Hva gjelder denne vurderingen (kort tittel)?",
+      helpText: "F.eks. «Nytt verktøy for timebestilling».",
+      questionType: "text" as const,
+      required: true,
+      options: [],
+      mappingTargets: [
+        { kind: "assessmentText" as const, field: "processName" as const },
+      ],
+    },
+    {
+      id: crypto.randomUUID(),
+      label: "Hvilken behandling av opplysninger skjer?",
+      helpText: "Hva gjør dere med dataene — i vanlig språk.",
+      questionType: "text" as const,
+      required: true,
+      options: [],
+      mappingTargets: [
+        {
+          kind: "assessmentText" as const,
+          field: "processDescription" as const,
+        },
+        {
+          kind: "assessmentText" as const,
+          field: "processGoal" as const,
+        },
+      ],
+    },
+    {
+      id: crypto.randomUUID(),
+      label: "Hvem er involvert (roller, leverandører, samarbeidspartnere)?",
+      questionType: "text" as const,
+      required: false,
+      options: [],
+      mappingTargets: [
+        { kind: "assessmentText" as const, field: "processActors" as const },
+        {
+          kind: "assessmentText" as const,
+          field: "hfOrganizationalBreadthNotes" as const,
+        },
+      ],
+    },
+    {
+      id: crypto.randomUUID(),
+      label: "Systemer, lagring eller overføring av data",
+      helpText: "Hvor ligger data, evt. sky eller integrasjoner — kort.",
+      questionType: "text" as const,
+      required: false,
+      options: [],
+      mappingTargets: [
+        { kind: "assessmentText" as const, field: "processSystems" as const },
+      ],
+    },
+    {
+      id: crypto.randomUUID(),
+      label: "Sikkerhet, tilgang og dokumentasjon dere er usikre på",
+      helpText: "Valgfritt — støtter personvern- og sikkerhetsnotat i vurderingen.",
+      questionType: "text" as const,
+      required: false,
+      options: [],
+      mappingTargets: [
+        {
+          kind: "assessmentText" as const,
+          field: "hfSecurityInformationNotes" as const,
+        },
+      ],
+    },
+    {
+      id: personalDataQuestionId,
+      label: "Behandles personopplysninger om enkeltpersoner?",
+      questionType: "yes_no" as const,
+      required: true,
+      options: [],
+      mappingTargets: [{ kind: "pvvPersonalData" as const }],
+    },
+    {
+      id: crypto.randomUUID(),
+      label: "Type opplysninger (velg det som passer best)",
+      questionType: "multiple_choice" as const,
+      required: true,
+      options: [
+        { id: "name", label: "Navn" },
+        { id: "contact", label: "Kontakt" },
+        { id: "national_id", label: "ID-nummer" },
+        { id: "health", label: "Helse eller særlige kategorier" },
+        { id: "mixed", label: "Blanding / usikker" },
+      ],
+      visibilityRule: {
+        parentQuestionKey: personalDataQuestionId,
+        match: { kind: "yes_no" as const, value: true },
+      },
+      mappingTargets: [
+        {
+          kind: "assessmentText" as const,
+          field: "hfSecurityInformationNotes" as const,
+        },
+      ],
+    },
+    {
+      id: crypto.randomUUID(),
+      label: "Formål og behandlingsgrunnlag (så godt dere kan)",
+      helpText: "Hvorfor trengs opplysningene — f.eks. avtale, lov, samtykke.",
+      questionType: "text" as const,
+      required: false,
+      options: [],
+      visibilityRule: {
+        parentQuestionKey: personalDataQuestionId,
+        match: { kind: "yes_no" as const, value: true },
+      },
+      mappingTargets: [
+        {
+          kind: "assessmentText" as const,
+          field: "hfSecurityInformationNotes" as const,
+        },
+      ],
+    },
+  ];
+}
+
+/** Mal-spørsmål — strukturelt det samme som i skjemaredigerings-UI. */
+export type IntakeTemplateQuestion = {
+  id: string;
+  label: string;
+  helpText?: string;
+  questionType: "text" | "number" | "multiple_choice" | "scale" | "yes_no";
+  required: boolean;
+  options: Array<{ id: string; label: string }>;
+  visibilityRule?: {
+    parentQuestionKey: string;
+    match:
+      | { kind: "yes_no"; value: boolean }
+      | { kind: "multiple_choice"; optionId: string }
+      | { kind: "scale"; value: number };
+  };
+  mappingTargets: Array<
+    | { kind: "assessmentText"; field: string }
+    | { kind: "assessmentScale"; field: string }
+    | { kind: "assessmentNumber"; field: string }
+    | { kind: "assessmentChoice"; field: string }
+    | { kind: "derivedFrequency" }
+    | { kind: "rosConsequence" }
+    | { kind: "rosRiskDescription" }
+    | { kind: "pvvPersonalData" }
+    | { kind: "assessmentRpaBarrier" }
+    | { kind: "assessmentRpaSimilar" }
+    | { kind: "assessmentStabilityBoth" }
+    | { kind: "assessmentScaleInvertedLength" }
+  >;
+};
+
+export type IntakeFormTemplateDefinition = {
+  id: string;
+  category: string;
+  title: string;
+  description: string;
+  buildQuestions: () => IntakeTemplateQuestion[];
+};
+
+export const INTAKE_FORM_TEMPLATE_CATALOG: readonly IntakeFormTemplateDefinition[] = [
+  {
+    id: "rpa_screening",
+    category: "Automatisering og RPA",
+    title: "RPA-kandidat (screening)",
+    description:
+      "Kort inntak: forklarer hva en RPA-kandidat er, og grovt om det er grunnlag for videre vurdering — få og enkle spørsmål.",
+    buildQuestions: buildIntakeQuestionsRpaScreening,
+  },
+  {
+    id: "rpa_full",
+    category: "Automatisering og RPA",
+    title: "RPA-kandidat (detaljert)",
+    description:
+      "Omfattende inntak med volum, tid, RPA-egnethet, ROS, personvern og portefølje — når dere trenger fullt datagrunnlag som i PVV-vurderingen.",
+    buildQuestions: buildIntakeQuestionsRpaFull,
+  },
+  {
+    id: "general_short",
+    category: "Generelt",
+    title: "Kort forbedringsforslag",
+    description:
+      "Færre spørsmål for idéer om prosess, kvalitet eller tjeneste — uten RPA-fokus.",
+    buildQuestions: buildIntakeQuestionsGeneralShort,
+  },
+  {
+    id: "risk_ros",
+    category: "Risiko og ROS",
+    title: "Risiko / ROS (kort)",
+    description:
+      "Konsekvens, scenario og frekvens — for rask innmelding til risikovurdering.",
+    buildQuestions: buildIntakeQuestionsRiskRos,
+  },
+  {
+    id: "privacy",
+    category: "Personvern",
+    title: "Personvern og behandling",
+    description:
+      "Behandling, systemer og sikkerhet — godt utgangspunkt før PVV eller DPIA.",
+    buildQuestions: buildIntakeQuestionsPrivacy,
+  },
+];
+
+export function defaultIntakeQuestions() {
+  return buildIntakeQuestionsRpaScreening();
 }

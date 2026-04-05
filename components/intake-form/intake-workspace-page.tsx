@@ -26,6 +26,7 @@ import type { Id } from "@/convex/_generated/dataModel";
 import { toast } from "@/lib/app-toast";
 import type { AssessmentPayload } from "@/lib/assessment-types";
 import {
+  INTAKE_FORM_TEMPLATE_CATALOG,
   INTAKE_MAPPING_TARGET_LABELS,
   defaultIntakeQuestions,
   detectTechnicalTerms,
@@ -810,6 +811,7 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [reviewOpen, setReviewOpen] = useState(false);
   const [githubIntakeDialogOpen, setGithubIntakeDialogOpen] = useState(false);
+  const [intakeTemplatePickerOpen, setIntakeTemplatePickerOpen] = useState(false);
   const [githubDialogOpenVersion, setGithubDialogOpenVersion] = useState(0);
   const [selectedSubmissionId, setSelectedSubmissionId] =
     useState<Id<"intakeSubmissions"> | null>(null);
@@ -1267,6 +1269,27 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
       });
     });
   }
+
+  function applyIntakeQuestionTemplate(
+    buildQuestions: (typeof INTAKE_FORM_TEMPLATE_CATALOG)[number]["buildQuestions"],
+  ) {
+    const nextQuestions = buildQuestions() as EditableQuestion[];
+    setQuestions(nextQuestions);
+    setExpandedQuestionIds(nextQuestions.map((question) => question.id));
+    setMappingSectionOpenIds(questionIdsWithMappingSectionInitiallyOpen(nextQuestions));
+    setIntakeTemplatePickerOpen(false);
+    toast.success("Mal er lastet inn — husk å lagre skjemaet.");
+  }
+
+  const intakeTemplatesByCategory = useMemo(() => {
+    const map = new Map<string, (typeof INTAKE_FORM_TEMPLATE_CATALOG)[number][]>();
+    for (const template of INTAKE_FORM_TEMPLATE_CATALOG) {
+      const list = map.get(template.category) ?? [];
+      list.push(template);
+      map.set(template.category, list);
+    }
+    return [...map.entries()];
+  }, []);
 
   function handleCreateForm() {
     selectedFormIdBeforeCreateRef.current = selectedFormId;
@@ -2603,17 +2626,11 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
                     type="button"
                     variant="outline"
                     className="rounded-xl"
-                    onClick={() => {
-                      const nextQuestions = defaultIntakeQuestions();
-                      setQuestions(nextQuestions);
-                      setExpandedQuestionIds(nextQuestions.map((question) => question.id));
-                      setMappingSectionOpenIds(
-                        questionIdsWithMappingSectionInitiallyOpen(nextQuestions),
-                      );
-                    }}
+                    onClick={() => setIntakeTemplatePickerOpen(true)}
                   >
                     <Sparkles className="size-4" />
-                    Bruk eksempel
+                    Velg eksempelmal
+                    <ChevronDown className="size-4 opacity-70" />
                   </Button>
                   <Button
                     type="button"
@@ -3158,6 +3175,55 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
                 {isCreatingNewForm ? "Opprett skjema" : "Lagre skjema"}
               </Button>
             </div>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={intakeTemplatePickerOpen} onOpenChange={setIntakeTemplatePickerOpen}>
+        <DialogContent size="lg" titleId="intake-template-picker-title">
+          <DialogHeader>
+            <p id="intake-template-picker-title" className="font-heading text-lg font-semibold">
+              Velg eksempelmal
+            </p>
+            <p className="text-sm text-muted-foreground">
+              Erstatter alle spørsmål i skjemaet med malen. Du kan redigere etterpå.
+            </p>
+          </DialogHeader>
+          <DialogBody className="space-y-6">
+            {intakeTemplatesByCategory.map(([category, templates]) => (
+              <div key={category} className="space-y-2">
+                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                  {category}
+                </p>
+                <div className="flex flex-col gap-2">
+                  {templates.map((template) => (
+                    <Button
+                      key={template.id}
+                      type="button"
+                      variant="outline"
+                      className="h-auto min-h-11 w-full min-w-0 shrink flex-col items-stretch gap-1 rounded-xl py-3 text-left whitespace-normal"
+                      onClick={() => applyIntakeQuestionTemplate(template.buildQuestions)}
+                    >
+                      <span className="block w-full min-w-0 text-pretty font-medium break-words">
+                        {template.title}
+                      </span>
+                      <span className="block w-full min-w-0 text-pretty text-xs font-normal leading-snug break-words text-muted-foreground">
+                        {template.description}
+                      </span>
+                    </Button>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </DialogBody>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setIntakeTemplatePickerOpen(false)}
+            >
+              Avbryt
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

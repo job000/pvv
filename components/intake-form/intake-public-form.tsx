@@ -234,6 +234,9 @@ export function IntakePublicForm({ token }: { token: string }) {
     shouldCreateRos: boolean;
     confirmationMode?: "none" | "email_copy";
     screening: {
+      verdict: "egnet" | "middels" | "lite_egnet";
+      verdictTitle: string;
+      verdictDescription: string;
       headline: string;
       body: string;
       valueLine: string;
@@ -508,20 +511,32 @@ export function IntakePublicForm({ token }: { token: string }) {
             </div>
             <CardTitle>Takk for henvendelsen</CardTitle>
             <CardDescription>
-              Vi har mottatt forslaget ditt. Under ser du et <strong>foreløpig anslag</strong>{" "}
-              basert på de samme enkle reglene som i vår vurdering — ikke en endelig
-              beslutning.
+              Vi har mottatt forslaget ditt. Resultatet under er et <strong>foreløpig</strong>{" "}
+              utkast ut fra svarene dine — ikke en endelig beslutning hos oss.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-5 text-left text-sm">
-            <div className="rounded-2xl border border-border/60 bg-muted/20 px-4 py-4 dark:border-white/10">
-              <p className="font-heading text-base font-semibold text-foreground">
-                {submitted.screening.headline}
+            <div
+              className={cn(
+                "rounded-2xl border px-4 py-5 dark:border-white/15",
+                submitted.screening.verdict === "egnet" &&
+                  "border-emerald-500/45 bg-emerald-500/[0.12] dark:bg-emerald-500/15",
+                submitted.screening.verdict === "middels" &&
+                  "border-amber-500/45 bg-amber-500/[0.10] dark:bg-amber-500/12",
+                submitted.screening.verdict === "lite_egnet" &&
+                  "border-border/70 bg-muted/35 dark:bg-zinc-800/60",
+              )}
+            >
+              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                Ditt resultat
               </p>
-              <p className="mt-2 leading-relaxed text-muted-foreground">
+              <p className="mt-1 font-heading text-lg font-semibold leading-snug text-foreground sm:text-xl">
+                {submitted.screening.verdictTitle}
+              </p>
+              <p className="mt-3 leading-relaxed text-foreground/90">
                 {submitted.screening.body}
               </p>
-              <p className="mt-3 text-foreground/90">{submitted.screening.valueLine}</p>
+              <p className="mt-4 text-foreground/90">{submitted.screening.valueLine}</p>
               <p className="mt-3 text-xs text-muted-foreground">
                 Automatiseringsscore (ca.): {Math.round(submitted.screening.automationPercent)}%
                 {" · "}
