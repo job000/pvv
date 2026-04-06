@@ -17,7 +17,7 @@ export function formatUserFacingError(
     return fallback;
   }
 
-  let cleaned = raw
+  const cleaned = raw
     .replace(/\[CONVEX[^\]]*]\s*/g, "")
     .replace(/\[Request ID:\s*[^\]]+]\s*/g, "")
     .replace(/\s*Called by client\.?/gi, "")
@@ -78,6 +78,16 @@ export function formatUserFacingError(
     if (normalized.toLowerCase().includes(k.toLowerCase())) {
       return v;
     }
+  }
+
+  const lower = normalized.toLowerCase();
+  if (
+    lower.includes("connection lost") ||
+    lower.includes("failed to fetch") ||
+    lower.includes("networkerror when fetching") ||
+    lower.includes("load failed")
+  ) {
+    return "Mistet forbindelsen til serveren. Sjekk nettet og prøv igjen.";
   }
 
   return normalized;

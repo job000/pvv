@@ -14,6 +14,7 @@ import { Input } from "@/components/ui/input";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import { toast } from "@/lib/app-toast";
+import { formatUserFacingError } from "@/lib/user-facing-error";
 import { formatRelativeUpdatedAt } from "@/lib/assessment-ui-helpers";
 import {
   PIPELINE_STATUS_LABELS,
@@ -33,6 +34,7 @@ import {
   Loader2,
   Search,
   Shield,
+  Trash2,
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -135,6 +137,9 @@ function ProcessCoverageDetailDialog({
   primaryPvvBusy,
   primaryPvvDisabled,
   canEditPipelineStatus,
+  canDeleteProcess,
+  onDeleteProcess,
+  deleteProcessBusy,
 }: {
   workspaceId: Id<"workspaces">;
   row: CoverageRow | null;
@@ -144,6 +149,9 @@ function ProcessCoverageDetailDialog({
   primaryPvvBusy: boolean;
   primaryPvvDisabled: boolean;
   canEditPipelineStatus: boolean;
+  canDeleteProcess: boolean;
+  onDeleteProcess: (row: CoverageRow) => void;
+  deleteProcessBusy: boolean;
 }) {
   const issueUrl = row ? githubIssueUrl(row) : null;
 
@@ -323,10 +331,32 @@ function ProcessCoverageDetailDialog({
               </p>
             </DialogBody>
 
-            <DialogFooter className="flex-wrap gap-2 sm:justify-between">
-              <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-                Lukk
-              </Button>
+            <DialogFooter className="flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex flex-wrap items-center gap-2">
+                {canDeleteProcess && row ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="text-destructive border-destructive/40 hover:bg-destructive/10 gap-1.5"
+                    disabled={deleteProcessBusy}
+                    onClick={() => onDeleteProcess(row)}
+                  >
+                    {deleteProcessBusy ? (
+                      <Loader2 className="size-4 animate-spin" aria-hidden />
+                    ) : (
+                      <Trash2 className="size-4" aria-hidden />
+                    )}
+                    Slett prosess
+                  </Button>
+                ) : null}
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => onOpenChange(false)}
+                >
+                  Lukk
+                </Button>
+              </div>
               {row ? (
                 <Button
                   type="button"
@@ -361,8 +391,12 @@ export function ProcessCoverageOverview({
   const rows = useQuery(api.candidates.listProcessCoverage, { workspaceId });
   const membership = useQuery(api.workspaces.getMyMembership, { workspaceId });
   const createAssessment = useMutation(api.assessments.create);
+  const removeCandidate = useMutation(api.candidates.remove);
   const [q, setQ] = useState("");
   const [detail, setDetail] = useState<CoverageRow | null>(null);
+  const [deleteBusyId, setDeleteBusyId] = useState<Id<"candidates"> | null>(
+    null,
+  );
   const [creatingCandidateId, setCreatingCandidateId] =
     useState<Id<"candidates"> | null>(null);
 
@@ -408,6 +442,28 @@ export function ProcessCoverageOverview({
       return false;
     } finally {
       setCreatingCandidateId(null);
+    }
+  }
+
+  async function deleteProcess(c: CoverageRow) {
+    if (!canCreatePvv) {
+      return;
+    }
+    const msg = c.githubProjectItemNodeId
+      ? "Slette denne prosessen fra registeret? Fjern eventuelt kortet i GitHub-prosjekt manuelt. Eksisterende PVV-koblinger bør ryddes manuelt."
+      : "Slette denne prosessen fra registeret? Eksisterende PVV-koblinger bør ryddes manuelt.";
+    if (typeof window !== "undefined" && !window.confirm(msg)) {
+      return;
+    }
+    setDeleteBusyId(c.candidateId);
+    try {
+      await removeCandidate({ candidateId: c.candidateId });
+      toast.success("Prosess slettet.");
+      setDetail((d) => (d?.candidateId === c.candidateId ? null : d));
+    } catch (e) {
+      toast.error(formatUserFacingError(e, "Kunne ikke slette prosessen."));
+    } finally {
+      setDeleteBusyId(null);
     }
   }
 
@@ -473,6 +529,11 @@ export function ProcessCoverageOverview({
           membership === undefined
         }
         canEditPipelineStatus={Boolean(canCreatePvv)}
+        canDeleteProcess={Boolean(canCreatePvv)}
+        onDeleteProcess={(row) => void deleteProcess(row)}
+        deleteProcessBusy={
+          detail !== null && deleteBusyId === detail.candidateId
+        }
       />
 
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
@@ -498,7 +559,9 @@ export function ProcessCoverageOverview({
             <span className="text-foreground font-medium">Åpne vurdering</span>{" "}
             — kortet navigerer ikke ved klikk.{" "}
             <span className="text-foreground font-medium">Se full oversikt</span>{" "}
-            viser alle lenker og ROS.
+            viser alle lenker og ROS. Medlemmer kan slette prosessen med{" "}
+            <span className="text-foreground font-medium">Slett prosess</span>{" "}
+            (også i detaljdialogen).
           </p>
         </div>
         <div className="relative w-full sm:max-w-xs">
@@ -649,6 +712,25 @@ export function ProcessCoverageOverview({
                     >
                       Se full oversikt
                     </Button>
+                    {canCreatePvv ? (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="text-destructive hover:bg-destructive/10 h-11 min-h-[44px] w-full gap-2 border-destructive/35 text-[13px] font-medium sm:h-10 sm:min-h-0"
+                        disabled={deleteBusyId === c.candidateId}
+                        onClick={() => void deleteProcess(c)}
+                      >
+                        {deleteBusyId === c.candidateId ? (
+                          <Loader2
+                            className="size-4 shrink-0 animate-spin"
+                            aria-hidden
+                          />
+                        ) : (
+                          <Trash2 className="size-4 shrink-0" aria-hidden />
+                        )}
+                        Slett prosess
+                      </Button>
+                    ) : null}
                   </div>
                 </div>
               </article>

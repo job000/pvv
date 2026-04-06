@@ -281,3 +281,97 @@ export const listGithubProjectItemsInStatusColumn = action({
     };
   },
 });
+
+const DRAFT_ISSUE_NODE_QUERY = `query($id: ID!) {
+  node(id: $id) {
+    ... on DraftIssue {
+      id
+      title
+      body
+      createdAt
+      updatedAt
+      creator {
+        __typename
+        login
+        ... on User {
+          avatarUrl
+        }
+        ... on Organization {
+          avatarUrl
+        }
+      }
+    }
+  }
+}`;
+
+/**
+ * Henter tekst og metadata for et prosjekt-utkast (DraftIssue) via GraphQL.
+ * Utkast har ikke repo/issue-nummer før de konverteres til vanlig issue.
+ */
+export const previewGithubDraftIssue = action({
+  args: {
+    workspaceId: v.id("workspaces"),
+    draftIssueNodeId: v.string(),
+  },
+  handler: async (
+    ctx,
+    args,
+  ): Promise<{
+    title: string;
+    body: string | null;
+    createdAt: string;
+    updatedAt: string;
+    creator: { login: string; avatarUrl: string } | null;
+    draftIssueNodeId: string;
+  }> => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) {
+      throw new Error("Du må være innlogget.");
+    }
+    await ctx.runQuery(internal.candidates.assertMemberForWorkspace, {
+      workspaceId: args.workspaceId,
+      userId,
+    });
+    const id = args.draftIssueNodeId.trim();
+    if (!id) {
+      throw new Error("Mangler utkast-ID.");
+    }
+    const token = await resolveGithubToken(ctx, args.workspaceId);
+    const json = await githubGraphql(token, DRAFT_ISSUE_NODE_QUERY, { id });
+    const node = (json.data as { node?: Record<string, unknown> | null })
+      ?.node;
+    if (!node || typeof node !== "object") {
+      throw new Error("Fant ikke utkastet på GitHub.");
+    }
+    const title =
+      typeof node.title === "string" && node.title.length > 0
+        ? node.title
+        : "(Uten tittel)";
+    const body = typeof node.body === "string" ? node.body : null;
+    const createdAt =
+      typeof node.createdAt === "string" ? node.createdAt : "";
+    const updatedAt =
+      typeof node.updatedAt === "string" ? node.updatedAt : "";
+    const outId = typeof node.id === "string" ? node.id : id;
+    const cr = node.creator as
+      | { login?: string; avatarUrl?: string }
+      | null
+      | undefined;
+    const creator =
+      cr && typeof cr.login === "string" && cr.login.length > 0
+        ? {
+            login: cr.login,
+            avatarUrl:
+              typeof cr.avatarUrl === "string" ? cr.avatarUrl : "",
+          }
+        : null;
+    return {
+      title,
+      body,
+      createdAt,
+      updatedAt,
+      creator,
+      draftIssueNodeId: outId,
+    };
+  },
+});

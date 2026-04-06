@@ -46,6 +46,7 @@ import {
   priorityBorderAccentClass,
   priorityFillClass,
 } from "@/lib/assessment-ui-helpers";
+import { formatUserFacingError } from "@/lib/user-facing-error";
 import { cn } from "@/lib/utils";
 import {
   AlertTriangle,
@@ -54,6 +55,7 @@ import {
   Clock,
   Eye,
   ExternalLink,
+  FileText,
   GitBranch,
   HelpCircle,
   MessageSquare,
@@ -61,6 +63,7 @@ import {
   Ticket,
   Loader2,
   Plus,
+  RefreshCw,
   Search,
   Shield,
   Sparkles,
@@ -132,6 +135,8 @@ type GithubColumnItemRow = {
   issueNumber?: number;
   repoFullName?: string;
   issueNodeId?: string;
+  /** GraphQL node-id for DraftIssue — brukes til forhåndsvisning */
+  draftIssueId?: string;
 };
 
 function githubColumnContentKindLabel(
@@ -791,8 +796,26 @@ export function WorkspaceCandidatesPanel({
     labels: { name: string; color: string }[];
     milestone: string | null;
     commentsCount: number;
+    /** Kan mangle i eldre Convex-svar — bruk `?? []` i UI */
+    comments?: {
+      id: number;
+      body: string;
+      author: { login: string; avatarUrl: string } | null;
+      createdAt: string;
+      updatedAt: string;
+    }[];
+  };
+  type DraftGithubPreviewData = {
+    title: string;
+    body: string | null;
+    createdAt: string;
+    updatedAt: string;
+    creator: { login: string; avatarUrl: string } | null;
+    draftIssueNodeId: string;
   };
   const [ghPreview, setGhPreview] = useState<GithubPreviewData | null>(null);
+  const [draftGhPreview, setDraftGhPreview] =
+    useState<DraftGithubPreviewData | null>(null);
   const [ghPreviewOpen, setGhPreviewOpen] = useState(false);
   const [ghPreviewLoading, setGhPreviewLoading] = useState(false);
   const previewGithubIssueAction = useAction(
@@ -801,9 +824,13 @@ export function WorkspaceCandidatesPanel({
   const previewGithubIssueByUrlAction = useAction(
     api.githubIssueImport.previewGithubIssueByUrl,
   );
+  const previewGithubDraftIssueAction = useAction(
+    api.githubProjectColumnItems.previewGithubDraftIssue,
+  );
 
   const openGhPreview = useCallback(
     async (repoFullName: string, issueNumber: number) => {
+      setDraftGhPreview(null);
       setGhPreviewLoading(true);
       setGhPreviewOpen(true);
       setGhPreview(null);
@@ -813,10 +840,13 @@ export function WorkspaceCandidatesPanel({
           repoFullName,
           issueNumber,
         });
-        setGhPreview(data);
+        setGhPreview({
+          ...data,
+          comments: Array.isArray(data.comments) ? data.comments : [],
+        });
       } catch (err) {
         toast.error(
-          err instanceof Error ? err.message : "Kunne ikke hente forhåndsvisning",
+          formatUserFacingError(err, "Kunne ikke hente forhåndsvisning"),
         );
         setGhPreviewOpen(false);
       } finally {
@@ -826,8 +856,78 @@ export function WorkspaceCandidatesPanel({
     [previewGithubIssueAction, workspaceId],
   );
 
+  const openDraftGhPreview = useCallback(
+    async (draftIssueNodeId: string) => {
+      setGhPreview(null);
+      setDraftGhPreview(null);
+      setGhPreviewLoading(true);
+      setGhPreviewOpen(true);
+      try {
+        const data = await previewGithubDraftIssueAction({
+          workspaceId,
+          draftIssueNodeId,
+        });
+        setDraftGhPreview(data);
+      } catch (err) {
+        toast.error(
+          formatUserFacingError(err, "Kunne ikke hente utkast fra GitHub."),
+        );
+        setGhPreviewOpen(false);
+      } finally {
+        setGhPreviewLoading(false);
+      }
+    },
+    [previewGithubDraftIssueAction, workspaceId],
+  );
+
+  const refreshDraftGhPreview = useCallback(
+    async (draftIssueNodeId: string) => {
+      setGhPreviewLoading(true);
+      try {
+        const data = await previewGithubDraftIssueAction({
+          workspaceId,
+          draftIssueNodeId,
+        });
+        setDraftGhPreview(data);
+      } catch (err) {
+        toast.error(
+          formatUserFacingError(err, "Kunne ikke oppdatere utkast fra GitHub."),
+        );
+      } finally {
+        setGhPreviewLoading(false);
+      }
+    },
+    [previewGithubDraftIssueAction, workspaceId],
+  );
+
+  /** Hent siste issue/PR-data fra GitHub uten å lukke dialog (etter endringer på GitHub). */
+  const refreshGhPreview = useCallback(
+    async (repoFullName: string, issueNumber: number) => {
+      setGhPreviewLoading(true);
+      try {
+        const data = await previewGithubIssueAction({
+          workspaceId,
+          repoFullName,
+          issueNumber,
+        });
+        setGhPreview({
+          ...data,
+          comments: Array.isArray(data.comments) ? data.comments : [],
+        });
+      } catch (err) {
+        toast.error(
+          formatUserFacingError(err, "Kunne ikke oppdatere fra GitHub."),
+        );
+      } finally {
+        setGhPreviewLoading(false);
+      }
+    },
+    [previewGithubIssueAction, workspaceId],
+  );
+
   const openGhPreviewByUrl = useCallback(
     async (issueUrl: string) => {
+      setDraftGhPreview(null);
       setGhPreviewLoading(true);
       setGhPreviewOpen(true);
       setGhPreview(null);
@@ -836,10 +936,13 @@ export function WorkspaceCandidatesPanel({
           workspaceId,
           issueUrl,
         });
-        setGhPreview(data);
+        setGhPreview({
+          ...data,
+          comments: Array.isArray(data.comments) ? data.comments : [],
+        });
       } catch (err) {
         toast.error(
-          err instanceof Error ? err.message : "Kunne ikke hente forhåndsvisning",
+          formatUserFacingError(err, "Kunne ikke hente forhåndsvisning"),
         );
         setGhPreviewOpen(false);
       } finally {
@@ -859,6 +962,10 @@ export function WorkspaceCandidatesPanel({
   } | null>(null);
   const [columnItemsError, setColumnItemsError] = useState<string | null>(null);
   const [columnItemsLoading, setColumnItemsLoading] = useState(false);
+  /** Tidspunkt for siste vellykkede henting av kolonnekort (kun klient) */
+  const [columnItemsFetchedAt, setColumnItemsFetchedAt] = useState<number | null>(
+    null,
+  );
   const [importGithubOpen, setImportGithubOpen] = useState(false);
   const [importGithubRow, setImportGithubRow] =
     useState<GithubColumnItemRow | null>(null);
@@ -935,10 +1042,10 @@ export function WorkspaceCandidatesPanel({
             loading: false,
             options: null,
             fieldName: null,
-            error:
-              e instanceof Error
-                ? e.message
-                : "Kunne ikke laste statusliste fra GitHub.",
+            error: formatUserFacingError(
+              e,
+              "Kunne ikke laste statusliste fra GitHub.",
+            ),
           }),
         );
     },
@@ -989,10 +1096,10 @@ export function WorkspaceCandidatesPanel({
             loading: false,
             options: null,
             fieldName: null,
-            error:
-              e instanceof Error
-                ? e.message
-                : "Kunne ikke laste statusliste fra GitHub.",
+            error: formatUserFacingError(
+              e,
+              "Kunne ikke laste statusliste fra GitHub.",
+            ),
           });
         }
       });
@@ -1321,10 +1428,12 @@ export function WorkspaceCandidatesPanel({
         optionName: r.optionName,
         items: r.items,
       });
+      setColumnItemsFetchedAt(Date.now());
     } catch (e) {
       setColumnItemsResult(null);
+      setColumnItemsFetchedAt(null);
       setColumnItemsError(
-        e instanceof Error ? e.message : "Kunne ikke hente kort fra GitHub.",
+        formatUserFacingError(e, "Kunne ikke hente kort fra GitHub."),
       );
     } finally {
       setColumnItemsLoading(false);
@@ -1925,7 +2034,20 @@ export function WorkspaceCandidatesPanel({
                 Laster kolonner fra GitHub …
               </p>
             ) : githubProjectStatus.error ? (
-              <p className="text-destructive text-sm">{githubProjectStatus.error}</p>
+              <div className="space-y-2">
+                <p className="text-destructive text-sm" role="alert">
+                  {githubProjectStatus.error}
+                </p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="rounded-xl"
+                  onClick={() => reloadGithubProjectStatus(true)}
+                >
+                  Prøv igjen
+                </Button>
+              </div>
             ) : (githubProjectStatus.options?.length ?? 0) === 0 ? (
               <p className="text-muted-foreground text-sm">
                 Ingen kolonner funnet — sjekk prosjekt under Innstillinger eller prøv igjen fra en
@@ -1973,16 +2095,50 @@ export function WorkspaceCandidatesPanel({
                 {columnItemsError}
               </p>
             ) : null}
-            {columnItemsResult && columnItemsResult.items.length > 0 ? (
+            {columnItemsResult ? (
               <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <p className="text-foreground text-sm font-medium">
-                    {columnItemsResult.optionName}
-                  </p>
-                  <span className="text-muted-foreground rounded-full bg-muted/50 px-2 py-0.5 text-[11px] font-medium tabular-nums">
-                    {columnItemsResult.items.length} kort
-                  </span>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-foreground text-sm font-medium">
+                      {columnItemsResult.optionName}
+                    </p>
+                    {columnItemsFetchedAt != null ? (
+                      <p className="text-muted-foreground mt-0.5 text-[11px]">
+                        Sist hentet fra GitHub{" "}
+                        {new Date(columnItemsFetchedAt).toLocaleString("nb-NO", {
+                          day: "numeric",
+                          month: "short",
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
+                      </p>
+                    ) : null}
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-muted-foreground rounded-full bg-muted/50 px-2 py-0.5 text-[11px] font-medium tabular-nums">
+                      {columnItemsResult.items.length} kort
+                    </span>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-8 gap-1.5 rounded-lg"
+                      disabled={columnItemsLoading || !columnPickId.trim()}
+                      title="Synkroniser med GitHub — nye titler, kommentarer synlige i forhåndsvisning, kort som har flyttet kolonne"
+                      onClick={() => void fetchGithubColumnItems()}
+                    >
+                      <RefreshCw
+                        className={cn(
+                          "size-3.5 shrink-0",
+                          columnItemsLoading && "animate-spin",
+                        )}
+                        aria-hidden
+                      />
+                      Oppdater
+                    </Button>
+                  </div>
                 </div>
+                {columnItemsResult.items.length > 0 ? (
                 <div className="max-h-[min(32rem,60vh)] overflow-y-auto pr-0.5">
                   <div className="grid gap-2 sm:grid-cols-2">
                   {columnItemsResult.items.map((row) => {
@@ -2001,10 +2157,15 @@ export function WorkspaceCandidatesPanel({
                       row.issueNumber > 0
                         ? `#${row.issueNumber}`
                         : null;
-                    const canPreview =
-                      row.repoFullName?.trim() &&
+                    const canPreviewIssue =
+                      Boolean(row.repoFullName?.trim()) &&
                       row.issueNumber != null &&
                       row.issueNumber > 0;
+                    const canPreviewDraft =
+                      row.contentKind === "draft_issue" &&
+                      Boolean(row.draftIssueId?.trim());
+                    const canOpenGithubPreview =
+                      canPreviewIssue || canPreviewDraft;
 
                     const kindIcon =
                       row.contentKind === "issue" ? (
@@ -2024,23 +2185,26 @@ export function WorkspaceCandidatesPanel({
                     return (
                       <div
                         key={row.projectItemId}
-                        role={canPreview ? "button" : undefined}
-                        tabIndex={canPreview ? 0 : undefined}
+                        role={canOpenGithubPreview ? "button" : undefined}
+                        tabIndex={canOpenGithubPreview ? 0 : undefined}
                         className={cn(
                           "group relative flex items-start gap-3 rounded-xl p-3 transition-all duration-150",
-                          canPreview && "cursor-pointer",
+                          canOpenGithubPreview && "cursor-pointer",
                           linked
                             ? "bg-muted/25"
                             : "bg-card shadow-sm ring-1 ring-black/[0.05] hover:shadow-md hover:ring-black/[0.1] dark:ring-white/[0.06] dark:hover:ring-white/[0.12]",
                         )}
                         onClick={
-                          canPreview
+                          canPreviewIssue
                             ? () =>
                                 void openGhPreview(
                                   row.repoFullName!,
                                   row.issueNumber!,
                                 )
-                            : undefined
+                            : canPreviewDraft
+                              ? () =>
+                                  void openDraftGhPreview(row.draftIssueId!)
+                              : undefined
                         }
                       >
                         {kindIcon}
@@ -2110,8 +2274,7 @@ export function WorkspaceCandidatesPanel({
                   })}
                   </div>
                 </div>
-              </div>
-            ) : columnItemsResult && columnItemsResult.items.length === 0 ? (
+                ) : (
               <div className="flex flex-col items-center gap-2 py-6 text-center">
                 <div className="flex size-10 items-center justify-center rounded-xl bg-muted/50">
                   <Search className="text-muted-foreground size-4" aria-hidden />
@@ -2119,6 +2282,12 @@ export function WorkspaceCandidatesPanel({
                 <p className="text-muted-foreground text-sm">
                   Ingen kort i denne kolonnen
                 </p>
+                <p className="text-muted-foreground max-w-xs text-xs">
+                  Har det kommet nye kort på GitHub? Trykk «Oppdater» over — listen
+                  hentes på nytt fra prosjektet.
+                </p>
+              </div>
+                )}
               </div>
             ) : null}
               </section>
@@ -2311,7 +2480,10 @@ export function WorkspaceCandidatesPanel({
           open={ghPreviewOpen}
           onOpenChange={(open) => {
             setGhPreviewOpen(open);
-            if (!open) setGhPreview(null);
+            if (!open) {
+              setGhPreview(null);
+              setDraftGhPreview(null);
+            }
           }}
         >
           <DialogContent
@@ -2320,7 +2492,7 @@ export function WorkspaceCandidatesPanel({
             titleId="gh-preview-title"
             descriptionId="gh-preview-desc"
           >
-            {ghPreviewLoading && !ghPreview ? (
+            {ghPreviewLoading && !ghPreview && !draftGhPreview ? (
               <div className="flex flex-col items-center justify-center gap-3 py-12">
                 <Loader2 className="text-muted-foreground size-6 animate-spin" aria-hidden />
                 <p className="text-muted-foreground text-sm">
@@ -2377,6 +2549,15 @@ export function WorkspaceCandidatesPanel({
                   </div>
                 </DialogHeader>
                 <DialogBody className="space-y-4">
+                  {ghPreviewLoading && ghPreview ? (
+                    <div className="bg-muted/40 text-muted-foreground flex items-center gap-2 rounded-lg border px-3 py-2 text-sm">
+                      <Loader2
+                        className="size-4 shrink-0 animate-spin"
+                        aria-hidden
+                      />
+                      Henter siste versjon fra GitHub …
+                    </div>
+                  ) : null}
                   <div className="flex flex-wrap gap-x-5 gap-y-2 text-xs">
                     {ghPreview.author ? (
                       <div className="flex items-center gap-1.5">
@@ -2391,10 +2572,30 @@ export function WorkspaceCandidatesPanel({
                       <div className="flex items-center gap-1.5">
                         <Clock className="text-muted-foreground size-3" aria-hidden />
                         <span className="text-muted-foreground">
-                          {new Date(ghPreview.createdAt).toLocaleDateString(
-                            "nb-NO",
-                            { day: "numeric", month: "short", year: "numeric" },
-                          )}
+                          Opprettet{" "}
+                          {new Date(ghPreview.createdAt).toLocaleString("nb-NO", {
+                            day: "numeric",
+                            month: "short",
+                            year: "numeric",
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })}
+                        </span>
+                      </div>
+                    ) : null}
+                    {ghPreview.updatedAt &&
+                    ghPreview.updatedAt !== ghPreview.createdAt ? (
+                      <div className="flex items-center gap-1.5">
+                        <Clock className="text-muted-foreground size-3" aria-hidden />
+                        <span className="text-muted-foreground">
+                          Oppdatert{" "}
+                          {new Date(ghPreview.updatedAt).toLocaleString("nb-NO", {
+                            day: "numeric",
+                            month: "short",
+                            year: "numeric",
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })}
                         </span>
                       </div>
                     ) : null}
@@ -2417,10 +2618,10 @@ export function WorkspaceCandidatesPanel({
                     ) : null}
                   </div>
 
-                  {ghPreview.assignees.length > 0 ? (
+                  {(ghPreview.assignees ?? []).length > 0 ? (
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="text-muted-foreground text-xs">Tildelt:</span>
-                      {ghPreview.assignees.map((a) => (
+                      {(ghPreview.assignees ?? []).map((a) => (
                         <span
                           key={a.login}
                           className="inline-flex items-center gap-1.5 rounded-full bg-muted/50 px-2 py-0.5 text-xs"
@@ -2440,9 +2641,9 @@ export function WorkspaceCandidatesPanel({
                     </div>
                   ) : null}
 
-                  {ghPreview.labels.length > 0 ? (
+                  {(ghPreview.labels ?? []).length > 0 ? (
                     <div className="flex flex-wrap gap-1.5">
-                      {ghPreview.labels.map((l) => (
+                      {(ghPreview.labels ?? []).map((l) => (
                         <span
                           key={l.name}
                           className="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium"
@@ -2475,6 +2676,61 @@ export function WorkspaceCandidatesPanel({
                     </p>
                   )}
 
+                  {(ghPreview.comments ?? []).length > 0 ? (
+                    <div className="rounded-lg border border-border/50 bg-muted/10 p-4">
+                      <h3 className="text-foreground mb-3 text-xs font-semibold uppercase tracking-wide">
+                        Kommentarer
+                      </h3>
+                      <ul className="max-h-[min(40vh,24rem)] space-y-3 overflow-y-auto pr-1">
+                        {(ghPreview.comments ?? []).map((c) => (
+                          <li
+                            key={c.id}
+                            className="border-border/40 rounded-lg border bg-background/40 p-3 text-sm"
+                          >
+                            <div className="mb-2 flex flex-wrap items-center gap-2 text-[11px]">
+                              {c.author?.avatarUrl ? (
+                                <img
+                                  src={c.author.avatarUrl}
+                                  alt=""
+                                  className="size-5 rounded-full"
+                                />
+                              ) : null}
+                              <span className="text-foreground font-medium">
+                                {c.author?.login ?? "Ukjent"}
+                              </span>
+                              {c.createdAt ? (
+                                <span className="text-muted-foreground tabular-nums">
+                                  {new Date(c.createdAt).toLocaleString("nb-NO", {
+                                    day: "numeric",
+                                    month: "short",
+                                    year: "numeric",
+                                    hour: "2-digit",
+                                    minute: "2-digit",
+                                  })}
+                                </span>
+                              ) : null}
+                            </div>
+                            <pre className="text-foreground whitespace-pre-wrap font-sans text-[13px] leading-relaxed">
+                              {c.body || "(Tom kommentar)"}
+                            </pre>
+                          </li>
+                        ))}
+                      </ul>
+                      {ghPreview.commentsCount >
+                      (ghPreview.comments ?? []).length ? (
+                        <p className="text-muted-foreground mt-2 text-[11px]">
+                          GitHub har flere enn {(ghPreview.comments ?? []).length}{" "}
+                          kommentarer. Åpne saken på GitHub for full historikk.
+                        </p>
+                      ) : null}
+                    </div>
+                  ) : ghPreview.commentsCount > 0 ? (
+                    <p className="text-muted-foreground text-xs italic">
+                      Kommentarer kunne ikke lastes. Åpne saken på GitHub for å
+                      lese dem.
+                    </p>
+                  ) : null}
+
                   {ghPreview.closedAt ? (
                     <p className="text-muted-foreground text-xs">
                       Lukket{" "}
@@ -2489,7 +2745,30 @@ export function WorkspaceCandidatesPanel({
                     </p>
                   ) : null}
                 </DialogBody>
-                <DialogFooter>
+                <DialogFooter className="flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="gap-1.5"
+                    disabled={ghPreviewLoading}
+                    title="Hent på nytt beskrivelse, kommentarer og metadata fra GitHub"
+                    onClick={() =>
+                      void refreshGhPreview(
+                        ghPreview.repoFullName,
+                        ghPreview.number,
+                      )
+                    }
+                  >
+                    <RefreshCw
+                      className={cn(
+                        "size-3.5 shrink-0",
+                        ghPreviewLoading && "animate-spin",
+                      )}
+                      aria-hidden
+                    />
+                    Oppdater fra GitHub
+                  </Button>
                   {ghPreview.htmlUrl ? (
                     <a
                       href={ghPreview.htmlUrl}
@@ -2504,6 +2783,149 @@ export function WorkspaceCandidatesPanel({
                       Åpne i GitHub
                     </a>
                   ) : null}
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setGhPreviewOpen(false)}
+                  >
+                    Lukk
+                  </Button>
+                </DialogFooter>
+              </>
+            ) : draftGhPreview ? (
+              <>
+                <DialogHeader>
+                  <div className="flex items-start gap-3">
+                    <div className="bg-muted/60 flex size-9 shrink-0 items-center justify-center rounded-lg">
+                      <FileText
+                        className="text-muted-foreground size-4"
+                        aria-hidden
+                      />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <h2
+                        id="gh-preview-title"
+                        className="text-foreground text-base font-semibold leading-snug"
+                      >
+                        {draftGhPreview.title}
+                      </h2>
+                      <p
+                        id="gh-preview-desc"
+                        className="text-muted-foreground mt-0.5 text-xs"
+                      >
+                        Prosjektutkast på GitHub (ikke et repo-issue ennå)
+                      </p>
+                    </div>
+                    <Badge
+                      variant="secondary"
+                      className="border-muted-foreground/25 bg-muted/50 shrink-0 text-xs"
+                    >
+                      Utkast
+                    </Badge>
+                  </div>
+                </DialogHeader>
+                <DialogBody className="space-y-4">
+                  {ghPreviewLoading && draftGhPreview ? (
+                    <div className="bg-muted/40 text-muted-foreground flex items-center gap-2 rounded-lg border px-3 py-2 text-sm">
+                      <Loader2
+                        className="size-4 shrink-0 animate-spin"
+                        aria-hidden
+                      />
+                      Henter siste versjon fra GitHub …
+                    </div>
+                  ) : null}
+                  <div className="flex flex-wrap gap-x-5 gap-y-2 text-xs">
+                    {draftGhPreview.creator ? (
+                      <div className="flex items-center gap-1.5">
+                        <User className="text-muted-foreground size-3" aria-hidden />
+                        <span className="text-muted-foreground">Opprettet av</span>
+                        <span className="text-foreground font-medium">
+                          {draftGhPreview.creator.login}
+                        </span>
+                      </div>
+                    ) : null}
+                    {draftGhPreview.createdAt ? (
+                      <div className="flex items-center gap-1.5">
+                        <Clock className="text-muted-foreground size-3" aria-hidden />
+                        <span className="text-muted-foreground">
+                          Opprettet{" "}
+                          {new Date(draftGhPreview.createdAt).toLocaleString(
+                            "nb-NO",
+                            {
+                              day: "numeric",
+                              month: "short",
+                              year: "numeric",
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            },
+                          )}
+                        </span>
+                      </div>
+                    ) : null}
+                    {draftGhPreview.updatedAt &&
+                    draftGhPreview.updatedAt !== draftGhPreview.createdAt ? (
+                      <div className="flex items-center gap-1.5">
+                        <Clock className="text-muted-foreground size-3" aria-hidden />
+                        <span className="text-muted-foreground">
+                          Oppdatert{" "}
+                          {new Date(draftGhPreview.updatedAt).toLocaleString(
+                            "nb-NO",
+                            {
+                              day: "numeric",
+                              month: "short",
+                              year: "numeric",
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            },
+                          )}
+                        </span>
+                      </div>
+                    ) : null}
+                  </div>
+                  <p className="text-muted-foreground text-xs leading-relaxed">
+                    Utkast ligger bare i GitHub-prosjektet. Når du konverterer til
+                    vanlig issue der, får det nummer og samme detaljvisning som andre
+                    issues.
+                  </p>
+                  {draftGhPreview.body ? (
+                    <div className="rounded-lg border border-border/50 bg-muted/10 p-4">
+                      <h3 className="text-foreground mb-2 text-xs font-semibold uppercase tracking-wide">
+                        Beskrivelse
+                      </h3>
+                      <div className="prose prose-sm dark:prose-invert max-h-[40vh] overflow-y-auto text-sm leading-relaxed">
+                        <pre className="whitespace-pre-wrap font-sans text-sm">
+                          {draftGhPreview.body}
+                        </pre>
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="text-muted-foreground text-xs italic">
+                      Ingen beskrivelse.
+                    </p>
+                  )}
+                </DialogBody>
+                <DialogFooter className="flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="gap-1.5"
+                    disabled={ghPreviewLoading}
+                    title="Hent på nytt tittel og beskrivelse fra GitHub"
+                    onClick={() =>
+                      void refreshDraftGhPreview(draftGhPreview.draftIssueNodeId)
+                    }
+                  >
+                    <RefreshCw
+                      className={cn(
+                        "size-3.5 shrink-0",
+                        ghPreviewLoading && "animate-spin",
+                      )}
+                      aria-hidden
+                    />
+                    Oppdater fra GitHub
+                  </Button>
                   <Button
                     type="button"
                     variant="ghost"

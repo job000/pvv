@@ -8,6 +8,14 @@ import { resolveGithubToken } from "./githubTasks";
 const GITHUB_ACCEPT = "application/vnd.github+json";
 const GITHUB_API_VERSION = "2022-11-28";
 
+type GithubIssueCommentPreview = {
+  id: number;
+  body: string;
+  author: { login: string; avatarUrl: string } | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
 type GithubIssuePreview = {
   title: string;
   body: string | null;
@@ -24,6 +32,8 @@ type GithubIssuePreview = {
   labels: { name: string; color: string }[];
   milestone: string | null;
   commentsCount: number;
+  /** Siste inntil 100 kommentarer (issue-/PR-tråd på GitHub) */
+  comments: GithubIssueCommentPreview[];
 };
 
 /**
@@ -154,6 +164,47 @@ async function fetchGithubIssueRest(
   return (await res.json()) as Record<string, unknown>;
 }
 
+async function fetchGithubIssueCommentsRest(
+  token: string,
+  owner: string,
+  repo: string,
+  issueNumber: number,
+): Promise<GithubIssueCommentPreview[]> {
+  const res = await fetch(
+    `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/issues/${issueNumber}/comments?per_page=100`,
+    {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: GITHUB_ACCEPT,
+        "X-GitHub-Api-Version": GITHUB_API_VERSION,
+      },
+    },
+  );
+  if (!res.ok) {
+    return [];
+  }
+  const raw = (await res.json()) as unknown;
+  if (!Array.isArray(raw)) {
+    return [];
+  }
+  return raw.map((item) => {
+    const c = item as Record<string, unknown>;
+    const user = c.user as Record<string, unknown> | null;
+    return {
+      id: typeof c.id === "number" ? c.id : 0,
+      body: typeof c.body === "string" ? c.body : "",
+      author: user
+        ? {
+            login: (user.login as string) || "",
+            avatarUrl: (user.avatar_url as string) || "",
+          }
+        : null,
+      createdAt: typeof c.created_at === "string" ? c.created_at : "",
+      updatedAt: typeof c.updated_at === "string" ? c.updated_at : "",
+    };
+  });
+}
+
 function parseGithubIssueJson(
   json: Record<string, unknown>,
   repoFullName: string,
@@ -194,6 +245,7 @@ function parseGithubIssueJson(
         ? ((json.milestone as Record<string, unknown>).title as string) || null
         : null,
     commentsCount: typeof json.comments === "number" ? json.comments : 0,
+    comments: [],
   };
 }
 
@@ -224,7 +276,14 @@ export const previewGithubIssue = action({
     const token = await resolveGithubToken(ctx, args.workspaceId);
     const [owner, repoName] = repo.split("/");
     const json = await fetchGithubIssueRest(token, owner, repoName, num);
-    return parseGithubIssueJson(json, repo);
+    const preview = parseGithubIssueJson(json, repo);
+    const comments = await fetchGithubIssueCommentsRest(
+      token,
+      owner,
+      repoName,
+      num,
+    );
+    return { ...preview, comments };
   },
 });
 
@@ -255,6 +314,13 @@ export const previewGithubIssueByUrl = action({
       repoName,
       parsed.issueNumber,
     );
-    return parseGithubIssueJson(json, parsed.repoFullName);
+    const preview = parseGithubIssueJson(json, parsed.repoFullName);
+    const comments = await fetchGithubIssueCommentsRest(
+      token,
+      owner,
+      repoName,
+      parsed.issueNumber,
+    );
+    return { ...preview, comments };
   },
 });
