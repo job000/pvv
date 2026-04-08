@@ -73,7 +73,7 @@ function computeDescendantIds(
   return out;
 }
 
-/** Mulige foreldre ved flytting (avdeling → HF, seksjon → avdeling). */
+/** Mulige foreldre ved flytting (avdeling → HF, seksjon → avdeling, team → seksjon eller team). */
 function validParentOptionsForMove(
   unit: Doc<"orgUnits">,
   all: Doc<"orgUnits">[],
@@ -88,10 +88,24 @@ function validParentOptionsForMove(
       .sort((a, b) => a.name.localeCompare(b.name, "nb"))
       .map((u) => ({ id: u._id, label: u.name }));
   }
+  if (unit.kind === "seksjon") {
+    return all
+      .filter((u) => u.kind === "avdeling" && !descendants.has(u._id))
+      .sort((a, b) => a.name.localeCompare(b.name, "nb"))
+      .map((u) => ({ id: u._id, label: u.name }));
+  }
   return all
-    .filter((u) => u.kind === "avdeling" && !descendants.has(u._id))
+    .filter(
+      (u) =>
+        (u.kind === "seksjon" || u.kind === "team") &&
+        !descendants.has(u._id) &&
+        u._id !== unit._id,
+    )
     .sort((a, b) => a.name.localeCompare(b.name, "nb"))
-    .map((u) => ({ id: u._id, label: u.name }));
+    .map((u) => ({
+      id: u._id,
+      label: `${ORG_UNIT_KIND_LABELS[u.kind]} · ${u.name}`,
+    }));
 }
 
 function MerkantilContactRow({
@@ -643,12 +657,14 @@ function OrgBranch({
     }
   }
 
-  const depthAccent =
-    depth === 0
-      ? "border-l-primary/55"
-      : depth === 1
-        ? "border-l-sky-400/30"
-        : "border-l-emerald-400/30";
+  const depthAccentPalette = [
+    "border-l-primary/55",
+    "border-l-sky-400/30",
+    "border-l-emerald-400/30",
+    "border-l-violet-400/30",
+    "border-l-amber-400/30",
+  ] as const;
+  const depthAccent = depthAccentPalette[depth % depthAccentPalette.length];
 
   return (
     <div
@@ -659,8 +675,7 @@ function OrgBranch({
       <div
         className={cn(
           "group/card relative w-full min-w-[260px] max-w-md",
-          canEdit && unit.kind !== "seksjon" && "pb-5 sm:pb-6",
-          canEdit && unit.kind === "seksjon" && "pb-2",
+          canEdit && "pb-5 sm:pb-6",
         )}
       >
       <div
@@ -917,23 +932,21 @@ function OrgBranch({
           >
             <Plus className="size-[1.125rem] stroke-[2.5]" aria-hidden />
           </button>
-          {unit.kind !== "seksjon" ? (
-            <button
-              type="button"
-              className={cn(
-                "border-border/55 bg-background/95 text-primary hover:bg-primary/10 hover:border-primary/35 absolute bottom-0 left-1/2 z-30 flex size-10 -translate-x-1/2 translate-y-1/2 items-center justify-center rounded-full border shadow-md ring-1 ring-black/[0.04] backdrop-blur-sm transition-[opacity,transform,box-shadow] hover:shadow-lg focus-visible:opacity-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary active:scale-95 dark:ring-white/[0.06]",
-                "touch-manipulation opacity-100 sm:opacity-0 sm:group-hover/card:opacity-100 sm:group-focus-within/card:opacity-100",
-              )}
-              onClick={(e) => {
-                e.stopPropagation();
-                openAddDialog("child");
-              }}
-              aria-label={`Ny underenhet under ${unit.name}`}
-              title="Ny underenhet"
-            >
-              <Plus className="size-[1.125rem] stroke-[2.5]" aria-hidden />
-            </button>
-          ) : null}
+          <button
+            type="button"
+            className={cn(
+              "border-border/55 bg-background/95 text-primary hover:bg-primary/10 hover:border-primary/35 absolute bottom-0 left-1/2 z-30 flex size-10 -translate-x-1/2 translate-y-1/2 items-center justify-center rounded-full border shadow-md ring-1 ring-black/[0.04] backdrop-blur-sm transition-[opacity,transform,box-shadow] hover:shadow-lg focus-visible:opacity-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary active:scale-95 dark:ring-white/[0.06]",
+              "touch-manipulation opacity-100 sm:opacity-0 sm:group-hover/card:opacity-100 sm:group-focus-within/card:opacity-100",
+            )}
+            onClick={(e) => {
+              e.stopPropagation();
+              openAddDialog("child");
+            }}
+            aria-label={`Ny underenhet under ${unit.name}`}
+            title="Ny underenhet"
+          >
+            <Plus className="size-[1.125rem] stroke-[2.5]" aria-hidden />
+          </button>
         </>
       ) : null}
       </div>
@@ -1018,7 +1031,9 @@ function OrgBranch({
                           ? ORG_UNIT_KIND_LABELS.avdeling
                           : unit.kind === "avdeling"
                             ? ORG_UNIT_KIND_LABELS.seksjon
-                            : "";
+                            : unit.kind === "seksjon" || unit.kind === "team"
+                              ? ORG_UNIT_KIND_LABELS.team
+                              : "";
                       return `Ny ${k} under ${unit.name}`;
                     })()
                   : addDialog === "sibling"
@@ -1139,7 +1154,9 @@ function OrgBranch({
               <p className="text-muted-foreground mt-2 text-sm leading-relaxed">
                 {unit.kind === "avdeling"
                   ? "Velg hvilket hovedselskap (HF) avdelingen skal ligge under."
-                  : "Velg hvilken avdeling teamet skal ligge under."}
+                  : unit.kind === "seksjon"
+                    ? "Velg hvilken avdeling teamet skal ligge under."
+                    : "Velg hvilken seksjon eller team-enhet denne enheten skal ligge under."}
               </p>
             </DialogHeader>
             <DialogBody className="space-y-2 px-5 pb-2 sm:px-6">
@@ -1226,12 +1243,14 @@ function AddChildFormFields({
       ? ("avdeling" as const)
       : parent.kind === "avdeling"
         ? ("seksjon" as const)
-        : null;
+        : parent.kind === "seksjon" || parent.kind === "team"
+          ? ("team" as const)
+          : null;
 
   if (childKind === null) {
     return null;
   }
-  const kindForChild: "avdeling" | "seksjon" = childKind;
+  const kindForChild: "avdeling" | "seksjon" | "team" = childKind;
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -1997,9 +2016,10 @@ export function OrgChartPanel({
         </summary>
         <div className="text-muted-foreground mt-4 space-y-3 border-t border-border/50 pt-4 text-sm leading-relaxed">
           <p>
-            Kartet har <strong className="text-foreground font-medium">tre nivåer</strong>:
-            øverst selskap eller konsern, deretter avdeling eller forretningsenhet,
-            og innerst team eller gruppe. Navn tilpasses deres modell.
+            Strukturen starter med <strong className="text-foreground font-medium">selskap eller konsern</strong>,
+            deretter avdeling eller forretningsenhet, så team eller seksjon — og du kan legge til{" "}
+            <strong className="text-foreground font-medium">flere team-nivåer</strong> under en seksjon
+            etter behov. Navn tilpasses deres modell.
           </p>
           <p>
             Hvert nivå kan ha{" "}
@@ -2012,7 +2032,7 @@ export function OrgChartPanel({
             <strong className="text-foreground font-medium">+</strong> til venstre eller høyre
             på kortet (ved peker over kortet på større skjerm) oppretter en søskenenhet;{" "}
             <strong className="text-foreground font-medium">+</strong> under kortet legger til
-            ett nivå inn i treet (ikke på laveste nivå). Flytt og slett finner du nederst i
+            ett nivå under (f.eks. team under seksjon, eller team under team). Flytt og slett finner du nederst i
             kortet.
           </p>
           <p>

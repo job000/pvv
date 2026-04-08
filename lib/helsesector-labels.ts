@@ -1,12 +1,14 @@
 /**
  * Etiketter for organisasjonsenheter.
- * Nøklene (helseforetak / avdeling / seksjon) er historiske i databasen;
+ * Nøklene (helseforetak / avdeling / seksjon / team) er historiske i databasen;
  * visningstekstene er generelle for alle typer virksomheter.
  */
 export const ORG_UNIT_KIND_LABELS = {
   helseforetak: "Hovedselskap eller konsern",
   avdeling: "Avdeling eller forretningsenhet",
   seksjon: "Team, gruppe eller seksjon",
+  /** Undernivå under seksjon; kan nøstes for flere lag. */
+  team: "Team eller undergruppe",
 } as const;
 
 /** Status for risiko- og personvernsdokumentasjon (kort språk i lister) */

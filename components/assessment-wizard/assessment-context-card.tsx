@@ -541,4 +541,5 @@ const ORG_SHORT: Record<Doc<"orgUnits">["kind"], string> = {
   helseforetak: "Selsk.",
   avdeling: "Avd.",
   seksjon: "Team",
+  team: "Gr.",
 };

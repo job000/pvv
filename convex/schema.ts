@@ -578,7 +578,7 @@ export default defineSchema({
     .index("by_user_workspace", ["userId", "workspaceId"]),
 
   /**
-   * Organisasjonskart (offentlig sektor / sykehus): Helseforetak → avdeling → seksjon.
+   * Organisasjonskart: Helseforetak → avdeling → seksjon → valgfrie team-nivåer under seksjon.
    * Merkantil kontakt og tilleggsinfo kan settes per enhet.
    */
   orgUnits: defineTable({
@@ -588,6 +588,7 @@ export default defineSchema({
       v.literal("helseforetak"),
       v.literal("avdeling"),
       v.literal("seksjon"),
+      v.literal("team"),
     ),
     name: v.string(),
     shortName: v.optional(v.string()),

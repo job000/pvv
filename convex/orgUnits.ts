@@ -11,10 +11,11 @@ const kindValidator = v.union(
   v.literal("helseforetak"),
   v.literal("avdeling"),
   v.literal("seksjon"),
+  v.literal("team"),
 );
 
 function assertValidHierarchy(
-  kind: "helseforetak" | "avdeling" | "seksjon",
+  kind: "helseforetak" | "avdeling" | "seksjon" | "team",
   parent: Doc<"orgUnits"> | null,
 ) {
   if (!parent) {
@@ -35,9 +36,14 @@ function assertValidHierarchy(
       "Under avdeling kan det bare opprettes team, grupper eller seksjoner.",
     );
   }
-  if (parent.kind === "seksjon") {
+  if (parent.kind === "seksjon" && kind !== "team") {
     throw new Error(
-      "Laveste nivå (team/gruppe) kan ikke ha underenheter i dette hierarkiet.",
+      "Under seksjon kan det bare opprettes underenheter på neste nivå (team/gruppe).",
+    );
+  }
+  if (parent.kind === "team" && kind !== "team") {
+    throw new Error(
+      "Under denne team-enheten kan det bare opprettes ytterligere underenheter på samme type nivå.",
     );
   }
 }
