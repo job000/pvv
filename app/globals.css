@@ -139,6 +139,20 @@
   html[data-pwa-hint="1"] main {
     padding-bottom: max(6.5rem, env(safe-area-inset-bottom));
   }
+
+  /**
+   * iOS Safari (og enkelte andre mobilnettlesere) zoomer inn ved fokus på felt med
+   * computed font-size under 16px. Eksplisitt 16px på små/middels skjermer overstyrer
+   * text-xs/text-sm og html[data-ui-density="compact"] slik at zoom ikke skjer.
+   */
+  @media (max-width: 1023px) {
+    input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="image"]):not([type="button"]):not([type="submit"]):not([type="reset"]):not([type="hidden"]):not([type="color"]),
+    textarea,
+    select,
+    [contenteditable="true"] {
+      font-size: 16px !important;
+    }
+  }
 }
 
 @layer components {

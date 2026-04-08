@@ -26,6 +26,7 @@ import {
   Building2,
   ChevronDown,
   ChevronRight,
+  Hand,
   Layers,
   Maximize2,
   Minimize2,
@@ -674,14 +675,15 @@ function OrgBranch({
     >
       <div
         className={cn(
-          "group/card relative w-full min-w-[260px] max-w-md",
-          canEdit && "pb-5 sm:pb-6",
+          "group/card relative w-full min-w-[188px] max-w-[15.5rem] sm:min-w-[200px] sm:max-w-[16.5rem]",
+          canEdit && "pb-4 sm:pb-5",
         )}
       >
       <div
         ref={cardShellRef}
+        data-org-chart-card
         className={cn(
-          "w-full overflow-hidden rounded-2xl border border-border/40 bg-card/90 shadow-sm backdrop-blur-sm transition-[box-shadow,transform,border-color] duration-200 hover:border-border/60 hover:shadow-md dark:bg-card/95 dark:border-white/[0.06]",
+          "w-full overflow-hidden rounded-xl border border-border/40 bg-card/90 shadow-sm backdrop-blur-sm transition-[box-shadow,transform,border-color] duration-200 hover:border-border/60 hover:shadow-md dark:bg-card/95 dark:border-white/[0.06]",
           "border-l-2",
           depthAccent,
           orgChartCtx &&
@@ -696,10 +698,10 @@ function OrgBranch({
           orgChartCtx.onCardSurfaceActivate(unit._id);
         }}
       >
-        <div className="flex items-start gap-2.5 px-4 pb-3 pt-4 sm:gap-3 sm:px-5 sm:pt-5">
+        <div className="flex items-start gap-2 px-3 pb-2 pt-3 sm:gap-2.5 sm:px-4 sm:pb-2.5 sm:pt-3.5">
           <button
             type="button"
-            className="text-muted-foreground hover:bg-muted/50 hover:text-foreground mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg transition-colors"
+            className="text-muted-foreground hover:bg-muted/50 hover:text-foreground mt-px flex size-7 shrink-0 items-center justify-center rounded-md transition-colors sm:size-7"
             onClick={() => setCardExpanded(!cardExpanded)}
             aria-expanded={cardExpanded}
             aria-label={
@@ -711,7 +713,7 @@ function OrgBranch({
           >
             <ChevronDown
               className={cn(
-                "size-4 transition-transform duration-200",
+                "size-3.5 transition-transform duration-200 sm:size-4",
                 cardExpanded ? "rotate-180" : "",
               )}
               aria-hidden
@@ -727,8 +729,8 @@ function OrgBranch({
             ) : null}
             <p
               className={cn(
-                "font-heading text-base font-semibold leading-snug tracking-tight text-foreground/95 sm:text-[1.0625rem]",
-                unit.localCode ? "mt-1" : "mt-0.5",
+                "font-heading text-sm font-semibold leading-snug tracking-tight text-foreground/95 sm:text-[0.9375rem]",
+                unit.localCode ? "mt-0.5" : "mt-0.5",
               )}
             >
               {unit.name}
@@ -741,14 +743,14 @@ function OrgBranch({
               (rollup.assessmentCount ?? 0) > 0 ||
               (rollup.intakeSubmissionCount ?? 0) > 0 ||
               (rollup.intakeFormCount ?? 0) > 0) ? (
-              <div className="mt-2 flex flex-wrap items-center gap-1.5">
+              <div className="mt-1.5 flex flex-wrap items-center gap-1">
                 {kids.length > 0 && (
-                  <span className="text-muted-foreground border-border/35 inline-flex items-center rounded-md border px-1.5 py-0.5 text-[10px] font-medium">
+                  <span className="text-muted-foreground border-border/40 inline-flex items-center rounded border px-1 py-px text-[9px] font-medium sm:px-1.5 sm:text-[10px]">
                     {kids.length} underenhet{kids.length === 1 ? "" : "er"}
                   </span>
                 )}
                 {contactsForUnit.length > 0 && (
-                  <span className="text-muted-foreground border-border/35 inline-flex items-center rounded-md border px-1.5 py-0.5 text-[10px] font-medium">
+                  <span className="text-muted-foreground border-border/40 inline-flex items-center rounded border px-1 py-px text-[9px] font-medium sm:px-1.5 sm:text-[10px]">
                     {contactsForUnit.length} kontakt{contactsForUnit.length === 1 ? "" : "er"}
                   </span>
                 )}
@@ -765,8 +767,12 @@ function OrgBranch({
           </div>
         </div>
 
-        <div className="border-border/25 border-t px-3 py-3 sm:px-4">
-          <OrgUnitTreeOverviewStrip workspaceId={workspaceId} stats={rollup} />
+        <div className="border-border/30 border-t px-2 py-2 sm:px-3 sm:py-2">
+          <OrgUnitTreeOverviewStrip
+            compact
+            workspaceId={workspaceId}
+            stats={rollup}
+          />
         </div>
 
         {cardExpanded ? (
@@ -905,7 +911,7 @@ function OrgBranch({
           <button
             type="button"
             className={cn(
-              "border-border/55 bg-background/95 text-primary hover:bg-primary/10 hover:border-primary/35 absolute left-0 top-1/2 z-30 flex size-10 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border shadow-md ring-1 ring-black/[0.04] backdrop-blur-sm transition-[opacity,transform,box-shadow] hover:shadow-lg focus-visible:opacity-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary active:scale-95 dark:ring-white/[0.06]",
+              "border-border/55 bg-background/95 text-primary hover:bg-primary/10 hover:border-primary/35 absolute left-0 top-1/2 z-30 flex size-8 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border shadow-md ring-1 ring-black/[0.04] backdrop-blur-sm transition-[opacity,transform,box-shadow] hover:shadow-lg focus-visible:opacity-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary active:scale-95 dark:ring-white/[0.06]",
               "touch-manipulation opacity-100 sm:opacity-0 sm:group-hover/card:opacity-100 sm:group-focus-within/card:opacity-100",
             )}
             onClick={(e) => {
@@ -915,12 +921,12 @@ function OrgBranch({
             aria-label={`Ny enhet ved siden av ${unit.name}`}
             title="Ny på samme nivå (søsken)"
           >
-            <Plus className="size-[1.125rem] stroke-[2.5]" aria-hidden />
+            <Plus className="size-3.5 stroke-[2.5]" aria-hidden />
           </button>
           <button
             type="button"
             className={cn(
-              "border-border/55 bg-background/95 text-primary hover:bg-primary/10 hover:border-primary/35 absolute right-0 top-1/2 z-30 flex size-10 translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border shadow-md ring-1 ring-black/[0.04] backdrop-blur-sm transition-[opacity,transform,box-shadow] hover:shadow-lg focus-visible:opacity-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary active:scale-95 dark:ring-white/[0.06]",
+              "border-border/55 bg-background/95 text-primary hover:bg-primary/10 hover:border-primary/35 absolute right-0 top-1/2 z-30 flex size-8 translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border shadow-md ring-1 ring-black/[0.04] backdrop-blur-sm transition-[opacity,transform,box-shadow] hover:shadow-lg focus-visible:opacity-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary active:scale-95 dark:ring-white/[0.06]",
               "touch-manipulation opacity-100 sm:opacity-0 sm:group-hover/card:opacity-100 sm:group-focus-within/card:opacity-100",
             )}
             onClick={(e) => {
@@ -930,12 +936,12 @@ function OrgBranch({
             aria-label={`Ny enhet ved siden av ${unit.name}`}
             title="Ny på samme nivå (søsken)"
           >
-            <Plus className="size-[1.125rem] stroke-[2.5]" aria-hidden />
+            <Plus className="size-3.5 stroke-[2.5]" aria-hidden />
           </button>
           <button
             type="button"
             className={cn(
-              "border-border/55 bg-background/95 text-primary hover:bg-primary/10 hover:border-primary/35 absolute bottom-0 left-1/2 z-30 flex size-10 -translate-x-1/2 translate-y-1/2 items-center justify-center rounded-full border shadow-md ring-1 ring-black/[0.04] backdrop-blur-sm transition-[opacity,transform,box-shadow] hover:shadow-lg focus-visible:opacity-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary active:scale-95 dark:ring-white/[0.06]",
+              "border-border/55 bg-background/95 text-primary hover:bg-primary/10 hover:border-primary/35 absolute bottom-0 left-1/2 z-30 flex size-8 -translate-x-1/2 translate-y-1/2 items-center justify-center rounded-full border shadow-md ring-1 ring-black/[0.04] backdrop-blur-sm transition-[opacity,transform,box-shadow] hover:shadow-lg focus-visible:opacity-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary active:scale-95 dark:ring-white/[0.06]",
               "touch-manipulation opacity-100 sm:opacity-0 sm:group-hover/card:opacity-100 sm:group-focus-within/card:opacity-100",
             )}
             onClick={(e) => {
@@ -945,7 +951,7 @@ function OrgBranch({
             aria-label={`Ny underenhet under ${unit.name}`}
             title="Ny underenhet"
           >
-            <Plus className="size-[1.125rem] stroke-[2.5]" aria-hidden />
+            <Plus className="size-3.5 stroke-[2.5]" aria-hidden />
           </button>
         </>
       ) : null}
@@ -955,8 +961,8 @@ function OrgBranch({
         <>
           <div
             className={cn(
-              "w-px shrink-0 bg-border/50",
-              kids.length === 1 ? "h-10" : "h-6",
+              "w-0.5 shrink-0 rounded-full bg-foreground/38 ring-2 ring-muted/90 dark:bg-foreground/48 dark:ring-muted",
+              kids.length === 1 ? "h-8" : "h-5",
             )}
             aria-hidden
           />
@@ -967,12 +973,13 @@ function OrgBranch({
           >
             <div
               className={cn(
-                "grid w-full gap-x-4 gap-y-6",
-                kids.length > 1 && "border-t border-border/35 pt-6",
+                "grid w-full gap-x-3 gap-y-5",
+                kids.length > 1 &&
+                  "border-t-2 border-foreground/25 pt-5 dark:border-foreground/32",
                 kids.length === 1 && "justify-items-center",
               )}
               style={{
-                gridTemplateColumns: `repeat(${kids.length}, minmax(200px, 1fr))`,
+                gridTemplateColumns: `repeat(${kids.length}, minmax(168px, 1fr))`,
               }}
             >
               {kids.map((ch) => (
@@ -982,7 +989,7 @@ function OrgBranch({
                 >
                   {kids.length > 1 ? (
                     <div
-                      className="mb-0 h-4 w-px shrink-0 bg-border/50"
+                      className="mb-0 h-3 w-0.5 shrink-0 rounded-full bg-foreground/38 ring-2 ring-muted/90 dark:bg-foreground/48 dark:ring-muted"
                       aria-hidden
                     />
                   ) : null}
@@ -1714,9 +1721,11 @@ function AddRootOrganizationForm({
   );
 }
 
-const ORG_CHART_ZOOM_MIN = 0.35;
-const ORG_CHART_ZOOM_MAX = 1.75;
-const ORG_CHART_ZOOM_STEP = 1.12;
+const ORG_CHART_ZOOM_MIN = 0.22;
+const ORG_CHART_ZOOM_MAX = 2.5;
+const ORG_CHART_ZOOM_STEP = 1.1;
+/** Standard startvisning: litt zoomet ut + kompakte kort gir bedre oversikt. */
+const ORG_CHART_ZOOM_INITIAL = 0.88;
 
 function clampOrgChartZoom(z: number) {
   return Math.min(ORG_CHART_ZOOM_MAX, Math.max(ORG_CHART_ZOOM_MIN, z));
@@ -1805,7 +1814,9 @@ export function OrgChartPanel({
     return m;
   }, [allContacts]);
 
-  const [chartZoom, setChartZoom] = useState(1);
+  const [chartZoom, setChartZoom] = useState(ORG_CHART_ZOOM_INITIAL);
+  const [chartPanMode, setChartPanMode] = useState(false);
+  const [chartIsPanning, setChartIsPanning] = useState(false);
   const chartZoomRef = useRef(chartZoom);
   useEffect(() => {
     chartZoomRef.current = chartZoom;
@@ -1892,30 +1903,84 @@ export function OrgChartPanel({
     };
   }, []);
 
+  const panSessionRef = useRef<{
+    pointerId: number;
+    startX: number;
+    startY: number;
+    startSl: number;
+    startSt: number;
+  } | null>(null);
+
   useEffect(() => {
     const el = chartViewportRef.current;
     if (!el) return;
-    const onMouseDown = (e: MouseEvent) => {
-      if (e.button !== 1) return;
-      e.preventDefault();
-      const startX = e.clientX;
-      const startY = e.clientY;
-      const startSl = el.scrollLeft;
-      const startSt = el.scrollTop;
-      const onMove = (ev: MouseEvent) => {
-        el.scrollLeft = startSl - (ev.clientX - startX);
-        el.scrollTop = startSt - (ev.clientY - startY);
-      };
-      const onUp = () => {
-        window.removeEventListener("mousemove", onMove);
-        window.removeEventListener("mouseup", onUp);
-      };
-      window.addEventListener("mousemove", onMove);
-      window.addEventListener("mouseup", onUp);
+
+    const interactiveSelector =
+      "button, a, summary, input, textarea, select, label, [role='dialog']";
+
+    const shouldStartPan = (e: PointerEvent) => {
+      if (e.pointerType !== "mouse") return false;
+      const t = e.target as HTMLElement | null;
+      if (!t || !el.contains(t)) return false;
+      if (t.closest(interactiveSelector)) return false;
+
+      if (e.button === 1) {
+        e.preventDefault();
+        return true;
+      }
+      if (e.button !== 0) return false;
+      if (e.altKey) return true;
+      if (chartPanMode && !t.closest("[data-org-chart-card]")) return true;
+      return false;
     };
-    el.addEventListener("mousedown", onMouseDown);
-    return () => el.removeEventListener("mousedown", onMouseDown);
-  }, []);
+
+    const onPointerDown = (e: PointerEvent) => {
+      if (!shouldStartPan(e)) return;
+      panSessionRef.current = {
+        pointerId: e.pointerId,
+        startX: e.clientX,
+        startY: e.clientY,
+        startSl: el.scrollLeft,
+        startSt: el.scrollTop,
+      };
+      setChartIsPanning(true);
+      try {
+        el.setPointerCapture(e.pointerId);
+      } catch {
+        /* ignore */
+      }
+    };
+
+    const onPointerMove = (e: PointerEvent) => {
+      const s = panSessionRef.current;
+      if (!s || e.pointerId !== s.pointerId) return;
+      el.scrollLeft = s.startSl - (e.clientX - s.startX);
+      el.scrollTop = s.startSt - (e.clientY - s.startY);
+    };
+
+    const endPan = (e: PointerEvent) => {
+      const s = panSessionRef.current;
+      if (!s || e.pointerId !== s.pointerId) return;
+      panSessionRef.current = null;
+      setChartIsPanning(false);
+      try {
+        el.releasePointerCapture(e.pointerId);
+      } catch {
+        /* ignore */
+      }
+    };
+
+    el.addEventListener("pointerdown", onPointerDown);
+    el.addEventListener("pointermove", onPointerMove);
+    el.addEventListener("pointerup", endPan);
+    el.addEventListener("pointercancel", endPan);
+    return () => {
+      el.removeEventListener("pointerdown", onPointerDown);
+      el.removeEventListener("pointermove", onPointerMove);
+      el.removeEventListener("pointerup", endPan);
+      el.removeEventListener("pointercancel", endPan);
+    };
+  }, [chartPanMode]);
 
   const zoomOut = useCallback(() => {
     setChartZoom((z) => clampOrgChartZoom(z / ORG_CHART_ZOOM_STEP));
@@ -1923,7 +1988,10 @@ export function OrgChartPanel({
   const zoomIn = useCallback(() => {
     setChartZoom((z) => clampOrgChartZoom(z * ORG_CHART_ZOOM_STEP));
   }, []);
-  const resetZoom = useCallback(() => setChartZoom(1), []);
+  const resetZoom = useCallback(
+    () => setChartZoom(ORG_CHART_ZOOM_INITIAL),
+    [],
+  );
 
   const cardRefs = useRef(new Map<string, HTMLDivElement>());
   const registerCardRef = useCallback(
@@ -2026,7 +2094,16 @@ export function OrgChartPanel({
             <strong className="text-foreground font-medium">kontaktpersoner</strong>{" "}
             (utvid kortet). Bruk knappen «Vis detaljer» eller snarveien under
             oversiktsraden for å vise eller skjule ROS, kontakter og mer tekst.
-            Underenheter vises i trestruktur med linjer mellom nivåene.
+            Underenheter vises i trestruktur med tydelige linjer mellom nivåene (tilpasset lys og mørk modus).
+          </p>
+          <p>
+            <strong className="text-foreground font-medium">Zoom</strong> med knappene over kartet,{" "}
+            <kbd className="bg-muted rounded px-1 py-0.5 font-mono text-[10px]">Ctrl</kbd>{" "}
+            + musehjul, eller knip på styreflate.{" "}
+            <strong className="text-foreground font-medium">Flytt utsnitt:</strong> aktiver «Dra kart» og dra i
+            området utenfor kortene, eller hold{" "}
+            <kbd className="bg-muted rounded px-1 py-0.5 font-mono text-[10px]">Alt</kbd>{" "}
+            (Mac: Valg) og dra med mus; midtknapp fungerer også.
           </p>
           <p>
             <strong className="text-foreground font-medium">+</strong> til venstre eller høyre
@@ -2207,6 +2284,19 @@ export function OrgChartPanel({
                     <Minimize2 className="mx-auto size-4" aria-hidden />
                   </Button>
                   <div className="bg-border mx-0.5 h-6 w-px shrink-0 self-center" aria-hidden />
+                  <Button
+                    type="button"
+                    variant={chartPanMode ? "secondary" : "ghost"}
+                    size="sm"
+                    className="size-10 min-h-10 min-w-10 shrink-0 touch-manipulation rounded-lg px-0"
+                    onClick={() => setChartPanMode((v) => !v)}
+                    aria-pressed={chartPanMode}
+                    aria-label="Dra for å flytte kartet"
+                    title="Dra-kart: dra i bakgrunnen utenfor kort, eller hold Alt og dra. Midtklikk panorerer også."
+                  >
+                    <Hand className="mx-auto size-4" aria-hidden />
+                  </Button>
+                  <div className="bg-border mx-0.5 h-6 w-px shrink-0 self-center" aria-hidden />
                   <div className="flex items-center gap-0.5" role="group" aria-label="Zoom">
                     <Button
                       type="button"
@@ -2244,10 +2334,10 @@ export function OrgChartPanel({
                       size="sm"
                       className="h-10 min-h-10 min-w-[2.75rem] shrink-0 touch-manipulation rounded-lg px-1.5 text-[11px] font-semibold"
                       onClick={resetZoom}
-                      title="Tilbakestill zoom til 100 %"
-                      aria-label="Tilbakestill zoom til 100 prosent"
+                      title={`Tilbakestill til standardvisning (${Math.round(ORG_CHART_ZOOM_INITIAL * 100)} %)`}
+                      aria-label={`Tilbakestill zoom til standardvisning ${Math.round(ORG_CHART_ZOOM_INITIAL * 100)} prosent`}
                     >
-                      100%
+                      Std
                     </Button>
                   </div>
                 </div>
@@ -2262,14 +2352,14 @@ export function OrgChartPanel({
                     <p className="text-muted-foreground max-w-2xl text-xs leading-relaxed">
                       <strong className="text-foreground font-medium">Trykk på et kort</strong> for å
                       zoome til minst 100 % og sentrere enheten.{" "}
-                      <strong className="text-foreground font-medium">Zoom:</strong> musehjul eller
-                      knipse (pinch); i Chrome/Firefox ofte{" "}
+                      <strong className="text-foreground font-medium">Zoom:</strong> knapper,{" "}
                       <kbd className="bg-muted rounded px-1 py-0.5 font-mono text-[10px]">Ctrl</kbd>{" "}
-                      + scroll. <strong className="text-foreground font-medium">Rulle:</strong> to
-                      fingre. <strong className="text-foreground font-medium">Horisontalt:</strong>{" "}
+                      + scroll eller knip. <strong className="text-foreground font-medium">Flytt kart:</strong>{" "}
+                      «Dra kart» + dra i bakgrunnen,{" "}
+                      <kbd className="bg-muted rounded px-1 py-0.5 font-mono text-[10px]">Alt</kbd>{" "}
+                      + dra, eller midtknapp. <strong className="text-foreground font-medium">Rull:</strong> to fingre;{" "}
                       <kbd className="bg-muted rounded px-1 py-0.5 font-mono text-[10px]">Shift</kbd>{" "}
-                      + scroll. <strong className="text-foreground font-medium">Panorere:</strong>{" "}
-                      midtknapp + dra. Utvid kort for ROS og kontakter.
+                      + scroll for horisontalt.
                     </p>
                   </div>
                   <div
@@ -2344,6 +2434,21 @@ export function OrgChartPanel({
                         Fullskjerm
                       </span>
                     </Button>
+                    <Button
+                      type="button"
+                      variant={chartPanMode ? "secondary" : "ghost"}
+                      size="sm"
+                      className="h-11 min-h-11 touch-manipulation gap-1.5 rounded-xl px-2.5 sm:h-10 sm:min-h-10 sm:px-3"
+                      onClick={() => setChartPanMode((v) => !v)}
+                      aria-pressed={chartPanMode}
+                      aria-label="Dra for å flytte kartet"
+                      title="Dra i bakgrunnen utenfor kort, eller Alt + dra / midtklikk"
+                    >
+                      <Hand className="size-4 shrink-0" aria-hidden />
+                      <span className="max-w-[5.5rem] truncate text-xs font-medium sm:inline">
+                        Dra kart
+                      </span>
+                    </Button>
                     <div
                       className="bg-border mx-0.5 hidden h-7 w-px self-center sm:block"
                       aria-hidden
@@ -2389,10 +2494,10 @@ export function OrgChartPanel({
                         size="sm"
                         className="h-11 min-h-11 touch-manipulation rounded-xl px-3 text-xs font-semibold sm:h-10 sm:min-h-10"
                         onClick={resetZoom}
-                        title="Tilbakestill zoom til 100 %"
-                        aria-label="Tilbakestill zoom til 100 prosent"
+                        title={`Tilbakestill til standardvisning (${Math.round(ORG_CHART_ZOOM_INITIAL * 100)} %)`}
+                        aria-label={`Tilbakestill zoom til standardvisning ${Math.round(ORG_CHART_ZOOM_INITIAL * 100)} prosent`}
                       >
-                        100 %
+                        Std
                       </Button>
                     </div>
                   </div>
@@ -2402,15 +2507,21 @@ export function OrgChartPanel({
             <div
               ref={chartViewportRef}
               className={cn(
-                "border-border/50 from-muted/15 to-muted/5 max-h-[min(85vh,56rem)] cursor-auto overflow-auto rounded-2xl border bg-gradient-to-b py-6 shadow-inner overscroll-contain touch-pan-x touch-pan-y",
+                "border-border/50 from-muted/15 to-muted/5 max-h-[min(85vh,56rem)] overflow-auto rounded-2xl border bg-gradient-to-b py-5 shadow-inner ring-1 ring-inset ring-foreground/[0.07] overscroll-contain touch-pan-x touch-pan-y",
+                "transition-[box-shadow] duration-200",
+                chartPanMode && !chartIsPanning && "cursor-grab",
+                chartIsPanning && "cursor-grabbing select-none",
                 chartIsFullscreen && "relative z-0 max-h-none min-h-0 flex-1",
               )}
               role="tree"
               aria-label="Organisasjonstre"
             >
               <div
-                className="flex min-w-min flex-wrap justify-center gap-10 px-4 pb-2"
-                style={{ zoom: chartZoom }}
+                className="flex min-w-min flex-wrap justify-center gap-8 px-5 pb-2 sm:gap-10 sm:px-6"
+                style={{
+                  zoom: chartZoom,
+                  transition: "zoom 0.2s cubic-bezier(0.25, 0.1, 0.25, 1)",
+                }}
               >
                 {roots.map((u) => (
                   <OrgBranch
