@@ -76,6 +76,13 @@ type Props = {
     afterRow: number,
     afterCol: number,
   ) => void;
+  /** Flytt alle punkter fra én celle til en annen (samme fase som matrisen) */
+  onMoveCellContents?: (
+    fromRow: number,
+    fromCol: number,
+    toRow: number,
+    toCol: number,
+  ) => void;
 };
 
 type PickerTarget = { row: number; col: number };
@@ -102,6 +109,14 @@ function toggleFlag(
   return a.length ? a : undefined;
 }
 
+/** Typisk «4 — Katastrofal» → rang + bildetekst; brukes til kompakt mobilvisning. */
+function splitAxisLabel(label: string): { rank: string; caption: string } {
+  const t = label.trim();
+  const m = t.match(/^(\d+)\s*[—–-]\s*(.+)$/);
+  if (m) return { rank: m[1]!, caption: m[2]!.trim() };
+  return { rank: t.slice(0, 3), caption: t.length > 3 ? t : "" };
+}
+
 export function RosMatrix({
   rowAxisTitle,
   colAxisTitle,
@@ -125,6 +140,7 @@ export function RosMatrix({
   beforeRowLabels,
   beforeColLabels,
   onAssignBeforeItem,
+  onMoveCellContents,
 }: Props) {
   const interactive = Boolean(onCellChange) && !readOnly;
   const [picker, setPicker] = useState<PickerTarget | null>(null);
@@ -627,6 +643,70 @@ export function RosMatrix({
               Legg inn risikopunkter for denne cellen.
             </p>
           </DialogHeader>
+          {interactive &&
+          onMoveCellContents &&
+          picker &&
+          pickerItems.length > 0 ? (
+            <div className="border-border/50 bg-muted/15 -mt-1 mb-4 space-y-2 rounded-xl border px-3 py-3 sm:flex sm:flex-wrap sm:items-end sm:gap-3">
+              <p className="text-foreground w-full text-xs font-semibold">
+                Plassering i matrisen
+              </p>
+              <div className="min-w-0 flex-1 space-y-1 sm:max-w-[min(100%,14rem)]">
+                <Label
+                  htmlFor="ros-cell-move-row"
+                  className="text-muted-foreground text-[10px] font-medium"
+                >
+                  {rowAxisTitle}
+                </Label>
+                <select
+                  id="ros-cell-move-row"
+                  className="border-input bg-background flex h-9 w-full rounded-lg border px-2 text-xs shadow-sm"
+                  value={picker.row}
+                  onChange={(e) => {
+                    const nr = Number(e.target.value);
+                    if (Number.isNaN(nr) || nr === picker.row) return;
+                    onMoveCellContents(picker.row, picker.col, nr, picker.col);
+                    setPicker({ row: nr, col: picker.col });
+                  }}
+                >
+                  {rowLabels.map((label, i) => (
+                    <option key={i} value={i}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="min-w-0 flex-1 space-y-1 sm:max-w-[min(100%,14rem)]">
+                <Label
+                  htmlFor="ros-cell-move-col"
+                  className="text-muted-foreground text-[10px] font-medium"
+                >
+                  {colAxisTitle}
+                </Label>
+                <select
+                  id="ros-cell-move-col"
+                  className="border-input bg-background flex h-9 w-full rounded-lg border px-2 text-xs shadow-sm"
+                  value={picker.col}
+                  onChange={(e) => {
+                    const nc = Number(e.target.value);
+                    if (Number.isNaN(nc) || nc === picker.col) return;
+                    onMoveCellContents(picker.row, picker.col, picker.row, nc);
+                    setPicker({ row: picker.row, col: nc });
+                  }}
+                >
+                  {colLabels.map((label, j) => (
+                    <option key={j} value={j}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <p className="text-muted-foreground w-full text-[10px] leading-relaxed">
+                Alle punkter i cellen flyttes til valgt rad og kolonne. Du kan også
+                klikke en annen celle i matrisen.
+              </p>
+            </div>
+          ) : null}
           <DialogBody>
             {(() => {
               const effLevel = pickerCurrentLevel > 0 ? pickerCurrentLevel : pickerAutoLevel;
@@ -930,29 +1010,32 @@ export function RosMatrix({
                             : "border-blue-500/20 bg-blue-500/[0.04]",
                         )}>
                           {hasPlacement ? (
-                            <div className="flex flex-wrap items-center gap-2">
+                            <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-3 sm:gap-y-1">
                               <span className="text-xs font-semibold text-emerald-700 dark:text-emerald-400">
                                 Etter tiltak:
                               </span>
                               <span
                                 className={cn(
-                                  "inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-xs font-bold tabular-nums",
+                                  "inline-flex max-w-full flex-wrap items-baseline gap-x-1.5 gap-y-0.5 rounded-lg px-2.5 py-1.5 text-xs font-bold tabular-nums",
                                   afterAutoLvl >= 4
                                     ? "bg-red-500/15 text-red-700 dark:text-red-300"
                                     : afterAutoLvl >= 3
                                       ? "bg-amber-400/20 text-amber-700 dark:text-amber-300"
                                       : "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300",
                                 )}
+                                title={`${afterRowLabels![it.afterRow!]} × ${afterColLabels![it.afterCol!]} — nivå ${afterAutoLvl}`}
                               >
-                                {afterRowLabels![it.afterRow!]} × {afterColLabels![it.afterCol!]}
-                                <span className="opacity-70">(nivå {afterAutoLvl})</span>
+                                <span className="min-w-0 break-words text-left leading-snug">
+                                  {afterRowLabels![it.afterRow!]} × {afterColLabels![it.afterCol!]}
+                                </span>
+                                <span className="opacity-80 font-semibold">(nivå {afterAutoLvl})</span>
                               </span>
-                              <div className="ml-auto flex gap-1">
+                              <div className="flex shrink-0 gap-1 sm:ml-auto">
                                 <Button
                                   type="button"
                                   size="sm"
-                                  variant="ghost"
-                                  className="h-6 px-2 text-[10px]"
+                                  variant="outline"
+                                  className="h-8 min-h-11 min-w-[4.5rem] px-3 text-xs sm:min-h-8"
                                   onClick={() => setDestPickerItemId(showDestGrid ? null : it.id)}
                                 >
                                   Endre
@@ -961,7 +1044,7 @@ export function RosMatrix({
                                   type="button"
                                   size="sm"
                                   variant="ghost"
-                                  className="text-muted-foreground hover:text-destructive h-6 px-2 text-[10px]"
+                                  className="text-muted-foreground hover:text-destructive h-8 min-h-11 px-3 text-xs sm:min-h-8"
                                   onClick={() => {
                                     onRemoveAfterPlacement?.(it.id);
                                     patchItem(picker.row, picker.col, it.id, {
@@ -991,69 +1074,157 @@ export function RosMatrix({
                           )}
 
                           {showDestGrid ? (
-                            <div className="mt-2 space-y-1.5 rounded-lg border bg-card p-2">
-                              <p className="text-muted-foreground text-[10px] font-medium">
-                                Klikk cellen der risikoen havner etter tiltak:
-                              </p>
-                              <div className="overflow-x-auto">
-                                <table className="border-collapse text-[10px]">
-                                  <thead>
-                                    <tr>
-                                      <th className="px-1 py-0.5" />
-                                      {afterColLabels!.map((cl, cj) => (
-                                        <th
-                                          key={cj}
-                                          className="text-muted-foreground truncate px-1 py-0.5 text-center font-medium"
-                                          style={{ maxWidth: "5rem" }}
-                                        >
-                                          {cl}
-                                        </th>
-                                      ))}
-                                    </tr>
-                                  </thead>
-                                  <tbody>
-                                    {[...afterRowLabels!].map((_, _ri) => {
-                                      const ri = afterRowLabels!.length - 1 - _ri;
-                                      const rl = afterRowLabels![ri] ?? `Rad ${ri + 1}`;
-                                      return (
-                                        <tr key={ri}>
-                                          <th className="text-muted-foreground truncate px-1 py-0.5 text-left font-medium" style={{ maxWidth: "5rem" }}>
-                                            {rl}
-                                          </th>
-                                          {afterColLabels!.map((_, cj) => {
-                                            const isSelected = it.afterRow === ri && it.afterCol === cj;
-                                            const autoLvl = positionRiskLevel(ri, cj, afterRowLabels!.length, afterColLabels!.length);
-                                            return (
-                                              <td key={cj} className="p-0.5">
-                                                <button
-                                                  type="button"
-                                                  onClick={() => {
-                                                    onPlaceInAfter!(it.id, it.text, it.flags, ri, cj);
-                                                    patchItem(picker.row, picker.col, it.id, {
-                                                      afterRow: ri,
-                                                      afterCol: cj,
-                                                    });
-                                                    setDestPickerItemId(null);
-                                                  }}
-                                                  className={cn(
-                                                    "flex size-8 items-center justify-center rounded-md border text-[10px] font-bold tabular-nums transition-colors",
-                                                    isSelected
-                                                      ? "ring-primary bg-primary text-primary-foreground ring-2"
-                                                      : cellRiskGhostClass(autoLvl),
-                                                    "hover:ring-primary/50 hover:ring-2",
-                                                  )}
-                                                >
-                                                  {autoLvl}
-                                                </button>
-                                              </td>
-                                            );
-                                          })}
-                                        </tr>
-                                      );
-                                    })}
-                                  </tbody>
-                                </table>
+                            <div className="mt-3 space-y-3 rounded-xl border border-border/70 bg-gradient-to-b from-muted/40 to-card/60 p-3 shadow-sm sm:p-4">
+                              <div className="space-y-1">
+                                <p className="text-foreground text-xs font-semibold">
+                                  Velg celle etter tiltak
+                                </p>
+                                <p className="text-muted-foreground text-[11px] leading-relaxed sm:text-xs">
+                                  Klikk ruten der du mener restrisikoen havner. På små skjermer er
+                                  aksene forkortet til tall — trykk lenge eller hold pekeren over en
+                                  celle for full beskrivelse.
+                                </p>
                               </div>
+                              <div className="border-border/50 bg-background/40 -mx-0.5 px-0.5 sm:mx-0">
+                                {(() => {
+                                  const nRows = afterRowLabels!.length;
+                                  const nCols = afterColLabels!.length;
+                                  const gridCols = `minmax(0,4.5rem) repeat(${nCols}, minmax(2.75rem, 1fr))`;
+                                  return (
+                                    <div
+                                      className="grid w-full gap-1 sm:gap-1.5"
+                                      style={{ gridTemplateColumns: gridCols }}
+                                    >
+                                      {/* Tomt hjørne + kolonneoverskrifter */}
+                                      <div className="min-h-2" aria-hidden />
+                                      {afterColLabels!.map((cl, cj) => {
+                                        const { rank, caption } = splitAxisLabel(cl);
+                                        return (
+                                          <div
+                                            key={cj}
+                                            className="flex min-h-[2.75rem] flex-col items-center justify-end gap-0.5 px-0.5 pb-0.5 text-center"
+                                          >
+                                            <span
+                                              className="text-foreground text-[11px] font-bold tabular-nums sm:text-xs"
+                                              title={cl}
+                                            >
+                                              {rank}
+                                            </span>
+                                            {caption ? (
+                                              <span
+                                                className="text-muted-foreground hidden w-full max-w-[5.5rem] text-[9px] leading-snug sm:line-clamp-2 sm:block sm:text-[10px]"
+                                                title={cl}
+                                              >
+                                                {caption}
+                                              </span>
+                                            ) : null}
+                                          </div>
+                                        );
+                                      })}
+                                      {[...afterRowLabels!].map((_, _ri) => {
+                                        const ri = nRows - 1 - _ri;
+                                        const rl = afterRowLabels![ri] ?? `Rad ${ri + 1}`;
+                                        const { rank, caption } = splitAxisLabel(rl);
+                                        return (
+                                          <div
+                                            key={ri}
+                                            className="contents"
+                                          >
+                                            <div
+                                              className="flex min-h-11 min-w-0 flex-col items-end justify-center gap-0.5 pr-1 text-right sm:min-h-10"
+                                              title={rl}
+                                            >
+                                              <span className="text-foreground text-[11px] font-bold tabular-nums sm:text-xs">
+                                                {rank}
+                                              </span>
+                                              {caption ? (
+                                                <span className="text-muted-foreground hidden max-w-[5rem] text-[9px] leading-snug sm:line-clamp-2 sm:block sm:text-[10px]">
+                                                  {caption}
+                                                </span>
+                                              ) : null}
+                                            </div>
+                                            {afterColLabels!.map((_, cj) => {
+                                              const isSelected =
+                                                it.afterRow === ri && it.afterCol === cj;
+                                              const autoLvl = positionRiskLevel(
+                                                ri,
+                                                cj,
+                                                nRows,
+                                                nCols,
+                                              );
+                                              const cellLabel = `${rl} × ${afterColLabels![cj]}`;
+                                              return (
+                                                <div
+                                                  key={cj}
+                                                  className="flex aspect-square min-h-11 min-w-0 items-stretch sm:min-h-10"
+                                                >
+                                                  <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                      onPlaceInAfter!(
+                                                        it.id,
+                                                        it.text,
+                                                        it.flags,
+                                                        ri,
+                                                        cj,
+                                                      );
+                                                      patchItem(
+                                                        picker.row,
+                                                        picker.col,
+                                                        it.id,
+                                                        {
+                                                          afterRow: ri,
+                                                          afterCol: cj,
+                                                        },
+                                                      );
+                                                      setDestPickerItemId(null);
+                                                    }}
+                                                    title={`${cellLabel} — nivå ${autoLvl}`}
+                                                    aria-label={`Velg ${cellLabel}, nivå ${autoLvl}`}
+                                                    aria-pressed={isSelected}
+                                                    className={cn(
+                                                      "flex touch-manipulation flex-1 items-center justify-center rounded-lg border text-sm font-bold tabular-nums transition-all active:scale-[0.97]",
+                                                      isSelected
+                                                        ? "ring-primary bg-primary text-primary-foreground shadow-md ring-2 ring-offset-2 ring-offset-background"
+                                                        : cellRiskGhostClass(autoLvl),
+                                                      "hover:z-10 hover:shadow-md hover:ring-2 hover:ring-primary/40",
+                                                    )}
+                                                  >
+                                                    {autoLvl}
+                                                  </button>
+                                                </div>
+                                              );
+                                            })}
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
+                                  );
+                                })()}
+                              </div>
+                              <details className="border-border/50 bg-muted/25 sm:hidden rounded-lg border text-[10px]">
+                                <summary className="cursor-pointer list-none px-3 py-2 font-medium text-foreground [&::-webkit-details-marker]:hidden">
+                                  <span className="text-muted-foreground font-normal">
+                                    Full akseliste
+                                  </span>
+                                </summary>
+                                <div className="text-muted-foreground space-y-2 border-t border-border/40 px-3 pb-3 pt-2 leading-relaxed">
+                                  <p>
+                                    <span className="font-medium text-foreground/90">
+                                      {colAxisTitle}
+                                    </span>
+                                    <br />
+                                    {afterColLabels!.join(" · ")}
+                                  </p>
+                                  <p>
+                                    <span className="font-medium text-foreground/90">
+                                      {rowAxisTitle}
+                                    </span>
+                                    <br />
+                                    {afterRowLabels!.join(" · ")}
+                                  </p>
+                                </div>
+                              </details>
                             </div>
                           ) : null}
                         </div>

@@ -761,6 +761,128 @@ export function RosAnalysisEditor({
     [matrixView],
   );
 
+  const moveMatrixCellContents = useCallback(
+    (fromRow: number, fromCol: number, toRow: number, toCol: number) => {
+      if (fromRow === toRow && fromCol === toCol) return;
+
+      if (matrixView === "after") {
+        const br = effectiveAfterRowLabels.length;
+        const bc = effectiveAfterColLabels.length;
+        if (
+          toRow < 0 ||
+          toCol < 0 ||
+          toRow >= br ||
+          toCol >= bc ||
+          fromRow < 0 ||
+          fromCol < 0 ||
+          fromRow >= br ||
+          fromCol >= bc
+        ) {
+          return;
+        }
+        setCellItemsAfterMatrix((prev) => {
+          const moving = prev[fromRow]?.[fromCol] ?? [];
+          if (moving.length === 0) return prev;
+
+          const copy = prev.map((r) => r.map((c) => [...c]));
+          const dest = copy[toRow]?.[toCol] ?? [];
+          copy[fromRow][fromCol] = [];
+          copy[toRow][toCol] = [...dest, ...moving];
+          const mergedDest = copy[toRow][toCol];
+
+          const sourceIds = moving
+            .map((it) => it.sourceItemId)
+            .filter((id): id is string => Boolean(id));
+          if (sourceIds.length > 0) {
+            const idSet = new Set(sourceIds);
+            setCellItemsMatrix((prevB) => {
+              const bCopy = prevB.map((r) =>
+                r.map((c) => c.map((it) => ({ ...it }))),
+              );
+              for (let r = 0; r < bCopy.length; r++) {
+                for (let c = 0; c < bCopy[r].length; c++) {
+                  for (let k = 0; k < bCopy[r][c].length; k++) {
+                    const it = bCopy[r][c][k];
+                    if (idSet.has(it.id)) {
+                      bCopy[r][c][k] = {
+                        ...it,
+                        afterRow: toRow,
+                        afterCol: toCol,
+                      };
+                    }
+                  }
+                }
+              }
+              return bCopy;
+            });
+          }
+
+          setMatrixAfter((prevM) => {
+            const m = resizeNumberMatrix(prevM, br, bc);
+            m[fromRow][fromCol] = 0;
+            if (mergedDest.length > 0) {
+              const cur = m[toRow][toCol] ?? 0;
+              if (cur <= 0) {
+                m[toRow][toCol] = positionRiskLevel(toRow, toCol, br, bc);
+              }
+            }
+            return m;
+          });
+          return copy;
+        });
+        setDirty(true);
+        return;
+      }
+
+      if (!data) return;
+      const br = data.rowLabels.length;
+      const bc = data.colLabels.length;
+      if (
+        toRow < 0 ||
+        toCol < 0 ||
+        toRow >= br ||
+        toCol >= bc ||
+        fromRow < 0 ||
+        fromCol < 0 ||
+        fromRow >= br ||
+        fromCol >= bc
+      ) {
+        return;
+      }
+
+      setCellItemsMatrix((prev) => {
+        const moving = prev[fromRow]?.[fromCol] ?? [];
+        if (moving.length === 0) return prev;
+
+        const copy = prev.map((r) => r.map((c) => [...c]));
+        const dest = copy[toRow]?.[toCol] ?? [];
+        copy[fromRow][fromCol] = [];
+        copy[toRow][toCol] = [...dest, ...moving];
+        const mergedDest = copy[toRow][toCol];
+
+        setMatrix((prevM) => {
+          const m = resizeNumberMatrix(prevM, br, bc);
+          m[fromRow][fromCol] = 0;
+          if (mergedDest.length > 0) {
+            const cur = m[toRow][toCol] ?? 0;
+            if (cur <= 0) {
+              m[toRow][toCol] = positionRiskLevel(toRow, toCol, br, bc);
+            }
+          }
+          return m;
+        });
+        return copy;
+      });
+      setDirty(true);
+    },
+    [
+      data,
+      matrixView,
+      effectiveAfterRowLabels.length,
+      effectiveAfterColLabels.length,
+    ],
+  );
+
   /** Removes any existing after-copy of a before-item from ALL cells and clears the before-item's afterRow/afterCol */
   const removeAfterCopyEverywhere = useCallback(
     (itemId: string) => {
@@ -998,11 +1120,38 @@ export function RosAnalysisEditor({
         });
       }
 
-      removeAfterCopyEverywhere(risk.id);
-      if (risk.afterRow !== risk.beforeRow || risk.afterCol !== risk.beforeCol) {
-        setCellItemsAfterMatrix((prev) => {
-          const copy = prev.map((r) => r.map((c) => [...c]));
-          if (!copy[risk.afterRow]) return prev;
+      /**
+       * Ikke bruk `removeAfterCopyEverywhere` her — den nullstiller `afterRow`/`afterCol`
+       * på kilden og overskriver nettopp lagrede målceller (dropdown + matrise «etter tiltak»).
+       * Fjern kun spøkelseskopier i etter-matrisen og legg inn ny kopi ved behov.
+       */
+      const br = effectiveAfterRowLabels.length;
+      const bc = effectiveAfterColLabels.length;
+
+      setCellItemsAfterMatrix((prev) => {
+        if (br < 1 || bc < 1) return prev;
+        const sized = resizeCellItemsMatrix(
+          prev,
+          prev.length,
+          prev[0]?.length ?? 0,
+          br,
+          bc,
+        );
+        const copy = sized.map((r) =>
+          r.map((c) => c.filter((it) => it.sourceItemId !== risk.id)),
+        );
+        if (
+          risk.afterRow !== risk.beforeRow ||
+          risk.afterCol !== risk.beforeCol
+        ) {
+          if (
+            risk.afterRow < 0 ||
+            risk.afterCol < 0 ||
+            risk.afterRow >= br ||
+            risk.afterCol >= bc
+          ) {
+            return copy;
+          }
           if (!copy[risk.afterRow][risk.afterCol])
             copy[risk.afterRow][risk.afterCol] = [];
           copy[risk.afterRow][risk.afterCol].push({
@@ -1011,27 +1160,40 @@ export function RosAnalysisEditor({
             flags: risk.flags,
             sourceItemId: risk.id,
           });
-          return copy;
-        });
-        setMatrixAfter((prev) => {
-          const copy = prev.map((r) => [...r]);
-          if (!copy[risk.afterRow]) return prev;
-          const cur = copy[risk.afterRow][risk.afterCol] ?? 0;
-          if (cur <= 0) {
-            copy[risk.afterRow][risk.afterCol] = positionRiskLevel(
-              risk.afterRow,
-              risk.afterCol,
-              effectiveAfterRowLabels.length,
-              effectiveAfterColLabels.length,
-            );
+        }
+        return copy;
+      });
+
+      setMatrixAfter((prev) => {
+        if (br < 1 || bc < 1) return prev;
+        const copy = resizeNumberMatrix(prev, br, bc);
+        if (
+          risk.afterRow !== risk.beforeRow ||
+          risk.afterCol !== risk.beforeCol
+        ) {
+          if (
+            risk.afterRow >= 0 &&
+            risk.afterCol >= 0 &&
+            risk.afterRow < br &&
+            risk.afterCol < bc
+          ) {
+            const cur = copy[risk.afterRow][risk.afterCol] ?? 0;
+            if (cur <= 0) {
+              copy[risk.afterRow][risk.afterCol] = positionRiskLevel(
+                risk.afterRow,
+                risk.afterCol,
+                br,
+                bc,
+              );
+            }
           }
-          return copy;
-        });
-      }
+        }
+        return copy;
+      });
 
       setDirty(true);
     },
-    [data, removeAfterCopyEverywhere, effectiveAfterRowLabels.length, effectiveAfterColLabels.length],
+    [data, effectiveAfterRowLabels.length, effectiveAfterColLabels.length],
   );
 
   const onDeleteRisk = useCallback(
@@ -1909,6 +2071,7 @@ export function RosAnalysisEditor({
                     beforeRowLabels={data?.rowLabels}
                     beforeColLabels={data?.colLabels}
                     onAssignBeforeItem={matrixView === "after" ? onAssignBeforeItem : undefined}
+                    onMoveCellContents={moveMatrixCellContents}
                   />
                 )}
               </div>
