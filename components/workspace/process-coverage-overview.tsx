@@ -10,9 +10,12 @@ import {
   DialogFooter,
   DialogHeader,
 } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
+import { FilterToolbar } from "@/components/ui/filter-toolbar";
+import { NativeSelectField } from "@/components/ui/native-select-field";
+import { SearchInput } from "@/components/ui/search-input";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
+import { orgSubtreeIds, orgUnitSearchLabel } from "@/lib/org-unit-filter";
 import { toast } from "@/lib/app-toast";
 import { formatUserFacingError } from "@/lib/user-facing-error";
 import { formatRelativeUpdatedAt } from "@/lib/assessment-ui-helpers";
@@ -32,7 +35,6 @@ import {
   Info,
   LayoutGrid,
   Loader2,
-  Search,
   Shield,
   Trash2,
 } from "lucide-react";
@@ -44,6 +46,7 @@ type CoverageRow = {
   candidateId: Id<"candidates">;
   name: string;
   code: string;
+  orgUnitId: Id<"orgUnits"> | null;
   candidateUpdatedAt: number;
   githubRepoFullName: string | null;
   githubIssueNumber: number | null;
@@ -389,10 +392,12 @@ export function ProcessCoverageOverview({
 }) {
   const router = useRouter();
   const rows = useQuery(api.candidates.listProcessCoverage, { workspaceId });
+  const orgUnits = useQuery(api.orgUnits.listByWorkspace, { workspaceId });
   const membership = useQuery(api.workspaces.getMyMembership, { workspaceId });
   const createAssessment = useMutation(api.assessments.create);
   const removeCandidate = useMutation(api.candidates.remove);
   const [q, setQ] = useState("");
+  const [orgUnitFilter, setOrgUnitFilter] = useState<"" | Id<"orgUnits">>("");
   const [detail, setDetail] = useState<CoverageRow | null>(null);
   const [deleteBusyId, setDeleteBusyId] = useState<Id<"candidates"> | null>(
     null,
@@ -468,17 +473,27 @@ export function ProcessCoverageOverview({
   }
 
   const filtered = useMemo(() => {
-    if (!rows?.length) return [];
+    if (!rows?.length || orgUnits === undefined) return [];
+    let list = rows;
+    if (orgUnitFilter) {
+      const subtree = orgSubtreeIds(orgUnitFilter, orgUnits);
+      list = list.filter((r) =>
+        r.orgUnitId ? subtree.has(r.orgUnitId) : false,
+      );
+    }
     const t = q.trim().toLowerCase();
-    if (!t) return rows;
-    return rows.filter(
-      (r) =>
+    if (!t) return list;
+    return list.filter((r) => {
+      const orgBlob = orgUnitSearchLabel(r.orgUnitId ?? undefined, orgUnits).toLowerCase();
+      return (
         r.name.toLowerCase().includes(t) ||
-        r.code.toLowerCase().includes(t),
-    );
-  }, [rows, q]);
+        r.code.toLowerCase().includes(t) ||
+        orgBlob.includes(t)
+      );
+    });
+  }, [rows, q, orgUnitFilter, orgUnits]);
 
-  if (rows === undefined) {
+  if (rows === undefined || (rows.length > 0 && orgUnits === undefined)) {
     return (
       <div
         data-tutorial-anchor="pvv-ros"
@@ -505,6 +520,8 @@ export function ProcessCoverageOverview({
       </div>
     );
   }
+
+  const orgUnitsList = orgUnits ?? [];
 
   return (
     <section
@@ -564,20 +581,34 @@ export function ProcessCoverageOverview({
             (også i detaljdialogen).
           </p>
         </div>
-        <div className="relative w-full sm:max-w-xs">
-          <Search
-            className="text-muted-foreground pointer-events-none absolute left-3 top-1/2 z-10 size-4 -translate-y-1/2"
-            aria-hidden
-          />
-          <Input
-            type="search"
+        <FilterToolbar className="w-full sm:ml-auto sm:max-w-2xl">
+          <SearchInput
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder="Søk i navn eller ID …"
-            className="h-11 min-h-[44px] bg-background pl-10 pr-3 text-[16px] sm:h-10 sm:min-h-0 sm:text-sm md:pl-10 md:pr-3"
+            placeholder="Søk i navn, ID eller organisasjon …"
             aria-label="Filtrer prosesser"
+            className="min-w-0 flex-1 sm:min-w-[min(100%,18rem)]"
           />
-        </div>
+          <NativeSelectField
+            id="process-coverage-org"
+            label="Organisasjon"
+            value={orgUnitFilter}
+            onChange={(e) =>
+              setOrgUnitFilter(
+                e.target.value === "" ? "" : (e.target.value as Id<"orgUnits">),
+              )
+            }
+            aria-label="Filtrer etter organisasjonsenhet"
+            className="w-full min-w-0 sm:w-[min(100%,14rem)]"
+          >
+            <option value="">Alle enheter</option>
+            {orgUnitsList.map((u) => (
+              <option key={u._id} value={u._id}>
+                {u.name}
+              </option>
+            ))}
+          </NativeSelectField>
+        </FilterToolbar>
       </div>
 
       <ul className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">

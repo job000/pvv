@@ -11,6 +11,7 @@ import {
   DialogHeader,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { SearchInput } from "@/components/ui/search-input";
 import { Label } from "@/components/ui/label";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
@@ -37,7 +38,6 @@ import {
   Library,
   ListTodo,
   Plus,
-  Search,
   SquareArrowOutUpRight,
   Trash2,
 } from "lucide-react";
@@ -828,18 +828,12 @@ export function RosRiskList({
                   </p>
                 ) : (
                   <>
-                    <div className="relative">
-                      <Search
-                        className="text-muted-foreground pointer-events-none absolute left-3 top-1/2 z-10 size-4 -translate-y-1/2"
-                        aria-hidden
-                      />
-                      <Input
-                        value={libSearch}
-                        onChange={(e) => setLibSearch(e.target.value)}
-                        placeholder="Søk …"
-                        className="pl-10 pr-3 md:pl-10 md:pr-3"
-                      />
-                    </div>
+                    <SearchInput
+                      value={libSearch}
+                      onChange={(e) => setLibSearch(e.target.value)}
+                      placeholder="Søk i biblioteket …"
+                      aria-label="Søk i bibliotek"
+                    />
                     <div className="flex flex-wrap gap-1.5">
                       <button
                         type="button"

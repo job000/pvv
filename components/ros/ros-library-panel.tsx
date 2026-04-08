@@ -17,6 +17,8 @@ import {
   DialogHeader,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { NativeSelectField } from "@/components/ui/native-select-field";
+import { SearchInput } from "@/components/ui/search-input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { api } from "@/convex/_generated/api";
@@ -41,7 +43,6 @@ import {
   Lock,
   Pencil,
   Plus,
-  Search,
   Settings2,
   Trash2,
 } from "lucide-react";
@@ -465,41 +466,33 @@ export function RosLibraryPanel({ workspaceId }: { workspaceId: Id<"workspaces">
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-stretch md:items-end">
             <div className="flex min-w-0 flex-1 flex-col gap-1.5">
               <Label htmlFor="lib-search" className="text-muted-foreground text-[10px]">
                 Søk
               </Label>
-              <div className="relative">
-                <Search
-                  className="text-muted-foreground pointer-events-none absolute left-3 top-1/2 z-10 size-4 -translate-y-1/2"
-                  aria-hidden
-                />
-                <Input
-                  id="lib-search"
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Tittel, risiko, tiltak …"
-                  className="min-h-11 touch-manipulation pl-10 pr-3 sm:min-h-10 md:pl-10 md:pr-3"
-                  autoComplete="off"
-                />
-              </div>
+              <SearchInput
+                id="lib-search"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Tittel, risiko, tiltak …"
+                aria-label="Søk i bibliotek"
+                autoComplete="off"
+              />
             </div>
-            <div className="flex w-full flex-col gap-1.5 sm:min-w-[14rem] sm:max-w-[20rem]">
-              <Label htmlFor="lib-sort" className="text-muted-foreground text-[10px]">
-                Sortering
-              </Label>
-              <select
-                id="lib-sort"
-                className="border-input bg-background flex min-h-11 w-full touch-manipulation rounded-lg border px-2 text-sm sm:min-h-10"
-                value={sortBy}
-                onChange={(e) => setSortBy(e.target.value as SortKey)}
-              >
-                <option value="category">Kategori, deretter tittel</option>
-                <option value="title">Tittel (A–Å)</option>
-                <option value="updated">Sist oppdatert</option>
-              </select>
-            </div>
+            <NativeSelectField
+              id="lib-sort"
+              label="Sortering"
+              compactLabel={false}
+              className="w-full sm:min-w-[14rem] sm:max-w-[20rem]"
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value as SortKey)}
+              aria-label="Sorter bibliotek"
+            >
+              <option value="category">Kategori, deretter tittel</option>
+              <option value="title">Tittel (A–Å)</option>
+              <option value="updated">Sist oppdatert</option>
+            </NativeSelectField>
           </div>
           <div className="flex flex-wrap gap-2">
             <button

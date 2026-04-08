@@ -11,6 +11,8 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { NativeSelectField } from "@/components/ui/native-select-field";
+import { SearchInput } from "@/components/ui/search-input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
@@ -78,6 +80,10 @@ import { useRouter } from "next/navigation";
 
 import { ORG_UNIT_KIND_LABELS } from "@/lib/helsesector-labels";
 import { parseSuggestedCodeAndNameFromGithubTitle } from "@/lib/github-process-title";
+import {
+  orgSubtreeIds,
+  orgUnitSearchLabel,
+} from "@/lib/org-unit-filter";
 import { prosessRegisterCopy } from "@/lib/prosess-register-copy";
 import {
   WORKSPACE_ROLE_DESC_NB,
@@ -3451,6 +3457,7 @@ export function WorkspaceAssessmentsPanel({
   const assessments = useQuery(api.assessments.listByWorkspace, {
     workspaceId,
   });
+  const orgUnits = useQuery(api.orgUnits.listByWorkspace, { workspaceId });
   const deleteAssessment = useMutation(api.assessments.deleteAssessment);
 
   const intakeAssessmentIdSet = useMemo(() => {
@@ -3464,6 +3471,7 @@ export function WorkspaceAssessmentsPanel({
     membership.role !== "viewer";
 
   const [search, setSearch] = useState("");
+  const [orgUnitFilter, setOrgUnitFilter] = useState<"" | Id<"orgUnits">>("");
   const [statusFilter, setStatusFilter] = useState<PipelineStatus | "all">(
     "all",
   );
@@ -3473,9 +3481,21 @@ export function WorkspaceAssessmentsPanel({
 
   const filteredAssessments = useMemo(() => {
     let rows = assessments ?? [];
+    const units = orgUnits ?? [];
+    if (orgUnitFilter) {
+      const subtree = orgSubtreeIds(orgUnitFilter, units);
+      rows = rows.filter((a) =>
+        a.orgUnitId ? subtree.has(a.orgUnitId) : false,
+      );
+    }
     const q = search.trim().toLowerCase();
     if (q) {
-      rows = rows.filter((a) => a.title.toLowerCase().includes(q));
+      rows = rows.filter((a) => {
+        const orgBlob = orgUnitSearchLabel(a.orgUnitId ?? undefined, units).toLowerCase();
+        return (
+          a.title.toLowerCase().includes(q) || orgBlob.includes(q)
+        );
+      });
     }
     if (statusFilter !== "all") {
       rows = rows.filter(
@@ -3520,7 +3540,7 @@ export function WorkspaceAssessmentsPanel({
         break;
     }
     return copy;
-  }, [assessments, search, statusFilter, sortBy]);
+  }, [assessments, search, statusFilter, sortBy, orgUnitFilter, orgUnits]);
 
   const priorityDistribution = useMemo(() => {
     let high = 0;
@@ -3535,7 +3555,7 @@ export function WorkspaceAssessmentsPanel({
     return { high, mid, low };
   }, [filteredAssessments]);
 
-  if (workspace === undefined || assessments === undefined) {
+  if (workspace === undefined || assessments === undefined || orgUnits === undefined) {
     return <p className="text-muted-foreground text-sm">Laster …</p>;
   }
   if (workspace === null) {
@@ -3545,7 +3565,9 @@ export function WorkspaceAssessmentsPanel({
   }
 
   const hasActiveFilter =
-    search.trim().length > 0 || statusFilter !== "all";
+    search.trim().length > 0 ||
+    statusFilter !== "all" ||
+    orgUnitFilter !== "";
 
   return (
     <div className="space-y-6">
@@ -3575,24 +3597,35 @@ export function WorkspaceAssessmentsPanel({
         </div>
 
         {assessments.length > 0 ? (
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
-            <div className="relative min-w-0 flex-1">
-              <Search
-                className="text-muted-foreground pointer-events-none absolute left-3 top-1/2 z-10 size-4 -translate-y-1/2"
-                aria-hidden
-              />
-              <Input
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Søk …"
-                className="bg-background h-10 rounded-xl pl-10 pr-3 text-sm shadow-sm md:pl-10 md:pr-3"
-                aria-label="Søk i vurderinger"
-              />
-            </div>
-            <div className="flex gap-2">
-              <select
+          <div className="flex flex-col gap-3">
+            <SearchInput
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Søk i tittel eller organisasjon …"
+              aria-label="Søk i vurderinger"
+            />
+            <div className="grid grid-cols-1 gap-3 min-[480px]:grid-cols-2 xl:grid-cols-3">
+              <NativeSelectField
+                id="assessment-org-filter"
+                label="Organisasjon"
+                value={orgUnitFilter}
+                onChange={(e) =>
+                  setOrgUnitFilter(
+                    e.target.value === "" ? "" : (e.target.value as Id<"orgUnits">),
+                  )
+                }
+                aria-label="Filtrer etter organisasjonsenhet"
+              >
+                <option value="">Alle enheter</option>
+                {orgUnits.map((u) => (
+                  <option key={u._id} value={u._id}>
+                    {u.name}
+                  </option>
+                ))}
+              </NativeSelectField>
+              <NativeSelectField
                 id="assessment-sort"
-                className="border-input bg-background h-10 min-w-0 flex-1 rounded-xl border px-3 text-xs shadow-sm sm:flex-none sm:text-sm"
+                label="Sorter"
                 value={sortBy}
                 onChange={(e) =>
                   setSortBy(
@@ -3604,20 +3637,23 @@ export function WorkspaceAssessmentsPanel({
                       | "ease",
                   )
                 }
+                aria-label="Sorter vurderinger"
               >
                 <option value="priority">Prioritet</option>
                 <option value="ap">Gevinst (AP)</option>
                 <option value="criticality">Viktighet</option>
                 <option value="ease">Implementering</option>
                 <option value="updated">Sist oppdatert</option>
-              </select>
-              <select
+              </NativeSelectField>
+              <NativeSelectField
                 id="assessment-status-filter"
-                className="border-input bg-background h-10 min-w-0 flex-1 rounded-xl border px-3 text-xs shadow-sm sm:flex-none sm:text-sm"
+                label="Status"
                 value={statusFilter}
                 onChange={(e) =>
                   setStatusFilter(e.target.value as PipelineStatus | "all")
                 }
+                aria-label="Filtrer etter status"
+                className="min-[480px]:col-span-2 xl:col-span-1"
               >
                 <option value="all">Alle statuser</option>
                 {PIPELINE_KANBAN_ORDER.map((s) => (
@@ -3625,7 +3661,7 @@ export function WorkspaceAssessmentsPanel({
                     {PIPELINE_STATUS_LABELS[s]}
                   </option>
                 ))}
-              </select>
+              </NativeSelectField>
             </div>
           </div>
         ) : null}

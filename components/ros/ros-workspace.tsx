@@ -3,10 +3,18 @@
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { FilterToolbar } from "@/components/ui/filter-toolbar";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { NativeSelectField } from "@/components/ui/native-select-field";
+import { SearchInput } from "@/components/ui/search-input";
 import { api } from "@/convex/_generated/api";
-import type { Id } from "@/convex/_generated/dataModel";
+import type { Doc, Id } from "@/convex/_generated/dataModel";
+import {
+  effectiveOrgForRosClient,
+  orgSubtreeIds,
+  orgUnitSearchLabel,
+} from "@/lib/org-unit-filter";
 import { toast } from "@/lib/app-toast";
 import { toastDeleteWithUndo } from "@/lib/toast-delete-undo";
 import { cellRiskClass } from "@/lib/ros-risk-colors";
@@ -223,6 +231,9 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
   const [anaOrgUnitId, setAnaOrgUnitId] = useState<Id<"orgUnits"> | "">("");
   const [templateDialogOpen, setTemplateDialogOpen] = useState(false);
   const [analysisSearch, setAnalysisSearch] = useState("");
+  const [analysisOrgFilter, setAnalysisOrgFilter] = useState<"" | Id<"orgUnits">>(
+    "",
+  );
   const [analysisSort, setAnalysisSort] = useState<AnalysisSort>("updated");
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [scaleRefOpen, setScaleRefOpen] = useState(false);
@@ -293,16 +304,36 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
     [],
   );
 
+  const candidateById = useMemo(() => {
+    const m = new Map<Id<"candidates">, Doc<"candidates">>();
+    for (const c of candidates ?? []) {
+      m.set(c._id, c);
+    }
+    return m;
+  }, [candidates]);
+
   const filteredSortedAnalyses = useMemo(() => {
     const list = analyses ?? [];
+    const units = orgUnits ?? [];
+    let base = list;
+    if (analysisOrgFilter) {
+      const subtree = orgSubtreeIds(analysisOrgFilter, units);
+      base = base.filter((a) => {
+        const eff = effectiveOrgForRosClient(a, candidateById);
+        return eff ? subtree.has(eff) : false;
+      });
+    }
     const q = analysisSearch.trim().toLowerCase();
     const filtered = q
-      ? list.filter((a) => {
+      ? base.filter((a) => {
           const fromIntake = Boolean((a as { fromIntake?: boolean }).fromIntake);
-          const blob = `${a.title} ${a.candidateName ?? ""} ${a.candidateCode ?? ""} ${fromIntake ? "skjema" : ""}`.toLowerCase();
+          const effOrg = effectiveOrgForRosClient(a, candidateById);
+          const orgBlob = orgUnitSearchLabel(effOrg, units).toLowerCase();
+          const blob =
+            `${a.title} ${a.candidateName ?? ""} ${a.candidateCode ?? ""} ${fromIntake ? "skjema" : ""} ${orgBlob}`.toLowerCase();
           return blob.includes(q);
         })
-      : [...list];
+      : [...base];
     const rows = [...filtered];
     if (analysisSort === "title") {
       rows.sort((a, b) =>
@@ -318,7 +349,14 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
       rows.sort((a, b) => b.updatedAt - a.updatedAt);
     }
     return rows;
-  }, [analyses, analysisSearch, analysisSort]);
+  }, [
+    analyses,
+    analysisSearch,
+    analysisSort,
+    analysisOrgFilter,
+    orgUnits,
+    candidateById,
+  ]);
 
   const requestRemoveAnalysis = useCallback(
     (a: { _id: Id<"rosAnalyses">; title: string }) => {
@@ -479,7 +517,10 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
 
   if (
     (tab === "maler" || tab === "analyser") &&
-    (templates === undefined || analyses === undefined)
+    (templates === undefined ||
+      analyses === undefined ||
+      (tab === "analyser" &&
+        (orgUnits === undefined || candidates === undefined)))
   ) {
     return (
       <div className="flex min-h-[20vh] flex-col items-center justify-center gap-3">
@@ -714,36 +755,46 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
           </div>
 
           {analysesList.length > 0 ? (
-            <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-end">
-              <div className="relative min-w-[12rem] flex-1">
-                <Search
-                  className="text-muted-foreground pointer-events-none absolute left-3 top-1/2 z-10 size-4 -translate-y-1/2"
-                  aria-hidden
-                />
-                <Input
-                  type="search"
-                  value={analysisSearch}
-                  onChange={(e) => setAnalysisSearch(e.target.value)}
-                  placeholder="Søk i tittel eller prosess …"
-                  className="pl-10 pr-3 md:pl-10 md:pr-3"
-                  aria-label="Filtrer analyser"
-                />
-              </div>
-              <div className="flex items-center gap-2">
-                <Label htmlFor="ros-ana-sort" className="text-muted-foreground shrink-0 text-xs">
-                  Sorter
-                </Label>
-                <select
+            <div className="flex flex-col gap-3">
+              <SearchInput
+                value={analysisSearch}
+                onChange={(e) => setAnalysisSearch(e.target.value)}
+                placeholder="Søk i tittel, prosess eller organisasjon …"
+                aria-label="Filtrer analyser"
+              />
+              <FilterToolbar>
+                <NativeSelectField
+                  id="ros-ana-org"
+                  label="Organisasjon"
+                  value={analysisOrgFilter}
+                  onChange={(e) =>
+                    setAnalysisOrgFilter(
+                      e.target.value === "" ? "" : (e.target.value as Id<"orgUnits">),
+                    )
+                  }
+                  aria-label="Filtrer etter organisasjonsenhet"
+                  className="min-w-0 flex-1 sm:min-w-[min(100%,14rem)]"
+                >
+                  <option value="">Alle enheter</option>
+                  {(orgUnits ?? []).map((u) => (
+                    <option key={u._id} value={u._id}>
+                      {u.name}
+                    </option>
+                  ))}
+                </NativeSelectField>
+                <NativeSelectField
                   id="ros-ana-sort"
-                  className="border-input bg-background flex h-10 rounded-lg border px-2 text-sm"
+                  label="Sorter"
                   value={analysisSort}
                   onChange={(e) => setAnalysisSort(e.target.value as AnalysisSort)}
+                  aria-label="Sorter analyser"
+                  className="min-w-0 sm:w-[min(100%,12rem)]"
                 >
                   <option value="updated">Sist oppdatert</option>
                   <option value="title">Tittel A–Å</option>
                   <option value="candidate">Prosess</option>
-                </select>
-              </div>
+                </NativeSelectField>
+              </FilterToolbar>
             </div>
           ) : null}
 

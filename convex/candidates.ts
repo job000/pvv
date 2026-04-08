@@ -639,6 +639,7 @@ export const listProcessCoverage = query({
           candidateId: c._id,
           name: c.name,
           code: c.code,
+          orgUnitId: c.orgUnitId ?? null,
           candidateUpdatedAt: c.updatedAt,
           githubRepoFullName: c.githubRepoFullName ?? null,
           githubIssueNumber: c.githubIssueNumber ?? null,

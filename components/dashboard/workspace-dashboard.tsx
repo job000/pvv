@@ -2,6 +2,7 @@
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { SearchInput } from "@/components/ui/search-input";
 import { WorkspaceDeleteDialog } from "@/components/workspace/workspace-delete-dialog";
 import { api } from "@/convex/_generated/api";
 import type { Doc, Id } from "@/convex/_generated/dataModel";
@@ -12,7 +13,6 @@ import {
   ArrowRight,
   MoreHorizontal,
   Plus,
-  Search,
   Settings,
   Star,
   Trash2,
@@ -131,7 +131,7 @@ export function WorkspaceDashboardGrid({
         className="scroll-mt-24 space-y-4"
         aria-labelledby="dash-workspaces-heading"
       >
-        <div className="flex items-center justify-between gap-3">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <h2
             id="dash-workspaces-heading"
             className="text-foreground text-base font-semibold"
@@ -139,21 +139,13 @@ export function WorkspaceDashboardGrid({
             {workspaces.length} arbeidsområde{workspaces.length !== 1 ? "r" : ""}
           </h2>
           {workspaces.length > 3 ? (
-            <div className="relative">
-              <Search
-                className="text-muted-foreground pointer-events-none absolute left-3 top-1/2 z-10 size-4 -translate-y-1/2"
-                aria-hidden
-              />
-              <Input
-                type="search"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Søk …"
-                className="h-9 w-48 rounded-lg pl-10 pr-3 text-sm md:pl-10 md:pr-3"
-                aria-label="Filtrer arbeidsområder"
-                autoComplete="off"
-              />
-            </div>
+            <SearchInput
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Søk i navn …"
+              aria-label="Filtrer arbeidsområder"
+              className="w-full sm:max-w-xs sm:flex-none"
+            />
           ) : null}
         </div>
 
