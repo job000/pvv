@@ -158,30 +158,88 @@ export function formatRosRequirementRefLine(r: {
 
 const JOURNAL_PDF_MAX = 100;
 
+/** Profesjonelt, trykk- og arkiv-vennlig palett (nøytral blå / skifer). */
+const PDF_THEME = {
+  brand: [23, 37, 84] as [number, number, number],
+  brandAccent: [37, 99, 235] as [number, number, number],
+  slate900: [15, 23, 42] as [number, number, number],
+  slate800: [30, 41, 59] as [number, number, number],
+  slate700: [51, 65, 85] as [number, number, number],
+  slate500: [100, 116, 139] as [number, number, number],
+  slate200: [226, 232, 240] as [number, number, number],
+  surface: [248, 250, 252] as [number, number, number],
+  calloutBg: [239, 246, 255] as [number, number, number],
+  calloutBorder: [191, 219, 254] as [number, number, number],
+  mutedBg: [241, 245, 249] as [number, number, number],
+  mutedBorder: [226, 232, 240] as [number, number, number],
+};
+
 function applyFooters(doc: jsPDF, margin: number, shortTitle: string) {
   const pageCount = doc.getNumberOfPages();
-  const pw = doc.internal.pageSize.getWidth();
-  const ph = doc.internal.pageSize.getHeight();
-  const safe = shortTitle.slice(0, 52) || "ROS-analyse";
+  const safe = shortTitle.slice(0, 56) || "Uten tittel";
+  const [s2, s3, s7] = [
+    PDF_THEME.slate200,
+    PDF_THEME.slate500,
+    PDF_THEME.slate700,
+  ];
   for (let i = 1; i <= pageCount; i++) {
     doc.setPage(i);
+    const pw = doc.internal.pageSize.getWidth();
+    const ph = doc.internal.pageSize.getHeight();
+    const landscape = pw > ph;
+    const footLineY = ph - 11;
+    const footBaseY = ph - 5;
+
+    doc.setDrawColor(s2[0], s2[1], s2[2]);
+    doc.setLineWidth(0.25);
+    doc.line(margin, footLineY, pw - margin, footLineY);
+
     doc.setFontSize(7);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(s7[0], s7[1], s7[2]);
+    doc.text("PVV", margin, footBaseY);
     doc.setFont("helvetica", "normal");
-    doc.setTextColor(130, 130, 130);
-    doc.text(`ROS · ${safe}`, margin, ph - 5.5, { maxWidth: pw - margin * 2 - 28 });
-    doc.text(`Side ${i} av ${pageCount}`, pw - margin, ph - 5.5, { align: "right" });
+    doc.setTextColor(s3[0], s3[1], s3[2]);
+    doc.text(`ROS-analyse · ${safe}`, margin + 10, footBaseY, {
+      maxWidth: pw - margin * 2 - 42,
+    });
+    doc.setFont("helvetica", "normal");
+    doc.text(`Side ${i} av ${pageCount}`, pw - margin, footBaseY, {
+      align: "right",
+    });
+
+    if (!landscape && i > 1) {
+      doc.setDrawColor(s2[0], s2[1], s2[2]);
+      doc.line(margin, 11, pw - margin, 11);
+      doc.setFontSize(7);
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(s3[0], s3[1], s3[2]);
+      doc.text("ROS-analyse", margin, 8);
+      doc.setFont("helvetica", "normal");
+      doc.text(safe, pw - margin, 8, {
+        align: "right",
+        maxWidth: pw - margin * 2 - 34,
+      });
+    }
+
     doc.setTextColor(0);
   }
+}
+
+/** Vertikal avstand per tekstlinje (mm) — litt romsligere enn jsPDF-default for lesbarhet. */
+function bodyLineHeightMm(fontSizePt: number) {
+  return fontSizePt * 0.52;
 }
 
 /** Laster ned A4-PDF med ROS-analyse (tekst + matrise + logg). */
 export function downloadRosAnalysisPdf(data: RosPdfInput): void {
   const doc = new jsPDF({ unit: "mm", format: "a4" });
-  const margin = 14;
+  const margin = 16;
   let y = margin;
 
   const pageW = () => doc.internal.pageSize.getWidth();
   const pageH = () => doc.internal.pageSize.getHeight();
+  const contentW = () => pageW() - margin * 2;
   const shortTitle = (data.title || "ROS-analyse").trim().slice(0, 60);
 
   doc.setProperties({
@@ -202,113 +260,413 @@ export function downloadRosAnalysisPdf(data: RosPdfInput): void {
     }
   };
 
-  const addHeading = (text: string, size = 14) => {
-    ensureSpace(12);
+  const addHeading = (
+    text: string,
+    size = 14,
+    opts?: { rule?: boolean; bar?: boolean },
+  ) => {
+    const rule = opts?.rule !== false && size >= 11;
+    const bar = opts?.bar !== false && size >= 11;
+    ensureSpace(16);
+    const barW = 2.8;
+    if (bar) {
+      doc.setFillColor(
+        PDF_THEME.brand[0],
+        PDF_THEME.brand[1],
+        PDF_THEME.brand[2],
+      );
+      doc.rect(margin, y - size * 0.36, barW, size * 0.72, "F");
+    }
+    const textX = margin + (bar ? barW + 3.5 : 0);
     doc.setFontSize(size);
     doc.setFont("helvetica", "bold");
-    doc.setTextColor(0);
-    doc.text(text, margin, y);
-    y += size * 0.55 + 4;
+    doc.setTextColor(
+      PDF_THEME.slate900[0],
+      PDF_THEME.slate900[1],
+      PDF_THEME.slate900[2],
+    );
+    doc.text(text, textX, y);
+    y += size * 0.55 + (rule ? 2 : 4);
+    if (rule) {
+      doc.setDrawColor(
+        PDF_THEME.slate200[0],
+        PDF_THEME.slate200[1],
+        PDF_THEME.slate200[2],
+      );
+      doc.setLineWidth(0.35);
+      doc.line(textX, y, pageW() - margin, y);
+      y += 4;
+    } else {
+      y += 1;
+    }
     doc.setFont("helvetica", "normal");
     doc.setFontSize(10);
+    doc.setTextColor(0);
   };
 
   const addPara = (text: string, size = 10) => {
     doc.setFontSize(size);
-    const lines = doc.splitTextToSize(text, pageW() - margin * 2);
-    ensureSpace(lines.length * size * 0.45 + 4);
+    const lh = bodyLineHeightMm(size);
+    const lines = doc.splitTextToSize(text, contentW());
+    ensureSpace(lines.length * lh + 5);
+    doc.setTextColor(
+      PDF_THEME.slate800[0],
+      PDF_THEME.slate800[1],
+      PDF_THEME.slate800[2],
+    );
     doc.text(lines, margin, y);
-    y += lines.length * size * 0.45 + 3;
+    y += lines.length * lh + 3.5;
+    doc.setTextColor(0);
+  };
+
+  /** Korte forklaringer / punktlister med tydelig luft. */
+  const addNumberedList = (items: string[], size = 9.5) => {
+    doc.setFontSize(size);
+    const lh = bodyLineHeightMm(size);
+    let n = 0;
+    for (const item of items) {
+      n += 1;
+      const prefix = `${n}. `;
+      const wrap = doc.splitTextToSize(item, contentW() - 8);
+      const blockH = wrap.length * lh + 2.5;
+      ensureSpace(blockH + 2);
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(
+        PDF_THEME.slate900[0],
+        PDF_THEME.slate900[1],
+        PDF_THEME.slate900[2],
+      );
+      doc.text(prefix, margin, y);
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(
+        PDF_THEME.slate800[0],
+        PDF_THEME.slate800[1],
+        PDF_THEME.slate800[2],
+      );
+      let yy = y;
+      for (let i = 0; i < wrap.length; i++) {
+        const line = wrap[i]!;
+        doc.text(line, margin + 7, yy);
+        yy += lh;
+      }
+      doc.setTextColor(0);
+      y = yy + 2;
+    }
   };
 
   const addRow = (label: string, value: string) => {
-    doc.setFontSize(10);
+    const size = 10;
+    const lh = bodyLineHeightMm(size);
+    doc.setFontSize(size);
     doc.setFont("helvetica", "bold");
-    doc.text(label, margin, y);
+    doc.setTextColor(
+      PDF_THEME.slate700[0],
+      PDF_THEME.slate700[1],
+      PDF_THEME.slate700[2],
+    );
+    const labelLines = doc.splitTextToSize(label, 42);
+    const vlines = doc.splitTextToSize(value, contentW() - 48);
+    const labelH = labelLines.length * lh;
+    const valueH = vlines.length * lh;
+    const block = Math.max(labelH, valueH) + 4;
+    ensureSpace(block);
+    let ly = y;
+    for (const ll of labelLines) {
+      doc.text(ll, margin, ly);
+      ly += lh;
+    }
     doc.setFont("helvetica", "normal");
-    const vlines = doc.splitTextToSize(value, pageW() - margin * 2 - 48);
-    ensureSpace(Math.max(vlines.length * 4.5, 7));
-    doc.text(vlines, margin + 46, y);
-    y += Math.max(vlines.length * 4.5, 6);
+    doc.setTextColor(
+      PDF_THEME.slate800[0],
+      PDF_THEME.slate800[1],
+      PDF_THEME.slate800[2],
+    );
+    let vy = y;
+    for (const vl of vlines) {
+      doc.text(vl, margin + 48, vy);
+      vy += lh;
+    }
+    y += Math.max(labelH, valueH) + 5;
+    doc.setTextColor(0);
   };
 
-  doc.setFillColor(30, 41, 59);
-  doc.rect(0, 0, pageW(), 40, "F");
+  /** Visuell pause mellom større blokker (f.eks. oppgaver / risikoer). */
+  const addSoftDivider = () => {
+    ensureSpace(6);
+    doc.setDrawColor(
+      PDF_THEME.slate200[0],
+      PDF_THEME.slate200[1],
+      PDF_THEME.slate200[2],
+    );
+    doc.setLineWidth(0.2);
+    doc.line(margin + 10, y, pageW() - margin - 10, y);
+    y += 5;
+  };
+
+  const isoDate = data.generatedAt.toISOString().slice(0, 10);
+  const docRefLabel = `ROS-${isoDate}${data.metadata?.revision != null ? ` · Rev. ${data.metadata.revision}` : ""}`;
+
+  doc.setFillColor(
+    PDF_THEME.brand[0],
+    PDF_THEME.brand[1],
+    PDF_THEME.brand[2],
+  );
+  doc.rect(0, 0, pageW(), 31, "F");
+  doc.setFillColor(
+    PDF_THEME.brandAccent[0],
+    PDF_THEME.brandAccent[1],
+    PDF_THEME.brandAccent[2],
+  );
+  doc.rect(0, 31, pageW(), 0.9, "F");
+
   doc.setTextColor(255, 255, 255);
-  doc.setFontSize(10);
+  doc.setFontSize(8);
   doc.setFont("helvetica", "bold");
-  doc.text("ROS-RAPPORT", margin, 14);
+  doc.text("PVV · ROS · RISIKO- OG SÅRBARHETSANALYSE", margin, 10);
   doc.setFont("helvetica", "normal");
-  doc.setFontSize(8.5);
+  doc.setFontSize(7);
   doc.text(
-    `Eksportert ${data.generatedAt.toLocaleString("nb-NO", { dateStyle: "long", timeStyle: "short" })}`,
+    `${data.generatedAt.toLocaleString("nb-NO", { dateStyle: "long", timeStyle: "short" })}  ·  ${docRefLabel}`,
+    margin,
+    16,
+  );
+  doc.text(
+    "Til intern styring, dokumentasjon og etterprøving (risikostyring i tråd med god praksis).",
     margin,
     22,
+    { maxWidth: pageW() - margin * 2 },
   );
   doc.setTextColor(0);
-  y = 48;
+  y = 38;
 
-  doc.setFontSize(18);
+  doc.setFontSize(19);
   doc.setFont("helvetica", "bold");
-  const titleLines = doc.splitTextToSize(data.title, pageW() - margin * 2);
-  ensureSpace(titleLines.length * 7 + 10);
+  doc.setTextColor(
+    PDF_THEME.slate900[0],
+    PDF_THEME.slate900[1],
+    PDF_THEME.slate900[2],
+  );
+  const titleLines = doc.splitTextToSize(data.title, contentW());
+  const titleLh = 7;
+  ensureSpace(titleLines.length * titleLh + 14);
   doc.text(titleLines, margin, y);
-  y += titleLines.length * 7 + 6;
+  y += titleLines.length * titleLh + 5;
   doc.setFont("helvetica", "normal");
-  doc.setFontSize(10);
+  doc.setFontSize(9.5);
+  doc.setTextColor(
+    PDF_THEME.slate500[0],
+    PDF_THEME.slate500[1],
+    PDF_THEME.slate500[2],
+  );
+  addPara(
+    "Samlet oversikt over vurdert risiko før og etter tiltak, inkludert sporbarhet mot oppgaver, PVV-koblinger og logg der disse er i bruk.",
+    9.5,
+  );
+  doc.setTextColor(0);
 
-  if (data.workspaceName) {
-    addRow("Arbeidsområde", data.workspaceName);
+  type ControlRow = { label: string; value: string };
+  const controlRows: ControlRow[] = [];
+  if (data.workspaceName?.trim()) {
+    controlRows.push({ label: "Arbeidsområde", value: data.workspaceName.trim() });
   }
-  if (data.candidateName) {
-    addRow("Prosess", `${data.candidateName} (${data.candidateCode ?? ""})`);
+  if (data.candidateName?.trim()) {
+    const code = data.candidateCode?.trim();
+    controlRows.push({
+      label: "Prosess / enhet",
+      value: code
+        ? `${data.candidateName.trim()} (${code})`
+        : data.candidateName.trim(),
+    });
   }
-  addRow("Akser", `${data.rowAxisTitle} × ${data.colAxisTitle}`);
-
-  if (data.metadata) {
-    const m = data.metadata;
-    y += 4;
-    doc.setDrawColor(220, 226, 232);
-    doc.setLineWidth(0.25);
-    doc.line(margin, y, pageW() - margin, y);
-    y += 5;
-    addHeading("Dokumentinformasjon", 11);
-    if (m.revision != null) {
-      addRow("Revisjon (utkast)", String(m.revision));
-    }
-    if (m.templateName) {
-      addRow("Mal", m.templateName);
-    }
-    if (m.createdAtMs) {
-      addRow("Opprettet", formatTs(m.createdAtMs));
-    }
-    if (m.updatedAtMs) {
-      addRow("Sist oppdatert", formatTs(m.updatedAtMs));
-    }
+  controlRows.push({
+    label: "Risikoakser (matrise)",
+    value: `${data.rowAxisTitle} × ${data.colAxisTitle}`,
+  });
+  const meta = data.metadata;
+  if (meta?.revision != null) {
+    controlRows.push({ label: "Revisjon", value: String(meta.revision) });
   }
-
+  if (meta?.templateName?.trim()) {
+    controlRows.push({ label: "Mal", value: meta.templateName.trim() });
+  }
+  if (meta?.createdAtMs) {
+    controlRows.push({ label: "Opprettet", value: formatTs(meta.createdAtMs) });
+  }
+  if (meta?.updatedAtMs) {
+    controlRows.push({
+      label: "Sist oppdatert",
+      value: formatTs(meta.updatedAtMs),
+    });
+  }
   if (data.linkedPvvTitles.length > 0) {
-    ensureSpace(8);
-    addRow("Koblede PVV-vurderinger", data.linkedPvvTitles.join("; "));
+    let pvvText = data.linkedPvvTitles.join("; ");
+    if (pvvText.length > 280) {
+      pvvText = `${pvvText.slice(0, 277)}…`;
+    }
+    controlRows.push({ label: "Koblede PVV-vurderinger", value: pvvText });
   }
+
+  const cPad = 5;
+  const cLabelW = 48;
+  const cInnerW = contentW() - cPad * 2;
+  const cValueX = margin + cPad + cLabelW;
+  const cValueMaxW = cInnerW - cLabelW - 2;
+  const cFs = 9;
+  const cLh = bodyLineHeightMm(cFs);
+  let cBodyH = cLh + 5;
+  for (const row of controlRows) {
+    doc.setFontSize(cFs);
+    const ll = doc.splitTextToSize(row.label, cLabelW - 1);
+    const vl = doc.splitTextToSize(row.value, cValueMaxW);
+    cBodyH += Math.max(ll.length, vl.length) * cLh + 3.5;
+  }
+  const cBoxH = cPad * 2 + cBodyH + 2;
+  ensureSpace(cBoxH + 10);
+  const cBoxTop = y;
+  doc.setFillColor(
+    PDF_THEME.surface[0],
+    PDF_THEME.surface[1],
+    PDF_THEME.surface[2],
+  );
+  doc.setDrawColor(
+    PDF_THEME.slate200[0],
+    PDF_THEME.slate200[1],
+    PDF_THEME.slate200[2],
+  );
+  doc.setLineWidth(0.35);
+  doc.rect(margin, cBoxTop, contentW(), cBoxH, "FD");
+  let cY = cBoxTop + cPad + 3;
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(cFs);
+  doc.setTextColor(
+    PDF_THEME.slate900[0],
+    PDF_THEME.slate900[1],
+    PDF_THEME.slate900[2],
+  );
+  doc.text("Dokumentkontroll", margin + cPad, cY);
+  cY += cLh + 4;
+  for (const row of controlRows) {
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(cFs);
+    doc.setTextColor(
+      PDF_THEME.slate700[0],
+      PDF_THEME.slate700[1],
+      PDF_THEME.slate700[2],
+    );
+    const ll = doc.splitTextToSize(row.label, cLabelW - 1);
+    const vl = doc.splitTextToSize(row.value, cValueMaxW);
+    let lyy = cY;
+    for (const l of ll) {
+      doc.text(l, margin + cPad, lyy);
+      lyy += cLh;
+    }
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(
+      PDF_THEME.slate800[0],
+      PDF_THEME.slate800[1],
+      PDF_THEME.slate800[2],
+    );
+    let vyy = cY;
+    for (const v of vl) {
+      doc.text(v, cValueX, vyy);
+      vyy += cLh;
+    }
+    cY = Math.max(lyy, vyy) + 3.5;
+  }
+  y = cBoxTop + cBoxH + 8;
+  doc.setTextColor(0);
+
+  y += 2;
+  addHeading("Formål og anvendelse", 12);
+  addPara(
+    "Rapporten dokumenterer risikovurderingen slik den foreligger i PVV på eksporttidspunktet. Den kan deles med ledelse, revisjon, DPO eller leverandører etter interne retningslinjer for informasjonsklassifisering.",
+    9.5,
+  );
 
   y += 4;
-  addHeading("Innhold i denne rapporten", 11);
+  addHeading("Struktur i dokumentet", 12);
   addPara(
-    "Oppsummering og notater · PVV-koblinger · Livssyklus og krav · Revisjon · Oppgaver · Identifiserte risikoer · Alle matrisepunkter (valgfritt) · Risikologg · Matriser før/etter tiltak.",
+    "Innholdet følger en fast rekkefølge: kontekst på forsiden, deretter eventuell oppsummering og analyse-notat, risikomatriser i breddeformat (før og etter tiltak), og til slutt detaljer om koblinger, krav, oppgaver, risikoer, logg og juridisk/teknisk merknad.",
+    9.5,
+  );
+  addPara("Hoveddeler:", 9);
+  addNumberedList(
+    [
+      "Forside med dokumentkontroll og referanse.",
+      "Oppsummering og analyse-notat (når det finnes data).",
+      "Risikomatrise før tiltak — nivå 0–5 og celletekst.",
+      "Risikomatrise etter tiltak — restrisiko etter planlagte eller gjennomførte tiltak.",
+      "PVV-koblinger, rammer og krav, revisjon, oppgaver, identifiserte risikoer og komplett punktliste.",
+      "Kortlager, risikologg, forklaring av nivåer og ansvarsfraskrivelse / merknad.",
+    ],
     9,
+  );
+  addPara(
+    "Sidetall og dokumenttittel gjentas i bunntekst på alle sider. Lange matriser kan deles over flere sider med gjentatte kolonneoverskrifter.",
+    8.5,
   );
 
   if (data.summaryLines && data.summaryLines.length > 0) {
     y += 4;
     addHeading("Oppsummering (før/etter tiltak)", 12);
     addPara(
-      "Automatisk sammendrag fra matrisene — tilsvarer fanen Oppsummering.",
-      8,
+      "Automatisk utdrag fra matrisene (samme innhold som i appens oppsummering). Egnet som innledning for ledelse eller revisjon.",
+      8.5,
+    );
+    const sPad = 5;
+    const sFs = 9.5;
+    const sLh = bodyLineHeightMm(sFs);
+    let sInner = sPad * 2 + 5;
+    doc.setFontSize(sFs);
+    for (const line of data.summaryLines) {
+      const wrapped = doc.splitTextToSize(
+        `• ${line}`,
+        contentW() - sPad * 2 - 4,
+      );
+      sInner += wrapped.length * sLh + 1;
+    }
+    sInner += 4;
+    ensureSpace(sInner + 6);
+    const sTop = y;
+    doc.setFillColor(
+      PDF_THEME.calloutBg[0],
+      PDF_THEME.calloutBg[1],
+      PDF_THEME.calloutBg[2],
+    );
+    doc.setDrawColor(
+      PDF_THEME.calloutBorder[0],
+      PDF_THEME.calloutBorder[1],
+      PDF_THEME.calloutBorder[2],
+    );
+    doc.setLineWidth(0.25);
+    doc.rect(margin, sTop, contentW(), sInner, "FD");
+    let sY = sTop + sPad + 4;
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(7.5);
+    doc.setTextColor(
+      PDF_THEME.slate700[0],
+      PDF_THEME.slate700[1],
+      PDF_THEME.slate700[2],
+    );
+    doc.text("HOVEDPOINTER", margin + sPad, sY);
+    sY += 5;
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(sFs);
+    doc.setTextColor(
+      PDF_THEME.slate800[0],
+      PDF_THEME.slate800[1],
+      PDF_THEME.slate800[2],
     );
     for (const line of data.summaryLines) {
-      addPara(`• ${line}`, 9);
+      const wrapped = doc.splitTextToSize(
+        `• ${line}`,
+        contentW() - sPad * 2 - 4,
+      );
+      doc.text(wrapped, margin + sPad, sY);
+      sY += wrapped.length * sLh + 1;
     }
+    y = sTop + sInner + 6;
+    doc.setTextColor(0);
   }
 
   if (data.analysisNotes?.trim()) {
@@ -317,16 +675,377 @@ export function downloadRosAnalysisPdf(data: RosPdfInput): void {
     addPara(data.analysisNotes.trim());
   }
 
+  /** Maks tekstlinjer per celle (større skrift = færre linjer per radhøyde; «…» ved avkorting). */
+  const ROS_PDF_MATRIX_CELL_NOTE_MAX_LINES = 18;
+  const splitMatrixCellNote = (note: string, maxW: number) => {
+    if (!note.trim()) return [];
+    doc.setFontSize(6);
+    doc.setFont("helvetica", "normal");
+    const all = doc.splitTextToSize(note, maxW);
+    if (all.length <= ROS_PDF_MATRIX_CELL_NOTE_MAX_LINES) return all;
+    const head = all.slice(0, ROS_PDF_MATRIX_CELL_NOTE_MAX_LINES - 1);
+    head.push("…");
+    return head;
+  };
+
+  /** To matriser i landskap: før tiltak og etter tiltak (rest) — plassert tidlig for full ROS-oversikt */
+  const matrixPhasesEarly: Array<{
+    heading: string;
+    sub: string;
+    mv: number[][];
+    cn: string[][];
+    rowLabels: string[];
+    colLabels: string[];
+    rowAxisTitle: string;
+    colAxisTitle: string;
+  }> = [
+    {
+      heading: "Risikomatrise — før tiltak (utgangspunkt)",
+      sub: `${data.rowAxisTitle} (rader) × ${data.colAxisTitle} (kolonner). Utgangspunkt før planlagte eller gjennomførte tiltak. Stort tall i cellen = risikonivå 0–5 (farge viser alvor). Teksten under er samlet beskrivelse av risiko i den cellen.`,
+      mv: data.matrixValues,
+      cn: data.cellNotes,
+      rowLabels: data.rowLabels,
+      colLabels: data.colLabels,
+      rowAxisTitle: data.rowAxisTitle,
+      colAxisTitle: data.colAxisTitle,
+    },
+    {
+      heading: "Risikomatrise — etter tiltak (rest)",
+      sub: data.afterSeparateLayout
+        ? `${data.afterRowAxisTitle} (rader) × ${data.afterColAxisTitle} (kolonner). Eget rutenett for restrisiko. Stort tall = nivå; farge = alvor; tekst = beskrivelse i cellen.`
+        : `${data.rowAxisTitle} (rader) × ${data.colAxisTitle} (kolonner). Samme akser som før-matrisen; her vises restrisiko etter tiltak.`,
+      mv: data.matrixValuesAfter,
+      cn: data.cellNotesAfter,
+      rowLabels: data.afterRowLabels,
+      colLabels: data.afterColLabels,
+      rowAxisTitle: data.afterRowAxisTitle,
+      colAxisTitle: data.afterColAxisTitle,
+    },
+  ];
+
+  const LAND_HDR_H = 12.5;
+
+  for (let pi = 0; pi < matrixPhasesEarly.length; pi++) {
+    const phase = matrixPhasesEarly[pi]!;
+    const phaseRibbon =
+      pi === 0 ? "Matrise — før tiltak" : "Matrise — etter tiltak";
+    doc.addPage("a4", "landscape");
+    const lw = pageW();
+    const lh = pageH();
+
+    const drawLandscapeChrome = (isContinuation: boolean) => {
+      doc.setFillColor(
+        PDF_THEME.surface[0],
+        PDF_THEME.surface[1],
+        PDF_THEME.surface[2],
+      );
+      doc.setDrawColor(
+        PDF_THEME.slate200[0],
+        PDF_THEME.slate200[1],
+        PDF_THEME.slate200[2],
+      );
+      doc.rect(0, 0, lw, LAND_HDR_H, "FD");
+      doc.setLineWidth(0.25);
+      doc.line(0, LAND_HDR_H, lw, LAND_HDR_H);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(7);
+      doc.setTextColor(
+        PDF_THEME.slate700[0],
+        PDF_THEME.slate700[1],
+        PDF_THEME.slate700[2],
+      );
+      doc.text("PVV · ROS-analyse", margin, 5.2);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(6.5);
+      doc.setTextColor(
+        PDF_THEME.slate500[0],
+        PDF_THEME.slate500[1],
+        PDF_THEME.slate500[2],
+      );
+      doc.text(shortTitle.slice(0, 78), margin, 9);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(9);
+      doc.setTextColor(
+        PDF_THEME.slate900[0],
+        PDF_THEME.slate900[1],
+        PDF_THEME.slate900[2],
+      );
+      doc.text(phaseRibbon, lw - margin, 5.5, { align: "right" });
+      if (isContinuation) {
+        doc.setFont("helvetica", "italic");
+        doc.setFontSize(7);
+        doc.setTextColor(
+          PDF_THEME.slate500[0],
+          PDF_THEME.slate500[1],
+          PDF_THEME.slate500[2],
+        );
+        doc.text("Fortsettelse", lw - margin, 9.2, { align: "right" });
+      }
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(0);
+    };
+
+    drawLandscapeChrome(false);
+    let my = LAND_HDR_H + 4;
+    const rows = phase.rowLabels.length;
+    const cols = phase.colLabels.length;
+    const labelColW = Math.min(46, Math.max(34, lw * 0.14));
+    const tableW = lw - margin * 2 - labelColW;
+    const colW = cols > 0 ? tableW / cols : 10;
+    const x0 = margin + labelColW;
+
+    const HEADER_BG: [number, number, number] = [252, 252, 253];
+    const HEADER_STROKE: [number, number, number] = [203, 213, 225];
+    const LABEL_COL_BG: [number, number, number] = [249, 250, 251];
+
+    const drawCellRect = (
+      x: number,
+      yy: number,
+      w: number,
+      h: number,
+      fill: [number, number, number],
+      stroke: [number, number, number],
+    ) => {
+      doc.setLineWidth(0.12);
+      doc.setFillColor(fill[0], fill[1], fill[2]);
+      doc.setDrawColor(stroke[0], stroke[1], stroke[2]);
+      doc.rect(x, yy, w, h, "FD");
+    };
+
+    const drawCenteredInCell = (
+      lines: { text: string; size: number; bold: boolean }[],
+      cx: number,
+      top: number,
+      cellH: number,
+      maxW: number,
+    ) => {
+      const flat: { text: string; size: number; bold: boolean }[] = [];
+      for (const ln of lines) {
+        doc.setFontSize(ln.size);
+        doc.setFont("helvetica", ln.bold ? "bold" : "normal");
+        const parts = doc.splitTextToSize(ln.text, maxW);
+        for (const p of parts) {
+          flat.push({ text: p, size: ln.size, bold: ln.bold });
+        }
+      }
+      if (flat.length === 0) return;
+      let totalH = 0;
+      for (const f of flat) {
+        totalH += f.size * 0.46 + 0.55;
+      }
+      let yy = top + (cellH - totalH) / 2 + flat[0]!.size * 0.36;
+      for (const f of flat) {
+        doc.setFontSize(f.size);
+        doc.setFont("helvetica", f.bold ? "bold" : "normal");
+        doc.text(f.text, cx, yy, { align: "center", maxWidth: maxW });
+        yy += f.size * 0.46 + 0.55;
+      }
+      doc.setFont("helvetica", "normal");
+    };
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8.5);
+    doc.setTextColor(
+      PDF_THEME.slate700[0],
+      PDF_THEME.slate700[1],
+      PDF_THEME.slate700[2],
+    );
+    const subLines = doc.splitTextToSize(phase.sub, lw - margin * 2);
+    doc.text(subLines, margin, my);
+    my += subLines.length * 3.6 + 5;
+    doc.setTextColor(0);
+
+    const legendBoxY = my;
+    doc.setFontSize(7.5);
+    doc.setTextColor(71, 85, 105);
+    doc.text("Nivåskala (0–5):", margin, legendBoxY + 2.4);
+    let legX = margin + 28;
+    for (let lev = 0; lev <= 5; lev++) {
+      const s = pdfRiskLevelStyle(lev);
+      drawCellRect(legX, legendBoxY, 6, 4.2, s.fill, s.stroke);
+      doc.setFontSize(7);
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(s.text[0], s.text[1], s.text[2]);
+      doc.text(String(lev), legX + 3, legendBoxY + 3.1, { align: "center" });
+      legX += 7.5;
+    }
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(71, 85, 105);
+    doc.setFontSize(7);
+    const legRest = legend.map((x) => `${x.level} = ${x.label}`).join("  ·  ");
+    const legLines = doc.splitTextToSize(legRest, lw - margin * 2);
+    doc.text(legLines, margin, legendBoxY + 7.5);
+    doc.setTextColor(0);
+    my = legendBoxY + 7.5 + legLines.length * 3.4 + 3;
+
+    doc.setFontSize(7.2);
+    doc.setFont("helvetica", "bold");
+    let headerLabelMaxLines = 1;
+    const colHeaderLines: string[][] = [];
+    for (let j = 0; j < cols; j++) {
+      doc.setFontSize(7.2);
+      const lines = doc.splitTextToSize(phase.colLabels[j] ?? "", colW - 2);
+      colHeaderLines.push(lines);
+      headerLabelMaxLines = Math.max(headerLabelMaxLines, lines.length);
+    }
+    doc.setFontSize(7);
+    const cornerLines = [
+      ...doc.splitTextToSize(phase.rowAxisTitle, labelColW - 3),
+      ...doc.splitTextToSize(phase.colAxisTitle, labelColW - 3),
+    ];
+    headerLabelMaxLines = Math.max(headerLabelMaxLines, cornerLines.length);
+    const headerRowH = Math.max(14, headerLabelMaxLines * 3.2 + 5);
+
+    const footerReserve = 22;
+    let continuation = false;
+
+    const drawMatrixHeaderRow = (atY: number) => {
+      drawCellRect(margin, atY, labelColW, headerRowH, HEADER_BG, HEADER_STROKE);
+      doc.setFontSize(6.8);
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(51, 65, 85);
+      let hy = atY + 3.5;
+      for (const line of cornerLines) {
+        doc.text(line, margin + labelColW / 2, hy, {
+          align: "center",
+          maxWidth: labelColW - 3,
+        });
+        hy += 3.2;
+      }
+      doc.setFont("helvetica", "normal");
+      for (let j = 0; j < cols; j++) {
+        drawCellRect(
+          x0 + j * colW,
+          atY,
+          colW,
+          headerRowH,
+          HEADER_BG,
+          HEADER_STROKE,
+        );
+        doc.setFontSize(7.2);
+        doc.setFont("helvetica", "bold");
+        doc.setTextColor(51, 65, 85);
+        const lines = colHeaderLines[j] ?? [];
+        const blockH = lines.length * 3.2;
+        let cy = atY + (headerRowH - blockH) / 2 + 2.4;
+        for (const line of lines) {
+          doc.text(line, x0 + j * colW + colW / 2, cy, {
+            align: "center",
+            maxWidth: colW - 2,
+          });
+          cy += 3.2;
+        }
+      }
+      doc.setTextColor(0);
+    };
+
+    const measureDataRowHeight = (i: number) => {
+      doc.setFontSize(7);
+      const rl = doc.splitTextToSize(
+        phase.rowLabels[i] ?? "",
+        labelColW - 3,
+      );
+      const rowLabelH = Math.max(rl.length * 3.4, 9);
+      let maxInner = 11;
+      for (let j = 0; j < cols; j++) {
+        const note = (phase.cn[i]?.[j] ?? "").trim();
+        const noteLines = splitMatrixCellNote(note, colW - 2.4);
+        const inner =
+          6 +
+          4.2 +
+          noteLines.length * 3.25 +
+          (noteLines.length > 0 ? 1.5 : 0);
+        maxInner = Math.max(maxInner, inner);
+      }
+      return Math.max(rowLabelH + 2, maxInner + 3.5);
+    };
+
+    drawMatrixHeaderRow(my);
+    my += headerRowH;
+
+    for (let i = 0; i < rows; i++) {
+      const rowH = measureDataRowHeight(i);
+      if (my + rowH > lh - margin - footerReserve) {
+        doc.addPage("a4", "landscape");
+        drawLandscapeChrome(true);
+        my = LAND_HDR_H + 4;
+        continuation = true;
+        drawMatrixHeaderRow(my);
+        my += headerRowH;
+      }
+
+      drawCellRect(margin, my, labelColW, rowH, LABEL_COL_BG, HEADER_STROKE);
+      doc.setFontSize(7);
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(51, 65, 85);
+      const rl = doc.splitTextToSize(phase.rowLabels[i] ?? "", labelColW - 3);
+      const rlBlock = rl.length * 3.4;
+      let rly = my + (rowH - rlBlock) / 2 + 2.6;
+      for (const line of rl) {
+        doc.text(line, margin + 1.5, rly, { maxWidth: labelColW - 3 });
+        rly += 3.4;
+      }
+      doc.setFont("helvetica", "normal");
+
+      for (let j = 0; j < cols; j++) {
+        const v = phase.mv[i]?.[j] ?? 0;
+        const note = (phase.cn[i]?.[j] ?? "").trim();
+        const style = pdfRiskLevelStyle(v);
+        const cx = x0 + j * colW + colW / 2;
+        drawCellRect(x0 + j * colW, my, colW, rowH, style.fill, style.stroke);
+        doc.setTextColor(style.text[0], style.text[1], style.text[2]);
+        const lines: { text: string; size: number; bold: boolean }[] = [
+          { text: String(v), size: 12, bold: true },
+          { text: levelLabel(v), size: 7, bold: false },
+        ];
+        if (note) {
+          const noteLines = splitMatrixCellNote(note, colW - 2.4);
+          for (const nl of noteLines) {
+            lines.push({ text: nl, size: 6, bold: false });
+          }
+        }
+        drawCenteredInCell(lines, cx, my, rowH, colW - 2.4);
+        doc.setTextColor(0);
+      }
+      my += rowH;
+    }
+
+    if (continuation) {
+      my += 2;
+      doc.setFontSize(8);
+      doc.setTextColor(100, 116, 139);
+      const contLines = doc.splitTextToSize(
+        "Tabellen fortsetter på neste side. Kolonneoverskriftene er gjentatt øverst slik at du slipper å bla tilbake.",
+        lw - margin * 2,
+      );
+      doc.text(contLines, margin, my);
+      my += contLines.length * 3.8 + 4;
+      doc.setTextColor(0);
+    }
+  }
+
+  doc.addPage("a4", "portrait");
+  y = margin;
+
   if (data.pvvLinksDetailed && data.pvvLinksDetailed.length > 0) {
     y += 4;
     addHeading("PVV-koblinger (detaljer)", 12);
+    addPara(
+      "Hver kobling er en egen blokk med tydelige felt (PDD-status, notater, krav). Tomme felt er utelatt.",
+      9,
+    );
+    let pvvi = 0;
     for (const p of data.pvvLinksDetailed) {
+      pvvi += 1;
+      if (pvvi > 1) addSoftDivider();
       doc.setFont("helvetica", "bold");
-      doc.setFontSize(10);
+      doc.setFontSize(10.5);
+      doc.setTextColor(30, 41, 59);
       ensureSpace(8);
       doc.text(p.title, margin, y);
-      y += 5;
+      y += 5.5;
       doc.setFont("helvetica", "normal");
+      doc.setTextColor(0);
       addRow("PDD-status (PVV)", p.pddLabel);
       if (p.pddUrl?.trim()) {
         addRow("PDD-lenke", p.pddUrl.trim());
@@ -389,7 +1108,7 @@ export function downloadRosAnalysisPdf(data: RosPdfInput): void {
     }
     if (data.axisScaleNotes?.trim()) {
       y += 2;
-      addHeading("Definisjon av nivåer (0–5)", 11);
+      addHeading("Definisjon av nivåer (0–5)", 11, { bar: false });
       addPara(data.axisScaleNotes.trim());
     }
     if (scopeLabels) {
@@ -397,7 +1116,7 @@ export function downloadRosAnalysisPdf(data: RosPdfInput): void {
     }
     if (data.requirementRefLines && data.requirementRefLines.length > 0) {
       y += 2;
-      addHeading("Krav- og kildehenvisninger", 11);
+      addHeading("Krav- og kildehenvisninger", 11, { bar: false });
       for (const line of data.requirementRefLines) {
         addPara(`• ${line}`, 9);
       }
@@ -428,30 +1147,49 @@ export function downloadRosAnalysisPdf(data: RosPdfInput): void {
     })) ??
       []);
 
-  if (taskLinesResolved.length > 0) {
-    y += 4;
-    addHeading("Oppfølgingsoppgaver", 12);
+  y += 4;
+  addHeading("Oppfølgingsoppgaver (tiltak)", 12);
+  if (taskLinesResolved.length === 0) {
+    addPara(
+      "Ingen oppgaver er registrert for denne analysen under fanen Oppgaver. Oppgaver dokumenterer planlagte eller pågående tiltak og kan kobles til risiko i matrisen.",
+      9,
+    );
+  } else {
     addPara(
       data.taskLinesAll
-        ? "Alle oppgaver fra fanen Oppgaver (åpne og fullførte)."
-        : "Åpne oppgaver.",
-      8,
+        ? "Listen under viser alle oppgaver fra fanen Oppgaver. Status står i hakeparentes. Beskrivelse, ansvarlig, koblet risiko og type tiltak følger bare når det er registrert."
+        : "Listen viser åpne oppgaver.",
+      9,
     );
+    let ti = 0;
     for (const t of taskLinesResolved) {
-      const parts: string[] = [`[${t.statusLabel}] ${t.line}`];
+      ti += 1;
+      if (ti > 1) addSoftDivider();
+      ensureSpace(22);
+      doc.setFontSize(10);
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(
+        PDF_THEME.slate900[0],
+        PDF_THEME.slate900[1],
+        PDF_THEME.slate900[2],
+      );
+      doc.text(`Oppgave ${ti} av ${taskLinesResolved.length}`, margin, y);
+      y += 5.5;
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(0);
+      addRow("Status og tittel", `[${t.statusLabel}] ${t.line}`);
       if (t.description?.trim()) {
-        parts.push(`Beskrivelse: ${t.description.trim()}`);
+        addRow("Beskrivelse", t.description.trim());
       }
       if (t.assigneeName?.trim()) {
-        parts.push(`Ansvarlig: ${t.assigneeName.trim()}`);
+        addRow("Ansvarlig", t.assigneeName.trim());
       }
       if (t.linkedRiskSummary?.trim()) {
-        parts.push(`Kobling: ${t.linkedRiskSummary.trim()}`);
+        addRow("Koblet risiko", t.linkedRiskSummary.trim());
       }
       if (t.riskTreatmentLabel?.trim()) {
-        parts.push(`Behandling: ${t.riskTreatmentLabel.trim()}`);
+        addRow("Type tiltak (behandling)", t.riskTreatmentLabel.trim());
       }
-      addPara(`• ${parts.join("\n")}`, 9);
       y += 1;
     }
   }
@@ -474,45 +1212,60 @@ export function downloadRosAnalysisPdf(data: RosPdfInput): void {
 
   if (data.identifiedRisks && data.identifiedRisks.length > 0) {
     y += 4;
-    addHeading("Identifiserte risikoer og tiltak", 12);
+    addHeading("Identifiserte risikoer (beskrivelse og plassering)", 12);
     addPara(
-      "Alle punkter fra risikolisten med beskrivelse, plassering i matrisen før/etter tiltak, og markeringer (tiltak / følg med). Matrisesidene viser kompakt sammendrag; her er full tekst.",
-      8,
+      "Hver risiko er listet for seg med tydelige felt. «Før/etter tiltak» viser celle og nivå slik det også framgår i matrisene. Økonomi/frekvens og begrunnelse for endring vises når de er utfylt i appen.",
+      9,
     );
+    const totalR = data.identifiedRisks.length;
+    let ri = 0;
     for (const r of data.identifiedRisks) {
-      const parts: string[] = [];
-      if (r.text.trim()) {
-        parts.push(r.text.trim());
-      } else {
-        parts.push("(Ingen fritekst — se markeringer nedenfor.)");
-      }
-      parts.push(
-        `Før tiltak: ${r.beforeRowLabel} × ${r.beforeColLabel} — nivå ${r.beforeLevel} (${levelLabel(r.beforeLevel)})`,
+      ri += 1;
+      if (ri > 1) addSoftDivider();
+      ensureSpace(28);
+      doc.setFontSize(10.5);
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(
+        PDF_THEME.slate900[0],
+        PDF_THEME.slate900[1],
+        PDF_THEME.slate900[2],
       );
-      parts.push(
-        `Etter tiltak: ${r.afterRowLabel} × ${r.afterColLabel} — nivå ${r.afterLevel} (${levelLabel(r.afterLevel)})`,
+      doc.text(`Risiko ${ri} av ${totalR}`, margin, y);
+      y += 6;
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(0);
+      addRow(
+        "Beskrivelse",
+        r.text.trim() ? r.text.trim() : "(Ingen fritekst — se markeringer og matrise.)",
+      );
+      addRow(
+        "Før tiltak (celle og nivå)",
+        `${r.beforeRowLabel} × ${r.beforeColLabel} — nivå ${r.beforeLevel} (${levelLabel(r.beforeLevel)})`,
+      );
+      addRow(
+        "Etter tiltak (celle og nivå)",
+        `${r.afterRowLabel} × ${r.afterColLabel} — nivå ${r.afterLevel} (${levelLabel(r.afterLevel)})`,
       );
       const marks: string[] = [];
       if (r.hasTiltak) marks.push("Må håndteres (tiltak)");
       if (r.hasFølg) marks.push("Følg med");
       if (marks.length > 0) {
-        parts.push(`Markeringer: ${marks.join(" · ")}`);
+        addRow("Markeringer", marks.join(" · "));
       }
       const note = r.afterChangeNote?.trim();
       if (note) {
-        parts.push(`Begrunnelse for endring (før → etter tiltak): ${note}`);
+        addRow("Begrunnelse for endring", note);
       }
-      addPara(parts.join("\n"), 9);
       y += 2;
     }
   }
 
   if (data.cellRiskPointsComplete && data.cellRiskPointsComplete.length > 0) {
     y += 4;
-    addHeading("Alle registrerte punkt i matrisen", 12);
+    addHeading("Alle registrerte punkt i matrisen (komplett liste)", 12);
     addPara(
-      "Full liste over alle risikopunkter i før- og etter-matrise (inkl. kun etter-fase). Er utfyllende sammen med «Identifiserte risikoer».",
-      8,
+      "Her listes hvert enkelt punkt som ligger i en celle (før eller etter tiltak). Bruk denne listen om du trenger full tekst punkt for punkt — matrisen gir oversikt, denne delen gir detalj.",
+      9,
     );
     const flagNb = (flags: string[]) => {
       const out: string[] = [];
@@ -520,23 +1273,44 @@ export function downloadRosAnalysisPdf(data: RosPdfInput): void {
       if (flags.includes("watch")) out.push("Følg med");
       return out.length ? out.join(" · ") : "";
     };
+    const totalP = data.cellRiskPointsComplete.length;
+    let pi = 0;
     for (const p of data.cellRiskPointsComplete) {
+      pi += 1;
+      if (pi > 1) addSoftDivider();
       const phaseNb = p.phase === "before" ? "Før tiltak" : "Etter tiltak";
       const flagStr = flagNb(p.flags);
-      const bits = [
-        `[${phaseNb}] ${p.rowLabel} × ${p.colLabel} — nivå ${p.level} (${levelLabel(p.level)})`,
-        p.text ? p.text : "(ingen fritekst)",
-        flagStr ? `Markeringer: ${flagStr}` : "",
-        p.afterChangeNote ? `Notat endring: ${p.afterChangeNote}` : "",
-      ].filter(Boolean);
-      addPara(bits.join("\n"), 9);
+      ensureSpace(20);
+      doc.setFontSize(9.5);
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(
+        PDF_THEME.slate900[0],
+        PDF_THEME.slate900[1],
+        PDF_THEME.slate900[2],
+      );
+      doc.text(`Punkt ${pi} av ${totalP}`, margin, y);
+      y += 5;
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(0);
+      addRow("Matrise", phaseNb);
+      addRow(
+        "Celle og nivå",
+        `${p.rowLabel} × ${p.colLabel} — nivå ${p.level} (${levelLabel(p.level)})`,
+      );
+      addRow("Tekst", p.text?.trim() ? p.text.trim() : "(Ingen fritekst)");
+      if (flagStr) {
+        addRow("Markeringer", flagStr);
+      }
+      if (p.afterChangeNote?.trim()) {
+        addRow("Notat om endring", p.afterChangeNote.trim());
+      }
       y += 1;
     }
   }
 
   if (data.sectorPackLabel?.trim()) {
     y += 4;
-    addHeading("Sektor ved opprettelse", 11);
+    addHeading("Sektor ved opprettelse", 11, { bar: false });
     addPara(data.sectorPackLabel.trim(), 9);
   }
 
@@ -567,23 +1341,44 @@ export function downloadRosAnalysisPdf(data: RosPdfInput): void {
   if (journal.length > 0) {
     y += 4;
     addHeading("Risikologg (utdrag)", 12);
+    addPara(
+      "Eldste hendelser først i utdraget. Tidspunkt og forfatter vises øverst; innholdet under er selve loggteksten.",
+      8.5,
+    );
+    let ji = 0;
     for (const e of journal) {
+      ji += 1;
+      if (ji > 1) addSoftDivider();
       const link =
         e.linkedRow !== undefined && e.linkedCol !== undefined
-          ? ` [Celle rad ${e.linkedRow + 1}, kol ${e.linkedCol + 1}]`
+          ? `Rad ${e.linkedRow + 1}, kolonne ${e.linkedCol + 1}`
           : "";
       const phaseTag =
         e.matrixPhase === "after"
-          ? "[Etter tiltak] "
+          ? "Etter tiltak"
           : e.matrixPhase === "before"
-            ? "[Før tiltak] "
+            ? "Før tiltak"
             : "";
-      const line = `${phaseTag}${formatTs(e.createdAt)} · ${e.authorName}${link}\n${e.body}`;
-      doc.setFontSize(8);
-      const lines = doc.splitTextToSize(line, pageW() - margin * 2);
-      ensureSpace(lines.length * 3.6 + 4);
-      doc.text(lines, margin, y);
-      y += lines.length * 3.6 + 3;
+      ensureSpace(14);
+      doc.setFontSize(8.5);
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(71, 85, 105);
+      const headBits = [
+        formatTs(e.createdAt),
+        e.authorName,
+        phaseTag,
+        link,
+      ].filter(Boolean);
+      doc.text(headBits.join(" · "), margin, y);
+      y += 4.5;
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(30, 41, 59);
+      const bodyLines = doc.splitTextToSize(e.body, contentW());
+      const blh = bodyLineHeightMm(8.5);
+      ensureSpace(bodyLines.length * blh + 3);
+      doc.setFontSize(8.5);
+      doc.text(bodyLines, margin, y);
+      y += bodyLines.length * blh + 4;
     }
     doc.setFontSize(10);
     if (data.journalEntries.length > JOURNAL_PDF_MAX) {
@@ -594,306 +1389,55 @@ export function downloadRosAnalysisPdf(data: RosPdfInput): void {
     }
   }
 
-  /** To matriser i landskap: før tiltak og etter tiltak (rest) */
-  const matrixPhases: Array<{
-    heading: string;
-    sub: string;
-    mv: number[][];
-    cn: string[][];
-    rowLabels: string[];
-    colLabels: string[];
-    rowAxisTitle: string;
-    colAxisTitle: string;
-  }> = [
-    {
-      heading: "Risikomatrise — før tiltak (utgangspunkt)",
-      sub: `${data.rowAxisTitle} (rader) × ${data.colAxisTitle} (kolonner). Utgangspunkt før planlagte eller gjennomførte tiltak. Cellefarge = nivå 0–5.`,
-      mv: data.matrixValues,
-      cn: data.cellNotes,
-      rowLabels: data.rowLabels,
-      colLabels: data.colLabels,
-      rowAxisTitle: data.rowAxisTitle,
-      colAxisTitle: data.colAxisTitle,
-    },
-    {
-      heading: "Risikomatrise — etter tiltak (rest)",
-      sub: data.afterSeparateLayout
-        ? `${data.afterRowAxisTitle} (rader) × ${data.afterColAxisTitle} (kolonner). Eget rutenett for restrisiko. Cellefarge = nivå 0–5.`
-        : `${data.rowAxisTitle} (rader) × ${data.colAxisTitle} (kolonner). Samme akser som før; restrisiko etter tiltak.`,
-      mv: data.matrixValuesAfter,
-      cn: data.cellNotesAfter,
-      rowLabels: data.afterRowLabels,
-      colLabels: data.afterColLabels,
-      rowAxisTitle: data.afterRowAxisTitle,
-      colAxisTitle: data.afterColAxisTitle,
-    },
-  ];
-
-  for (let pi = 0; pi < matrixPhases.length; pi++) {
-    const phase = matrixPhases[pi]!;
-    doc.addPage("a4", "landscape");
-    y = margin;
-    const lw = pageW();
-    const lh = pageH();
-    const rows = phase.rowLabels.length;
-    const cols = phase.colLabels.length;
-    const labelColW = Math.min(46, Math.max(34, lw * 0.14));
-    const tableW = lw - margin * 2 - labelColW;
-    const colW = cols > 0 ? tableW / cols : 10;
-    const x0 = margin + labelColW;
-
-    const HEADER_BG: [number, number, number] = [248, 250, 252];
-    const HEADER_STROKE: [number, number, number] = [100, 116, 139];
-    const LABEL_COL_BG: [number, number, number] = [249, 250, 251];
-
-    const drawCellRect = (
-      x: number,
-      yy: number,
-      w: number,
-      h: number,
-      fill: [number, number, number],
-      stroke: [number, number, number],
-    ) => {
-      doc.setLineWidth(0.18);
-      doc.setFillColor(fill[0], fill[1], fill[2]);
-      doc.setDrawColor(stroke[0], stroke[1], stroke[2]);
-      doc.rect(x, yy, w, h, "FD");
-    };
-
-    const drawCenteredInCell = (
-      lines: { text: string; size: number; bold: boolean }[],
-      cx: number,
-      top: number,
-      cellH: number,
-      maxW: number,
-    ) => {
-      const flat: { text: string; size: number; bold: boolean }[] = [];
-      for (const ln of lines) {
-        doc.setFontSize(ln.size);
-        doc.setFont("helvetica", ln.bold ? "bold" : "normal");
-        const parts = doc.splitTextToSize(ln.text, maxW);
-        for (const p of parts) {
-          flat.push({ text: p, size: ln.size, bold: ln.bold });
-        }
-      }
-      if (flat.length === 0) return;
-      let totalH = 0;
-      for (const f of flat) {
-        totalH += f.size * 0.42 + 0.5;
-      }
-      let yy = top + (cellH - totalH) / 2 + flat[0]!.size * 0.35;
-      for (const f of flat) {
-        doc.setFontSize(f.size);
-        doc.setFont("helvetica", f.bold ? "bold" : "normal");
-        doc.text(f.text, cx, yy, { align: "center", maxWidth: maxW });
-        yy += f.size * 0.42 + 0.5;
-      }
-      doc.setFont("helvetica", "normal");
-    };
-
-    doc.setFontSize(12);
-    doc.setFont("helvetica", "bold");
-    doc.setTextColor(30, 41, 59);
-    doc.text(phase.heading, margin, y);
-    y += 7;
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(8);
-    doc.setTextColor(71, 85, 105);
-    doc.text(phase.sub, margin, y);
-    y += 5;
-    doc.setTextColor(0);
-
-    const legendBoxY = y;
-    doc.setFontSize(6.5);
-    doc.setTextColor(71, 85, 105);
-    doc.text("Nivå:", margin, legendBoxY + 2.2);
-    let legX = margin + 12;
-    for (let lev = 0; lev <= 5; lev++) {
-      const s = pdfRiskLevelStyle(lev);
-      drawCellRect(legX, legendBoxY, 5.5, 4, s.fill, s.stroke);
-      doc.setFontSize(6);
-      doc.setFont("helvetica", "bold");
-      doc.setTextColor(s.text[0], s.text[1], s.text[2]);
-      doc.text(String(lev), legX + 2.75, legendBoxY + 2.9, { align: "center" });
-      legX += 7;
-    }
-    doc.setFont("helvetica", "normal");
-    doc.setTextColor(71, 85, 105);
-    doc.setFontSize(6);
-    const legRest = legend.map((x) => `${x.level}=${x.label}`).join(" · ");
-    const legLines = doc.splitTextToSize(legRest, lw - margin * 2);
-    doc.text(legLines, margin, legendBoxY + 6.8);
-    doc.setTextColor(0);
-    y = legendBoxY + 6.8 + legLines.length * 3 + 3;
-
-    doc.setFontSize(6.5);
-    doc.setFont("helvetica", "bold");
-    let headerLabelMaxLines = 1;
-    const colHeaderLines: string[][] = [];
-    for (let j = 0; j < cols; j++) {
-      const lines = doc.splitTextToSize(phase.colLabels[j] ?? "", colW - 2);
-      colHeaderLines.push(lines);
-      headerLabelMaxLines = Math.max(headerLabelMaxLines, lines.length);
-    }
-    const cornerLines = [
-      ...doc.splitTextToSize(phase.rowAxisTitle, labelColW - 3),
-      ...doc.splitTextToSize(phase.colAxisTitle, labelColW - 3),
-    ];
-    headerLabelMaxLines = Math.max(headerLabelMaxLines, cornerLines.length);
-    const headerRowH = Math.max(14, headerLabelMaxLines * 3.2 + 5);
-
-    const footerReserve = 22;
-    let continuation = false;
-
-    const drawMatrixHeaderRow = (atY: number) => {
-      drawCellRect(margin, atY, labelColW, headerRowH, HEADER_BG, HEADER_STROKE);
-      doc.setFontSize(6);
-      doc.setFont("helvetica", "bold");
-      doc.setTextColor(51, 65, 85);
-      let hy = atY + 3.5;
-      for (const line of cornerLines) {
-        doc.text(line, margin + labelColW / 2, hy, {
-          align: "center",
-          maxWidth: labelColW - 3,
-        });
-        hy += 3;
-      }
-      doc.setFont("helvetica", "normal");
-      for (let j = 0; j < cols; j++) {
-        drawCellRect(
-          x0 + j * colW,
-          atY,
-          colW,
-          headerRowH,
-          HEADER_BG,
-          HEADER_STROKE,
-        );
-        doc.setFontSize(6.5);
-        doc.setFont("helvetica", "bold");
-        doc.setTextColor(51, 65, 85);
-        const lines = colHeaderLines[j] ?? [];
-        const blockH = lines.length * 3;
-        let cy = atY + (headerRowH - blockH) / 2 + 2.2;
-        for (const line of lines) {
-          doc.text(line, x0 + j * colW + colW / 2, cy, {
-            align: "center",
-            maxWidth: colW - 2,
-          });
-          cy += 3;
-        }
-      }
-      doc.setTextColor(0);
-    };
-
-    const measureDataRowHeight = (i: number) => {
-      doc.setFontSize(6.5);
-      const rl = doc.splitTextToSize(
-        phase.rowLabels[i] ?? "",
-        labelColW - 3,
-      );
-      const rowLabelH = Math.max(rl.length * 3.2, 8);
-      let maxInner = 10;
-      for (let j = 0; j < cols; j++) {
-        const note = (phase.cn[i]?.[j] ?? "").trim();
-        const noteLines = note
-          ? doc.splitTextToSize(note.slice(0, 140), colW - 2.4).slice(0, 4)
-          : [];
-        const inner =
-          5 +
-          3.5 +
-          noteLines.length * 2.6 +
-          (noteLines.length > 0 ? 1 : 0);
-        maxInner = Math.max(maxInner, inner);
-      }
-      return Math.max(rowLabelH + 2, maxInner + 3);
-    };
-
-    drawMatrixHeaderRow(y);
-    y += headerRowH;
-
-    for (let i = 0; i < rows; i++) {
-      const rowH = measureDataRowHeight(i);
-      if (y + rowH > lh - margin - footerReserve) {
-        doc.addPage("a4", "landscape");
-        y = margin;
-        continuation = true;
-        doc.setFontSize(9);
-        doc.setFont("helvetica", "italic");
-        doc.setTextColor(100, 116, 139);
-        doc.text("Matrise (fortsettelse)", margin, y);
-        y += 5;
-        doc.setFont("helvetica", "normal");
-        doc.setTextColor(0);
-        drawMatrixHeaderRow(y);
-        y += headerRowH;
-      }
-
-      drawCellRect(margin, y, labelColW, rowH, LABEL_COL_BG, HEADER_STROKE);
-      doc.setFontSize(6.5);
-      doc.setFont("helvetica", "bold");
-      doc.setTextColor(51, 65, 85);
-      const rl = doc.splitTextToSize(phase.rowLabels[i] ?? "", labelColW - 3);
-      const rlBlock = rl.length * 3.2;
-      let rly = y + (rowH - rlBlock) / 2 + 2.5;
-      for (const line of rl) {
-        doc.text(line, margin + 1.5, rly, { maxWidth: labelColW - 3 });
-        rly += 3.2;
-      }
-      doc.setFont("helvetica", "normal");
-
-      for (let j = 0; j < cols; j++) {
-        const v = phase.mv[i]?.[j] ?? 0;
-        const note = (phase.cn[i]?.[j] ?? "").trim();
-        const style = pdfRiskLevelStyle(v);
-        const cx = x0 + j * colW + colW / 2;
-        drawCellRect(x0 + j * colW, y, colW, rowH, style.fill, style.stroke);
-        doc.setTextColor(style.text[0], style.text[1], style.text[2]);
-        const lines: { text: string; size: number; bold: boolean }[] = [
-          { text: String(v), size: 11, bold: true },
-          { text: levelLabel(v), size: 6.2, bold: false },
-        ];
-        if (note) {
-          const noteLines = doc
-            .splitTextToSize(note.slice(0, 160), colW - 2.4)
-            .slice(0, 4);
-          for (const nl of noteLines) {
-            lines.push({ text: nl, size: 5.2, bold: false });
-          }
-        }
-        drawCenteredInCell(lines, cx, y, rowH, colW - 2.4);
-        doc.setTextColor(0);
-      }
-      y += rowH;
-    }
-
-    if (continuation) {
-      y += 2;
-      doc.setFontSize(7);
-      doc.setTextColor(100, 116, 139);
-      const contLines = doc.splitTextToSize(
-        "Matrisen er delt over flere sider; kolonneoverskrifter er gjentatt øverst på hver ny side.",
-        lw - margin * 2,
-      );
-      doc.text(contLines, margin, y);
-      y += contLines.length * 3.5 + 4;
-      doc.setTextColor(0);
-    }
-  }
-
-  y += 6;
-  doc.setFontSize(7);
-  doc.setTextColor(100);
-  addPara(
-    "Nivå: 0 = ikke vurdert; 1–5 = lav → kritisk. " +
-      legend.map((x) => `${x.level}=${x.label}`).join("; ") +
-      ".",
-    7,
+  const legendExplain =
+    "Forklaring av nivåer: 0 = ikke vurdert; 1–5 = lav → kritisk. " +
+    legend.map((x) => `${x.level} = ${x.label}`).join("; ") +
+    ".";
+  const dFs = 6.8;
+  const dLh = bodyLineHeightMm(dFs);
+  doc.setFontSize(dFs);
+  const legLines = doc.splitTextToSize(legendExplain, contentW() - 10);
+  const discLines = doc.splitTextToSize(
+    ROS_COMPLIANCE_PDF_DISCLAIMER_NB,
+    contentW() - 10,
   );
-
-  y += 4;
-  doc.setFontSize(6.5);
-  doc.setTextColor(85, 90, 100);
-  addPara(ROS_COMPLIANCE_PDF_DISCLAIMER_NB, 6.5);
+  const footBoxH =
+    8 + legLines.length * dLh + 5 + discLines.length * dLh + 8;
+  ensureSpace(footBoxH + 8);
+  const footTop = y;
+  doc.setFillColor(
+    PDF_THEME.mutedBg[0],
+    PDF_THEME.mutedBg[1],
+    PDF_THEME.mutedBg[2],
+  );
+  doc.setDrawColor(
+    PDF_THEME.mutedBorder[0],
+    PDF_THEME.mutedBorder[1],
+    PDF_THEME.mutedBorder[2],
+  );
+  doc.setLineWidth(0.25);
+  doc.rect(margin, footTop, contentW(), footBoxH, "FD");
+  let fy = footTop + 6;
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(7.5);
+  doc.setTextColor(
+    PDF_THEME.slate700[0],
+    PDF_THEME.slate700[1],
+    PDF_THEME.slate700[2],
+  );
+  doc.text("Nivåskala og merknad", margin + 5, fy);
+  fy += 5;
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(dFs);
+  doc.setTextColor(
+    PDF_THEME.slate700[0],
+    PDF_THEME.slate700[1],
+    PDF_THEME.slate700[2],
+  );
+  doc.text(legLines, margin + 5, fy);
+  fy += legLines.length * dLh + 5;
+  doc.text(discLines, margin + 5, fy);
+  y = footTop + footBoxH + 6;
   doc.setTextColor(0);
 
   applyFooters(doc, margin, shortTitle);

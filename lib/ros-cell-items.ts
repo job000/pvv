@@ -170,13 +170,23 @@ export function collectIdentifiedRisksForPdf(args: {
         const t = item.text.trim();
         const hasFlags = (item.flags?.length ?? 0) > 0;
         const hasAfterNote = Boolean(item.afterChangeNote?.trim());
-        if (!t && !hasFlags && !hasAfterNote) continue;
+        const bandBits = [item.economicBand, item.frequencyBand]
+          .map((s) => s?.trim())
+          .filter(Boolean);
+        const hasBands = bandBits.length > 0;
+        if (!t && !hasFlags && !hasAfterNote && !hasBands) continue;
         const ar = item.afterRow ?? r;
         const ac = item.afterCol ?? c;
         const beforeLevel = args.matrixValues[r]?.[c] ?? 0;
         const afterLevel = args.matrixValuesAfter[ar]?.[ac] ?? 0;
+        const textForPdf =
+          hasBands && t
+            ? `${t} [Økonomi/frekvens: ${bandBits.join(" · ")}]`
+            : hasBands && !t
+              ? `[Økonomi/frekvens: ${bandBits.join(" · ")}]`
+              : t;
         out.push({
-          text: t,
+          text: textForPdf,
           beforeRowLabel: args.rowLabels[r] ?? `Rad ${r + 1}`,
           beforeColLabel: args.colLabels[c] ?? `Kolonne ${c + 1}`,
           afterRowLabel: args.afterRowLabels[ar] ?? `Rad ${ar + 1}`,

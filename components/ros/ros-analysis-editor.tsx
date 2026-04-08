@@ -1733,7 +1733,7 @@ export function RosAnalysisEditor({
       requirementRefLines:
         requirementRefLines.length > 0 ? requirementRefLines : undefined,
       reviewSchedule,
-      taskLinesAll: taskLinesAll.length > 0 ? taskLinesAll : undefined,
+      taskLinesAll,
       identifiedRisks:
         identifiedRisks.length > 0 ? identifiedRisks : undefined,
       cellRiskPointsComplete:
