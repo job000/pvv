@@ -47,10 +47,16 @@ export function DialogContent({
     throw new Error("DialogContent must be used inside Dialog");
   }
   const { open, onOpenChange } = ctx;
-  const [mounted, setMounted] = React.useState(false);
+  /** Må følge fullskjerm — portaler til `body` havner under nettleserens fullskjerm-topplag. */
+  const [portalRoot, setPortalRoot] = React.useState<Element | null>(null);
 
-  React.useEffect(() => {
-    setMounted(true);
+  React.useLayoutEffect(() => {
+    const sync = () => {
+      setPortalRoot(document.fullscreenElement ?? document.body);
+    };
+    sync();
+    document.addEventListener("fullscreenchange", sync);
+    return () => document.removeEventListener("fullscreenchange", sync);
   }, []);
 
   React.useEffect(() => {
@@ -59,6 +65,16 @@ export function DialogContent({
       if (e.key === "Escape") onOpenChange(false);
     };
     document.addEventListener("keydown", onKey);
+
+    const fs = document.fullscreenElement;
+    if (fs instanceof HTMLElement) {
+      const prevFs = fs.style.overflow;
+      fs.style.overflow = "hidden";
+      return () => {
+        document.removeEventListener("keydown", onKey);
+        fs.style.overflow = prevFs;
+      };
+    }
     const prev = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     return () => {
@@ -67,7 +83,7 @@ export function DialogContent({
     };
   }, [open, onOpenChange]);
 
-  if (!mounted || !open) {
+  if (!open || portalRoot == null) {
     return null;
   }
 
@@ -85,7 +101,7 @@ export function DialogContent({
   }[size];
 
   return createPortal(
-    <div className="fixed inset-0 z-50 flex items-end justify-center p-3 sm:items-center sm:p-6">
+    <div className="fixed inset-0 z-[200] flex items-end justify-center p-3 sm:items-center sm:p-6">
       <button
         type="button"
         aria-label="Lukk"
@@ -106,7 +122,7 @@ export function DialogContent({
         {children}
       </div>
     </div>,
-    document.body,
+    portalRoot,
   );
 }
 

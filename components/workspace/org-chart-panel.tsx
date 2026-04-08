@@ -922,7 +922,10 @@ function OrgBranch({
                   formId={`form-add-child-${unit._id}`}
                   workspaceId={unit.workspaceId}
                   parent={unit}
-                  onSuccessfulCreate={closeAddDialog}
+                  onSuccessfulCreate={(newId) => {
+                    closeAddDialog();
+                    if (newId) orgChartCtx?.onCardSurfaceActivate(newId);
+                  }}
                 />
               ) : null}
               {addDialog === "sibling" ? (
@@ -930,7 +933,10 @@ function OrgBranch({
                   formId={`form-add-sibling-${unit._id}`}
                   workspaceId={unit.workspaceId}
                   siblingOf={unit}
-                  onSuccessfulCreate={closeAddDialog}
+                  onSuccessfulCreate={(newId) => {
+                    closeAddDialog();
+                    if (newId) orgChartCtx?.onCardSurfaceActivate(newId);
+                  }}
                 />
               ) : null}
             </DialogBody>
@@ -950,7 +956,7 @@ function AddChildFormFields({
   formId: string;
   workspaceId: Id<"workspaces">;
   parent: Doc<"orgUnits">;
-  onSuccessfulCreate: () => void;
+  onSuccessfulCreate: (newUnitId?: Id<"orgUnits">) => void;
 }) {
   const create = useMutation(api.orgUnits.create);
   const [name, setName] = useState("");
@@ -973,7 +979,7 @@ function AddChildFormFields({
     e.preventDefault();
     setMsg(null);
     try {
-      await create({
+      const newId = await create({
         workspaceId,
         parentId: parent._id,
         kind: kindForChild,
@@ -982,7 +988,7 @@ function AddChildFormFields({
       });
       setName("");
       setExtra("");
-      onSuccessfulCreate();
+      onSuccessfulCreate(newId);
     } catch (err) {
       setMsg(err instanceof Error ? err.message : "Kunne ikke opprette.");
     }
@@ -1041,7 +1047,7 @@ function AddChildFormFields({
           variant="ghost"
           size="sm"
           className="rounded-xl text-muted-foreground"
-          onClick={onSuccessfulCreate}
+          onClick={() => onSuccessfulCreate()}
         >
           Avbryt
         </Button>
@@ -1059,7 +1065,7 @@ function AddSiblingFormFields({
   formId: string;
   workspaceId: Id<"workspaces">;
   siblingOf: Doc<"orgUnits">;
-  onSuccessfulCreate: () => void;
+  onSuccessfulCreate: (newUnitId?: Id<"orgUnits">) => void;
 }) {
   const create = useMutation(api.orgUnits.create);
   const [name, setName] = useState("");
@@ -1078,8 +1084,9 @@ function AddSiblingFormFields({
     e.preventDefault();
     setMsg(null);
     try {
+      let newId: Id<"orgUnits">;
       if (kind === "helseforetak") {
-        await create({
+        newId = await create({
           workspaceId,
           parentId: null,
           kind: "helseforetak",
@@ -1094,7 +1101,7 @@ function AddSiblingFormFields({
           setMsg("Manglende overordnet enhet.");
           return;
         }
-        await create({
+        newId = await create({
           workspaceId,
           parentId: p,
           kind,
@@ -1106,7 +1113,7 @@ function AddSiblingFormFields({
       setShortName("");
       setLocalCode("");
       setExtra("");
-      onSuccessfulCreate();
+      onSuccessfulCreate(newId);
     } catch (err) {
       setMsg(err instanceof Error ? err.message : "Kunne ikke opprette.");
     }
@@ -1203,7 +1210,7 @@ function AddSiblingFormFields({
           variant="ghost"
           size="sm"
           className="rounded-xl text-muted-foreground"
-          onClick={onSuccessfulCreate}
+          onClick={() => onSuccessfulCreate()}
         >
           Avbryt
         </Button>
