@@ -5,6 +5,7 @@ import {
   Dialog,
   DialogBody,
   DialogContent,
+  DialogFooter,
   DialogHeader,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -16,9 +17,12 @@ import type { Doc, Id } from "@/convex/_generated/dataModel";
 import { ORG_UNIT_KIND_LABELS } from "@/lib/helsesector-labels";
 import { OrgUnitRosKpiStrip, type OrgRosRollup } from "@/components/workspace/org-unit-ros-kpi-strip";
 import { OrgUnitTreeOverviewStrip } from "@/components/workspace/org-unit-tree-overview-strip";
+import { toast } from "@/lib/app-toast";
+import { formatUserFacingError } from "@/lib/user-facing-error";
 import { cn } from "@/lib/utils";
 import { useMutation, useQuery } from "convex/react";
 import {
+  ArrowRightLeft,
   Building2,
   ChevronDown,
   ChevronRight,
@@ -54,6 +58,43 @@ type OrgChartInteraction = {
 const OrgChartInteractionContext = createContext<OrgChartInteraction | null>(
   null,
 );
+
+/** Alle noder under `rootId` (ikke med selve roten). */
+function computeDescendantIds(
+  rootId: Id<"orgUnits">,
+  childrenByParent: Map<string, Doc<"orgUnits">[]>,
+): Set<Id<"orgUnits">> {
+  const out = new Set<Id<"orgUnits">>();
+  const walk = (id: Id<"orgUnits">) => {
+    for (const k of childrenByParent.get(id) ?? []) {
+      out.add(k._id);
+      walk(k._id);
+    }
+  };
+  walk(rootId);
+  return out;
+}
+
+/** Mulige foreldre ved flytting (avdeling → HF, seksjon → avdeling). */
+function validParentOptionsForMove(
+  unit: Doc<"orgUnits">,
+  all: Doc<"orgUnits">[],
+  descendants: Set<Id<"orgUnits">>,
+): { id: Id<"orgUnits">; label: string }[] {
+  if (unit.kind === "helseforetak") {
+    return [];
+  }
+  if (unit.kind === "avdeling") {
+    return all
+      .filter((u) => u.kind === "helseforetak" && !descendants.has(u._id))
+      .sort((a, b) => a.name.localeCompare(b.name, "nb"))
+      .map((u) => ({ id: u._id, label: u.name }));
+  }
+  return all
+    .filter((u) => u.kind === "avdeling" && !descendants.has(u._id))
+    .sort((a, b) => a.name.localeCompare(b.name, "nb"))
+    .map((u) => ({ id: u._id, label: u.name }));
+}
 
 function MerkantilContactRow({
   contact,
@@ -466,24 +507,32 @@ function OrgBranch({
   unit,
   parentOfUnit,
   childrenByParent,
+  allOrgUnits,
   contactsByUnit,
   rosByUnit,
   depth,
   canEdit,
   isAdmin,
   onRemove,
+  onMove,
 }: {
   workspaceId: Id<"workspaces">;
   unit: Doc<"orgUnits">;
   /** Forelder til denne noden (for etiketter ved «samme nivå»). Null for rot. */
   parentOfUnit: Doc<"orgUnits"> | null;
   childrenByParent: Map<string, Doc<"orgUnits">[]>;
+  /** Hele registeret (velge ny forelder ved flytting). */
+  allOrgUnits: Doc<"orgUnits">[];
   contactsByUnit: Map<string, Doc<"orgUnitContacts">[]>;
   rosByUnit: Record<string, OrgRosRollup> | undefined;
   depth: number;
   canEdit: boolean;
   isAdmin: boolean;
-  onRemove: (id: Id<"orgUnits">) => void;
+  onRemove: (id: Id<"orgUnits">) => void | Promise<void>;
+  onMove: (
+    orgUnitId: Id<"orgUnits">,
+    newParentId: Id<"orgUnits"> | null,
+  ) => void | Promise<void>;
 }) {
   const contactsForUnit = contactsByUnit.get(unit._id) ?? [];
   const kids = childrenByParent.get(unit._id) ?? [];
@@ -525,6 +574,20 @@ function OrgBranch({
 
   const [addDialog, setAddDialog] = useState<null | "child" | "sibling">(null);
   const addDialogTitleId = `org-add-${unit._id}-title`;
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [moveOpen, setMoveOpen] = useState(false);
+  const [deleteBusy, setDeleteBusy] = useState(false);
+  const [moveBusy, setMoveBusy] = useState(false);
+  const [moveSelectValue, setMoveSelectValue] = useState("");
+
+  const descendants = useMemo(
+    () => computeDescendantIds(unit._id, childrenByParent),
+    [unit._id, childrenByParent],
+  );
+  const moveParentOptions = useMemo(
+    () => validParentOptionsForMove(unit, allOrgUnits, descendants),
+    [unit, allOrgUnits, descendants],
+  );
 
   const orgChartCtx = useContext(OrgChartInteractionContext);
 
@@ -794,23 +857,38 @@ function OrgBranch({
                 <span className="hidden sm:inline">Ny på samme nivå</span>
                 <span className="sm:hidden">Ved siden</span>
               </Button>
+              {moveParentOptions.length > 0 ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-9 gap-1.5 rounded-lg border border-border/35 bg-background/50 px-2.5 text-xs font-medium hover:bg-muted/40"
+                  onClick={() => {
+                    setMoveSelectValue(
+                      unit.parentId ? String(unit.parentId) : "",
+                    );
+                    setMoveOpen(true);
+                  }}
+                  aria-label={`Flytt ${unit.name}`}
+                >
+                  <ArrowRightLeft className="size-3.5 shrink-0 opacity-70" aria-hidden />
+                  <span className="hidden sm:inline">Flytt</span>
+                </Button>
+              ) : null}
             </div>
             {isAdmin ? (
               <Button
                 type="button"
                 variant="ghost"
                 size="sm"
-                className="text-muted-foreground hover:text-destructive h-9 rounded-lg self-start px-2 text-xs sm:self-auto"
-                onClick={() => {
-                  if (
-                    typeof window !== "undefined" &&
-                    window.confirm(
-                      `Slette «${unit.name}»? Krever at den ikke har underenheter eller koblinger.`,
-                    )
-                  ) {
-                    void onRemove(unit._id);
-                  }
-                }}
+                className="text-muted-foreground hover:text-destructive h-9 rounded-lg self-start px-2 text-xs sm:self-auto disabled:opacity-50"
+                disabled={kids.length > 0}
+                title={
+                  kids.length > 0
+                    ? `Kan ikke slette: ${kids.length} underenhet${kids.length === 1 ? "" : "er"}. Flytt eller slett dem først.`
+                    : `Slett «${unit.name}»`
+                }
+                onClick={() => setDeleteOpen(true)}
               >
                 <Trash2 className="size-3.5" />
                 Slett
@@ -860,12 +938,14 @@ function OrgBranch({
                     unit={ch}
                     parentOfUnit={unit}
                     childrenByParent={childrenByParent}
+                    allOrgUnits={allOrgUnits}
                     contactsByUnit={contactsByUnit}
                     rosByUnit={rosByUnit}
                     depth={depth + 1}
                     canEdit={canEdit}
                     isAdmin={isAdmin}
                     onRemove={onRemove}
+                    onMove={onMove}
                   />
                 </div>
               ))}
@@ -941,6 +1021,143 @@ function OrgBranch({
                 />
               ) : null}
             </DialogBody>
+          </DialogContent>
+        </Dialog>
+      ) : null}
+      {isAdmin ? (
+        <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+          <DialogContent
+            size="sm"
+            titleId={`org-del-${unit._id}`}
+            className="max-h-[min(92vh,28rem)]"
+          >
+            <DialogHeader className="px-5 py-4 sm:px-6 sm:py-4">
+              <h2
+                id={`org-del-${unit._id}`}
+                className="text-foreground text-lg font-semibold tracking-tight"
+              >
+                Slette «{unit.name}»?
+              </h2>
+              <p className="text-muted-foreground mt-2 text-sm leading-relaxed">
+                Enheten fjernes fra organisasjonskartet. Hvis den fortsatt er
+                knyttet til vurderinger, prosesser, ROS eller inntaksskjema, får
+                du en tydelig melding om hva som må ryddes først.
+              </p>
+            </DialogHeader>
+            <DialogFooter className="px-5 pb-4 sm:px-6">
+              <Button
+                type="button"
+                variant="outline"
+                className="rounded-lg"
+                disabled={deleteBusy}
+                onClick={() => setDeleteOpen(false)}
+              >
+                Avbryt
+              </Button>
+              <Button
+                type="button"
+                variant="destructive"
+                className="rounded-lg"
+                disabled={deleteBusy}
+                onClick={() => {
+                  void (async () => {
+                    setDeleteBusy(true);
+                    try {
+                      await onRemove(unit._id);
+                      toast.success("Enheten er slettet.");
+                      setDeleteOpen(false);
+                    } catch (e) {
+                      toast.error(
+                        formatUserFacingError(e, "Kunne ikke slette enheten."),
+                      );
+                    } finally {
+                      setDeleteBusy(false);
+                    }
+                  })();
+                }}
+              >
+                {deleteBusy ? "Sletter …" : "Slett"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      ) : null}
+      {canEdit && moveParentOptions.length > 0 ? (
+        <Dialog open={moveOpen} onOpenChange={setMoveOpen}>
+          <DialogContent
+            size="md"
+            titleId={`org-move-${unit._id}`}
+            className="max-h-[min(92vh,36rem)]"
+          >
+            <DialogHeader className="px-5 py-4 sm:px-6 sm:py-4">
+              <h2
+                id={`org-move-${unit._id}`}
+                className="text-foreground text-lg font-semibold tracking-tight"
+              >
+                Flytt «{unit.name}»
+              </h2>
+              <p className="text-muted-foreground mt-2 text-sm leading-relaxed">
+                {unit.kind === "avdeling"
+                  ? "Velg hvilket hovedselskap (HF) avdelingen skal ligge under."
+                  : "Velg hvilken avdeling teamet skal ligge under."}
+              </p>
+            </DialogHeader>
+            <DialogBody className="space-y-2 px-5 pb-2 sm:px-6">
+              <Label htmlFor={`move-parent-${unit._id}`}>Overordnet enhet</Label>
+              <select
+                id={`move-parent-${unit._id}`}
+                className="border-input bg-background h-10 w-full rounded-md border px-3 text-sm"
+                value={moveSelectValue}
+                onChange={(e) => setMoveSelectValue(e.target.value)}
+              >
+                {moveParentOptions.map((o) => (
+                  <option key={o.id} value={String(o.id)}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+            </DialogBody>
+            <DialogFooter className="px-5 pb-4 sm:px-6">
+              <Button
+                type="button"
+                variant="outline"
+                className="rounded-lg"
+                disabled={moveBusy}
+                onClick={() => setMoveOpen(false)}
+              >
+                Avbryt
+              </Button>
+              <Button
+                type="button"
+                className="rounded-lg"
+                disabled={moveBusy || !moveSelectValue}
+                onClick={() => {
+                  void (async () => {
+                    if (!moveSelectValue) {
+                      toast.error("Velg overordnet enhet.");
+                      return;
+                    }
+                    setMoveBusy(true);
+                    try {
+                      await onMove(
+                        unit._id,
+                        moveSelectValue as Id<"orgUnits">,
+                      );
+                      toast.success("Enheten er flyttet.");
+                      setMoveOpen(false);
+                    } catch (e) {
+                      toast.error(
+                        formatUserFacingError(e, "Kunne ikke flytte enheten."),
+                      );
+                    } finally {
+                      setMoveBusy(false);
+                    }
+                  })();
+                }}
+              >
+                {moveBusy ? "Flytter …" : "Flytt hit"}
+              </Button>
+            </DialogFooter>
           </DialogContent>
         </Dialog>
       ) : null}
@@ -1457,7 +1674,22 @@ export function OrgChartPanel({
     workspaceId,
   });
   const removeUnit = useMutation(api.orgUnits.remove);
+  const moveUnit = useMutation(api.orgUnits.move);
   const rosRollup = useQuery(api.orgUnits.rosRollupByOrgUnit, { workspaceId });
+
+  const handleRemoveOrgUnit = useCallback(
+    async (id: Id<"orgUnits">) => {
+      await removeUnit({ orgUnitId: id });
+    },
+    [removeUnit],
+  );
+
+  const handleMoveOrgUnit = useCallback(
+    async (orgUnitId: Id<"orgUnits">, newParentId: Id<"orgUnits"> | null) => {
+      await moveUnit({ orgUnitId, newParentId });
+    },
+    [moveUnit],
+  );
 
   const canEdit =
     membership &&
@@ -2126,12 +2358,14 @@ export function OrgChartPanel({
                     unit={u}
                     parentOfUnit={null}
                     childrenByParent={childrenByParent}
+                    allOrgUnits={rows ?? []}
                     contactsByUnit={contactsByUnit}
                     rosByUnit={rosRollup?.byOrgUnitId}
                     depth={0}
                     canEdit={!!canEdit}
                     isAdmin={!!isAdmin}
-                    onRemove={(id) => void removeUnit({ orgUnitId: id })}
+                    onRemove={handleRemoveOrgUnit}
+                    onMove={handleMoveOrgUnit}
                   />
                 ))}
               </div>

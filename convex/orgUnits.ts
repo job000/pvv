@@ -390,6 +390,104 @@ export const update = mutation({
   },
 });
 
+/** Alle underenheter (rekursivt), uten rot-id — brukes til sykelsjekk ved flytting. */
+async function collectDescendantOrgUnitIds(
+  ctx: MutationCtx,
+  rootId: Id<"orgUnits">,
+): Promise<Set<Id<"orgUnits">>> {
+  const out = new Set<Id<"orgUnits">>();
+  const stack: Id<"orgUnits">[] = [rootId];
+  while (stack.length > 0) {
+    const id = stack.pop()!;
+    const children = await ctx.db
+      .query("orgUnits")
+      .withIndex("by_parent", (q) => q.eq("parentId", id))
+      .collect();
+    for (const ch of children) {
+      out.add(ch._id);
+      stack.push(ch._id);
+    }
+  }
+  return out;
+}
+
+/**
+ * Flytter en enhet til ny overordnet (eller til rot for hovedenheter).
+ * Medlemmer kan flytte (samme nivå som opprettelse); sykel og hierarki valideres.
+ */
+export const move = mutation({
+  args: {
+    orgUnitId: v.id("orgUnits"),
+    newParentId: v.union(v.id("orgUnits"), v.null()),
+  },
+  handler: async (ctx, args) => {
+    const userId = await requireUserId(ctx);
+    const unit = await ctx.db.get(args.orgUnitId);
+    if (!unit) {
+      throw new Error("Enheten finnes ikke.");
+    }
+    await requireWorkspaceMember(ctx, unit.workspaceId, userId, "member");
+
+    const currentParent = unit.parentId ?? null;
+    const targetParent = args.newParentId;
+    if (currentParent === targetParent) {
+      return null;
+    }
+
+    if (targetParent === null) {
+      if (unit.kind !== "helseforetak") {
+        throw new Error(
+          "Avdelinger og team må ha en overordnet enhet. Velg en hovedenhet eller avdeling i listen under «Flytt».",
+        );
+      }
+    } else {
+      const parent = await ctx.db.get(targetParent);
+      if (!parent || parent.workspaceId !== unit.workspaceId) {
+        throw new Error("Fant ikke overordnet enhet i dette arbeidsområdet.");
+      }
+      assertValidHierarchy(unit.kind, parent);
+    }
+
+    if (targetParent !== null) {
+      if (targetParent === unit._id) {
+        throw new Error("En enhet kan ikke være sin egen overordnede.");
+      }
+      const descendants = await collectDescendantOrgUnitIds(ctx, unit._id);
+      if (descendants.has(targetParent)) {
+        throw new Error(
+          "Du kan ikke flytte en enhet under seg selv eller under en av sine egne underenheter. Flytt først underenhetene til et annet sted.",
+        );
+      }
+    }
+
+    const all = await ctx.db
+      .query("orgUnits")
+      .withIndex("by_workspace", (q) => q.eq("workspaceId", unit.workspaceId))
+      .collect();
+
+    const parentKey = (p: Id<"orgUnits"> | undefined | null) =>
+      p === undefined || p === null ? "__root__" : p;
+
+    const targetKey = targetParent === null ? "__root__" : targetParent;
+    const siblings = all.filter(
+      (u) =>
+        u._id !== unit._id && parentKey(u.parentId) === targetKey,
+    );
+    const sortOrder =
+      siblings.length === 0
+        ? 0
+        : Math.max(...siblings.map((s) => s.sortOrder)) + 1;
+
+    const now = Date.now();
+    await ctx.db.patch(unit._id, {
+      parentId: targetParent === null ? undefined : targetParent,
+      sortOrder,
+      updatedAt: now,
+    });
+    return null;
+  },
+});
+
 export const remove = mutation({
   args: { orgUnitId: v.id("orgUnits") },
   handler: async (ctx, args) => {
@@ -411,38 +509,59 @@ export const remove = mutation({
       .withIndex("by_parent", (q) => q.eq("parentId", args.orgUnitId))
       .collect();
     if (children.length > 0) {
-      throw new Error("Fjern eller flytt underenheter først.");
+      const n = children.length;
+      throw new Error(
+        `Denne enheten har ${n} underenhe${n === 1 ? "t" : "ter"}. Slett eller flytt dem først — start nederst i treet, eller bruk «Flytt» for å plassere dem andre steder.`,
+      );
     }
     const assessments = await ctx.db
       .query("assessments")
       .withIndex("by_workspace", (q) => q.eq("workspaceId", row.workspaceId))
       .collect();
-    if (assessments.some((a) => a.orgUnitId === args.orgUnitId)) {
-      throw new Error("Enheten er knyttet til vurderinger.");
+    const assessmentHits = assessments.filter(
+      (a) => a.orgUnitId === args.orgUnitId,
+    );
+    if (assessmentHits.length > 0) {
+      const n = assessmentHits.length;
+      throw new Error(
+        `${n} PVV-vurdering${n === 1 ? "" : "er"} er knyttet til denne enheten. Fjern eller endre organisasjonsenhet på vurderingene først (Vurderinger).`,
+      );
     }
     const candidates = await ctx.db
       .query("candidates")
       .withIndex("by_workspace", (q) => q.eq("workspaceId", row.workspaceId))
       .collect();
-    if (candidates.some((c) => c.orgUnitId === args.orgUnitId)) {
-      throw new Error("Enheten er knyttet til kandidater.");
+    const candidateHits = candidates.filter(
+      (c) => c.orgUnitId === args.orgUnitId,
+    );
+    if (candidateHits.length > 0) {
+      const n = candidateHits.length;
+      throw new Error(
+        `${n} prosess${n === 1 ? "" : "er"} i registeret er knyttet til enheten. Flytt prosessene til annen enhet eller fjern koblingen først (Prosessregister).`,
+      );
     }
     const rosAnalyses = await ctx.db
       .query("rosAnalyses")
       .withIndex("by_workspace", (q) => q.eq("workspaceId", row.workspaceId))
       .collect();
-    if (rosAnalyses.some((r) => r.orgUnitId === args.orgUnitId)) {
+    const rosHits = rosAnalyses.filter((r) => r.orgUnitId === args.orgUnitId);
+    if (rosHits.length > 0) {
+      const n = rosHits.length;
       throw new Error(
-        "Enheten er knyttet til ROS-analyser. Fjern eller endre koblingen i ROS først.",
+        `${n} ROS-analyse${n === 1 ? "" : "r"} bruker enheten direkte. Fjern eller endre organisasjonskoblingen i ROS først.`,
       );
     }
     const intakeFormsForWs = await ctx.db
       .query("intakeForms")
       .withIndex("by_workspace", (q) => q.eq("workspaceId", row.workspaceId))
       .collect();
-    if (intakeFormsForWs.some((f) => f.orgUnitId === args.orgUnitId)) {
+    const intakeHits = intakeFormsForWs.filter(
+      (f) => f.orgUnitId === args.orgUnitId,
+    );
+    if (intakeHits.length > 0) {
+      const n = intakeHits.length;
       throw new Error(
-        "Enheten er knyttet til inntaksskjema. Fjern eller endre koblingen under Skjemaer først.",
+        `${n} inntaksskjema${n === 1 ? "" : "er"} er knyttet til enheten. Fjern eller endre enhet på skjemaet først (Skjemaer).`,
       );
     }
     await ctx.db.delete(args.orgUnitId);
