@@ -23,20 +23,28 @@ export type OrgRosRollup = {
 function MiniLevel({
   label,
   level,
+  embedded = false,
 }: {
   label: string;
   level: number;
+  embedded?: boolean;
 }) {
   const cls =
     level > 0 ? cellRiskClass(level) : "bg-muted/80 text-muted-foreground border-border/50";
   return (
     <div className="flex min-w-0 flex-col gap-0.5">
-      <span className="text-muted-foreground truncate text-[9px] font-medium uppercase tracking-wide">
+      <span
+        className={cn(
+          "text-muted-foreground truncate font-medium uppercase tracking-wide",
+          embedded ? "text-[8px]" : "text-[9px]",
+        )}
+      >
         {label}
       </span>
       <span
         className={cn(
-          "inline-flex min-h-[1.75rem] items-center justify-center rounded-lg border px-2 text-sm font-bold tabular-nums",
+          "inline-flex items-center justify-center rounded-lg border border-transparent px-2 tabular-nums",
+          embedded ? "min-h-[1.5rem] text-sm font-semibold" : "min-h-[1.75rem] text-sm font-bold",
           cls,
         )}
       >
@@ -114,31 +122,82 @@ export function OrgUnitRosKpiStrip({
           «Prosesser», og opprett ROS fra ROS-arbeidsflaten.
         </p>
       ) : (
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-          <div className="flex items-start gap-2 rounded-lg bg-card/80 px-2.5 py-2 ring-1 ring-black/[0.04] dark:ring-white/[0.06]">
-            <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-              <Layers className="size-4" aria-hidden />
+        <div
+          className={cn(
+            "grid grid-cols-2 gap-2 sm:grid-cols-4",
+            embedded && "gap-1.5 sm:gap-2",
+          )}
+        >
+          <div
+            className={cn(
+              "flex items-start gap-2 rounded-lg px-2.5 py-2",
+              embedded
+                ? "border-border/25 border bg-muted/10"
+                : "bg-card/80 ring-1 ring-black/[0.04] dark:ring-white/[0.06]",
+            )}
+          >
+            <div
+              className={cn(
+                "flex shrink-0 items-center justify-center rounded-lg",
+                embedded
+                  ? "bg-muted/45 text-muted-foreground size-7"
+                  : "bg-primary/10 text-primary size-8",
+              )}
+            >
+              <Layers className={embedded ? "size-3.5" : "size-4"} aria-hidden />
             </div>
             <div className="min-w-0">
-              <p className="text-lg font-bold tabular-nums leading-none">{candidateCount}</p>
+              <p
+                className={cn(
+                  "tabular-nums leading-none",
+                  embedded
+                    ? "text-base font-semibold"
+                    : "text-lg font-bold",
+                )}
+              >
+                {candidateCount}
+              </p>
               <p className="text-muted-foreground mt-0.5 text-[10px] font-medium leading-tight">
                 Prosesser
               </p>
             </div>
           </div>
-          <div className="flex items-start gap-2 rounded-lg bg-card/80 px-2.5 py-2 ring-1 ring-black/[0.04] dark:ring-white/[0.06]">
-            <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-              <FileText className="size-4" aria-hidden />
+          <div
+            className={cn(
+              "flex items-start gap-2 rounded-lg px-2.5 py-2",
+              embedded
+                ? "border-border/25 border bg-muted/10"
+                : "bg-card/80 ring-1 ring-black/[0.04] dark:ring-white/[0.06]",
+            )}
+          >
+            <div
+              className={cn(
+                "flex shrink-0 items-center justify-center rounded-lg",
+                embedded
+                  ? "bg-muted/45 text-muted-foreground size-7"
+                  : "bg-primary/10 text-primary size-8",
+              )}
+            >
+              <FileText className={embedded ? "size-3.5" : "size-4"} aria-hidden />
             </div>
             <div className="min-w-0">
-              <p className="text-lg font-bold tabular-nums leading-none">{analysisCount}</p>
+              <p
+                className={cn(
+                  "tabular-nums leading-none",
+                  embedded
+                    ? "text-base font-semibold"
+                    : "text-lg font-bold",
+                )}
+              >
+                {analysisCount}
+              </p>
               <p className="text-muted-foreground mt-0.5 text-[10px] font-medium leading-tight">
                 ROS-analyser
               </p>
             </div>
           </div>
-          <MiniLevel label="Høyeste før tiltak" level={maxBefore} />
-          <MiniLevel label="Høyeste etter tiltak" level={maxAfter} />
+          <MiniLevel label="Høyeste før tiltak" level={maxBefore} embedded={embedded} />
+          <MiniLevel label="Høyeste etter tiltak" level={maxAfter} embedded={embedded} />
         </div>
       )}
       {hasActivity && maxAfter > 0 && maxAfter < maxBefore ? (

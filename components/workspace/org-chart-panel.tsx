@@ -586,8 +586,8 @@ function OrgBranch({
     depth === 0
       ? "border-l-primary/55"
       : depth === 1
-        ? "border-l-sky-500/45"
-        : "border-l-emerald-500/40";
+        ? "border-l-sky-400/30"
+        : "border-l-emerald-400/30";
 
   return (
     <div
@@ -598,12 +598,13 @@ function OrgBranch({
       <div
         ref={cardShellRef}
         className={cn(
-          "w-full min-w-[260px] max-w-md overflow-hidden rounded-3xl border-l-[3px] bg-gradient-to-b from-card via-card to-muted/20 shadow-lg ring-1 ring-black/[0.06] transition-[box-shadow,transform,ring] duration-200 hover:shadow-xl dark:from-card dark:via-card dark:to-muted/10 dark:ring-white/[0.08]",
+          "w-full min-w-[260px] max-w-md overflow-hidden rounded-2xl border border-border/40 bg-card/90 shadow-sm backdrop-blur-sm transition-[box-shadow,transform,border-color] duration-200 hover:border-border/60 hover:shadow-md dark:bg-card/95 dark:border-white/[0.06]",
+          "border-l-2",
           depthAccent,
           orgChartCtx &&
             "cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary",
           orgChartCtx?.highlightedUnitId === unit._id &&
-            "ring-2 ring-primary ring-offset-2 ring-offset-background dark:ring-offset-background",
+            "ring-1 ring-primary/60 ring-offset-2 ring-offset-background dark:ring-offset-background",
         )}
         onClick={(e) => {
           if (!orgChartCtx) return;
@@ -612,10 +613,10 @@ function OrgBranch({
           orgChartCtx.onCardSurfaceActivate(unit._id);
         }}
       >
-        <div className="flex items-start gap-2 px-4 pb-2 pt-3.5 sm:gap-3 sm:px-5 sm:pt-4">
+        <div className="flex items-start gap-2.5 px-4 pb-3 pt-4 sm:gap-3 sm:px-5 sm:pt-5">
           <button
             type="button"
-            className="text-muted-foreground hover:bg-muted/60 hover:text-foreground mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-xl border border-transparent transition-colors"
+            className="text-muted-foreground hover:bg-muted/50 hover:text-foreground mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg transition-colors"
             onClick={() => setCardExpanded(!cardExpanded)}
             aria-expanded={cardExpanded}
             aria-label={
@@ -627,7 +628,7 @@ function OrgBranch({
           >
             <ChevronDown
               className={cn(
-                "size-5 transition-transform duration-200",
+                "size-4 transition-transform duration-200",
                 cardExpanded ? "rotate-180" : "",
               )}
               aria-hidden
@@ -643,7 +644,7 @@ function OrgBranch({
             ) : null}
             <p
               className={cn(
-                "font-heading text-base font-semibold leading-snug tracking-tight sm:text-lg",
+                "font-heading text-base font-semibold leading-snug tracking-tight text-foreground/95 sm:text-[1.0625rem]",
                 unit.localCode ? "mt-1" : "mt-0.5",
               )}
             >
@@ -659,12 +660,12 @@ function OrgBranch({
               (rollup.intakeFormCount ?? 0) > 0) ? (
               <div className="mt-2 flex flex-wrap items-center gap-1.5">
                 {kids.length > 0 && (
-                  <span className="bg-muted/80 text-muted-foreground inline-flex items-center rounded-lg px-2 py-0.5 text-[10px] font-medium">
+                  <span className="text-muted-foreground border-border/35 inline-flex items-center rounded-md border px-1.5 py-0.5 text-[10px] font-medium">
                     {kids.length} underenhet{kids.length === 1 ? "" : "er"}
                   </span>
                 )}
                 {contactsForUnit.length > 0 && (
-                  <span className="bg-muted/80 text-muted-foreground inline-flex items-center rounded-lg px-2 py-0.5 text-[10px] font-medium">
+                  <span className="text-muted-foreground border-border/35 inline-flex items-center rounded-md border px-1.5 py-0.5 text-[10px] font-medium">
                     {contactsForUnit.length} kontakt{contactsForUnit.length === 1 ? "" : "er"}
                   </span>
                 )}
@@ -681,7 +682,7 @@ function OrgBranch({
           </div>
         </div>
 
-        <div className="border-border/35 bg-muted/15 px-3 py-2.5 sm:px-4">
+        <div className="border-border/25 border-t px-3 py-3 sm:px-4">
           <OrgUnitTreeOverviewStrip workspaceId={workspaceId} stats={rollup} />
         </div>
 
@@ -692,9 +693,9 @@ function OrgBranch({
               open={rosPanelOpen}
               onToggle={(e) => setRosPanelOpen(e.currentTarget.open)}
             >
-              <summary className="hover:bg-muted/20 flex cursor-pointer list-none items-center gap-2.5 px-4 py-3 text-left text-sm transition-colors sm:px-5 [&::-webkit-details-marker]:hidden">
-                <div className="bg-primary/12 text-primary flex size-9 shrink-0 items-center justify-center rounded-xl">
-                  <Shield className="size-4" aria-hidden />
+              <summary className="hover:bg-muted/30 flex cursor-pointer list-none items-center gap-2.5 px-4 py-2.5 text-left text-sm transition-colors sm:px-5 [&::-webkit-details-marker]:hidden">
+                <div className="bg-muted/50 text-muted-foreground flex size-8 shrink-0 items-center justify-center rounded-lg">
+                  <Shield className="size-3.5" aria-hidden />
                 </div>
                 <span className="min-w-0 flex-1 font-medium leading-tight">
                   <span className="text-foreground">ROS</span>
@@ -707,7 +708,7 @@ function OrgBranch({
                 <span className="flex shrink-0 items-center gap-2">
                   <Link
                     href={`/w/${workspaceId}/ros`}
-                    className="text-primary text-[10px] font-semibold hover:underline"
+                    className="text-primary text-[11px] font-medium hover:underline"
                     onClick={(e) => e.stopPropagation()}
                   >
                     Åpne ROS
@@ -715,7 +716,7 @@ function OrgBranch({
                   <ChevronRight className="text-muted-foreground size-4 transition-transform group-open:rotate-90" />
                 </span>
               </summary>
-              <div className="border-border/35 bg-muted/10 border-t px-4 pb-3 pt-2 sm:px-5">
+              <div className="border-border/25 bg-muted/5 border-t px-4 pb-3 pt-2 sm:px-5">
                 <OrgUnitRosKpiStrip
                   embedded
                   workspaceId={workspaceId}
@@ -730,9 +731,9 @@ function OrgBranch({
               open={contactsPanelOpen}
               onToggle={(e) => setContactsPanelOpen(e.currentTarget.open)}
             >
-              <summary className="hover:bg-muted/20 flex cursor-pointer list-none items-center gap-2.5 px-4 py-3 text-left text-sm transition-colors sm:px-5 [&::-webkit-details-marker]:hidden">
-                <div className="bg-primary/12 text-primary flex size-9 shrink-0 items-center justify-center rounded-xl">
-                  <Users className="size-4" aria-hidden />
+              <summary className="hover:bg-muted/30 flex cursor-pointer list-none items-center gap-2.5 px-4 py-2.5 text-left text-sm transition-colors sm:px-5 [&::-webkit-details-marker]:hidden">
+                <div className="bg-muted/50 text-muted-foreground flex size-8 shrink-0 items-center justify-center rounded-lg">
+                  <Users className="size-3.5" aria-hidden />
                 </div>
                 <span className="min-w-0 flex-1 font-medium leading-tight">
                   <span className="text-foreground">Kontaktpersoner</span>
@@ -759,7 +760,7 @@ function OrgBranch({
         ) : (
           <button
             type="button"
-            className="text-muted-foreground hover:text-foreground hover:bg-muted/25 w-full border-t border-border/35 px-4 py-2.5 text-left text-xs font-medium transition-colors sm:px-5"
+            className="text-muted-foreground hover:text-foreground hover:bg-muted/25 w-full border-t border-border/25 px-4 py-2.5 text-left text-xs font-medium transition-colors sm:px-5"
             onClick={() => setCardExpanded(true)}
           >
             Vis ROS, kontakter og mer …
@@ -767,29 +768,29 @@ function OrgBranch({
         )}
 
         {canEdit ? (
-          <div className="border-border/35 flex flex-col gap-2 rounded-b-3xl border-t bg-muted/[0.04] px-4 py-2.5 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:px-5">
-            <div className="flex min-w-0 flex-1 flex-wrap gap-2">
+          <div className="border-border/25 flex flex-col gap-1.5 rounded-b-2xl border-t bg-muted/[0.03] px-3 py-2.5 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-2 sm:px-4">
+            <div className="flex min-w-0 flex-1 flex-wrap gap-1.5">
               {unit.kind !== "seksjon" ? (
                 <Button
                   type="button"
-                  variant="outline"
+                  variant="ghost"
                   size="sm"
-                  className="rounded-xl gap-1.5 font-medium"
+                  className="h-9 gap-1.5 rounded-lg border border-border/35 bg-background/50 px-2.5 text-xs font-medium hover:bg-muted/40"
                   onClick={() => openAddDialog("child")}
                 >
-                  <CornerDownRight className="size-3.5 shrink-0 opacity-80" aria-hidden />
+                  <CornerDownRight className="size-3.5 shrink-0 opacity-70" aria-hidden />
                   <span className="hidden sm:inline">Ny underenhet</span>
                   <span className="sm:hidden">Under</span>
                 </Button>
               ) : null}
               <Button
                 type="button"
-                variant="outline"
+                variant="ghost"
                 size="sm"
-                className="rounded-xl gap-1.5 font-medium"
+                className="h-9 gap-1.5 rounded-lg border border-border/35 bg-background/50 px-2.5 text-xs font-medium hover:bg-muted/40"
                 onClick={() => openAddDialog("sibling")}
               >
-                <Rows2 className="size-3.5 shrink-0 opacity-80" aria-hidden />
+                <Rows2 className="size-3.5 shrink-0 opacity-70" aria-hidden />
                 <span className="hidden sm:inline">Ny på samme nivå</span>
                 <span className="sm:hidden">Ved siden</span>
               </Button>
@@ -799,7 +800,7 @@ function OrgBranch({
                 type="button"
                 variant="ghost"
                 size="sm"
-                className="text-muted-foreground hover:text-destructive rounded-xl self-start sm:self-auto"
+                className="text-muted-foreground hover:text-destructive h-9 rounded-lg self-start px-2 text-xs sm:self-auto"
                 onClick={() => {
                   if (
                     typeof window !== "undefined" &&
@@ -823,7 +824,7 @@ function OrgBranch({
         <>
           <div
             className={cn(
-              "bg-border w-px shrink-0",
+              "w-px shrink-0 bg-border/50",
               kids.length === 1 ? "h-10" : "h-6",
             )}
             aria-hidden
@@ -836,7 +837,7 @@ function OrgBranch({
             <div
               className={cn(
                 "grid w-full gap-x-4 gap-y-6",
-                kids.length > 1 && "border-border border-t pt-6",
+                kids.length > 1 && "border-t border-border/35 pt-6",
                 kids.length === 1 && "justify-items-center",
               )}
               style={{
@@ -850,7 +851,7 @@ function OrgBranch({
                 >
                   {kids.length > 1 ? (
                     <div
-                      className="bg-border mb-0 h-4 w-px shrink-0"
+                      className="mb-0 h-4 w-px shrink-0 bg-border/50"
                       aria-hidden
                     />
                   ) : null}
