@@ -45,6 +45,7 @@ import { ROS_PDD_ALIGNMENT_HINT_NB } from "@/lib/ros-compliance";
 import { toast } from "@/lib/app-toast";
 import { toastDeleteWithUndo } from "@/lib/toast-delete-undo";
 import { cellRiskClass } from "@/lib/ros-risk-colors";
+import { computeMatrixItemStats } from "@/lib/ros-risk-register";
 import { cn } from "@/lib/utils";
 import type { RosRequirementRef } from "@/lib/ros-requirement-catalog";
 import {
@@ -112,40 +113,29 @@ function RiskSummaryBar({
   afterColLabels: string[];
 }) {
   const stats = useMemo(() => {
-    let total = 0;
-    let highBefore = 0;
-    let criticalBefore = 0;
-    let needsAction = 0;
-    let highAfter = 0;
-
-    for (let r = 0; r < cellItemsMatrix.length; r++) {
-      const row = cellItemsMatrix[r];
-      if (!row) continue;
-      for (let c = 0; c < row.length; c++) {
-        const cell = row[c];
-        if (!cell) continue;
-        for (const it of cell) {
-          if (!it.text.trim()) continue;
-          total++;
-          const bLvl = positionRiskLevel(r, c, rowLabels.length, colLabels.length);
-          if (bLvl >= 4) highBefore++;
-          if (bLvl >= 5) criticalBefore++;
-          const hasFlag = it.flags?.includes("requires_action");
-          if (bLvl >= 4 && !hasFlag) needsAction++;
-          const aR = it.afterRow ?? r;
-          const aC = it.afterCol ?? c;
-          const aLvl = positionRiskLevel(aR, aC, afterRowLabels.length, afterColLabels.length);
-          if (aLvl >= 4) highAfter++;
-        }
-      }
-    }
-
+    const item = computeMatrixItemStats(
+      cellItemsMatrix,
+      rowLabels,
+      colLabels,
+      afterRowLabels,
+      afterColLabels,
+    );
     const maxBefore = Math.max(0, ...matrixValues.flat());
     const maxAfter = Math.max(0, ...matrixAfter.flat());
     const overallLevel = maxBefore >= 5 ? "Kritisk" : maxBefore >= 4 ? "Høy" : maxBefore >= 3 ? "Middels" : maxBefore >= 2 ? "Lav" : "Ingen";
     const overallColor = maxBefore >= 5 ? "text-red-600 dark:text-red-400" : maxBefore >= 4 ? "text-orange-600 dark:text-orange-400" : maxBefore >= 3 ? "text-amber-600 dark:text-amber-400" : "text-emerald-600 dark:text-emerald-400";
 
-    return { total, highBefore, criticalBefore, needsAction, highAfter, maxBefore, maxAfter, overallLevel, overallColor };
+    return {
+      total: item.textItemCount,
+      highBefore: item.highOrCriticalBefore,
+      criticalBefore: item.criticalBefore,
+      needsAction: item.needsAction,
+      highAfter: item.highAfter,
+      maxBefore,
+      maxAfter,
+      overallLevel,
+      overallColor,
+    };
   }, [cellItemsMatrix, matrixValues, matrixAfter, rowLabels, colLabels, afterRowLabels, afterColLabels]);
 
   if (stats.total === 0) return null;
@@ -2417,21 +2407,12 @@ export function RosAnalysisEditor({
       {/* === Section 2: Oppsummering === */}
       {rosSection === 2 && (
       <div className="space-y-5">
-        <RiskSummaryBar
-          cellItemsMatrix={cellItemsMatrix}
-          matrixValues={matrix}
-          matrixAfter={matrixAfter}
-          cellItemsAfterMatrix={cellItemsAfterMatrix}
-          rowLabels={data.rowLabels}
-          colLabels={data.colLabels}
-          afterRowLabels={effectiveAfterRowLabels}
-          afterColLabels={effectiveAfterColLabels}
-        />
-
         <div id="ros-risk-register" className="scroll-mt-24">
           {riskRegisterSnapshot ? (
             <RosRiskRegisterTable
               sameLayout={data.rosSummary.sameLayout}
+              rowAxisTitle={data.rowAxisTitle}
+              colAxisTitle={data.colAxisTitle}
               before={riskRegisterSnapshot.before}
               after={riskRegisterSnapshot.after}
             />

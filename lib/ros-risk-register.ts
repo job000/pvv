@@ -3,7 +3,12 @@
  * Støtter også paret før/etter-visning for å vise risikoreduksjon per celle.
  */
 
-import type { RosCellItem, RosCellItemMatrix } from "./ros-cell-items";
+import {
+  ROS_CELL_FLAG_REQUIRES_ACTION,
+  type RosCellItem,
+  type RosCellItemMatrix,
+} from "./ros-cell-items";
+import { positionRiskLevel } from "./ros-defaults";
 
 export type RiskRegisterPhase = "before" | "after";
 
@@ -207,4 +212,80 @@ export function pairedSummaryStats(
 
 export function phaseLabelNb(phase: RiskRegisterPhase): string {
   return phase === "before" ? "Før tiltak" : "Etter tiltak (rest)";
+}
+
+/** Teller risikopunkter (celle-items med fritekst) og tilhørende nivåer — for oversikts-KPI. */
+export type MatrixItemStats = {
+  /** Antall punkter med ikke-tom beskrivelse */
+  textItemCount: number;
+  /** Punkter der plassering gir nivå ≥ 4 før tiltak */
+  highOrCriticalBefore: number;
+  /** Punkter der plassering gir nivå 5 før tiltak */
+  criticalBefore: number;
+  /** Høy risiko uten «krever handling» */
+  needsAction: number;
+  /** Punkter der restrisiko (etter) er ≥ 4 */
+  highAfter: number;
+};
+
+/**
+ * Bruker samme logikk som tidligere «RiskSummaryBar»: nivå fra celleposisjon (sannsynlighet × konsekvens),
+ * restrisiko fra punktets etter-plassering eller samme celle.
+ */
+export function computeMatrixItemStats(
+  cellItemsMatrix: RosCellItemMatrix,
+  rowLabels: string[],
+  colLabels: string[],
+  afterRowLabels: string[],
+  afterColLabels: string[],
+): MatrixItemStats {
+  let textItemCount = 0;
+  let highOrCriticalBefore = 0;
+  let criticalBefore = 0;
+  let needsAction = 0;
+  let highAfter = 0;
+  const br = rowLabels.length;
+  const bc = colLabels.length;
+  const ar = afterRowLabels.length;
+  const ac = afterColLabels.length;
+
+  for (let r = 0; r < cellItemsMatrix.length; r++) {
+    const row = cellItemsMatrix[r];
+    if (!row) continue;
+    for (let c = 0; c < row.length; c++) {
+      const cell = row[c];
+      if (!cell) continue;
+      for (const it of cell) {
+        if (!it.text.trim()) continue;
+        textItemCount++;
+        const bLvl = positionRiskLevel(r, c, br, bc);
+        if (bLvl >= 4) highOrCriticalBefore++;
+        if (bLvl >= 5) criticalBefore++;
+        const hasFlag = it.flags?.includes(ROS_CELL_FLAG_REQUIRES_ACTION);
+        if (bLvl >= 4 && !hasFlag) needsAction++;
+        const aRow = it.afterRow ?? r;
+        const aCol = it.afterCol ?? c;
+        const aLvl = positionRiskLevel(aRow, aCol, ar, ac);
+        if (aLvl >= 4) highAfter++;
+      }
+    }
+  }
+
+  return {
+    textItemCount,
+    highOrCriticalBefore,
+    criticalBefore,
+    needsAction,
+    highAfter,
+  };
+}
+
+export function maxMatrixLevel(matrixValues: number[][]): number {
+  let m = 0;
+  for (const row of matrixValues) {
+    for (const v of row ?? []) {
+      if (v > m) m = v;
+    }
+  }
+  return m;
 }
