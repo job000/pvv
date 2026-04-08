@@ -26,13 +26,11 @@ import {
   Building2,
   ChevronDown,
   ChevronRight,
-  CornerDownRight,
   Layers,
   Maximize2,
   Minimize2,
   Minus,
   Plus,
-  Rows2,
   Shield,
   Trash2,
   Users,
@@ -659,9 +657,16 @@ function OrgBranch({
       aria-expanded={kids.length > 0}
     >
       <div
+        className={cn(
+          "group/card relative w-full min-w-[260px] max-w-md",
+          canEdit && unit.kind !== "seksjon" && "pb-5 sm:pb-6",
+          canEdit && unit.kind === "seksjon" && "pb-2",
+        )}
+      >
+      <div
         ref={cardShellRef}
         className={cn(
-          "w-full min-w-[260px] max-w-md overflow-hidden rounded-2xl border border-border/40 bg-card/90 shadow-sm backdrop-blur-sm transition-[box-shadow,transform,border-color] duration-200 hover:border-border/60 hover:shadow-md dark:bg-card/95 dark:border-white/[0.06]",
+          "w-full overflow-hidden rounded-2xl border border-border/40 bg-card/90 shadow-sm backdrop-blur-sm transition-[box-shadow,transform,border-color] duration-200 hover:border-border/60 hover:shadow-md dark:bg-card/95 dark:border-white/[0.06]",
           "border-l-2",
           depthAccent,
           orgChartCtx &&
@@ -831,71 +836,106 @@ function OrgBranch({
         )}
 
         {canEdit ? (
-          <div className="border-border/25 flex flex-col gap-1.5 rounded-b-2xl border-t bg-muted/[0.03] px-3 py-2.5 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-2 sm:px-4">
-            <div className="flex min-w-0 flex-1 flex-wrap gap-1.5">
-              {unit.kind !== "seksjon" ? (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="h-9 gap-1.5 rounded-lg border border-border/35 bg-background/50 px-2.5 text-xs font-medium hover:bg-muted/40"
-                  onClick={() => openAddDialog("child")}
-                >
-                  <CornerDownRight className="size-3.5 shrink-0 opacity-70" aria-hidden />
-                  <span className="hidden sm:inline">Ny underenhet</span>
-                  <span className="sm:hidden">Under</span>
-                </Button>
-              ) : null}
+          <div className="border-border/25 flex items-center justify-end gap-0.5 rounded-b-2xl border-t bg-muted/[0.03] px-2 py-1.5 sm:px-3">
+            {moveParentOptions.length > 0 ? (
               <Button
                 type="button"
                 variant="ghost"
                 size="sm"
-                className="h-9 gap-1.5 rounded-lg border border-border/35 bg-background/50 px-2.5 text-xs font-medium hover:bg-muted/40"
-                onClick={() => openAddDialog("sibling")}
+                className="text-muted-foreground hover:text-foreground size-10 min-h-10 min-w-10 shrink-0 rounded-xl sm:size-9 sm:min-h-9 sm:min-w-9"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setMoveSelectValue(
+                    unit.parentId ? String(unit.parentId) : "",
+                  );
+                  setMoveOpen(true);
+                }}
+                aria-label={`Flytt ${unit.name}`}
+                title="Flytt til annen overordnet"
               >
-                <Rows2 className="size-3.5 shrink-0 opacity-70" aria-hidden />
-                <span className="hidden sm:inline">Ny på samme nivå</span>
-                <span className="sm:hidden">Ved siden</span>
+                <ArrowRightLeft className="size-4 opacity-80" aria-hidden />
               </Button>
-              {moveParentOptions.length > 0 ? (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="h-9 gap-1.5 rounded-lg border border-border/35 bg-background/50 px-2.5 text-xs font-medium hover:bg-muted/40"
-                  onClick={() => {
-                    setMoveSelectValue(
-                      unit.parentId ? String(unit.parentId) : "",
-                    );
-                    setMoveOpen(true);
-                  }}
-                  aria-label={`Flytt ${unit.name}`}
-                >
-                  <ArrowRightLeft className="size-3.5 shrink-0 opacity-70" aria-hidden />
-                  <span className="hidden sm:inline">Flytt</span>
-                </Button>
-              ) : null}
-            </div>
+            ) : null}
             {isAdmin ? (
               <Button
                 type="button"
                 variant="ghost"
                 size="sm"
-                className="text-muted-foreground hover:text-destructive h-9 rounded-lg self-start px-2 text-xs sm:self-auto disabled:opacity-50"
+                className="text-muted-foreground hover:text-destructive size-10 min-h-10 min-w-10 shrink-0 rounded-xl disabled:opacity-40 sm:size-9 sm:min-h-9 sm:min-w-9"
                 disabled={kids.length > 0}
                 title={
                   kids.length > 0
                     ? `Kan ikke slette: ${kids.length} underenhet${kids.length === 1 ? "" : "er"}. Flytt eller slett dem først.`
                     : `Slett «${unit.name}»`
                 }
-                onClick={() => setDeleteOpen(true)}
+                aria-label={
+                  kids.length > 0
+                    ? "Kan ikke slette — fjern underenheter først"
+                    : `Slett ${unit.name}`
+                }
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setDeleteOpen(true);
+                }}
               >
-                <Trash2 className="size-3.5" />
-                Slett
+                <Trash2 className="size-4" aria-hidden />
               </Button>
             ) : null}
           </div>
         ) : null}
+      </div>
+
+      {canEdit ? (
+        <>
+          <button
+            type="button"
+            className={cn(
+              "border-border/55 bg-background/95 text-primary hover:bg-primary/10 hover:border-primary/35 absolute left-0 top-1/2 z-30 flex size-10 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border shadow-md ring-1 ring-black/[0.04] backdrop-blur-sm transition-[opacity,transform,box-shadow] hover:shadow-lg focus-visible:opacity-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary active:scale-95 dark:ring-white/[0.06]",
+              "touch-manipulation opacity-100 sm:opacity-0 sm:group-hover/card:opacity-100 sm:group-focus-within/card:opacity-100",
+            )}
+            onClick={(e) => {
+              e.stopPropagation();
+              openAddDialog("sibling");
+            }}
+            aria-label={`Ny enhet ved siden av ${unit.name}`}
+            title="Ny på samme nivå (søsken)"
+          >
+            <Plus className="size-[1.125rem] stroke-[2.5]" aria-hidden />
+          </button>
+          <button
+            type="button"
+            className={cn(
+              "border-border/55 bg-background/95 text-primary hover:bg-primary/10 hover:border-primary/35 absolute right-0 top-1/2 z-30 flex size-10 translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border shadow-md ring-1 ring-black/[0.04] backdrop-blur-sm transition-[opacity,transform,box-shadow] hover:shadow-lg focus-visible:opacity-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary active:scale-95 dark:ring-white/[0.06]",
+              "touch-manipulation opacity-100 sm:opacity-0 sm:group-hover/card:opacity-100 sm:group-focus-within/card:opacity-100",
+            )}
+            onClick={(e) => {
+              e.stopPropagation();
+              openAddDialog("sibling");
+            }}
+            aria-label={`Ny enhet ved siden av ${unit.name}`}
+            title="Ny på samme nivå (søsken)"
+          >
+            <Plus className="size-[1.125rem] stroke-[2.5]" aria-hidden />
+          </button>
+          {unit.kind !== "seksjon" ? (
+            <button
+              type="button"
+              className={cn(
+                "border-border/55 bg-background/95 text-primary hover:bg-primary/10 hover:border-primary/35 absolute bottom-0 left-1/2 z-30 flex size-10 -translate-x-1/2 translate-y-1/2 items-center justify-center rounded-full border shadow-md ring-1 ring-black/[0.04] backdrop-blur-sm transition-[opacity,transform,box-shadow] hover:shadow-lg focus-visible:opacity-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary active:scale-95 dark:ring-white/[0.06]",
+                "touch-manipulation opacity-100 sm:opacity-0 sm:group-hover/card:opacity-100 sm:group-focus-within/card:opacity-100",
+              )}
+              onClick={(e) => {
+                e.stopPropagation();
+                openAddDialog("child");
+              }}
+              aria-label={`Ny underenhet under ${unit.name}`}
+              title="Ny underenhet"
+            >
+              <Plus className="size-[1.125rem] stroke-[2.5]" aria-hidden />
+            </button>
+          ) : null}
+        </>
+      ) : null}
       </div>
 
       {kids.length > 0 ? (
@@ -1969,10 +2009,11 @@ export function OrgChartPanel({
             Underenheter vises i trestruktur med linjer mellom nivåene.
           </p>
           <p>
-            <strong className="text-foreground font-medium">Ny underenhet</strong> legger
-            til ett nivå inn i treet;{" "}
-            <strong className="text-foreground font-medium">ny på samme nivå</strong>{" "}
-            oppretter en søskenenhet ved siden av den du står på (samme forelder).
+            <strong className="text-foreground font-medium">+</strong> til venstre eller høyre
+            på kortet (ved peker over kortet på større skjerm) oppretter en søskenenhet;{" "}
+            <strong className="text-foreground font-medium">+</strong> under kortet legger til
+            ett nivå inn i treet (ikke på laveste nivå). Flytt og slett finner du nederst i
+            kortet.
           </p>
           <p>
             Under enhetsnavnet vises en <strong className="text-foreground font-medium">firfeltet oversikt</strong>{" "}
