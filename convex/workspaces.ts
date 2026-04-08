@@ -11,6 +11,7 @@ import {
 import { insertUserInAppNotification } from "./userInAppNotifications";
 import { normalizeGithubRepoFullName } from "./lib/github";
 import { queryUsersByEmailPrefix } from "./lib/userSearch";
+import { isValidRosSectorPackId } from "../lib/ros-sector-packs";
 
 const WORKSPACE_INVITE_ROLE_NB: Record<"admin" | "member" | "viewer", string> = {
   admin: "Administrator",
@@ -366,6 +367,7 @@ export const update = mutation({
     githubProjectSingleSelectFieldId: v.optional(
       v.union(v.string(), v.null()),
     ),
+    defaultRosSectorPackId: v.optional(v.union(v.string(), v.null())),
   },
   handler: async (ctx, args) => {
     const userId = await requireUserId(ctx);
@@ -387,6 +389,7 @@ export const update = mutation({
       githubProjectSingleSelectFieldId?: string;
       githubProjectStatusFieldCacheAt?: undefined;
       githubProjectStatusFieldCache?: undefined;
+      defaultRosSectorPackId?: string;
     } = {};
     if (args.name !== undefined) {
       patch.name = args.name.trim() || "Uten navn";
@@ -467,6 +470,17 @@ export const update = mutation({
       if (oldF !== newF) {
         patch.githubProjectStatusFieldCacheAt = undefined;
         patch.githubProjectStatusFieldCache = undefined;
+      }
+    }
+    if (args.defaultRosSectorPackId !== undefined) {
+      if (args.defaultRosSectorPackId === null) {
+        patch.defaultRosSectorPackId = undefined;
+      } else {
+        const id = args.defaultRosSectorPackId.trim();
+        if (!isValidRosSectorPackId(id)) {
+          throw new Error("Ugyldig ROS-sektor.");
+        }
+        patch.defaultRosSectorPackId = id;
       }
     }
     await ctx.db.patch(args.workspaceId, patch);

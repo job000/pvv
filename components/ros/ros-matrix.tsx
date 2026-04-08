@@ -8,12 +8,14 @@ import {
   DialogHeader,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { legendItems, cnCell, cellRiskGhostClass } from "@/lib/ros-risk-colors";
 import {
   ROS_CELL_FLAG_REQUIRES_ACTION,
   ROS_CELL_FLAG_WATCH,
+  cellHasFilledRosItems,
   newRosCellItemId,
   type RosCellItem,
   type RosCellItemMatrix,
@@ -29,7 +31,13 @@ import {
   Plus,
   Trash2,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 
 type Props = {
   rowAxisTitle: string;
@@ -166,13 +174,7 @@ export function RosMatrix({
         const stored = matrixValues[i]?.[j] ?? 0;
         const auto = positionRiskLevel(i, j, totalRows, totalCols);
         const items = cellItems[i]?.[j] ?? [];
-        const hasItems = items.some(
-          (it) =>
-            it.text.trim() ||
-            it.flags?.includes(ROS_CELL_FLAG_WATCH) ||
-            it.flags?.includes(ROS_CELL_FLAG_REQUIRES_ACTION),
-        );
-        if (!hasItems) continue;
+        if (!cellHasFilledRosItems(items)) continue;
         filledCells++;
         const level = stored > 0 ? stored : auto;
         if (level >= 4) highRisk++;
@@ -301,6 +303,8 @@ export function RosMatrix({
 
   useEffect(() => {
     if (!picker || !interactive || !onCellItemsChange) return;
+    /** Etter-tiltak-punkter skal kun komme fra «Før tiltak» (plassering / kobling), ikke nye frie kort. */
+    if (currentPhase === "after") return;
     const items = cellItems[picker.row]?.[picker.col] ?? [];
     if (items.length > 0) return;
     const newId = newRosCellItemId();
@@ -315,7 +319,7 @@ export function RosMatrix({
       el?.focus();
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [picker?.row, picker?.col]);
+  }, [picker?.row, picker?.col, currentPhase]);
 
   function selectLevel(level: number) {
     if (!picker || !onCellChange) return;
@@ -438,7 +442,10 @@ export function RosMatrix({
                   const otherLevel = otherPhaseValues?.[i]?.[j] ?? 0;
                   const showCrossRef = hasContent && otherLevel > 0 && otherLevel !== displayLevel;
                   return (
-                    <td key={j} className="overflow-hidden p-0.5 align-top sm:p-1.5">
+                    <td
+                      key={j}
+                      className="overflow-hidden p-0.5 align-top sm:p-1.5"
+                    >
                       <button
                         id={`ros-mx-cell-${i}-${j}`}
                         type="button"
@@ -873,39 +880,58 @@ export function RosMatrix({
             ) : null}
             {onCellItemsChange && picker ? (
               <div className="mb-5 space-y-3">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <Label className="text-foreground text-sm font-semibold">
-                    Risikopunkter
-                    {pickerItems.length > 1 ? (
-                      <span className="text-muted-foreground ml-1 text-xs font-normal">
-                        ({pickerItems.length})
-                      </span>
-                    ) : null}
-                  </Label>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="secondary"
-                    onClick={() => {
-                      const newId = newRosCellItemId();
-                      updateItemAt(picker.row, picker.col, [
-                        ...pickerItems,
-                        { id: newId, text: "" },
-                      ]);
-                      requestAnimationFrame(() => {
-                        document
-                          .querySelector<HTMLTextAreaElement>(
-                            `[data-ros-item-id="${newId}"]`,
-                          )
-                          ?.focus();
-                      });
-                    }}
-                  >
-                    <Plus className="mr-1.5 size-4" />
-                    Legg til punkt
-                  </Button>
-                </div>
-                <ul className="space-y-3">
+                {currentPhase === "after" &&
+                pickerItems.length === 0 &&
+                unmappedBeforeItems.length === 0 &&
+                mappedElsewhereItems.length === 0 ? (
+                  <div className="border-border/60 bg-muted/15 text-muted-foreground rounded-xl border px-3 py-3 text-xs leading-relaxed">
+                    <p className="text-foreground font-medium">
+                      Ingen risiko knyttet til denne cellen etter tiltak
+                    </p>
+                    <p className="mt-1.5">
+                      Opprett eller rediger risiko under «Før tiltak». Bruk deretter{" "}
+                      <strong className="text-foreground">«Plasser i etter»</strong> på
+                      punktet, eller bruk «Plasser her» når uplasserte risikoer vises over.
+                    </p>
+                  </div>
+                ) : null}
+                {currentPhase === "before" || pickerItems.length > 0 ? (
+                  <>
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <Label className="text-foreground text-sm font-semibold">
+                        Risikopunkter
+                        {pickerItems.length > 1 ? (
+                          <span className="text-muted-foreground ml-1 text-xs font-normal">
+                            ({pickerItems.length})
+                          </span>
+                        ) : null}
+                      </Label>
+                      {currentPhase === "before" ? (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="secondary"
+                          onClick={() => {
+                            const newId = newRosCellItemId();
+                            updateItemAt(picker.row, picker.col, [
+                              ...pickerItems,
+                              { id: newId, text: "" },
+                            ]);
+                            requestAnimationFrame(() => {
+                              document
+                                .querySelector<HTMLTextAreaElement>(
+                                  `[data-ros-item-id="${newId}"]`,
+                                )
+                                ?.focus();
+                            });
+                          }}
+                        >
+                          <Plus className="mr-1.5 size-4" />
+                          Legg til punkt
+                        </Button>
+                      ) : null}
+                    </div>
+                    <ul className="space-y-3">
                   {pickerItems.map((it, idx) => {
                     const canPlaceAfter = currentPhase === "before" && onPlaceInAfter && afterRowLabels && afterColLabels;
                     const hasPlacement = it.afterRow != null && it.afterCol != null;
@@ -926,23 +952,27 @@ export function RosMatrix({
                               {idx + 1} av {pickerItems.length}
                             </span>
                           ) : <span />}
-                          <Button
-                            type="button"
-                            size="icon"
-                            variant="ghost"
-                            className="text-muted-foreground hover:text-destructive size-7 shrink-0"
-                            aria-label="Fjern punkt"
-                            onClick={() => {
-                              if (hasPlacement) onRemoveAfterPlacement?.(it.id);
-                              updateItemAt(
-                                picker.row,
-                                picker.col,
-                                pickerItems.filter((x) => x.id !== it.id),
-                              );
-                            }}
-                          >
-                            <Trash2 className="size-3.5" />
-                          </Button>
+                          <div className="flex shrink-0 items-center gap-0.5">
+                            <Button
+                              type="button"
+                              size="icon"
+                              variant="ghost"
+                              className="text-muted-foreground hover:text-destructive size-7 shrink-0"
+                              aria-label="Fjern punkt"
+                              onClick={() => {
+                                if (hasPlacement) {
+                                  onRemoveAfterPlacement?.(it.id);
+                                }
+                                updateItemAt(
+                                  picker.row,
+                                  picker.col,
+                                  pickerItems.filter((x) => x.id !== it.id),
+                                );
+                              }}
+                            >
+                              <Trash2 className="size-3.5" />
+                            </Button>
+                          </div>
                         </div>
                         <Textarea
                           data-ros-item-id={it.id}
@@ -956,6 +986,38 @@ export function RosMatrix({
                           rows={2}
                           className="min-h-[3rem] resize-y text-sm"
                         />
+                        <div className="grid gap-2 sm:grid-cols-2">
+                          <div className="space-y-1">
+                            <Label className="text-muted-foreground text-[10px]">
+                              Økonomi (valgfritt)
+                            </Label>
+                            <Input
+                              value={it.economicBand ?? ""}
+                              onChange={(e) =>
+                                patchItem(picker.row, picker.col, it.id, {
+                                  economicBand: e.target.value,
+                                })
+                              }
+                              className="h-8 text-xs"
+                              placeholder="Størrelsesorden"
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <Label className="text-muted-foreground text-[10px]">
+                              Frekvens (valgfritt)
+                            </Label>
+                            <Input
+                              value={it.frequencyBand ?? ""}
+                              onChange={(e) =>
+                                patchItem(picker.row, picker.col, it.id, {
+                                  frequencyBand: e.target.value,
+                                })
+                              }
+                              className="h-8 text-xs"
+                              placeholder="F.eks. daglig, årlig"
+                            />
+                          </div>
+                        </div>
                         <div className="flex flex-wrap gap-2">
                           <button
                             type="button"
@@ -1240,7 +1302,9 @@ export function RosMatrix({
                     </li>
                     );
                   })}
-                </ul>
+                    </ul>
+                  </>
+                ) : null}
               </div>
             ) : null}
 

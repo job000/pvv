@@ -1,6 +1,7 @@
 import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
 import type { AssessmentPayload } from "../schema";
+import { syncWorkloadDerivedFields } from "../../lib/assessment-workload-sync";
 import { sanitizeAssessmentProcessTextFields } from "../../lib/assessment-process-profile";
 import { normalizePipelineStatus, type PipelineStatus } from "../../lib/assessment-pipeline";
 import { payloadToSnapshot } from "./payloadSnapshot";
@@ -98,9 +99,11 @@ export async function createAssessmentWithPayload(
   },
 ) {
   const now = Date.now();
-  const payload = sanitizeAssessmentProcessTextFields(
-    args.payload as unknown as Record<string, unknown>,
-  ) as AssessmentPayload;
+  const payload = syncWorkloadDerivedFields(
+    sanitizeAssessmentProcessTextFields(
+      args.payload as unknown as Record<string, unknown>,
+    ) as AssessmentPayload,
+  );
   const computed = computeAllResults(
     payloadToSnapshot(payload as unknown as Record<string, unknown>),
   );

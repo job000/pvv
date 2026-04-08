@@ -10,6 +10,24 @@ const rosCellItemValidator = v.object({
   afterCol: v.optional(v.number()),
   sourceItemId: v.optional(v.string()),
   afterChangeNote: v.optional(v.string()),
+  /** Valgfri økonomisk størrelsesorden (fritekst eller forhåndsdefinert kode) */
+  economicBand: v.optional(v.string()),
+  /** Valgfri frekvens / tidshorisont for hendelsen */
+  frequencyBand: v.optional(v.string()),
+});
+
+/** Risikokort i kortlager (ikke plassert i matrise) — før/etter tiltak */
+const rosPoolItemValidator = v.object({
+  id: v.string(),
+  text: v.string(),
+  flags: v.optional(v.array(v.string())),
+  economicBand: v.optional(v.string()),
+  frequencyBand: v.optional(v.string()),
+  status: v.union(
+    v.literal("unplaced"),
+    v.literal("on_hold"),
+    v.literal("not_relevant"),
+  ),
 });
 
 /** Felles input for én vurdering (Likert 1–5 som tall) */
@@ -460,6 +478,8 @@ export default defineSchema({
         options: v.array(v.object({ id: v.string(), name: v.string() })),
       }),
     ),
+    /** Standard sektor-pakke ved nye ROS-analyser (general, va_water, …) */
+    defaultRosSectorPackId: v.optional(v.string()),
   }).index("by_owner", ["ownerUserId"]),
 
   /**
@@ -1069,6 +1089,12 @@ export default defineSchema({
     complianceScopeTags: v.optional(v.array(v.string())),
     /** Strukturerte krav-/kildehenvisninger */
     requirementRefs: v.optional(v.array(rosRequirementRefValidator)),
+    /** Sektor-pakke brukt ved opprettelse (visning / sporbarhet) */
+    rosSectorPackId: v.optional(v.string()),
+    /** Kortlager før tiltak — risiko som ikke (ennå) ligger i en celle */
+    riskPoolBefore: v.optional(v.array(rosPoolItemValidator)),
+    /** Kortlager etter tiltak */
+    riskPoolAfter: v.optional(v.array(rosPoolItemValidator)),
   })
     .index("by_workspace", ["workspaceId"])
     .index("by_workspace_updated", ["workspaceId", "updatedAt"])
@@ -1149,6 +1175,9 @@ export default defineSchema({
     axisScaleNotes: v.optional(v.string()),
     complianceScopeTags: v.optional(v.array(v.string())),
     requirementRefs: v.optional(v.array(rosRequirementRefValidator)),
+    rosSectorPackId: v.optional(v.string()),
+    riskPoolBefore: v.optional(v.array(rosPoolItemValidator)),
+    riskPoolAfter: v.optional(v.array(rosPoolItemValidator)),
     createdByUserId: v.id("users"),
     createdAt: v.number(),
   })

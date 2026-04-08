@@ -35,6 +35,12 @@ import {
   emptyMatrix,
   emptyStringMatrix,
 } from "../lib/ros-defaults";
+import {
+  getRosSectorPack,
+  isValidRosSectorPackId,
+  sectorPackInitialAnalysisFields,
+  workspaceDefaultSectorPackId,
+} from "../lib/ros-sector-packs";
 
 const MIN_DIM = 2;
 const MAX_DIM = 12;
@@ -111,7 +117,44 @@ function assertCellItemsShape(
         if (it.afterChangeNote && it.afterChangeNote.length > 8000) {
           throw new Error("Begrunnelse for endring etter tiltak er for lang.");
         }
+        if (it.economicBand && it.economicBand.length > 240) {
+          throw new Error("Økonomifelt er for langt.");
+        }
+        if (it.frequencyBand && it.frequencyBand.length > 240) {
+          throw new Error("Frekvensfelt er for langt.");
+        }
       }
+    }
+  }
+}
+
+const MAX_POOL_ITEMS = 500;
+
+function assertRiskPoolShape(
+  pool: Array<{
+    id: string;
+    text: string;
+    flags?: string[];
+    economicBand?: string;
+    frequencyBand?: string;
+    status: "unplaced" | "on_hold" | "not_relevant";
+  }>,
+) {
+  if (pool.length > MAX_POOL_ITEMS) {
+    throw new Error(`Maks ${MAX_POOL_ITEMS} kort i kortlager.`);
+  }
+  for (const it of pool) {
+    if (!it.id?.trim()) {
+      throw new Error("Hvert kort må ha en id.");
+    }
+    if (it.text.length > 8000) {
+      throw new Error("Korttekst er for lang.");
+    }
+    if (it.economicBand && it.economicBand.length > 240) {
+      throw new Error("Økonomifelt er for langt.");
+    }
+    if (it.frequencyBand && it.frequencyBand.length > 240) {
+      throw new Error("Frekvensfelt er for langt.");
     }
   }
 }
@@ -1203,6 +1246,8 @@ export const createAnalysis = mutation({
     assessmentId: v.optional(v.id("assessments")),
     assessmentIds: v.optional(v.array(v.id("assessments"))),
     notes: v.optional(v.string()),
+    /** Sektor-pakke (general, va_water, …); ellers brukes arbeidsområdets standard om satt */
+    sectorPackId: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const userId = await requireUserId(ctx);
@@ -1260,6 +1305,14 @@ export const createAnalysis = mutation({
       tpl.rowLabels.length,
       tpl.colLabels.length,
     );
+    const ws = await ctx.db.get(args.workspaceId);
+    const packIdArg = args.sectorPackId?.trim();
+    const effectivePackId =
+      packIdArg && isValidRosSectorPackId(packIdArg)
+        ? packIdArg
+        : workspaceDefaultSectorPackId(ws ?? null);
+    const pack = effectivePackId ? getRosSectorPack(effectivePackId) : null;
+    const packFields = pack ? sectorPackInitialAnalysisFields(pack) : null;
     const analysisId = await ctx.db.insert("rosAnalyses", {
       workspaceId: args.workspaceId,
       templateId: args.templateId,
@@ -1280,6 +1333,16 @@ export const createAnalysis = mutation({
       createdAt: now,
       updatedAt: now,
       revision: 1,
+      ...(packFields && pack
+        ? {
+            methodologyStatement: packFields.methodologyStatement,
+            scopeAndCriteria: packFields.scopeAndCriteria,
+            axisScaleNotes: packFields.axisScaleNotes,
+            complianceScopeTags: packFields.complianceScopeTags,
+            requirementRefs: packFields.requirementRefs,
+            rosSectorPackId: pack.id,
+          }
+        : {}),
     });
     for (const aid of idSet) {
       const existing = await ctx.db
@@ -1312,8 +1375,24 @@ const rosCellItemV = v.object({
   afterCol: v.optional(v.number()),
   sourceItemId: v.optional(v.string()),
   afterChangeNote: v.optional(v.string()),
+  economicBand: v.optional(v.string()),
+  frequencyBand: v.optional(v.string()),
 });
 const rosCellItemsMatrixV = v.array(v.array(v.array(rosCellItemV)));
+
+const rosPoolItemV = v.object({
+  id: v.string(),
+  text: v.string(),
+  flags: v.optional(v.array(v.string())),
+  economicBand: v.optional(v.string()),
+  frequencyBand: v.optional(v.string()),
+  status: v.union(
+    v.literal("unplaced"),
+    v.literal("on_hold"),
+    v.literal("not_relevant"),
+  ),
+});
+const rosPoolItemsV = v.array(rosPoolItemV);
 
 export const updateAnalysis = mutation({
   args: {
@@ -1345,6 +1424,8 @@ export const updateAnalysis = mutation({
     requirementRefs: v.optional(
       v.union(v.array(rosRequirementRefValidator), v.null()),
     ),
+    riskPoolBefore: v.optional(rosPoolItemsV),
+    riskPoolAfter: v.optional(rosPoolItemsV),
     /** Etter vellykket lagring: lag versjonsøyeblikksbilde (brukes ved eksplisitt «Lagre», ikke autosave). */
     saveVersionSnapshot: v.optional(v.boolean()),
     versionSnapshotNote: v.optional(v.string()),
@@ -1631,6 +1712,14 @@ export const updateAnalysis = mutation({
               note: r.note?.trim() || undefined,
               documentationUrl: r.documentationUrl?.trim() || undefined,
             }));
+    }
+    if (args.riskPoolBefore !== undefined) {
+      assertRiskPoolShape(args.riskPoolBefore);
+      patch.riskPoolBefore = args.riskPoolBefore.map((x) => ({ ...x }));
+    }
+    if (args.riskPoolAfter !== undefined) {
+      assertRiskPoolShape(args.riskPoolAfter);
+      patch.riskPoolAfter = args.riskPoolAfter.map((x) => ({ ...x }));
     }
     const fresh = await ctx.db.get(args.analysisId);
     if (!fresh) {
@@ -2076,6 +2165,13 @@ async function insertRosAnalysisVersionSnapshot(
       : undefined,
     requirementRefs: analysis.requirementRefs
       ? analysis.requirementRefs.map((r) => ({ ...r }))
+      : undefined,
+    rosSectorPackId: analysis.rosSectorPackId,
+    riskPoolBefore: analysis.riskPoolBefore
+      ? analysis.riskPoolBefore.map((x) => ({ ...x }))
+      : undefined,
+    riskPoolAfter: analysis.riskPoolAfter
+      ? analysis.riskPoolAfter.map((x) => ({ ...x }))
       : undefined,
     createdByUserId: userId,
     createdAt: now,

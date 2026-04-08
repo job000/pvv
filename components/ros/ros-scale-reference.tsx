@@ -157,6 +157,13 @@ export function RosScaleReference({
             referanse som tilleggsveiledning.
           </p>
         ) : null}
+        <p className="text-muted-foreground border-border/40 bg-muted/10 mb-3 rounded-lg border px-3 py-2 text-[11px] leading-snug sm:text-xs">
+          <strong className="text-foreground">Sektor:</strong> For VA og kommunal
+          kritisk infrastruktur bør konsekvens beskrive helse, miljø og
+          tjenesteleveranse. I helse vektlegg pasientsikkerhet og personvern.
+          Juster akser i malen — og bruk feltet «Definisjon av nivå 0–5» under
+          Livsløp og etterlevelse når dere trenger egen bindende tekst.
+        </p>
         {axis === "probability" ? (
           <ul className="space-y-3">
             {DEFAULT_ROS_PROBABILITY_REFERENCE.map((row) => (

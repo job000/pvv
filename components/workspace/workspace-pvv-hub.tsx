@@ -39,17 +39,28 @@ export function WorkspacePvvHub({ workspaceId, activeTab }: Props) {
   );
 
   return (
-    <div className="space-y-4 pb-4">
-      <header className="border-border/60 border-b pb-3">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <h1 className="font-heading text-lg font-semibold tracking-tight text-foreground sm:text-xl">
-            {activeTab === "vurderinger" ? "Vurderinger" : "Prosessregister"}
-          </h1>
-          <div className="flex flex-col gap-2 sm:items-end">
+    <div className="space-y-6 pb-6">
+      <header className="border-border/40 border-b pb-4">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-0 space-y-1">
+            <h1 className="font-heading text-xl font-semibold tracking-tight text-foreground sm:text-2xl">
+              {activeTab === "vurderinger" ? "Vurderinger" : "Prosesser"}
+            </h1>
+            {activeTab === "prosesser" ? (
+              <p className="text-muted-foreground max-w-lg text-sm leading-relaxed">
+                Registrer prosess-ID-er, importer fra GitHub og se dekning mot vurderinger og ROS.
+              </p>
+            ) : (
+              <p className="text-muted-foreground max-w-lg text-sm leading-relaxed">
+                Gå gjennom veiviseren for hver prosess — poengsum og prioritering oppdateres når du lagrer.
+              </p>
+            )}
+          </div>
+          <div className="flex flex-col gap-2.5 sm:items-end">
             <div
-              className="flex w-full shrink-0 gap-0.5 rounded-2xl border border-border/50 bg-muted/40 p-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] backdrop-blur-sm dark:bg-muted/25 sm:w-auto sm:min-w-0"
+              className="flex w-full shrink-0 gap-1 rounded-xl border border-border/40 bg-muted/30 p-1 sm:w-auto sm:min-w-0"
               role="tablist"
-              aria-label="Vis vurderinger eller prosessregister"
+              aria-label="Vis vurderinger eller prosesser"
             >
               <button
                 id="tab-vurderinger"
@@ -58,10 +69,10 @@ export function WorkspacePvvHub({ workspaceId, activeTab }: Props) {
                 aria-selected={activeTab === "vurderinger"}
                 onClick={() => setTab("vurderinger")}
                 className={cn(
-                  "flex h-11 min-h-[44px] flex-1 items-center justify-center gap-2 rounded-lg px-3 text-[13px] font-medium transition-[color,box-shadow] duration-200 sm:h-10 sm:min-h-0 sm:flex-initial sm:px-4",
+                  "flex h-11 min-h-[44px] flex-1 items-center justify-center gap-2 rounded-lg px-3 text-sm font-medium transition-colors sm:h-9 sm:min-h-0 sm:flex-initial sm:px-4",
                   activeTab === "vurderinger"
-                    ? "bg-card text-foreground shadow-[0_1px_3px_rgba(0,0,0,0.08)] ring-1 ring-black/[0.06] dark:shadow-[0_1px_3px_rgba(0,0,0,0.35)] dark:ring-white/[0.08]"
-                    : "text-muted-foreground hover:bg-card/60 hover:text-foreground",
+                    ? "bg-background text-foreground shadow-sm ring-1 ring-border/50"
+                    : "text-muted-foreground hover:text-foreground",
                 )}
               >
                 <ClipboardList className="size-4 shrink-0 opacity-80" aria-hidden />
@@ -74,22 +85,22 @@ export function WorkspacePvvHub({ workspaceId, activeTab }: Props) {
                 aria-selected={activeTab === "prosesser"}
                 onClick={() => setTab("prosesser")}
                 className={cn(
-                  "flex h-11 min-h-[44px] flex-1 items-center justify-center gap-2 rounded-lg px-3 text-[13px] font-medium transition-[color,box-shadow] duration-200 sm:h-10 sm:min-h-0 sm:flex-initial sm:px-4",
+                  "flex h-11 min-h-[44px] flex-1 items-center justify-center gap-2 rounded-lg px-3 text-sm font-medium transition-colors sm:h-9 sm:min-h-0 sm:flex-initial sm:px-4",
                   activeTab === "prosesser"
-                    ? "bg-card text-foreground shadow-[0_1px_3px_rgba(0,0,0,0.08)] ring-1 ring-black/[0.06] dark:shadow-[0_1px_3px_rgba(0,0,0,0.35)] dark:ring-white/[0.08]"
-                    : "text-muted-foreground hover:bg-card/60 hover:text-foreground",
+                    ? "bg-background text-foreground shadow-sm ring-1 ring-border/50"
+                    : "text-muted-foreground hover:text-foreground",
                 )}
               >
                 <Users className="size-4 shrink-0 opacity-80" aria-hidden />
-                Prosessregister
+                Prosesser
               </button>
             </div>
             <Link
               href={`/w/${workspaceId}/skjemaer`}
               title="Skjemaer og innsending (intake)"
-              className="inline-flex h-10 items-center gap-2 rounded-xl border border-border/60 bg-card px-4 text-sm font-medium text-foreground transition hover:bg-muted/20"
+              className="text-muted-foreground hover:text-foreground inline-flex h-10 items-center gap-2 rounded-xl px-3 text-sm font-medium transition-colors hover:bg-muted/40 sm:h-9"
             >
-              <FileText className="size-4 shrink-0" aria-hidden />
+              <FileText className="size-4 shrink-0 opacity-80" aria-hidden />
               Skjemaer
             </Link>
           </div>

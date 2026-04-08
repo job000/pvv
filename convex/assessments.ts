@@ -38,6 +38,7 @@ import {
   mergeCandidateIntoAssessmentPayload,
   nextAssessmentKanbanRank,
 } from "./lib/assessmentCreation";
+import { syncWorkloadDerivedFields } from "../lib/assessment-workload-sync";
 import { sanitizeAssessmentProcessTextFields } from "../lib/assessment-process-profile";
 import { payloadToSnapshot } from "./lib/payloadSnapshot";
 import { computeAllResults } from "./lib/rpaScoring";
@@ -410,9 +411,11 @@ export const saveDraft = mutation({
       throw new Error("Ugyldig revisjon.");
     }
     const now = Date.now();
-    const payload = sanitizeAssessmentProcessTextFields(
-      args.payload as unknown as Record<string, unknown>,
-    ) as AssessmentPayload;
+    const payload = syncWorkloadDerivedFields(
+      sanitizeAssessmentProcessTextFields(
+        args.payload as unknown as Record<string, unknown>,
+      ) as AssessmentPayload,
+    );
     const existing = await ctx.db
       .query("assessmentDrafts")
       .withIndex("by_assessment", (q) =>
@@ -545,9 +548,11 @@ export const restoreDraftFromVersion = mutation({
         q.eq("assessmentId", args.assessmentId),
       )
       .unique();
-    const restoredPayload = sanitizeAssessmentProcessTextFields(
-      ver.payload as unknown as Record<string, unknown>,
-    ) as AssessmentPayload;
+    const restoredPayload = syncWorkloadDerivedFields(
+      sanitizeAssessmentProcessTextFields(
+        ver.payload as unknown as Record<string, unknown>,
+      ) as AssessmentPayload,
+    );
     const prevRev = existing ? (existing.revision ?? 0) : 0;
     const newRevision = prevRev + 1;
     if (existing) {

@@ -8,10 +8,12 @@ import {
   ROS_COMPLIANCE_OFFICIAL_RESOURCES_NB,
   ROS_COMPLIANCE_PVV_PARAGRAPH_NB,
 } from "@/lib/ros-compliance";
+import { ROS_SECTOR_METHODOLOGY_SNIPPETS } from "@/lib/ros-sector-methodology-nb";
 import type { ComponentType, ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import {
   ArrowLeftRight,
+  Building2,
   ChevronDown,
   CircleHelp,
   GitBranch,
@@ -133,6 +135,49 @@ export function RosMethodologyGuide({
           kan bruke skalaen uten å koble analyse til prosess eller
           personvernvurdering.
         </p>
+      </DetailsBlock>
+
+      <DetailsBlock
+        id="ros-metode-sektor"
+        title="Sektor (VA, helse, kommune) og kilder"
+        icon={Building2}
+        defaultOpen={false}
+      >
+        <p>
+          Når du oppretter en ROS-analyse kan du velge en{" "}
+          <strong className="text-foreground">sektor-pakke</strong> som fyller inn
+          forslag til metodikk, rammeverk-tagger og kravhenvisninger. Alt kan
+          redigeres under «Innstillinger» → Livsløp og etterlevelse.
+        </p>
+        <div className="space-y-3">
+          {ROS_SECTOR_METHODOLOGY_SNIPPETS.map((s) => (
+            <div
+              key={s.id}
+              className="border-border/50 bg-muted/20 rounded-xl border px-3 py-2.5"
+            >
+              <p className="text-foreground text-sm font-semibold">{s.title}</p>
+              <div className="mt-2 space-y-2 text-sm">
+                {s.body.map((para, i) => (
+                  <p key={i}>{para}</p>
+                ))}
+              </div>
+              <ul className="mt-2 list-inside list-disc space-y-1 text-sm">
+                {s.links.map((l) => (
+                  <li key={l.href}>
+                    <a
+                      href={l.href}
+                      className="text-primary font-medium underline-offset-4 hover:underline"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      {l.label}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
       </DetailsBlock>
 
       <DetailsBlock

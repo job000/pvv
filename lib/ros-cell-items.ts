@@ -18,6 +18,20 @@ export type RosCellItem = {
   sourceItemId?: string;
   /** Hvorfor endret risikonivået seg etter tiltak (ned/opp/beholdt + begrunnelse) */
   afterChangeNote?: string;
+  /** Økonomisk størrelsesorden (valgfritt) */
+  economicBand?: string;
+  /** Frekvens / tidshorisont (valgfritt) */
+  frequencyBand?: string;
+};
+
+/** Kort i kortlager (før/etter) — ikke plassert i matrise */
+export type RosPoolItem = {
+  id: string;
+  text: string;
+  flags?: string[];
+  economicBand?: string;
+  frequencyBand?: string;
+  status: "unplaced" | "on_hold" | "not_relevant";
 };
 
 /** Rad × kolonne × punkter i cellen (eksplisitt — ikke forveksle med RosCellItem[][]) */
@@ -31,6 +45,17 @@ export function newRosCellItemId(): string {
     return crypto.randomUUID();
   }
   return `ros_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
+}
+
+export function newRosPoolItem(
+  text: string,
+  status: RosPoolItem["status"] = "unplaced",
+): RosPoolItem {
+  return {
+    id: newRosCellItemId(),
+    text,
+    status,
+  };
 }
 
 export function emptyCellItemsMatrix(
@@ -58,13 +83,17 @@ function cellItemToNoteLine(it: RosCellItem): string {
   if (it.flags?.includes(ROS_CELL_FLAG_WATCH)) {
     tags.push("Følg med");
   }
+  const bands: string[] = [];
+  if (it.economicBand?.trim()) bands.push(`Økonomi: ${it.economicBand.trim()}`);
+  if (it.frequencyBand?.trim()) bands.push(`Frekvens: ${it.frequencyBand.trim()}`);
+  const bandSuffix = bands.length ? ` [${bands.join("; ")}]` : "";
   if (tags.length > 0 && t) {
-    return `${tags.join(" · ")}: ${t}`;
+    return `${tags.join(" · ")}: ${t}${bandSuffix}`;
   }
   if (tags.length > 0) {
-    return tags.join(" · ");
+    return `${tags.join(" · ")}${bandSuffix}`;
   }
-  return t;
+  return t + bandSuffix;
 }
 
 /** Slår sammen flere punkter til én streng for PDF / eldre felt. */
@@ -73,6 +102,38 @@ export function flattenCellItemsToNote(cell: RosCellItem[]): string {
     .map(cellItemToNoteLine)
     .filter((s) => s.length > 0)
     .join("\n\n");
+}
+
+/** Celle regnes som dokumentert risiko (brukes i badge / max-nivå — ikke bare varmefarge i rutenettet). */
+export function cellHasFilledRosItems(cell: RosCellItem[] | undefined): boolean {
+  if (!cell?.length) return false;
+  return cell.some(
+    (it) =>
+      it.text.trim().length > 0 ||
+      it.flags?.includes(ROS_CELL_FLAG_WATCH) ||
+      it.flags?.includes(ROS_CELL_FLAG_REQUIRES_ACTION),
+  );
+}
+
+/** Høyeste matrisenivå kun blant celler med dokumentert risiko (tekst eller flagg). */
+export function maxRiskAmongDocumentedCells(
+  matrix: number[][],
+  cellItems: RosCellItemMatrix,
+): { max: number; highOrCriticalCells: number } {
+  let max = 0;
+  let highOrCriticalCells = 0;
+  for (let r = 0; r < matrix.length; r++) {
+    const rowM = matrix[r];
+    const rowItems = cellItems[r];
+    if (!rowM) continue;
+    for (let c = 0; c < rowM.length; c++) {
+      if (!cellHasFilledRosItems(rowItems?.[c])) continue;
+      const v = rowM[c] ?? 0;
+      if (v > max) max = v;
+      if (v >= 4) highOrCriticalCells += 1;
+    }
+  }
+  return { max, highOrCriticalCells };
 }
 
 /** Rad til egen PDF-seksjon «Identifiserte risikoer» (full tekst, ikke bare matrise-celle). */
@@ -169,13 +230,21 @@ export function collectAllCellRiskPointsForPdf(args: {
         const t = item.text.trim();
         const hasFlags = (item.flags?.length ?? 0) > 0;
         const hasNote = Boolean(item.afterChangeNote?.trim());
-        if (!t && !hasFlags && !hasNote) continue;
+        const bandBits = [item.economicBand, item.frequencyBand]
+          .map((s) => s?.trim())
+          .filter(Boolean);
+        const hasBands = bandBits.length > 0;
+        if (!t && !hasFlags && !hasNote && !hasBands) continue;
+        const textWithBands =
+          hasBands && t ? `${t} [${bandBits.join(" · ")}]` : hasBands && !t
+            ? `[${bandBits.join(" · ")}]`
+            : t;
         out.push({
           phase: args.phase,
           rowLabel: args.rowLabels[r] ?? `Rad ${r + 1}`,
           colLabel: args.colLabels[c] ?? `Kolonne ${c + 1}`,
           level: args.matrixValues[r]?.[c] ?? 0,
-          text: t,
+          text: textWithBands,
           flags: item.flags ? [...item.flags] : [],
           afterChangeNote: item.afterChangeNote?.trim() || undefined,
         });
@@ -223,6 +292,8 @@ export function normalizeCellItems(
             afterCol: it.afterCol,
             sourceItemId: it.sourceItemId,
             afterChangeNote: it.afterChangeNote,
+            economicBand: it.economicBand,
+            frequencyBand: it.frequencyBand,
           })),
         );
       } else {

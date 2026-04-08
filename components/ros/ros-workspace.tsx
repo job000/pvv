@@ -4,6 +4,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { FilterToolbar } from "@/components/ui/filter-toolbar";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { NativeSelectField } from "@/components/ui/native-select-field";
@@ -20,6 +21,11 @@ import { toastDeleteWithUndo } from "@/lib/toast-delete-undo";
 import { cellRiskClass } from "@/lib/ros-risk-colors";
 import { useRosWorkspaceUiPrefs } from "@/lib/ros-workspace-ui-prefs";
 import { cn } from "@/lib/utils";
+import {
+  isValidRosSectorPackId,
+  listRosSectorPacks,
+  type RosSectorPackId,
+} from "@/lib/ros-sector-packs";
 import { useMutation, useQuery } from "convex/react";
 import { RosDashboardPanel } from "@/components/ros/ros-dashboard-panel";
 import { RosMethodologyGuide } from "@/components/ros/ros-methodology-guide";
@@ -161,12 +167,14 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
   const hub = useQuery(api.ros.workspaceHub, { workspaceId });
   const candidates = useQuery(api.candidates.listByWorkspace, { workspaceId });
   const orgUnits = useQuery(api.orgUnits.listByWorkspace, { workspaceId });
+  const workspace = useQuery(api.workspaces.get, { workspaceId });
 
   const createTemplate = useMutation(api.ros.createTemplate);
   const updateTemplate = useMutation(api.ros.updateTemplate);
   const removeTemplate = useMutation(api.ros.removeTemplate);
   const createAnalysis = useMutation(api.ros.createAnalysis);
   const removeAnalysis = useMutation(api.ros.removeAnalysis);
+  const updateWorkspace = useMutation(api.workspaces.update);
 
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -236,12 +244,26 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
   );
   const [analysisSort, setAnalysisSort] = useState<AnalysisSort>("updated");
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
+  const [anaSectorPackId, setAnaSectorPackId] =
+    useState<RosSectorPackId>("general");
+  const [rememberDefaultSectorPack, setRememberDefaultSectorPack] =
+    useState(false);
   const [scaleRefOpen, setScaleRefOpen] = useState(false);
   const [methodHelpOpen, setMethodHelpOpen] = useState(false);
   const [versionsQuickDialog, setVersionsQuickDialog] = useState<{
     analysisId: Id<"rosAnalyses">;
     title: string;
   } | null>(null);
+
+  useEffect(() => {
+    if (!createDialogOpen || !workspace) return;
+    const d = workspace.defaultRosSectorPackId?.trim();
+    if (d && isValidRosSectorPackId(d)) {
+      setAnaSectorPackId(d);
+    } else {
+      setAnaSectorPackId("general");
+    }
+  }, [createDialogOpen, workspace?.defaultRosSectorPackId, workspace?._id]);
 
   const openBuilderForEdit = useCallback(
     (t: {
@@ -504,7 +526,14 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
         candidateId: anaCandidateId || undefined,
         orgUnitId: anaOrgUnitId || undefined,
         title: anaTitle.trim(),
+        sectorPackId: anaSectorPackId,
       });
+      if (rememberDefaultSectorPack) {
+        await updateWorkspace({
+          workspaceId,
+          defaultRosSectorPackId: anaSectorPackId,
+        });
+      }
       window.location.href = `/w/${workspaceId}/ros/a/${id}`;
     } catch (e) {
       toast.error(
@@ -1013,6 +1042,43 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
                       placeholder="F.eks. ROS — Rekruttering"
                       required
                     />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="ana-sector">Sektor / metode</Label>
+                    <select
+                      id="ana-sector"
+                      className="border-input bg-background flex h-10 w-full rounded-lg border px-2 text-sm"
+                      value={anaSectorPackId}
+                      onChange={(e) =>
+                        setAnaSectorPackId(e.target.value as RosSectorPackId)
+                      }
+                    >
+                      {listRosSectorPacks().map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.name}
+                        </option>
+                      ))}
+                    </select>
+                    <p className="text-muted-foreground text-xs leading-relaxed">
+                      {listRosSectorPacks().find((p) => p.id === anaSectorPackId)
+                        ?.shortDescription ?? ""}
+                    </p>
+                    <div className="flex items-start gap-2 pt-1">
+                      <Checkbox
+                        id="ana-remember-sector"
+                        checked={rememberDefaultSectorPack}
+                        onCheckedChange={(c) =>
+                          setRememberDefaultSectorPack(Boolean(c))
+                        }
+                      />
+                      <Label
+                        htmlFor="ana-remember-sector"
+                        className="text-muted-foreground cursor-pointer text-xs font-normal leading-snug"
+                      >
+                        Bruk denne sektoren som standard for nye ROS-analyser i
+                        dette arbeidsområdet
+                      </Label>
+                    </div>
                   </div>
                   <div className="space-y-1.5">
                     <Label htmlFor="ana-tpl">Mal</Label>

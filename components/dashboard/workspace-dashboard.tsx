@@ -11,6 +11,7 @@ import { formatUserFacingError } from "@/lib/user-facing-error";
 import { cn } from "@/lib/utils";
 import {
   ArrowRight,
+  ChevronRight,
   MoreHorizontal,
   Plus,
   Settings,
@@ -84,59 +85,79 @@ export function WorkspaceDashboardGrid({
     }
   }
 
+  const createBlock = (
+    <div className="space-y-2">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+        <Input
+          id="new-ws-name"
+          value={newName}
+          onChange={(e) => setNewName(e.target.value)}
+          placeholder="Navn på nytt område"
+          className="h-11 flex-1 rounded-xl bg-background text-sm"
+          onKeyDown={(e) => {
+            if (e.key === "Enter") void handleCreate();
+          }}
+        />
+        <Button
+          type="button"
+          className="h-11 shrink-0 gap-2 rounded-xl px-4 text-sm font-medium shadow-none sm:w-auto"
+          disabled={creating || !newName.trim()}
+          onClick={() => void handleCreate()}
+        >
+          {creating ? (
+            "Oppretter …"
+          ) : (
+            <>
+              <Plus className="size-4" aria-hidden />
+              Opprett
+            </>
+          )}
+        </Button>
+      </div>
+      {createError ? (
+        <p className="text-destructive text-sm" role="alert">
+          {createError}
+        </p>
+      ) : null}
+    </div>
+  );
+
   return (
     <>
-      {/* ── Create workspace ── */}
-      <section className="rounded-2xl bg-muted/30 p-5">
-        <p className="text-foreground mb-3 text-sm font-semibold">
-          Opprett nytt arbeidsområde
-        </p>
-        <div className="flex gap-3">
-          <Input
-            id="new-ws-name"
-            value={newName}
-            onChange={(e) => setNewName(e.target.value)}
-            placeholder="F.eks. Digitalisering Vest"
-            className="h-12 flex-1 rounded-xl bg-background text-base shadow-sm"
-            onKeyDown={(e) => {
-              if (e.key === "Enter") void handleCreate();
-            }}
-          />
-          <Button
-            type="button"
-            className="h-12 shrink-0 gap-2 rounded-xl px-5 text-sm font-semibold shadow-sm"
-            disabled={creating || !newName.trim()}
-            onClick={() => void handleCreate()}
-          >
-            {creating ? (
-              "Oppretter …"
-            ) : (
-              <>
-                <Plus className="size-4" aria-hidden />
-                Opprett
-              </>
-            )}
-          </Button>
-        </div>
-        {createError ? (
-          <p className="text-destructive mt-2 text-sm" role="alert">
-            {createError}
-          </p>
-        ) : null}
-      </section>
+      {workspaces.length > 0 ? (
+        <details className="border-border/40 bg-muted/15 group rounded-xl border open:bg-muted/25">
+          <summary className="hover:bg-muted/25 cursor-pointer list-none rounded-xl px-4 py-3 text-sm font-medium transition-colors [&::-webkit-details-marker]:hidden">
+            <span className="inline-flex w-full items-center justify-between gap-2">
+              <span>Nytt arbeidsområde</span>
+              <ChevronRight className="text-muted-foreground size-4 shrink-0 transition-transform group-open:rotate-90" />
+            </span>
+          </summary>
+          <div className="border-border/35 border-t px-4 pb-4 pt-2">{createBlock}</div>
+        </details>
+      ) : (
+        <section className="border-border/40 rounded-xl border bg-muted/[0.08] p-4">
+          <p className="text-foreground mb-3 text-sm font-medium">Opprett første område</p>
+          {createBlock}
+        </section>
+      )}
 
       {/* ── Workspace list ── */}
       <section
         id="arbeidsområder"
-        className="scroll-mt-24 space-y-4"
+        className="scroll-mt-24 space-y-3"
         aria-labelledby="dash-workspaces-heading"
       >
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <h2
             id="dash-workspaces-heading"
-            className="text-foreground text-base font-semibold"
+            className="text-foreground text-base font-semibold tracking-tight"
           >
-            {workspaces.length} arbeidsområde{workspaces.length !== 1 ? "r" : ""}
+            Arbeidsområder
+            {workspaces.length > 0 ? (
+              <span className="text-muted-foreground ml-2 text-sm font-normal tabular-nums">
+                · {workspaces.length}
+              </span>
+            ) : null}
           </h2>
           {workspaces.length > 3 ? (
             <SearchInput
@@ -162,7 +183,7 @@ export function WorkspaceDashboardGrid({
           </p>
         ) : null}
 
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
           {filteredWorkspaces.map(({ workspace, role }) => {
             const isOwner = role === "owner";
             const canManage = role === "owner" || role === "admin";
@@ -173,16 +194,14 @@ export function WorkspaceDashboardGrid({
               <div
                 key={workspace._id}
                 className={cn(
-                  "group relative cursor-pointer rounded-2xl p-5 transition-all duration-200",
-                  "hover:shadow-md hover:scale-[1.02] active:scale-[0.99]",
-                  isDefault
-                    ? "bg-primary/[0.04] shadow-sm ring-1 ring-primary/20 hover:ring-primary/35"
-                    : "bg-card shadow-sm ring-1 ring-black/[0.04] hover:ring-black/[0.08] dark:ring-white/[0.06] dark:hover:ring-white/[0.12]",
+                  "group border-border/40 bg-card/80 relative cursor-pointer rounded-xl border p-4 transition-colors",
+                  "hover:border-border/60",
+                  isDefault && "border-primary/25 bg-primary/[0.03]",
                 )}
               >
                 <Link
                   href={`/w/${workspace._id}`}
-                  className="absolute inset-0 z-[1] rounded-2xl focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                  className="absolute inset-0 z-[1] rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                   aria-label={`Åpne ${workspace.name}`}
                 />
 

@@ -397,25 +397,18 @@ export function TasksBoard() {
     return (
       <section
         id="oppgaver"
-        className="space-y-4 scroll-mt-24"
+        className="scroll-mt-24 space-y-3"
         aria-labelledby="tasks-board-heading"
       >
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <h2
-              id="tasks-board-heading"
-              className="font-heading text-xl font-semibold tracking-tight sm:text-2xl"
-            >
-              Oppgaver på tvers av arbeidsområder
-            </h2>
-            <p className="text-muted-foreground mt-1 max-w-2xl text-sm leading-relaxed">
-              Dra for å prioritere eller flytte mellom kolonner.
-            </p>
-          </div>
-        </div>
-        <div className="text-muted-foreground flex items-center gap-3 rounded-2xl border border-border/70 bg-muted/20 px-5 py-10 text-sm">
-          <span className="border-primary size-5 shrink-0 animate-spin rounded-full border-2 border-t-transparent" />
-          Henter oppgaver …
+        <h2
+          id="tasks-board-heading"
+          className="text-foreground text-base font-semibold tracking-tight"
+        >
+          Oppgaver
+        </h2>
+        <div className="text-muted-foreground flex items-center gap-2 rounded-xl border border-border/40 bg-muted/20 px-4 py-8 text-sm">
+          <span className="border-primary size-4 shrink-0 animate-spin rounded-full border-2 border-t-transparent" />
+          Laster …
         </div>
       </section>
     );
@@ -424,73 +417,56 @@ export function TasksBoard() {
   return (
     <section
       id="oppgaver"
-      className="space-y-5 scroll-mt-24"
+      className="scroll-mt-24 space-y-3"
       aria-labelledby="tasks-board-heading"
     >
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <div className="flex items-center gap-2">
-            <div className="bg-primary/12 text-primary flex size-9 items-center justify-center rounded-lg">
-              <LayoutGrid className="size-4" aria-hidden />
-            </div>
-            <h2
-              id="tasks-board-heading"
-              className="font-heading text-xl font-semibold tracking-tight sm:text-2xl"
-            >
-              Oppgaver på tvers av arbeidsområder
-            </h2>
-          </div>
-          <p className="text-muted-foreground mt-2 max-w-2xl pl-11 text-sm leading-relaxed">
-            Dra for å prioritere eller flytte mellom kolonner. Rediger for full
-            kontroll (tekst, frist, tildeling). Data vises kun der du har
-            tilgang.
+          <h2
+            id="tasks-board-heading"
+            className="text-foreground text-base font-semibold tracking-tight"
+          >
+            Oppgaver
+          </h2>
+          <p className="text-muted-foreground mt-0.5 text-xs">
+            Dra kort for å endre prioritet eller kolonne.
           </p>
         </div>
         <div
-          className="bg-muted/50 inline-flex rounded-lg border p-0.5"
+          className="border-border/40 inline-flex shrink-0 rounded-lg border bg-muted/30 p-0.5"
           role="group"
+          aria-label="Visning"
         >
           <Button
             type="button"
             variant={view === "kanban" ? "secondary" : "ghost"}
             size="sm"
-            className="gap-1.5"
+            className="h-8 gap-1 rounded-md px-2.5 text-xs shadow-none"
             onClick={() => setView("kanban")}
           >
-            <LayoutGrid className="size-4" aria-hidden />
-            Prioritetstavle
+            <LayoutGrid className="size-3.5" aria-hidden />
+            Tavle
           </Button>
           <Button
             type="button"
             variant={view === "list" ? "secondary" : "ghost"}
             size="sm"
-            className="gap-1.5"
+            className="h-8 gap-1 rounded-md px-2.5 text-xs shadow-none"
             onClick={() => setView("list")}
           >
-            <List className="size-4" aria-hidden />
+            <List className="size-3.5" aria-hidden />
             Liste
           </Button>
         </div>
       </div>
 
       {tasks.length === 0 ? (
-        <div className="border-border/70 bg-muted/15 relative overflow-hidden rounded-2xl border border-dashed px-6 py-14 text-center">
-          <div
-            className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_50%_0%,hsl(var(--primary)/0.12),transparent_55%)]"
-            aria-hidden
-          />
-          <div className="relative mx-auto max-w-md space-y-3">
-            <div className="bg-muted text-muted-foreground mx-auto flex size-12 items-center justify-center rounded-2xl">
-              <List className="size-6" aria-hidden />
-            </div>
-            <p className="text-foreground font-heading text-base font-semibold">
-              Ingen oppgaver ennå
-            </p>
-            <p className="text-muted-foreground text-sm leading-relaxed">
-              Opprett oppgaver under en vurdering (Samarbeid), eller vent på at
-              andre tildeler deg.
-            </p>
-          </div>
+        <div className="rounded-xl border border-dashed border-border/50 bg-muted/[0.04] px-6 py-10 text-center">
+          <List className="text-muted-foreground mx-auto mb-2 size-8 opacity-50" aria-hidden />
+          <p className="text-foreground text-sm font-medium">Ingen oppgaver</p>
+          <p className="text-muted-foreground mx-auto mt-1 max-w-sm text-xs leading-relaxed">
+            Opprett under en vurdering (Samarbeid), eller få tildelt av andre.
+          </p>
         </div>
       ) : view === "list" ? (
         <DndContext

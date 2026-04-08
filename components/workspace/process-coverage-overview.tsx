@@ -32,7 +32,6 @@ import {
   ExternalLink,
   FolderKanban,
   GitBranch,
-  Info,
   LayoutGrid,
   Loader2,
   Shield,
@@ -124,13 +123,6 @@ function githubIssueUrl(c: CoverageRow): string | null {
   return `https://github.com/${c.githubRepoFullName.trim()}/issues/${c.githubIssueNumber}`;
 }
 
-function formatNbDateTime(ms: number): string {
-  return new Intl.DateTimeFormat("nb-NO", {
-    dateStyle: "short",
-    timeStyle: "short",
-  }).format(new Date(ms));
-}
-
 function ProcessCoverageDetailDialog({
   workspaceId,
   row,
@@ -180,22 +172,17 @@ function ProcessCoverageDetailDialog({
                   >
                     {row.name}
                   </h2>
-                  <p
-                    id="process-coverage-detail-desc"
-                    className="text-muted-foreground text-sm leading-relaxed"
-                  >
-                    Full oversikt over PVV-vurderinger og ROS-analyser knyttet til
-                    denne prosessen i registeret.
-                  </p>
+                  <span id="process-coverage-detail-desc" className="sr-only">
+                    PVV og ROS for denne prosessen.
+                  </span>
                 </div>
                 {sourceBadges(row)}
               </div>
-              <div className="text-muted-foreground mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs">
+              <div className="text-muted-foreground mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs tabular-nums">
                 <span>
-                  Prosess oppdatert i register:{" "}
+                  Register:{" "}
                   <time dateTime={new Date(row.candidateUpdatedAt).toISOString()}>
-                    {formatNbDateTime(row.candidateUpdatedAt)} (
-                    {formatRelativeUpdatedAt(row.candidateUpdatedAt)})
+                    {formatRelativeUpdatedAt(row.candidateUpdatedAt)}
                   </time>
                 </span>
                 {issueUrl ? (
@@ -228,8 +215,7 @@ function ProcessCoverageDetailDialog({
                 </div>
                 {row.pvv.assessments.length === 0 ? (
                   <p className="text-muted-foreground text-sm">
-                    Ingen vurdering har denne prosess-ID-en i utkastet ennå. Velg
-                    prosessen i veiviseren steg 1, eller start fra prosessregisteret.
+                    Ingen vurdering med denne prosess-ID ennå.
                   </p>
                 ) : (
                   <ul className="divide-border/60 divide-y rounded-lg border border-border/50 bg-background">
@@ -245,10 +231,8 @@ function ProcessCoverageDetailDialog({
                           >
                             {a.title}
                           </Link>
-                          <p className="text-muted-foreground mt-0.5 text-xs">
-                            Sist aktivitet{" "}
-                            {formatRelativeUpdatedAt(a.updatedAt)} ·{" "}
-                            {formatNbDateTime(a.updatedAt)}
+                          <p className="text-muted-foreground mt-0.5 text-xs tabular-nums">
+                            {formatRelativeUpdatedAt(a.updatedAt)}
                           </p>
                         </div>
                         {canEditPipelineStatus ? (
@@ -292,8 +276,7 @@ function ProcessCoverageDetailDialog({
                 </div>
                 {row.ros.analyses.length === 0 ? (
                   <p className="text-muted-foreground text-sm">
-                    Ingen ROS-analyse er knyttet til denne prosessen. Opprett fra
-                    ROS-arbeidsflaten eller koble ved opprettelse av analyse.
+                    Ingen ROS knyttet til prosessen.
                   </p>
                 ) : (
                   <ul className="divide-border/60 divide-y rounded-lg border border-border/50 bg-background">
@@ -309,9 +292,8 @@ function ProcessCoverageDetailDialog({
                           >
                             {r.title}
                           </Link>
-                          <p className="text-muted-foreground mt-0.5 text-xs">
-                            Sist oppdatert {formatRelativeUpdatedAt(r.updatedAt)} ·{" "}
-                            {formatNbDateTime(r.updatedAt)}
+                          <p className="text-muted-foreground mt-0.5 text-xs tabular-nums">
+                            {formatRelativeUpdatedAt(r.updatedAt)}
                           </p>
                         </div>
                         <Link
@@ -327,11 +309,6 @@ function ProcessCoverageDetailDialog({
                 )}
               </section>
 
-              <p className="text-muted-foreground flex items-start gap-2 text-xs leading-relaxed">
-                <Info className="mt-0.5 size-4 shrink-0 opacity-70" aria-hidden />
-                PVV kobles via prosess-ID i vurderingens utkast. ROS kobles direkte
-                til prosessraden i databasen.
-              </p>
             </DialogBody>
 
             <DialogFooter className="flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -514,8 +491,8 @@ export function ProcessCoverageOverview({
         <p className="text-foreground text-sm font-semibold">
           Ingen prosesser i registeret ennå
         </p>
-        <p className="text-muted-foreground mx-auto mt-2 max-w-sm text-[13px] leading-relaxed">
-          Når du legger inn prosesser, vises PVV- og ROS-dekning her.
+        <p className="text-muted-foreground mx-auto mt-2 max-w-sm text-sm">
+          Legg til prosesser i registeret for å se status her.
         </p>
       </div>
     );
@@ -554,32 +531,13 @@ export function ProcessCoverageOverview({
       />
 
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-        <div className="space-y-1.5">
-          <p className="text-muted-foreground text-[11px] font-semibold uppercase tracking-[0.12em]">
-            Dekning
-          </p>
+        <div>
           <h2
             id="process-coverage-heading"
-            className="font-heading text-lg font-semibold tracking-tight text-foreground"
+            className="font-heading text-lg font-semibold tracking-tight text-foreground sm:text-xl"
           >
             PVV og ROS per prosess
           </h2>
-          <p className="text-muted-foreground max-w-prose text-[13px] leading-relaxed sm:text-sm">
-            Oversikt over hvilke prosesser som er brukt i{" "}
-            <strong className="text-foreground font-medium">vurderinger</strong>{" "}
-            (utkastets prosess-ID) og som har{" "}
-            <strong className="text-foreground font-medium">ROS-analyse</strong>{" "}
-            knyttet til seg.{" "}
-            Bruk knappene{" "}
-            <span className="text-foreground font-medium">Start vurdering</span>{" "}
-            eller{" "}
-            <span className="text-foreground font-medium">Åpne vurdering</span>{" "}
-            — kortet navigerer ikke ved klikk.{" "}
-            <span className="text-foreground font-medium">Se full oversikt</span>{" "}
-            viser alle lenker og ROS. Medlemmer kan slette prosessen med{" "}
-            <span className="text-foreground font-medium">Slett prosess</span>{" "}
-            (også i detaljdialogen).
-          </p>
         </div>
         <FilterToolbar className="w-full sm:ml-auto sm:max-w-2xl">
           <SearchInput
@@ -655,28 +613,28 @@ export function ProcessCoverageOverview({
                     ) : null}
                   </div>
 
-                  <div className="border-border/50 space-y-3 border-t pt-3">
-                    <div className="flex gap-2">
+                  <div className="border-border/50 space-y-2.5 border-t pt-3">
+                    <div
+                      className="flex gap-2.5"
+                      role="group"
+                      aria-label="PVV-vurderinger"
+                    >
                       <div className="bg-primary/10 text-primary flex size-8 shrink-0 items-center justify-center rounded-lg">
                         <ClipboardList className="size-4" aria-hidden />
                       </div>
-                      <div className="min-w-0 flex-1 space-y-1">
-                        <p className="text-muted-foreground text-[11px] font-semibold uppercase tracking-wide">
-                          PVV-vurdering
-                        </p>
+                      <div className="min-w-0 flex-1">
                         {c.pvv.count === 0 ? (
                           <p className="text-muted-foreground text-sm">
-                            Ikke koblet i utkast ennå
+                            Ingen vurdering
                           </p>
                         ) : (
-                          <p className="text-foreground text-sm">
+                          <p className="text-foreground text-sm tabular-nums">
                             {c.pvv.count === 1
                               ? "1 vurdering"
                               : `${c.pvv.count} vurderinger`}
                             {c.pvv.latestAt != null ? (
                               <span className="text-muted-foreground">
-                                {" "}
-                                · sist aktivitet{" "}
+                                {" · "}
                                 {formatRelativeUpdatedAt(c.pvv.latestAt)}
                               </span>
                             ) : null}
@@ -685,27 +643,25 @@ export function ProcessCoverageOverview({
                       </div>
                     </div>
 
-                    <div className="flex gap-2">
+                    <div
+                      className="flex gap-2.5"
+                      role="group"
+                      aria-label="ROS-analyser"
+                    >
                       <div className="bg-emerald-500/12 text-emerald-800 dark:text-emerald-200 flex size-8 shrink-0 items-center justify-center rounded-lg">
                         <Shield className="size-4" aria-hidden />
                       </div>
-                      <div className="min-w-0 flex-1 space-y-1">
-                        <p className="text-muted-foreground text-[11px] font-semibold uppercase tracking-wide">
-                          ROS
-                        </p>
+                      <div className="min-w-0 flex-1">
                         {c.ros.count === 0 ? (
-                          <p className="text-muted-foreground text-sm">
-                            Ingen analyse knyttet til prosessen
-                          </p>
+                          <p className="text-muted-foreground text-sm">Ingen ROS</p>
                         ) : (
-                          <p className="text-foreground text-sm">
+                          <p className="text-foreground text-sm tabular-nums">
                             {c.ros.count === 1
                               ? "1 analyse"
                               : `${c.ros.count} analyser`}
                             {c.ros.latestAt != null ? (
                               <span className="text-muted-foreground">
-                                {" "}
-                                · sist oppdatert{" "}
+                                {" · "}
                                 {formatRelativeUpdatedAt(c.ros.latestAt)}
                               </span>
                             ) : null}
@@ -741,7 +697,7 @@ export function ProcessCoverageOverview({
                       className="h-11 min-h-[44px] w-full text-[13px] font-medium sm:h-10 sm:min-h-0"
                       onClick={() => setDetail(c)}
                     >
-                      Se full oversikt
+                      Detaljer
                     </Button>
                     {canCreatePvv ? (
                       <Button
@@ -749,6 +705,8 @@ export function ProcessCoverageOverview({
                         variant="outline"
                         className="text-destructive hover:bg-destructive/10 h-11 min-h-[44px] w-full gap-2 border-destructive/35 text-[13px] font-medium sm:h-10 sm:min-h-0"
                         disabled={deleteBusyId === c.candidateId}
+                        title={`Slett prosess ${c.code} fra registeret`}
+                        aria-label={`Slett prosess ${c.code}`}
                         onClick={() => void deleteProcess(c)}
                       >
                         {deleteBusyId === c.candidateId ? (
@@ -759,7 +717,7 @@ export function ProcessCoverageOverview({
                         ) : (
                           <Trash2 className="size-4 shrink-0" aria-hidden />
                         )}
-                        Slett prosess
+                        Slett
                       </Button>
                     ) : null}
                   </div>

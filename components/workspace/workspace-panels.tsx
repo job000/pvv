@@ -13,6 +13,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { NativeSelectField } from "@/components/ui/native-select-field";
 import { SearchInput } from "@/components/ui/search-input";
+import { FilterToolbar } from "@/components/ui/filter-toolbar";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
@@ -785,6 +786,7 @@ export function WorkspaceCandidatesPanel({
   const [newProcessOpen, setNewProcessOpen] = useState(false);
   const [autoGhHelpOpen, setAutoGhHelpOpen] = useState(false);
   const [processRegHelpOpen, setProcessRegHelpOpen] = useState(false);
+  const [processRegisterSearch, setProcessRegisterSearch] = useState("");
 
   type GithubPreviewData = {
     title: string;
@@ -1133,6 +1135,33 @@ export function WorkspaceCandidatesPanel({
     );
   }, [candidates]);
 
+  const processRegisterSearchQuery = processRegisterSearch.trim().toLowerCase();
+
+  const approvedIntakeFiltered = useMemo(() => {
+    const rows = approvedIntakeForProcessregister ?? [];
+    if (!processRegisterSearchQuery) {
+      return rows;
+    }
+    return rows.filter((r) =>
+      r.title.toLowerCase().includes(processRegisterSearchQuery),
+    );
+  }, [approvedIntakeForProcessregister, processRegisterSearchQuery]);
+
+  const candidatesFiltered = useMemo(() => {
+    if (!processRegisterSearchQuery) {
+      return candidatesSorted;
+    }
+    const units = orgUnits ?? [];
+    return candidatesSorted.filter((c) => {
+      const org = candidateOrgUnitLabel(c, units);
+      return (
+        c.name.toLowerCase().includes(processRegisterSearchQuery) ||
+        c.code.toLowerCase().includes(processRegisterSearchQuery) ||
+        org.toLowerCase().includes(processRegisterSearchQuery)
+      );
+    });
+  }, [candidatesSorted, processRegisterSearchQuery, orgUnits]);
+
   const projectItemIdsLinkedInPvv = useMemo(() => {
     const s = new Set<string>();
     if (!candidates) {
@@ -1189,7 +1218,13 @@ export function WorkspaceCandidatesPanel({
     workspace === undefined ||
     approvedIntakeForProcessregister === undefined
   ) {
-    return <p className="text-muted-foreground text-sm">Laster …</p>;
+    return (
+      <div className="space-y-4" aria-busy>
+        <div className="bg-muted/50 h-9 max-w-md animate-pulse rounded-xl" />
+        <div className="bg-muted/40 h-36 animate-pulse rounded-2xl" />
+        <div className="bg-muted/30 h-48 animate-pulse rounded-2xl" />
+      </div>
+    );
   }
 
   if (workspace === null) {
@@ -1607,57 +1642,73 @@ export function WorkspaceCandidatesPanel({
   const canCreateGithubRepoIssue =
     canQuickAddGithubCard && hasDefaultGithubRepo;
 
+  const statusLine =
+    !canEditCandidates
+      ? "Kun lesing"
+      : candidates.length > 0 && approvedIntakeForProcessregister.length > 0
+        ? `${candidates.length} prosess${candidates.length !== 1 ? "er" : ""} · ${approvedIntakeForProcessregister.length} fra skjema`
+        : candidates.length > 0
+          ? `${candidates.length} prosess${candidates.length !== 1 ? "er" : ""}`
+          : approvedIntakeForProcessregister.length > 0
+            ? `${approvedIntakeForProcessregister.length} fra skjema (ingen P-ID ennå)`
+            : "Ingen registrerte rader ennå";
+
   return (
     <Card
       className={cn(
-        "overflow-hidden rounded-2xl border-0 shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.06]",
-        hubMode && "ring-emerald-500/15",
+        "overflow-hidden rounded-2xl border border-border/40 bg-card shadow-none",
+        !hubMode &&
+          "border-0 shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.06]",
       )}
     >
-      <CardHeader
-        data-tutorial-anchor={
-          hubMode ? "prosess-oversikt-header" : undefined
-        }
-        className="pb-5 pt-6 px-6"
-      >
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <div className="bg-emerald-500/10 flex size-10 items-center justify-center rounded-xl">
-              <Users className="text-emerald-600 dark:text-emerald-400 size-5" aria-hidden />
-            </div>
-            <div>
-              <CardTitle className="text-lg font-semibold tracking-tight">
-                Prosessregister
-              </CardTitle>
-              <p className="text-muted-foreground text-xs mt-0.5">
-                {!canEditCandidates
-                  ? "Lesertilgang"
-                  : candidates.length > 0 &&
-                      approvedIntakeForProcessregister.length > 0
-                    ? `${candidates.length} prosess${candidates.length !== 1 ? "er" : ""} registrert · ${approvedIntakeForProcessregister.length} godkjent fra skjema`
-                    : candidates.length > 0
-                      ? `${candidates.length} prosess${candidates.length !== 1 ? "er" : ""} registrert`
-                      : approvedIntakeForProcessregister.length > 0
-                        ? `Ingen prosess-ID ennå — ${approvedIntakeForProcessregister.length} godkjent fra skjema`
-                        : "Kom i gang ved å opprette eller importere en prosess"}
-              </p>
-            </div>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              className="text-muted-foreground hover:text-foreground size-8"
-              title="Hjelp"
-              onClick={() => setProcessRegHelpOpen(true)}
-            >
-              <HelpCircle className="size-4" aria-hidden />
-            </Button>
-          </div>
+      {hubMode ? (
+        <div
+          data-tutorial-anchor="prosess-oversikt-header"
+          className="text-muted-foreground flex flex-wrap items-center justify-between gap-2 border-b border-border/40 px-5 py-3 text-xs sm:px-6 sm:text-sm"
+        >
+          <span>{statusLine}</span>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="text-muted-foreground hover:text-foreground h-8 gap-1 px-2 text-xs"
+            title="Kort om registeret"
+            onClick={() => setProcessRegHelpOpen(true)}
+          >
+            <HelpCircle className="size-3.5" aria-hidden />
+            Om registeret
+          </Button>
         </div>
-      </CardHeader>
-      <CardContent className="space-y-6 px-6 pb-6">
+      ) : (
+        <CardHeader className="px-6 pb-5 pt-6">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className="bg-emerald-500/10 flex size-10 items-center justify-center rounded-xl">
+                <Users className="text-emerald-600 dark:text-emerald-400 size-5" aria-hidden />
+              </div>
+              <div>
+                <CardTitle className="text-lg font-semibold tracking-tight">
+                  Prosessregister
+                </CardTitle>
+                <p className="text-muted-foreground mt-0.5 text-xs">{statusLine}</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="text-muted-foreground hover:text-foreground size-8"
+                title="Hjelp"
+                onClick={() => setProcessRegHelpOpen(true)}
+              >
+                <HelpCircle className="size-4" aria-hidden />
+              </Button>
+            </div>
+          </div>
+        </CardHeader>
+      )}
+      <CardContent className={cn("space-y-6 px-5 pb-6 pt-5 sm:px-6", hubMode && "pt-4")}>
         {hubMode ? (
           <ProsessregisterHubLead
             canEdit={Boolean(canEditCandidates)}
@@ -1682,17 +1733,30 @@ export function WorkspaceCandidatesPanel({
             data-tutorial-anchor="prosess-oversikt-liste"
           >
             {hubMode ? (
-              <div className="space-y-1">
-                <h2
-                  id="prosessregister-oversikt-heading"
-                  className="text-foreground text-lg font-semibold tracking-tight"
-                >
-                  Oversikt
-                </h2>
-                <p className="text-muted-foreground text-xs leading-relaxed">
-                  Godkjente skjemaforslag blir til vurderinger (uten egen P-ID). Registrerte prosesser
-                  har kode i registeret — som på vurderings- og ROS-sidene.
-                </p>
+              <div className="space-y-3">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+                  <div className="min-w-0 space-y-1">
+                    <h2
+                      id="prosessregister-oversikt-heading"
+                      className="text-foreground text-base font-semibold tracking-tight"
+                    >
+                      Dine rader
+                    </h2>
+                    <p className="text-muted-foreground text-xs leading-relaxed">
+                      Skjemavurderinger uten egen P-ID vises først. Registrerte prosesser har ID som brukes i vurdering og ROS.
+                    </p>
+                  </div>
+                  {candidates.length > 0 ||
+                  approvedIntakeForProcessregister.length > 0 ? (
+                    <SearchInput
+                      value={processRegisterSearch}
+                      onChange={(e) => setProcessRegisterSearch(e.target.value)}
+                      placeholder="Søk etter navn, ID eller enhet …"
+                      className="h-10 w-full min-w-0 rounded-xl sm:max-w-xs"
+                      aria-label="Søk i prosesser og skjemavurderinger"
+                    />
+                  ) : null}
+                </div>
               </div>
             ) : (
               <h2
@@ -1707,18 +1771,31 @@ export function WorkspaceCandidatesPanel({
               </h2>
             )}
 
-            {approvedIntakeForProcessregister.length > 0 ? (
+            {processRegisterSearchQuery &&
+            approvedIntakeFiltered.length === 0 &&
+            candidatesFiltered.length === 0 &&
+            (approvedIntakeForProcessregister.length > 0 ||
+              candidates.length > 0) ? (
+              <p
+                className="text-muted-foreground py-6 text-center text-sm"
+                role="status"
+              >
+                Ingen treff — prøv et annet søk.
+              </p>
+            ) : null}
+
+            {approvedIntakeFiltered.length > 0 ? (
               <div className="space-y-2">
                 {hubMode ? (
-                  <h3 className="text-muted-foreground text-[11px] font-semibold uppercase tracking-[0.12em]">
-                    Fra skjema (godkjent) · {approvedIntakeForProcessregister.length}
+                  <h3 className="text-muted-foreground text-xs font-medium">
+                    Fra skjema · {approvedIntakeFiltered.length}
                   </h3>
                 ) : null}
                 <div className="space-y-2">
-                  {approvedIntakeForProcessregister.map((row) => (
+                  {approvedIntakeFiltered.map((row) => (
                     <div
                       key={row.submissionId}
-                      className="flex items-center gap-2 rounded-2xl bg-card p-3 pr-2 shadow-sm ring-1 ring-black/[0.04] transition-all duration-200 hover:shadow-md hover:ring-black/[0.08] sm:gap-3 sm:p-4 dark:ring-white/[0.06] dark:hover:ring-white/[0.12]"
+                      className="border-border/40 bg-card/80 hover:border-border/60 flex items-center gap-2 rounded-xl border p-3 pr-2 transition-colors sm:gap-3 sm:p-3.5"
                     >
                       <Link
                         href={`/w/${workspaceId}/a/${row.approvedAssessmentId}`}
@@ -1769,15 +1846,19 @@ export function WorkspaceCandidatesPanel({
               </div>
             ) : null}
 
-            {candidates.length > 0 ? (
+            {candidatesFiltered.length > 0 ? (
               <div className="space-y-2">
                 {hubMode ? (
-                  <h3 className="text-muted-foreground text-[11px] font-semibold uppercase tracking-[0.12em]">
-                    Registrerte prosesser (P-ID) · {candidates.length}
+                  <h3 className="text-muted-foreground text-xs font-medium">
+                    Med prosess-ID · {candidatesFiltered.length}
+                    {processRegisterSearchQuery &&
+                    candidatesFiltered.length !== candidates.length
+                      ? ` av ${candidates.length}`
+                      : null}
                   </h3>
                 ) : null}
                 <div className="space-y-2">
-                  {candidatesSorted.map((c) => {
+                  {candidatesFiltered.map((c) => {
                     const hasGithub = Boolean(c.githubProjectItemNodeId);
                     const canPreviewGh =
                       c.githubRepoFullName &&
@@ -1786,7 +1867,7 @@ export function WorkspaceCandidatesPanel({
                     return (
                       <div
                         key={c._id}
-                        className="group flex cursor-pointer items-center gap-4 rounded-2xl bg-card p-4 shadow-sm ring-1 ring-black/[0.04] transition-all duration-200 hover:shadow-md hover:ring-black/[0.08] active:scale-[0.995] dark:ring-white/[0.06] dark:hover:ring-white/[0.12]"
+                        className="border-border/40 bg-card/80 hover:border-border/60 group flex cursor-pointer items-center gap-3 rounded-xl border p-3.5 transition-colors sm:gap-4 sm:p-4"
                         onClick={() => setEditCandidateId(c._id)}
                       >
                         <div className="min-w-0 flex-1">
@@ -1891,11 +1972,16 @@ export function WorkspaceCandidatesPanel({
         {canEditCandidates ? (
           <div
             data-tutorial-anchor="github-prosess"
-            className="rounded-2xl bg-muted/20 p-4"
+            className="rounded-2xl border border-border/40 bg-muted/[0.08] p-4 sm:p-5"
           >
+            {hubMode ? (
+              <h2 className="text-foreground mb-3 text-sm font-semibold tracking-tight">
+                Legg til eller importer
+              </h2>
+            ) : null}
             {/* Top-level tabs: GitHub vs Manual */}
             <div
-              className="mb-4 flex gap-0.5 rounded-xl bg-muted/50 p-1"
+              className="mb-4 flex gap-1 rounded-xl border border-border/35 bg-muted/25 p-1"
               role="tablist"
               aria-label="Opprett prosess"
             >
@@ -1904,30 +1990,30 @@ export function WorkspaceCandidatesPanel({
                 role="tab"
                 aria-selected={createTab === "github"}
                 className={cn(
-                  "flex flex-1 items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-all duration-150",
+                  "flex flex-1 items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors sm:py-2",
                   createTab === "github"
-                    ? "bg-card text-foreground shadow-sm"
+                    ? "bg-background text-foreground shadow-sm ring-1 ring-border/40"
                     : "text-muted-foreground hover:text-foreground",
                 )}
                 onClick={() => setCreateTab("github")}
               >
-                <GitBranch className="size-4" aria-hidden />
-                Importer fra GitHub
+                <GitBranch className="size-4 shrink-0 opacity-80" aria-hidden />
+                GitHub
               </button>
               <button
                 type="button"
                 role="tab"
                 aria-selected={createTab === "manual"}
                 className={cn(
-                  "flex flex-1 items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-all duration-150",
+                  "flex flex-1 items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors sm:py-2",
                   createTab === "manual"
-                    ? "bg-card text-foreground shadow-sm"
+                    ? "bg-background text-foreground shadow-sm ring-1 ring-border/40"
                     : "text-muted-foreground hover:text-foreground",
                 )}
                 onClick={() => setCreateTab("manual")}
               >
-                <Plus className="size-4" aria-hidden />
-                Opprett manuelt
+                <Plus className="size-4 shrink-0 opacity-80" aria-hidden />
+                Manuelt
               </button>
             </div>
 
@@ -2327,7 +2413,7 @@ export function WorkspaceCandidatesPanel({
         githubProjectStatus.options &&
         githubProjectStatus.options.length > 0 ? (
           <section
-            className="rounded-2xl bg-muted/15 p-5"
+            className="rounded-2xl border border-border/40 bg-muted/[0.06] p-4 sm:p-5"
             aria-labelledby="auto-github-heading"
           >
             <div className="flex items-center justify-between gap-2">
@@ -3398,23 +3484,23 @@ export function WorkspaceCandidatesPanel({
         {candidates.length === 0 && approvedIntakeForProcessregister.length === 0 ? (
           <div
             data-tutorial-anchor="prosess-oversikt-liste"
-            className="flex flex-col items-center rounded-2xl bg-muted/15 px-6 py-14 text-center"
+            className="flex flex-col items-center rounded-2xl border border-dashed border-border/50 bg-muted/[0.04] px-6 py-12 text-center sm:py-14"
           >
-            <div className="mb-4 flex size-14 items-center justify-center rounded-2xl bg-emerald-500/10">
-              <Users className="text-emerald-600 dark:text-emerald-400 size-6" aria-hidden />
+            <div className="bg-muted/50 mb-4 flex size-12 items-center justify-center rounded-2xl">
+              <Users className="text-muted-foreground size-5" aria-hidden />
             </div>
-            <p className="text-foreground text-base font-semibold">
-              Ingen prosesser eller skjemavurderinger ennå
+            <p className="text-foreground text-base font-semibold tracking-tight">
+              Ingen rader ennå
             </p>
-            <p className="text-muted-foreground mt-1.5 max-w-xs text-sm">
-              Opprett prosess manuelt, importer fra GitHub, eller bruk skjemaer for å samle forslag
-              som blir vurderinger.
+            <p className="text-muted-foreground mx-auto mt-2 max-w-sm text-sm leading-relaxed">
+              Opprett en prosess med ID, importer fra GitHub nedenfor, eller bruk skjemaer — godkjente
+              forslag dukker opp her som vurderinger.
             </p>
-            <div className="mt-6 flex gap-3">
+            <div className="mt-6 flex flex-wrap items-center justify-center gap-2">
               {canEditCandidates ? (
                 <Button
                   type="button"
-                  className="h-10 gap-2 rounded-xl px-5 shadow-sm"
+                  className="h-10 gap-2 rounded-xl px-5 shadow-none"
                   onClick={() => setNewProcessOpen(true)}
                 >
                   <Plus className="size-4 shrink-0" aria-hidden />
@@ -3426,10 +3512,10 @@ export function WorkspaceCandidatesPanel({
                   href={`/w/${workspaceId}/vurderinger`}
                   className={cn(
                     buttonVariants({ variant: "outline", size: "default" }),
-                    "h-10 rounded-xl px-5",
+                    "h-10 rounded-xl border-border/50 px-5 shadow-none",
                   )}
                 >
-                  Gå til vurderinger
+                  Til vurderinger
                 </Link>
               ) : null}
             </div>
@@ -3556,7 +3642,16 @@ export function WorkspaceAssessmentsPanel({
   }, [filteredAssessments]);
 
   if (workspace === undefined || assessments === undefined || orgUnits === undefined) {
-    return <p className="text-muted-foreground text-sm">Laster …</p>;
+    return (
+      <div className="space-y-4" aria-busy>
+        <div className="bg-muted/50 h-24 animate-pulse rounded-2xl" />
+        <div className="bg-muted/40 h-10 max-w-md animate-pulse rounded-xl" />
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div className="bg-muted/35 h-40 animate-pulse rounded-2xl" />
+          <div className="bg-muted/35 h-40 animate-pulse rounded-2xl" />
+        </div>
+      </div>
+    );
   }
   if (workspace === null) {
     return (
@@ -3571,135 +3666,141 @@ export function WorkspaceAssessmentsPanel({
 
   return (
     <div className="space-y-6">
-      <GithubIssueStartCard workspaceId={workspaceId} variant="assessment" />
+      {assessments.length > 0 ? (
+        <details className="border-border/40 bg-card/30 group rounded-2xl border open:bg-card/45">
+          <summary className="hover:bg-muted/20 cursor-pointer list-none rounded-2xl px-4 py-3.5 text-sm font-medium transition-colors [&::-webkit-details-marker]:hidden">
+            <span className="inline-flex w-full items-center justify-between gap-2">
+              <span>Ny vurdering eller fortsett fra GitHub / prosess</span>
+              <ChevronRight className="text-muted-foreground size-4 shrink-0 transition-transform group-open:rotate-90" />
+            </span>
+          </summary>
+          <div className="border-border/40 border-t px-2 pb-3 pt-1 sm:px-3">
+            <GithubIssueStartCard workspaceId={workspaceId} variant="assessment" />
+          </div>
+        </details>
+      ) : (
+        <GithubIssueStartCard workspaceId={workspaceId} variant="assessment" />
+      )}
 
       <section
-        className="space-y-3"
+        className="space-y-4"
         role="region"
         aria-labelledby="vurderinger-liste-heading"
       >
-        <div className="flex items-center justify-between gap-3">
-          <h2
-            id="vurderinger-liste-heading"
-            className="text-foreground text-lg font-semibold tracking-tight"
-          >
-            {assessments.length === 0 ? (
-              "Dine vurderinger"
-            ) : (
-              <>
-                Dine vurderinger
-                <span className="text-muted-foreground ml-2 text-sm font-normal tabular-nums">
-                  ({assessments.length})
-                </span>
-              </>
-            )}
-          </h2>
-        </div>
+        <h2
+          id="vurderinger-liste-heading"
+          className="text-foreground text-base font-semibold tracking-tight sm:text-lg"
+        >
+          {assessments.length === 0 ? (
+            "Listen"
+          ) : (
+            <>
+              Listen
+              <span className="text-muted-foreground ml-2 text-sm font-normal tabular-nums">
+                · {assessments.length}
+              </span>
+            </>
+          )}
+        </h2>
 
         {assessments.length > 0 ? (
-          <div className="flex flex-col gap-3">
+          <FilterToolbar>
             <SearchInput
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Søk i tittel eller organisasjon …"
+              placeholder="Søk tittel eller enhet …"
               aria-label="Søk i vurderinger"
+              className="min-w-0 flex-1 sm:min-w-[12rem] sm:max-w-xs"
             />
-            <div className="grid grid-cols-1 gap-3 min-[480px]:grid-cols-2 xl:grid-cols-3">
-              <NativeSelectField
-                id="assessment-org-filter"
-                label="Organisasjon"
-                value={orgUnitFilter}
-                onChange={(e) =>
-                  setOrgUnitFilter(
-                    e.target.value === "" ? "" : (e.target.value as Id<"orgUnits">),
-                  )
-                }
-                aria-label="Filtrer etter organisasjonsenhet"
-              >
-                <option value="">Alle enheter</option>
-                {orgUnits.map((u) => (
-                  <option key={u._id} value={u._id}>
-                    {u.name}
-                  </option>
-                ))}
-              </NativeSelectField>
-              <NativeSelectField
-                id="assessment-sort"
-                label="Sorter"
-                value={sortBy}
-                onChange={(e) =>
-                  setSortBy(
-                    e.target.value as
-                      | "priority"
-                      | "updated"
-                      | "ap"
-                      | "criticality"
-                      | "ease",
-                  )
-                }
-                aria-label="Sorter vurderinger"
-              >
-                <option value="priority">Prioritet</option>
-                <option value="ap">Gevinst (AP)</option>
-                <option value="criticality">Viktighet</option>
-                <option value="ease">Implementering</option>
-                <option value="updated">Sist oppdatert</option>
-              </NativeSelectField>
-              <NativeSelectField
-                id="assessment-status-filter"
-                label="Status"
-                value={statusFilter}
-                onChange={(e) =>
-                  setStatusFilter(e.target.value as PipelineStatus | "all")
-                }
-                aria-label="Filtrer etter status"
-                className="min-[480px]:col-span-2 xl:col-span-1"
-              >
-                <option value="all">Alle statuser</option>
-                {PIPELINE_KANBAN_ORDER.map((s) => (
-                  <option key={s} value={s}>
-                    {PIPELINE_STATUS_LABELS[s]}
-                  </option>
-                ))}
-              </NativeSelectField>
-            </div>
-          </div>
+            <NativeSelectField
+              id="assessment-org-filter"
+              label="Enhet"
+              value={orgUnitFilter}
+              onChange={(e) =>
+                setOrgUnitFilter(
+                  e.target.value === "" ? "" : (e.target.value as Id<"orgUnits">),
+                )
+              }
+              aria-label="Filtrer etter organisasjonsenhet"
+              className="w-full min-w-0 sm:w-[min(100%,11rem)]"
+            >
+              <option value="">Alle</option>
+              {orgUnits.map((u) => (
+                <option key={u._id} value={u._id}>
+                  {u.name}
+                </option>
+              ))}
+            </NativeSelectField>
+            <NativeSelectField
+              id="assessment-sort"
+              label="Sorter"
+              value={sortBy}
+              onChange={(e) =>
+                setSortBy(
+                  e.target.value as
+                    | "priority"
+                    | "updated"
+                    | "ap"
+                    | "criticality"
+                    | "ease",
+                )
+              }
+              aria-label="Sorter vurderinger"
+              className="w-full min-w-0 sm:w-[min(100%,11rem)]"
+            >
+              <option value="priority">Prioritet</option>
+              <option value="ap">Gevinst</option>
+              <option value="criticality">Viktighet</option>
+              <option value="ease">Implementering</option>
+              <option value="updated">Sist endret</option>
+            </NativeSelectField>
+            <NativeSelectField
+              id="assessment-status-filter"
+              label="Status"
+              value={statusFilter}
+              onChange={(e) =>
+                setStatusFilter(e.target.value as PipelineStatus | "all")
+              }
+              aria-label="Filtrer etter status"
+              className="w-full min-w-0 sm:w-[min(100%,12rem)]"
+            >
+              <option value="all">Alle</option>
+              {PIPELINE_KANBAN_ORDER.map((s) => (
+                <option key={s} value={s}>
+                  {PIPELINE_STATUS_LABELS[s]}
+                </option>
+              ))}
+            </NativeSelectField>
+          </FilterToolbar>
         ) : null}
 
         {assessments.length > 0 &&
         filteredAssessments.length > 0 &&
         hasActiveFilter ? (
-          <div className="text-muted-foreground flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px]">
-            <span className="tabular-nums">{filteredAssessments.length} treff</span>
-            <span className="text-border">·</span>
-            <span className="text-emerald-800 dark:text-emerald-200">
-              Høy {priorityDistribution.high}
-            </span>
-            <span className="text-amber-800 dark:text-amber-200">
-              Mid. {priorityDistribution.mid}
-            </span>
-            <span>Lav {priorityDistribution.low}</span>
-          </div>
+          <p className="text-muted-foreground text-xs tabular-nums">
+            {filteredAssessments.length} treff
+            <span className="text-border mx-1.5">·</span>
+            Høy {priorityDistribution.high} · Mid {priorityDistribution.mid} · Lav{" "}
+            {priorityDistribution.low}
+          </p>
         ) : null}
 
         {assessments.length === 0 ? (
-          <div className="flex flex-col items-center rounded-2xl bg-muted/15 px-6 py-14 text-center">
-            <div className="mb-4 flex size-14 items-center justify-center rounded-2xl bg-primary/10">
-              <Sparkles className="text-primary size-6" aria-hidden />
+          <div className="flex flex-col items-center rounded-2xl border border-dashed border-border/50 bg-muted/[0.04] px-6 py-12 text-center sm:py-14">
+            <div className="bg-muted/50 mb-3 flex size-12 items-center justify-center rounded-2xl">
+              <Sparkles className="text-muted-foreground size-5" aria-hidden />
             </div>
-            <p className="text-foreground text-base font-semibold">
+            <p className="text-foreground text-base font-semibold tracking-tight">
               Ingen vurderinger ennå
             </p>
-            <p className="text-muted-foreground mt-1.5 max-w-xs text-sm">
-              Bruk «Ny vurdering» over.
+            <p className="text-muted-foreground mx-auto mt-2 max-w-sm text-sm leading-relaxed">
+              Start med skjemaet over — du kan koble til prosess eller opprette frittstående.
             </p>
           </div>
         ) : filteredAssessments.length === 0 ? (
-          <div className="flex flex-col items-center rounded-2xl bg-muted/10 px-6 py-10 text-center">
+          <div className="flex flex-col items-center rounded-2xl border border-dashed border-border/40 px-6 py-10 text-center">
             <Search className="text-muted-foreground mb-2 size-5" aria-hidden />
-            <p className="text-muted-foreground text-sm">
-              Ingen treff — prøv et annet søk eller fjern filter.
-            </p>
+            <p className="text-muted-foreground text-sm">Ingen treff for filteret.</p>
           </div>
         ) : (
           <ul className="grid gap-3 sm:grid-cols-2">
@@ -3709,6 +3810,7 @@ export function WorkspaceAssessmentsPanel({
               const ap = a.cachedAp;
               const crit = a.cachedCriticality;
               const band = priorityBandLabel(prio);
+              const orgLine = orgUnitSearchLabel(a.orgUnitId ?? undefined, orgUnits);
               const hasModelScores =
                 ap !== undefined &&
                 ap !== null &&
@@ -3720,28 +3822,32 @@ export function WorkspaceAssessmentsPanel({
                 <li key={a._id} className="group/card relative">
                   <div
                     className={cn(
-                      "relative overflow-hidden rounded-2xl bg-card p-4 shadow-sm ring-1 ring-black/[0.04] transition-all duration-200 hover:shadow-md hover:ring-black/[0.08] active:scale-[0.995] dark:ring-white/[0.06] dark:hover:ring-white/[0.12]",
-                      "border-l-[3px]",
+                      "border-border/40 bg-card/80 hover:border-border/55 relative overflow-hidden rounded-xl border border-l-[3px] p-3.5 transition-colors sm:p-4",
                       priorityBorderAccentClass(prio),
                     )}
                   >
                     <Link
                       href={`/w/${workspaceId}/a/${a._id}`}
-                      className="absolute inset-0 z-0 rounded-2xl"
+                      className="absolute inset-0 z-0 rounded-xl"
                       aria-label={`Åpne vurdering: ${a.title}`}
                     />
                     <div className="pointer-events-none relative z-10 flex flex-col gap-3">
                       <div className="flex items-start justify-between gap-2">
-                        <div className="min-w-0 flex-1 space-y-1.5">
+                        <div className="min-w-0 flex-1 space-y-1">
                           <p className="group-hover/card:text-primary min-w-0 text-sm font-semibold leading-snug transition-colors line-clamp-2">
                             {a.title}
                           </p>
+                          {orgLine ? (
+                            <p className="text-muted-foreground line-clamp-1 text-xs">
+                              {orgLine}
+                            </p>
+                          ) : null}
                           {intakeAssessmentIdSet.has(a._id) ? (
                             <Badge
                               variant="outline"
                               className="pointer-events-none border-primary/25 bg-primary/5 text-[10px] font-medium text-primary"
                             >
-                              Fra skjema
+                              Skjema
                             </Badge>
                           ) : null}
                         </div>
@@ -3805,8 +3911,8 @@ export function WorkspaceAssessmentsPanel({
                           easeLabel={a.cachedEaseLabel}
                         />
                       ) : (
-                        <p className="text-muted-foreground bg-muted/20 rounded-md px-2 py-1.5 text-[11px] leading-snug">
-                          Fullfør veiviseren for poeng.
+                        <p className="text-muted-foreground rounded-lg bg-muted/25 px-2 py-1.5 text-[11px]">
+                          Åpne veiviseren og lagre for å beregne poeng.
                         </p>
                       )}
 

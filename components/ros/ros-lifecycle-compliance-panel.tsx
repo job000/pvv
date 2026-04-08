@@ -22,6 +22,7 @@ import {
   type RosRequirementRef,
   type RosRequirementSource,
 } from "@/lib/ros-requirement-catalog";
+import { Badge } from "@/components/ui/badge";
 import { Plus, Trash2 } from "lucide-react";
 
 const SOURCE_OPTIONS: { value: RosRequirementSource; label: string }[] = [
@@ -41,6 +42,8 @@ type Props = {
   axisScaleNotes: string;
   complianceScopeTags: string[];
   requirementRefs: RosRequirementRef[];
+  /** Vises som informativ tag (satt ved opprettelse fra sektor-pakke) */
+  sectorPackLabel?: string | null;
   onChange: (patch: {
     methodologyStatement?: string;
     contextSummary?: string;
@@ -60,6 +63,7 @@ export function RosLifecycleCompliancePanel({
   axisScaleNotes,
   complianceScopeTags,
   requirementRefs,
+  sectorPackLabel,
   onChange,
 }: Props) {
   const toggleTag = (id: string) => {
@@ -90,6 +94,14 @@ export function RosLifecycleCompliancePanel({
 
   return (
     <div className="space-y-6">
+      {sectorPackLabel?.trim() ? (
+        <p className="text-muted-foreground flex flex-wrap items-center gap-2 text-xs">
+          <span>Sektor ved opprettelse:</span>
+          <Badge variant="secondary" className="font-normal">
+            {sectorPackLabel.trim()}
+          </Badge>
+        </p>
+      ) : null}
       <Alert>
         <AlertTitle className="text-sm">Produktomfang og ansvar</AlertTitle>
         <AlertDescription className="text-muted-foreground space-y-2 text-sm leading-relaxed">

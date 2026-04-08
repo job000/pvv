@@ -23,10 +23,12 @@ import {
   collectAllCellRiskPointsForPdf,
   collectIdentifiedRisksForPdf,
   flattenCellItemsMatrixToLegacyNotes,
+  maxRiskAmongDocumentedCells,
   newRosCellItemId,
   resizeCellItemsMatrix,
   type RosCellItem,
   type RosCellItemMatrix,
+  type RosPoolItem,
 } from "@/lib/ros-cell-items";
 import {
   DEFAULT_ROS_COL_LABELS,
@@ -42,6 +44,7 @@ import {
   type ComplianceStatusKey,
 } from "@/lib/helsesector-labels";
 import { ROS_PDD_ALIGNMENT_HINT_NB } from "@/lib/ros-compliance";
+import { getRosSectorPack } from "@/lib/ros-sector-packs";
 import { toast } from "@/lib/app-toast";
 import { toastDeleteWithUndo } from "@/lib/toast-delete-undo";
 import { cellRiskClass } from "@/lib/ros-risk-colors";
@@ -79,11 +82,27 @@ import {
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-
 function tsToDatetimeLocal(ms: number): string {
   const d = new Date(ms);
   const pad = (n: number) => String(n).padStart(2, "0");
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function formatRiskPoolLinesForPdf(pool: RosPoolItem[]): string[] {
+  return pool.map((it) => {
+    const zone =
+      it.status === "on_hold"
+        ? "På vent"
+        : it.status === "not_relevant"
+          ? "Ikke relevant"
+          : "I kø";
+    const bands = [it.economicBand, it.frequencyBand]
+      .map((s) => s?.trim())
+      .filter(Boolean)
+      .join(" · ");
+    const body = it.text.trim() || "(ingen tekst)";
+    return bands ? `${zone}: ${body} — ${bands}` : `${zone}: ${body}`;
+  });
 }
 
 const ROS_EDITOR_SECTIONS = [
@@ -121,8 +140,14 @@ function RiskSummaryBar({
       afterRowLabels,
       afterColLabels,
     );
-    const maxBefore = Math.max(0, ...matrixValues.flat());
-    const maxAfter = Math.max(0, ...matrixAfter.flat());
+    const maxBefore = maxRiskAmongDocumentedCells(
+      matrixValues,
+      cellItemsMatrix,
+    ).max;
+    const maxAfter = maxRiskAmongDocumentedCells(
+      matrixAfter,
+      cellItemsAfterMatrix,
+    ).max;
     const overallLevel = maxBefore >= 5 ? "Kritisk" : maxBefore >= 4 ? "Høy" : maxBefore >= 3 ? "Middels" : maxBefore >= 2 ? "Lav" : "Ingen";
     const overallColor = maxBefore >= 5 ? "text-red-600 dark:text-red-400" : maxBefore >= 4 ? "text-orange-600 dark:text-orange-400" : maxBefore >= 3 ? "text-amber-600 dark:text-amber-400" : "text-emerald-600 dark:text-emerald-400";
 
@@ -137,7 +162,16 @@ function RiskSummaryBar({
       overallLevel,
       overallColor,
     };
-  }, [cellItemsMatrix, matrixValues, matrixAfter, rowLabels, colLabels, afterRowLabels, afterColLabels]);
+  }, [
+    cellItemsMatrix,
+    cellItemsAfterMatrix,
+    matrixValues,
+    matrixAfter,
+    rowLabels,
+    colLabels,
+    afterRowLabels,
+    afterColLabels,
+  ]);
 
   if (stats.total === 0) return null;
 
@@ -205,7 +239,7 @@ function RiskSummaryBar({
           "flex size-10 shrink-0 items-center justify-center rounded-xl text-sm font-bold tabular-nums",
           cellRiskClass(stats.maxBefore),
         )}>
-          {stats.maxBefore}
+          {stats.maxBefore > 0 ? stats.maxBefore : "—"}
         </div>
         <div>
           <p className={cn("text-sm font-bold leading-tight", stats.overallColor)}>
@@ -399,6 +433,8 @@ export function RosAnalysisEditor({
   const [requirementRefs, setRequirementRefs] = useState<RosRequirementRef[]>(
     [],
   );
+  const [riskPoolBefore, setRiskPoolBefore] = useState<RosPoolItem[]>([]);
+  const [riskPoolAfter, setRiskPoolAfter] = useState<RosPoolItem[]>([]);
   const [orgUnitLocal, setOrgUnitLocal] = useState<Id<"orgUnits"> | "">("");
   const [matrix, setMatrix] = useState<number[][]>([]);
   const [cellItemsMatrix, setCellItemsMatrix] =
@@ -542,6 +578,12 @@ export function RosAnalysisEditor({
       data.requirementRefs
         ? data.requirementRefs.map((r) => ({ ...r }))
         : [],
+    );
+    setRiskPoolBefore(
+      (data.riskPoolBefore ?? []).map((x) => ({ ...x })),
+    );
+    setRiskPoolAfter(
+      (data.riskPoolAfter ?? []).map((x) => ({ ...x })),
     );
     setOrgUnitLocal(data.orgUnitId ?? "");
     setDirty(false);
@@ -1246,34 +1288,14 @@ export function RosAnalysisEditor({
     colLabelsAfterText,
   ]);
 
-  const activeMatrix = matrixView === "after" ? matrixAfter : matrix;
-
-  const matrixStats = useMemo(() => {
-    let max = 0;
-    let highOrCritical = 0;
-    for (const row of activeMatrix) {
-      for (const v of row) {
-        if (v > max) max = v;
-        if (v >= 4) highOrCritical += 1;
-      }
-    }
-    return { max, highOrCritical };
-  }, [activeMatrix]);
-
-  const statsFor = useCallback((m: number[][]) => {
-    let max = 0;
-    let highOrCritical = 0;
-    for (const row of m) {
-      for (const v of row) {
-        if (v > max) max = v;
-        if (v >= 4) highOrCritical += 1;
-      }
-    }
-    return { max, highOrCritical };
-  }, []);
-
-  const beforeStats = useMemo(() => statsFor(matrix), [matrix, statsFor]);
-  const afterStats = useMemo(() => statsFor(matrixAfter), [matrixAfter, statsFor]);
+  const beforeStats = useMemo(
+    () => maxRiskAmongDocumentedCells(matrix, cellItemsMatrix),
+    [matrix, cellItemsMatrix],
+  );
+  const afterStats = useMemo(
+    () => maxRiskAmongDocumentedCells(matrixAfter, cellItemsAfterMatrix),
+    [matrixAfter, cellItemsAfterMatrix],
+  );
 
   const pddAlignmentHint = useMemo(() => {
     if (!data) return false;
@@ -1426,6 +1448,8 @@ export function RosAnalysisEditor({
             complianceScopeTags.length === 0 ? null : complianceScopeTags,
           requirementRefs:
             cleanedRefs.length === 0 ? null : cleanedRefs,
+          riskPoolBefore,
+          riskPoolAfter,
           matrixValues: matrix,
           cellItems: cellItemsMatrix,
           matrixValuesAfter: matrixAfterToSave,
@@ -1504,6 +1528,8 @@ export function RosAnalysisEditor({
     axisScaleNotes,
     complianceScopeTags,
     requirementRefs,
+    riskPoolBefore,
+    riskPoolAfter,
     useSeparateAfterAxes,
     rowAxisTitleAfter,
     colAxisTitleAfter,
@@ -1670,6 +1696,9 @@ export function RosAnalysisEditor({
         ? rosTemplates.find((x) => x._id === data.templateId)?.name ?? null
         : null;
 
+    const riskPoolBeforeLines = formatRiskPoolLinesForPdf(riskPoolBefore);
+    const riskPoolAfterLines = formatRiskPoolLinesForPdf(riskPoolAfter);
+
     downloadRosAnalysisPdf({
       title: title.trim() || data.title,
       workspaceName: workspace?.name ?? null,
@@ -1709,6 +1738,14 @@ export function RosAnalysisEditor({
         identifiedRisks.length > 0 ? identifiedRisks : undefined,
       cellRiskPointsComplete:
         cellRiskPointsComplete.length > 0 ? cellRiskPointsComplete : undefined,
+      sectorPackLabel:
+        data.rosSectorPackId != null
+          ? getRosSectorPack(data.rosSectorPackId)?.name ?? null
+          : null,
+      riskPoolBeforeLines:
+        riskPoolBeforeLines.length > 0 ? riskPoolBeforeLines : undefined,
+      riskPoolAfterLines:
+        riskPoolAfterLines.length > 0 ? riskPoolAfterLines : undefined,
       linkedPvvTitles: data.linkedAssessments.map((l) => l.title),
       pvvLinksDetailed:
         pvvLinksDetailed.length > 0 ? pvvLinksDetailed : undefined,
@@ -1987,25 +2024,37 @@ export function RosAnalysisEditor({
                     {data.rowAxisTitle} × {data.colAxisTitle} — klikk celler for å redigere
                   </p>
                 </div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className={cn(
-                    "inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-semibold",
-                    cellRiskClass(beforeStats.max),
-                  )}>
-                    Før: {beforeStats.max}
-                  </span>
-                  <ArrowRight className="text-muted-foreground size-3" />
-                  <span className={cn(
-                    "inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-semibold",
-                    cellRiskClass(afterStats.max),
-                  )}>
-                    Etter: {afterStats.max}
-                  </span>
-                  {beforeStats.max > afterStats.max && (
-                    <span className="text-[11px] font-medium text-emerald-600 dark:text-emerald-400">
-                      ↓ Redusert
+                <div
+                  className="flex flex-col items-stretch gap-1 sm:items-end"
+                  title="Høyeste nivå kun i celler med risikotekst eller «Må håndteres» / «Følg med» (ikke bare farge i rutenettet)."
+                >
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span
+                      className={cn(
+                        "inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-semibold",
+                        cellRiskClass(beforeStats.max),
+                      )}
+                    >
+                      Før: {beforeStats.max > 0 ? beforeStats.max : "—"}
                     </span>
-                  )}
+                    <ArrowRight className="text-muted-foreground size-3" />
+                    <span
+                      className={cn(
+                        "inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-semibold",
+                        cellRiskClass(afterStats.max),
+                      )}
+                    >
+                      Etter: {afterStats.max > 0 ? afterStats.max : "—"}
+                    </span>
+                    {beforeStats.max > afterStats.max && (
+                      <span className="text-[11px] font-medium text-emerald-600 dark:text-emerald-400">
+                        ↓ Redusert
+                      </span>
+                    )}
+                  </div>
+                  <span className="text-muted-foreground text-[10px] leading-tight sm:text-right">
+                    Kun celler med dokumentert risiko
+                  </span>
                 </div>
               </div>
               <div className="flex flex-col gap-3 px-5 pb-4 sm:flex-row sm:flex-wrap sm:items-center sm:gap-2 sm:px-6">
@@ -2682,6 +2731,11 @@ export function RosAnalysisEditor({
           axisScaleNotes={axisScaleNotes}
           complianceScopeTags={complianceScopeTags}
           requirementRefs={requirementRefs}
+          sectorPackLabel={
+            data.rosSectorPackId
+              ? getRosSectorPack(data.rosSectorPackId)?.name ?? null
+              : null
+          }
           onChange={(patch) => {
             if (patch.methodologyStatement !== undefined) setMethodologyStatement(patch.methodologyStatement);
             if (patch.contextSummary !== undefined) setContextSummary(patch.contextSummary);

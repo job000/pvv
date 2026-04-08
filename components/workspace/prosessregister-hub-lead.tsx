@@ -51,18 +51,18 @@ export function ProsessregisterHubLead({ canEdit, onRegisterClick }: Props) {
     <>
       <div
         data-tutorial-anchor="hub-registrering"
-        className="flex flex-col gap-3 rounded-xl border border-border/60 bg-muted/20 px-3 py-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-2"
+        className="flex flex-col gap-3 rounded-2xl border border-border/40 bg-card/40 px-4 py-3.5 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-3"
       >
         <div className="flex min-w-0 flex-wrap items-center gap-2">
           {canEdit ? (
             <Button
               type="button"
               size="default"
-              className="gap-2"
+              className="gap-2 rounded-xl shadow-none"
               onClick={onRegisterClick}
             >
               <Plus className="size-4 shrink-0" aria-hidden />
-              Registrer ny prosess
+              Ny prosess
             </Button>
           ) : (
             <p className="text-muted-foreground text-sm">
@@ -72,8 +72,8 @@ export function ProsessregisterHubLead({ canEdit, onRegisterClick }: Props) {
           <Button
             type="button"
             variant="outline"
-            size="default"
-            className="gap-2"
+            size="sm"
+            className="gap-1.5 rounded-xl border-border/50 shadow-none"
             onClick={openTutorial}
             disabled={!tutorialAllowed}
             title={
@@ -82,18 +82,18 @@ export function ProsessregisterHubLead({ canEdit, onRegisterClick }: Props) {
                 : undefined
             }
           >
-            <BookOpen className="size-4 shrink-0" aria-hidden />
-            Vis veiledning
+            <BookOpen className="size-3.5 shrink-0 opacity-80" aria-hidden />
+            Veiledning
           </Button>
           <button
             type="button"
             onClick={() => setHelpOpen(true)}
             className={cn(
-              buttonVariants({ variant: "ghost", size: "default" }),
-              "gap-2 text-muted-foreground",
+              buttonVariants({ variant: "ghost", size: "sm" }),
+              "gap-1.5 rounded-xl text-muted-foreground",
             )}
           >
-            <CircleHelp className="size-4 shrink-0" aria-hidden />
+            <CircleHelp className="size-3.5 shrink-0 opacity-80" aria-hidden />
             Hjelp
           </button>
         </div>
@@ -101,7 +101,7 @@ export function ProsessregisterHubLead({ canEdit, onRegisterClick }: Props) {
           href="/bruker/innstillinger#veiledning-prosessregister"
           className="text-muted-foreground hover:text-foreground shrink-0 text-xs underline-offset-4 hover:underline sm:text-right"
         >
-          Innstillinger for veiledning
+          Veiledningsinnstillinger
         </Link>
       </div>
 

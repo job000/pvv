@@ -103,6 +103,11 @@ export type RosPdfInput = {
    * «Identifiserte risikoer» som følger flytting før→etter.
    */
   cellRiskPointsComplete?: RosCellRiskPointPdfRow[];
+  /** Lesbar sektor-pakke ved opprettelse */
+  sectorPackLabel?: string | null;
+  /** Kortlager (ikke plassert i matrise) — én linje per kort */
+  riskPoolBeforeLines?: string[];
+  riskPoolAfterLines?: string[];
   linkedPvvTitles: string[];
   /** Full tekst per PVV-kobling (fanen PVV-koblinger) */
   pvvLinksDetailed?: RosPdfPvvLinkDetail[];
@@ -528,6 +533,28 @@ export function downloadRosAnalysisPdf(data: RosPdfInput): void {
       y += 1;
     }
   }
+
+  if (data.sectorPackLabel?.trim()) {
+    y += 4;
+    addHeading("Sektor ved opprettelse", 11);
+    addPara(data.sectorPackLabel.trim(), 9);
+  }
+
+  const addPoolHeading = (heading: string, lines: string[] | undefined) => {
+    if (!lines || lines.length === 0) return;
+    y += 4;
+    addHeading(heading, 12);
+    addPara(
+      "Risikokort i kortlager (kø, på vent, ikke relevant) som ikke er plassert i matrisen.",
+      8,
+    );
+    for (const line of lines) {
+      addPara(`• ${line}`, 9);
+      y += 0.5;
+    }
+  };
+  addPoolHeading("Kortlager — før tiltak", data.riskPoolBeforeLines);
+  addPoolHeading("Kortlager — etter tiltak", data.riskPoolAfterLines);
 
   /** Risikologg: siste N hendelser, kronologisk (eldste først i utdraget). */
   const journalSorted = [...data.journalEntries].sort(

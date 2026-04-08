@@ -314,7 +314,7 @@ export const PROSESSREGISTER_TUTORIAL_STEPS: TutorialStep[] = [
     targetSelectors: ['[data-tutorial-anchor="pvv-ros"]'],
     title: "PVV og ROS per prosess",
     targetHint: "Kort og søk",
-    body: "Her ser du dekning per prosess: PVV-vurderinger og ROS-analyser. «Start vurdering» oppretter eller åpner vurdering med riktig prosess-ID. Søk og nedtrekkslisten «Organisasjon» filtrerer på navn, ID eller enhet.",
+    body: "Status per prosess for PVV og ROS. «Start/Åpne vurdering» bruker prosess-ID. Søk og «Organisasjon» filtrerer listen. «Detaljer» åpner full liste.",
   },
   {
     targetSelectors: [

@@ -39,6 +39,10 @@ import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import type { AssessmentPayload } from "@/lib/assessment-types";
 import {
+  derivedBaselineHoursFromPayload,
+  syncWorkloadDerivedFields,
+} from "@/lib/assessment-workload-sync";
+import {
   normalizePipelineStatus,
   nextStepHint,
   type PipelineStatus,
@@ -255,32 +259,6 @@ function annualCasesFromPayload(payload: AssessmentPayload): number | null {
   }
 }
 
-function derivedBaselineHoursFromPayload(
-  payload: AssessmentPayload,
-): number | null {
-  const annualCases = annualCasesFromPayload(payload);
-  const timePerCaseValue = effectiveTimePerCaseValue(payload);
-  if (
-    typeof timePerCaseValue === "number" &&
-    timePerCaseValue > 0 &&
-    annualCases !== null
-  ) {
-    const hoursPerCase =
-      effectiveTimePerCaseUnit(payload) === "hours"
-        ? timePerCaseValue
-        : timePerCaseValue / 60;
-    return roundKpiValue(hoursPerCase * annualCases);
-  }
-
-  const manualFteEstimate = payload.manualFteEstimate;
-  if (typeof manualFteEstimate === "number" && manualFteEstimate > 0) {
-    return roundKpiValue(
-      manualFteEstimate * payload.workingDays * payload.workingHoursPerDay,
-    );
-  }
-  return null;
-}
-
 function workloadSummaryFromPayload(payload: AssessmentPayload): {
   title: string;
   description: string;
@@ -316,19 +294,6 @@ function workloadSummaryFromPayload(payload: AssessmentPayload): {
   }
 
   return null;
-}
-
-function syncWorkloadDerivedFields(
-  payload: AssessmentPayload,
-): AssessmentPayload {
-  const derivedBaselineHours = derivedBaselineHoursFromPayload(payload);
-  if (derivedBaselineHours === null) {
-    return payload;
-  }
-  return {
-    ...payload,
-    baselineHours: derivedBaselineHours,
-  };
 }
 
 type Props = { assessmentId: Id<"assessments"> };
@@ -431,7 +396,9 @@ export function AssessmentWizard({ assessmentId }: Props) {
       const r = data?.draft?.revision ?? 0;
       draftRevisionRef.current = r;
       setDraftRevision(r);
-      return normalizeDraftPayload(draftPayload as AssessmentPayload);
+      return syncWorkloadDerivedFields(
+        normalizeDraftPayload(draftPayload as AssessmentPayload),
+      );
     });
   }, [data?.draft?.payload, data?.draft?._id, data?.draft?.revision]);
 
@@ -497,7 +464,7 @@ export function AssessmentWizard({ assessmentId }: Props) {
             let result = await saveDraft({
               assessmentId,
               expectedRevision: rev,
-              payload: p,
+              payload: syncWorkloadDerivedFields(p),
             });
             if (
               !result.ok &&
@@ -507,7 +474,7 @@ export function AssessmentWizard({ assessmentId }: Props) {
               result = await saveDraft({
                 assessmentId,
                 expectedRevision: result.conflict.serverRevision,
-                payload: p,
+                payload: syncWorkloadDerivedFields(p),
               });
             }
             if (result.ok) {
@@ -544,14 +511,22 @@ export function AssessmentWizard({ assessmentId }: Props) {
     const draftPayload = data?.draft?.payload;
     if (!draftPayload) return;
     const r = data?.draft?.revision ?? 0;
-    setPayload(normalizeDraftPayload(draftPayload as AssessmentPayload));
+    setPayload(
+      syncWorkloadDerivedFields(
+        normalizeDraftPayload(draftPayload as AssessmentPayload),
+      ),
+    );
     draftRevisionRef.current = r;
     setDraftRevision(r);
   }, [data?.draft?.payload, data?.draft?.revision]);
 
   const resolveConflictLoadServer = useCallback(() => {
     if (!draftConflict) return;
-    setPayload(normalizeDraftPayload(draftConflict.serverPayload));
+    setPayload(
+      syncWorkloadDerivedFields(
+        normalizeDraftPayload(draftConflict.serverPayload),
+      ),
+    );
     draftRevisionRef.current = draftConflict.serverRevision;
     setDraftRevision(draftConflict.serverRevision);
     setDraftConflict(null);
@@ -563,7 +538,7 @@ export function AssessmentWizard({ assessmentId }: Props) {
       const result = await saveDraft({
         assessmentId,
         expectedRevision: draftConflict.serverRevision,
-        payload: payloadRef.current,
+        payload: syncWorkloadDerivedFields(payloadRef.current),
       });
       if (result.ok) {
         draftRevisionRef.current = result.revision;
