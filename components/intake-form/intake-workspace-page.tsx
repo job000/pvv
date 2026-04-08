@@ -46,6 +46,7 @@ import { toastDeleteWithUndo } from "@/lib/toast-delete-undo";
 import { formatUserFacingError } from "@/lib/user-facing-error";
 import { useAction, useMutation, useQuery } from "convex/react";
 import {
+  Building2,
   CheckCircle2,
   ChevronDown,
   ChevronRight,
@@ -116,6 +117,7 @@ type FormSummary = {
   confirmationMode: "none" | "email_copy";
   isTemplate: boolean;
   sourceTemplateFormId?: Id<"intakeForms">;
+  orgUnitId?: Id<"orgUnits">;
   questionCount: number;
   responseCount: number;
   activeActivationCount: number;
@@ -134,6 +136,7 @@ type FormEditorData = {
     linkedRosTemplateId?: Id<"rosTemplates">;
     isTemplate?: boolean;
     sourceTemplateFormId?: Id<"intakeForms">;
+    orgUnitId?: Id<"orgUnits">;
   };
   questions: Array<{
     _id: string;
@@ -778,11 +781,13 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
   const myWorkspaceMembership = useQuery(api.workspaces.getMyMembership, {
     workspaceId,
   });
+  const orgUnitsQuery = useQuery(api.orgUnits.listByWorkspace, { workspaceId });
 
   const createForm = useMutation(api.intakeForms.create);
   const saveForm = useMutation(api.intakeForms.save);
   const archiveForm = useMutation(api.intakeForms.archive);
   const updateFormIntegrations = useMutation(api.intakeForms.updateIntegrations);
+  const setFormOrgUnit = useMutation(api.intakeForms.setFormOrgUnit);
   const setFormStatus = useMutation(api.intakeForms.setStatus);
   const publishTemplate = useMutation(api.intakeForms.publishTemplate);
   const activateTemplate = useMutation(api.intakeForms.activateTemplate);
@@ -1085,6 +1090,14 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
     () => rosTemplates.find((template) => template._id === linkedRosTemplateId) ?? null,
     [linkedRosTemplateId, rosTemplates],
   );
+  const orgUnitNameById = useMemo(() => {
+    const m = new Map<Id<"orgUnits">, string>();
+    for (const u of orgUnitsQuery ?? []) {
+      m.set(u._id, u.name);
+    }
+    return m;
+  }, [orgUnitsQuery]);
+  const selectedFormOrgUnitId = editorData?.form.orgUnitId;
   const targetWorkspaceOptions = useMemo(
     () =>
       myWorkspaces
@@ -1429,6 +1442,23 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
           error,
           "Kunne ikke oppdatere skjema-status. Prøv igjen.",
         ),
+      );
+    }
+  }
+
+  async function handleFormOrgUnitChange(value: string) {
+    if (!activeFormId) return;
+    try {
+      await setFormOrgUnit({
+        formId: activeFormId,
+        orgUnitId: value === "" ? null : (value as Id<"orgUnits">),
+      });
+      toast.success("Organisasjonsenhet lagret.");
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Kunne ikke lagre organisasjonsenhet.",
       );
     }
   }
@@ -1975,6 +2005,9 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
                               {form.activeActivationCount > 0
                                 ? ` · ${form.activeActivationCount} aktiveringer`
                                 : ""}
+                              {form.orgUnitId
+                                ? ` · ${orgUnitNameById.get(form.orgUnitId) ?? "Org."}`
+                                : ""}
                             </p>
                           </div>
                           <Badge
@@ -1998,6 +2031,9 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
                               {form.questionCount} spørsmål · {form.responseCount} svar
                               {form.activeActivationCount > 0
                                 ? ` · ${form.activeActivationCount} aktiveringer`
+                                : ""}
+                              {form.orgUnitId
+                                ? ` · ${orgUnitNameById.get(form.orgUnitId) ?? "Org."}`
                                 : ""}
                             </p>
                             <p className="text-muted-foreground text-[11px]">
@@ -3288,15 +3324,53 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
         <DialogContent size="xl" titleId="intake-settings-title">
           <DialogHeader>
             <p id="intake-settings-title" className="font-heading text-lg font-semibold">
-              ROS, mal og lenker
+              Innstillinger for skjema
             </p>
             <p className="text-muted-foreground text-sm leading-snug">
-              Publisering og sletting ligger på hovedsiden over.
+              Organisasjon, ROS, mal og lenker. Publisering og sletting ligger på hovedsiden over.
             </p>
           </DialogHeader>
           <DialogBody className="space-y-5">
             {selectedForm ? (
               <>
+                <section className="border-border/60 bg-card rounded-2xl border p-4 shadow-sm sm:p-5">
+                  <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+                    <div className="min-w-0 space-y-1">
+                      <h3 className="flex items-center gap-2 text-sm font-semibold leading-tight">
+                        <Building2 className="text-muted-foreground size-4 shrink-0" aria-hidden />
+                        Organisasjon
+                      </h3>
+                      <p className="text-muted-foreground text-xs leading-snug">
+                        Knytt skjemaet til en enhet i organisasjonstreet — brukes i oversikter og
+                        filtrering.
+                      </p>
+                    </div>
+                  </div>
+                  <Separator className="my-4" />
+                  <div className="space-y-2">
+                    <Label className="text-sm" htmlFor="intake-form-org-unit">
+                      Organisasjonsenhet
+                    </Label>
+                    <select
+                      id="intake-form-org-unit"
+                      className="border-input bg-background flex h-10 w-full rounded-xl border px-3 text-sm"
+                      value={selectedFormOrgUnitId ?? ""}
+                      onChange={(e) => void handleFormOrgUnitChange(e.target.value)}
+                      disabled={orgUnitsQuery === undefined}
+                    >
+                      <option value="">— Ikke satt —</option>
+                      {(orgUnitsQuery ?? []).map((u) => (
+                        <option key={u._id} value={u._id}>
+                          {u.name}
+                        </option>
+                      ))}
+                    </select>
+                    <p className="text-muted-foreground text-[11px] leading-snug">
+                      Fjern koblingen før en enhet kan slettes fra organisasjonskartet.
+                    </p>
+                  </div>
+                </section>
+
                 <section className="border-border/60 bg-card rounded-2xl border p-4 shadow-sm sm:p-5">
                   <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
                     <div className="min-w-0 space-y-1">

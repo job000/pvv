@@ -7,6 +7,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { ProductEmptyState, ProductLoadingBlock, ProductPageHeader } from "@/components/product";
+import { WorkspaceOrgRosCtaCard } from "@/components/workspace/workspace-org-ros-snapshot";
 import { WorkspaceOperationalDashboard } from "@/components/workspace/workspace-operational-dashboard";
 import { WorkspaceRosLinkDialogHost } from "@/components/workspace/workspace-ros-link-dialog-host";
 import { WorkspaceOverviewViewSettings } from "@/components/workspace/workspace-overview-view-settings";
@@ -99,6 +100,16 @@ export default function WorkspaceOverviewPage() {
         }
         actions={<WorkspaceOverviewViewSettings workspaceId={workspaceId} />}
       />
+
+      <section aria-labelledby="dash-org-ros-heading" className="space-y-3">
+        <h2
+          id="dash-org-ros-heading"
+          className="font-heading text-base font-semibold tracking-tight text-foreground sm:text-lg"
+        >
+          Organisasjon og risiko
+        </h2>
+        <WorkspaceOrgRosCtaCard workspaceId={workspaceId} />
+      </section>
 
       {!showAnyDashboardContent && viewPrefs !== undefined ? (
         <ProductEmptyState

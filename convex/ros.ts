@@ -1196,6 +1196,8 @@ export const createAnalysis = mutation({
     workspaceId: v.id("workspaces"),
     templateId: v.id("rosTemplates"),
     candidateId: v.optional(v.id("candidates")),
+    /** Brukes når prosess mangler enhet, eller som eksplisitt kobling til treet. */
+    orgUnitId: v.optional(v.id("orgUnits")),
     title: v.string(),
     /** Én eldre enkeltkobling (valgfritt); bruk assessmentIds for flere PVV */
     assessmentId: v.optional(v.id("assessments")),
@@ -1209,6 +1211,12 @@ export const createAnalysis = mutation({
       const cand = await ctx.db.get(args.candidateId);
       if (!cand || cand.workspaceId !== args.workspaceId) {
         throw new Error("Ugyldig kandidat.");
+      }
+    }
+    if (args.orgUnitId) {
+      const unit = await ctx.db.get(args.orgUnitId);
+      if (!unit || unit.workspaceId !== args.workspaceId) {
+        throw new Error("Ugyldig organisasjonsenhet.");
       }
     }
     const tpl = await ctx.db.get(args.templateId);
@@ -1265,6 +1273,7 @@ export const createAnalysis = mutation({
       matrixValuesAfter,
       cellNotesAfter,
       candidateId: args.candidateId ?? undefined,
+      orgUnitId: args.orgUnitId ?? undefined,
       assessmentId: undefined,
       notes: args.notes?.trim() || undefined,
       createdByUserId: userId,
@@ -1323,6 +1332,7 @@ export const updateAnalysis = mutation({
     colLabelsAfter: v.optional(v.array(v.string())),
     title: v.optional(v.string()),
     candidateId: v.optional(v.union(v.id("candidates"), v.null())),
+    orgUnitId: v.optional(v.union(v.id("orgUnits"), v.null())),
     notes: v.optional(v.union(v.string(), v.null())),
     nextReviewAt: v.optional(v.union(v.number(), v.null())),
     reviewRoutineNotes: v.optional(v.union(v.string(), v.null())),
@@ -1548,6 +1558,17 @@ export const updateAnalysis = mutation({
           throw new Error("Ugyldig kandidat.");
         }
         patch.candidateId = args.candidateId;
+      }
+    }
+    if (args.orgUnitId !== undefined) {
+      if (args.orgUnitId === null) {
+        patch.orgUnitId = undefined;
+      } else {
+        const unit = await ctx.db.get(args.orgUnitId);
+        if (!unit || unit.workspaceId !== row.workspaceId) {
+          throw new Error("Ugyldig organisasjonsenhet.");
+        }
+        patch.orgUnitId = args.orgUnitId;
       }
     }
     if (args.notes !== undefined) {

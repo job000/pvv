@@ -200,13 +200,21 @@ export const create = mutation({
   args: {
     workspaceId: v.id("workspaces"),
     title: v.string(),
+    orgUnitId: v.optional(v.id("orgUnits")),
   },
   handler: async (ctx, args) => {
     const userId = await requireUserId(ctx);
     await requireWorkspaceMember(ctx, args.workspaceId, userId, "member");
+    if (args.orgUnitId) {
+      const unit = await ctx.db.get(args.orgUnitId);
+      if (!unit || unit.workspaceId !== args.workspaceId) {
+        throw new Error("Ugyldig organisasjonsenhet.");
+      }
+    }
     const now = Date.now();
     return await ctx.db.insert("intakeForms", {
       workspaceId: args.workspaceId,
+      orgUnitId: args.orgUnitId ?? undefined,
       title: args.title.trim() || "Nytt skjema",
       description: undefined,
       status: "draft",
@@ -473,6 +481,37 @@ export const archive = mutation({
     await requireWorkspaceMember(ctx, form.workspaceId, userId, "member");
     await ctx.db.patch(args.formId, {
       status: "archived",
+      updatedAt: Date.now(),
+    });
+    return null;
+  },
+});
+
+export const setFormOrgUnit = mutation({
+  args: {
+    formId: v.id("intakeForms"),
+    orgUnitId: v.union(v.id("orgUnits"), v.null()),
+  },
+  handler: async (ctx, args) => {
+    const userId = await requireUserId(ctx);
+    const form = await ctx.db.get(args.formId);
+    if (!form) {
+      throw new Error("Skjemaet finnes ikke.");
+    }
+    await requireWorkspaceMember(ctx, form.workspaceId, userId, "member");
+    if (args.orgUnitId === null) {
+      await ctx.db.patch(args.formId, {
+        orgUnitId: undefined,
+        updatedAt: Date.now(),
+      });
+      return null;
+    }
+    const unit = await ctx.db.get(args.orgUnitId);
+    if (!unit || unit.workspaceId !== form.workspaceId) {
+      throw new Error("Ugyldig organisasjonsenhet.");
+    }
+    await ctx.db.patch(args.formId, {
+      orgUnitId: args.orgUnitId,
       updatedAt: Date.now(),
     });
     return null;

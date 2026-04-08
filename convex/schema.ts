@@ -802,6 +802,8 @@ export default defineSchema({
   /** Enkle skjema per arbeidsområde for innsendte forslag til vurdering. */
   intakeForms: defineTable({
     workspaceId: v.id("workspaces"),
+    /** Plassering i organisasjonstreet (eierskap / hvor skjemaet «hører hjemme»). */
+    orgUnitId: v.optional(v.id("orgUnits")),
     title: v.string(),
     description: v.optional(v.string()),
     status: intakeFormStatusValidator,
@@ -1037,6 +1039,11 @@ export default defineSchema({
     rowLabelsAfter: v.optional(v.array(v.string())),
     colLabelsAfter: v.optional(v.array(v.string())),
     candidateId: v.optional(v.id("candidates")),
+    /**
+     * Plassering i organisasjonstreet når prosess ikke har enhet, eller som eksplisitt overstyring.
+     * Effektiv enhet i aggregering: prosess.orgUnitId ?? denne.
+     */
+    orgUnitId: v.optional(v.id("orgUnits")),
     assessmentId: v.optional(v.id("assessments")),
     notes: v.optional(v.string()),
     createdByUserId: v.id("users"),

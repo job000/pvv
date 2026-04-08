@@ -61,6 +61,7 @@ import {
 import {
   AlertTriangle,
   ArrowRight,
+  Building2,
   ChevronLeft,
   ChevronRight,
   CircleHelp,
@@ -367,6 +368,7 @@ export function RosAnalysisEditor({
   const tasks = useQuery(api.ros.listTasksByRosAnalysis, rosChildQueryArgs);
   const members = useQuery(api.workspaces.listMembers, { workspaceId });
   const rosTemplates = useQuery(api.ros.listTemplates, { workspaceId });
+  const orgUnits = useQuery(api.orgUnits.listByWorkspace, { workspaceId });
 
   const updateAnalysis = useMutation(api.ros.updateAnalysis);
   const removeAnalysis = useMutation(api.ros.removeAnalysis);
@@ -397,6 +399,7 @@ export function RosAnalysisEditor({
   const [requirementRefs, setRequirementRefs] = useState<RosRequirementRef[]>(
     [],
   );
+  const [orgUnitLocal, setOrgUnitLocal] = useState<Id<"orgUnits"> | "">("");
   const [matrix, setMatrix] = useState<number[][]>([]);
   const [cellItemsMatrix, setCellItemsMatrix] =
     useState<RosCellItemMatrix>([]);
@@ -540,6 +543,7 @@ export function RosAnalysisEditor({
         ? data.requirementRefs.map((r) => ({ ...r }))
         : [],
     );
+    setOrgUnitLocal(data.orgUnitId ?? "");
     setDirty(false);
   // Synk kun ved server-oppdatering (id/tidsstempel), ikke ved hver query-referanse
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1302,6 +1306,32 @@ export function RosAnalysisEditor({
     !data || matrixView === "before" || !useSeparateAfterAxes
       ? data?.colLabels ?? []
       : effectiveAfterColLabels;
+
+  async function flushOrgUnit() {
+    if (!data) return;
+    const desired =
+      orgUnitLocal === "" ? null : orgUnitLocal;
+    const current = data.orgUnitId ?? null;
+    if (desired === current) return;
+    const rev = analysisRevisionRef.current ?? data.revision ?? 0;
+    try {
+      const result = await updateAnalysis({
+        analysisId,
+        expectedRevision: rev,
+        orgUnitId: desired,
+      });
+      if (result.ok) {
+        analysisRevisionRef.current = result.revision;
+        toast.success("Organisasjonsenhet lagret.");
+      } else {
+        toast.error(
+          "ROS-analysen er allerede oppdatert på serveren. Last siden på nytt og prøv igjen.",
+        );
+      }
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Kunne ikke lagre.");
+    }
+  }
 
   async function flushReviewSchedule() {
     if (!data) return;
@@ -2589,6 +2619,33 @@ export function RosAnalysisEditor({
                 rows={3}
                 className="min-h-[4rem] rounded-xl"
               />
+            </div>
+            <div className="space-y-1.5 sm:col-span-2">
+              <Label htmlFor="ros-org-unit" className="flex items-center gap-1.5 text-xs">
+                <Building2 className="size-3.5 text-muted-foreground" aria-hidden />
+                Organisasjonsenhet
+              </Label>
+              <select
+                id="ros-org-unit"
+                className="border-input bg-background flex h-10 w-full rounded-xl border px-2 text-sm"
+                value={orgUnitLocal}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setOrgUnitLocal(v === "" ? "" : (v as Id<"orgUnits">));
+                }}
+                onBlur={() => void flushOrgUnit()}
+              >
+                <option value="">— Ikke satt —</option>
+                {(orgUnits ?? []).map((u) => (
+                  <option key={u._id} value={u._id}>
+                    {u.name}
+                  </option>
+                ))}
+              </select>
+              <p className="text-muted-foreground text-xs leading-relaxed">
+                I org.-tre og oversikter brukes prosessens enhet når den er satt. Sett enhet her
+                når analysen ikke har prosess med enhet, eller for eksplisitt plassering.
+              </p>
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="ros-next-review" className="text-xs">Neste revisjon</Label>

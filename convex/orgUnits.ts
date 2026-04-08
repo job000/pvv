@@ -427,7 +427,278 @@ export const remove = mutation({
     if (candidates.some((c) => c.orgUnitId === args.orgUnitId)) {
       throw new Error("Enheten er knyttet til kandidater.");
     }
+    const rosAnalyses = await ctx.db
+      .query("rosAnalyses")
+      .withIndex("by_workspace", (q) => q.eq("workspaceId", row.workspaceId))
+      .collect();
+    if (rosAnalyses.some((r) => r.orgUnitId === args.orgUnitId)) {
+      throw new Error(
+        "Enheten er knyttet til ROS-analyser. Fjern eller endre koblingen i ROS først.",
+      );
+    }
+    const intakeFormsForWs = await ctx.db
+      .query("intakeForms")
+      .withIndex("by_workspace", (q) => q.eq("workspaceId", row.workspaceId))
+      .collect();
+    if (intakeFormsForWs.some((f) => f.orgUnitId === args.orgUnitId)) {
+      throw new Error(
+        "Enheten er knyttet til inntaksskjema. Fjern eller endre koblingen under Skjemaer først.",
+      );
+    }
     await ctx.db.delete(args.orgUnitId);
     return null;
+  },
+});
+
+/**
+ * Aggregerer aktivitet per org.-enhet (inkl. underenheter):
+ * prosesser (kandidater), ROS-analyser, PVV-vurderinger, godkjente inntak (inntak → vurdering),
+ * og inntaksskjema med direkte org.-kobling.
+ */
+export type OrgUnitRosRollup = {
+  candidateCount: number;
+  analysisCount: number;
+  maxBefore: number;
+  maxAfter: number;
+  /** PVV-vurderinger med org.-enhet i under-treet */
+  assessmentCount: number;
+  /** Godkjente inntak der tilknyttet vurdering har org.-enhet i under-treet */
+  intakeSubmissionCount: number;
+  /** Inntaksskjema direkte knyttet til enhet i under-treet */
+  intakeFormCount: number;
+};
+
+function maxMatrixValues(m: number[][] | undefined): number {
+  if (!m?.length) return 0;
+  let x = 0;
+  for (const row of m) {
+    for (const v of row ?? []) {
+      if (v > x) x = v;
+    }
+  }
+  return x;
+}
+
+function maxAfterLevel(a: Doc<"rosAnalyses">): number {
+  const m = a.matrixValuesAfter;
+  if (m && m.length > 0) return maxMatrixValues(m);
+  return 0;
+}
+
+export const rosRollupByOrgUnit = query({
+  args: { workspaceId: v.id("workspaces") },
+  handler: async (ctx, args) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) {
+      return null;
+    }
+    await requireWorkspaceMember(ctx, args.workspaceId, userId, "viewer");
+
+    const orgUnits = await ctx.db
+      .query("orgUnits")
+      .withIndex("by_workspace", (q) => q.eq("workspaceId", args.workspaceId))
+      .collect();
+
+    const candidates = await ctx.db
+      .query("candidates")
+      .withIndex("by_workspace", (q) => q.eq("workspaceId", args.workspaceId))
+      .collect();
+
+    const assessments = await ctx.db
+      .query("assessments")
+      .withIndex("by_workspace", (q) => q.eq("workspaceId", args.workspaceId))
+      .collect();
+
+    const intakeForms = await ctx.db
+      .query("intakeForms")
+      .withIndex("by_workspace", (q) => q.eq("workspaceId", args.workspaceId))
+      .collect();
+
+    const intakeSubmissions = await ctx.db
+      .query("intakeSubmissions")
+      .withIndex("by_workspace_and_submitted_at", (q) =>
+        q.eq("workspaceId", args.workspaceId),
+      )
+      .collect();
+
+    const approvedAssessmentIds = new Set<Id<"assessments">>();
+    for (const s of intakeSubmissions) {
+      if (s.approvedAssessmentId) {
+        approvedAssessmentIds.add(s.approvedAssessmentId);
+      }
+    }
+    const assessmentById = new Map<Id<"assessments">, Doc<"assessments">>();
+    for (const aid of approvedAssessmentIds) {
+      const a = await ctx.db.get(aid);
+      if (a && a.workspaceId === args.workspaceId) {
+        assessmentById.set(aid, a);
+      }
+    }
+
+    /** Direkte antall vurderinger per org.-enhet (kun egen enhet, ikke subtre ennå). */
+    const directAssessmentCount = new Map<Id<"orgUnits">, number>();
+    for (const a of assessments) {
+      if (!a.orgUnitId) continue;
+      const k = a.orgUnitId;
+      directAssessmentCount.set(k, (directAssessmentCount.get(k) ?? 0) + 1);
+    }
+
+    /** Godkjente inntak per org.-enhet (via vurderingens orgUnitId). */
+    const directIntakeSubmissionCount = new Map<Id<"orgUnits">, number>();
+    for (const s of intakeSubmissions) {
+      if (!s.approvedAssessmentId) continue;
+      const a = assessmentById.get(s.approvedAssessmentId);
+      if (!a?.orgUnitId) continue;
+      const k = a.orgUnitId;
+      directIntakeSubmissionCount.set(
+        k,
+        (directIntakeSubmissionCount.get(k) ?? 0) + 1,
+      );
+    }
+
+    /** Inntaksskjema direkte merket med org.-enhet. */
+    const directIntakeFormCount = new Map<Id<"orgUnits">, number>();
+    for (const f of intakeForms) {
+      if (!f.orgUnitId) continue;
+      const k = f.orgUnitId;
+      directIntakeFormCount.set(k, (directIntakeFormCount.get(k) ?? 0) + 1);
+    }
+
+    const rosRows = await ctx.db
+      .query("rosAnalyses")
+      .withIndex("by_workspace_updated", (q) =>
+        q.eq("workspaceId", args.workspaceId),
+      )
+      .collect();
+
+    const candidateById = new Map<Id<"candidates">, Doc<"candidates">>();
+    for (const c of candidates) {
+      candidateById.set(c._id, c);
+    }
+
+    /** Prosess sin enhet, ellers direkte kobling på ROS-analysen. */
+    function effectiveOrgForRos(
+      r: Doc<"rosAnalyses">,
+    ): Id<"orgUnits"> | undefined {
+      if (r.candidateId) {
+        const c = candidateById.get(r.candidateId);
+        return c?.orgUnitId ?? r.orgUnitId;
+      }
+      return r.orgUnitId;
+    }
+
+    const childrenById = new Map<Id<"orgUnits">, Id<"orgUnits">[]>();
+    for (const u of orgUnits) {
+      childrenById.set(u._id, []);
+    }
+    for (const u of orgUnits) {
+      if (u.parentId) {
+        if (!childrenById.has(u.parentId)) {
+          childrenById.set(u.parentId, []);
+        }
+        childrenById.get(u.parentId)!.push(u._id);
+      }
+    }
+
+    function subtreeIds(root: Id<"orgUnits">): Set<Id<"orgUnits">> {
+      const s = new Set<Id<"orgUnits">>();
+      const q: Id<"orgUnits">[] = [root];
+      while (q.length) {
+        const id = q.shift()!;
+        s.add(id);
+        for (const ch of childrenById.get(id) ?? []) {
+          q.push(ch);
+        }
+      }
+      return s;
+    }
+
+    function rollupForSubtree(sub: Set<Id<"orgUnits">>): OrgUnitRosRollup {
+      let candidateCount = 0;
+      for (const c of candidates) {
+        if (!c.orgUnitId || !sub.has(c.orgUnitId)) continue;
+        candidateCount++;
+      }
+      let analysisCount = 0;
+      let maxBefore = 0;
+      let maxAfter = 0;
+      for (const r of rosRows) {
+        const eo = effectiveOrgForRos(r);
+        if (!eo || !sub.has(eo)) continue;
+        analysisCount++;
+        maxBefore = Math.max(maxBefore, maxMatrixValues(r.matrixValues));
+        maxAfter = Math.max(maxAfter, maxAfterLevel(r));
+      }
+      let assessmentCount = 0;
+      for (const [oid, n] of directAssessmentCount) {
+        if (sub.has(oid)) assessmentCount += n;
+      }
+      let intakeSubmissionCount = 0;
+      for (const [oid, n] of directIntakeSubmissionCount) {
+        if (sub.has(oid)) intakeSubmissionCount += n;
+      }
+      let intakeFormCount = 0;
+      for (const [oid, n] of directIntakeFormCount) {
+        if (sub.has(oid)) intakeFormCount += n;
+      }
+      return {
+        candidateCount,
+        analysisCount,
+        maxBefore,
+        maxAfter,
+        assessmentCount,
+        intakeSubmissionCount,
+        intakeFormCount,
+      };
+    }
+
+    const byOrgUnitId: Record<string, OrgUnitRosRollup> = {};
+    for (const u of orgUnits) {
+      const sub = subtreeIds(u._id);
+      byOrgUnitId[u._id] = rollupForSubtree(sub);
+    }
+
+    let unCand = 0;
+    for (const c of candidates) {
+      if (c.orgUnitId) continue;
+      unCand++;
+    }
+    let unAnalysis = 0;
+    let unMaxB = 0;
+    let unMaxA = 0;
+    for (const r of rosRows) {
+      if (effectiveOrgForRos(r) !== undefined) continue;
+      unAnalysis++;
+      unMaxB = Math.max(unMaxB, maxMatrixValues(r.matrixValues));
+      unMaxA = Math.max(unMaxA, maxAfterLevel(r));
+    }
+    let unAssess = 0;
+    for (const a of assessments) {
+      if (!a.orgUnitId) unAssess++;
+    }
+    let unIntake = 0;
+    for (const s of intakeSubmissions) {
+      if (!s.approvedAssessmentId) {
+        unIntake++;
+        continue;
+      }
+      const a = assessmentById.get(s.approvedAssessmentId);
+      if (!a?.orgUnitId) unIntake++;
+    }
+    let unIntakeForm = 0;
+    for (const f of intakeForms) {
+      if (!f.orgUnitId) unIntakeForm++;
+    }
+    const unassigned: OrgUnitRosRollup = {
+      candidateCount: unCand,
+      analysisCount: unAnalysis,
+      maxBefore: unMaxB,
+      maxAfter: unMaxA,
+      assessmentCount: unAssess,
+      intakeSubmissionCount: unIntake,
+      intakeFormCount: unIntakeForm,
+    };
+
+    return { byOrgUnitId, unassigned };
   },
 });

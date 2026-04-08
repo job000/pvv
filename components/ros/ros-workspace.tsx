@@ -152,6 +152,7 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
   const analyses = useQuery(api.ros.listAnalyses, { workspaceId });
   const hub = useQuery(api.ros.workspaceHub, { workspaceId });
   const candidates = useQuery(api.candidates.listByWorkspace, { workspaceId });
+  const orgUnits = useQuery(api.orgUnits.listByWorkspace, { workspaceId });
 
   const createTemplate = useMutation(api.ros.createTemplate);
   const updateTemplate = useMutation(api.ros.updateTemplate);
@@ -219,6 +220,7 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
   const [anaTitle, setAnaTitle] = useState("");
   const [anaTemplateId, setAnaTemplateId] = useState<Id<"rosTemplates"> | "">("");
   const [anaCandidateId, setAnaCandidateId] = useState<Id<"candidates"> | "">("");
+  const [anaOrgUnitId, setAnaOrgUnitId] = useState<Id<"orgUnits"> | "">("");
   const [templateDialogOpen, setTemplateDialogOpen] = useState(false);
   const [analysisSearch, setAnalysisSearch] = useState("");
   const [analysisSort, setAnalysisSort] = useState<AnalysisSort>("updated");
@@ -462,6 +464,7 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
         workspaceId,
         templateId: anaTemplateId,
         candidateId: anaCandidateId || undefined,
+        orgUnitId: anaOrgUnitId || undefined,
         title: anaTitle.trim(),
       });
       window.location.href = `/w/${workspaceId}/ros/a/${id}`;
@@ -991,6 +994,7 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
                         if (val && candidates) {
                           const c = candidates.find((x) => x._id === val);
                           if (c && !anaTitle.trim()) setAnaTitle(`ROS — ${c.name} (${c.code})`);
+                          if (c?.orgUnitId) setAnaOrgUnitId(c.orgUnitId);
                         }
                       }}
                     >
@@ -999,6 +1003,32 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
                         <option key={c._id} value={c._id}>{c.name} ({c.code})</option>
                       ))}
                     </select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="ana-org" className="text-xs">
+                      Organisasjonsenhet (valgfritt)
+                    </Label>
+                    <select
+                      id="ana-org"
+                      className="border-input bg-background flex h-10 w-full rounded-lg border px-2 text-sm"
+                      value={anaOrgUnitId}
+                      onChange={(e) =>
+                        setAnaOrgUnitId(
+                          e.target.value === "" ? "" : (e.target.value as Id<"orgUnits">),
+                        )
+                      }
+                    >
+                      <option value="">— Ikke satt —</option>
+                      {(orgUnits ?? []).map((u) => (
+                        <option key={u._id} value={u._id}>
+                          {u.name}
+                        </option>
+                      ))}
+                    </select>
+                    <p className="text-muted-foreground text-xs leading-relaxed">
+                      Brukes i org.-tre når prosessen mangler enhet. Hvis prosessen har enhet,
+                      er det den som teller i oversikter.
+                    </p>
                   </div>
                 </form>
               </DialogBody>
