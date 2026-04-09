@@ -26,7 +26,14 @@ import {
   Sparkles,
   Sun,
 } from "lucide-react";
-import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { useTheme } from "next-themes";
+import {
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useState,
+  useSyncExternalStore,
+} from "react";
 
 type AnswerState = Record<string, string | number | boolean>;
 type SubmissionAnswer =
@@ -222,8 +229,19 @@ function PublicThemeToggle({
 export function IntakePublicForm({ token }: { token: string }) {
   const data = useQuery(api.intakeLinks.getPublicForm, { token });
   const submitPublic = useMutation(api.intakeSubmissions.submitPublic);
+  const { setTheme } = useTheme();
   const initialDraft = readStoredDraft(token);
   const [publicTheme, setPublicTheme] = useState<PublicTheme>(() => readPublicTheme());
+
+  /**
+   * Tailwind `dark:` bruker varianten `.dark *` (se globals.css). next-themes legger
+   * `.dark` på <html> fra system/bruker — da vinner globalt mørkt tema over den lokale
+   * wrapper-klassen. Synkroniser eksplisitt slik at offentlig skjema fungerer på Vercel
+   * (ofte mørk OS / forhåndsvalgt tema) likevel som lokalt.
+   */
+  useLayoutEffect(() => {
+    setTheme(publicTheme);
+  }, [publicTheme, setTheme]);
 
   const [step, setStep] = useState(initialDraft?.step ?? 0);
   const [answers, setAnswers] = useState<AnswerState>(initialDraft?.answers ?? {});
