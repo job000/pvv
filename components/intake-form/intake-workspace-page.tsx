@@ -199,6 +199,148 @@ type SubmissionSummary = {
   githubProjectItemNodeId?: string;
 };
 
+type IntakeSubmissionStatus = SubmissionSummary["status"];
+
+function intakeSubmissionStatusBadgeProps(status: IntakeSubmissionStatus): {
+  variant: "default" | "secondary" | "outline" | "destructive";
+  label: string;
+  className?: string;
+} {
+  switch (status) {
+    case "submitted":
+      return { variant: "default", label: "Ny" };
+    case "under_review":
+      return {
+        variant: "outline",
+        label: "Under vurdering",
+        className:
+          "border-amber-500/40 bg-amber-500/10 text-amber-950 dark:border-amber-400/35 dark:bg-amber-400/10 dark:text-amber-50",
+      };
+    case "approved":
+      return {
+        variant: "outline",
+        label: "Godkjent",
+        className:
+          "border-emerald-500/40 bg-emerald-500/10 text-emerald-950 dark:border-emerald-400/35 dark:bg-emerald-400/10 dark:text-emerald-50",
+      };
+    case "rejected":
+      return { variant: "destructive", label: "Avslått" };
+    default: {
+      const _exhaustive: never = status;
+      return { variant: "outline", label: String(_exhaustive) };
+    }
+  }
+}
+
+function IntakeSubmissionStatusBadge({ status }: { status: IntakeSubmissionStatus }) {
+  const p = intakeSubmissionStatusBadgeProps(status);
+  return (
+    <Badge variant={p.variant} className={cn("shrink-0", p.className)}>
+      {p.label}
+    </Badge>
+  );
+}
+
+function intakeSubmissionReviewHint(status: IntakeSubmissionStatus): string {
+  switch (status) {
+    case "submitted":
+    case "under_review":
+      return "Åpne gjennomgang for å godkjenne eller avslå";
+    case "approved":
+      return "Trykk for å se detaljer og lenke til vurdering";
+    case "rejected":
+      return "Trykk for å se gjennomgang og begrunnelse";
+    default: {
+      const _e: never = status;
+      return String(_e);
+    }
+  }
+}
+
+/** Kø-kort: tydelig klikkflate + verktøylinje (gjennomgå/slett) + valgfritt GitHub-felt under. */
+function IntakeSubmissionQueueCard({
+  submission,
+  subtitle,
+  onOpenReview,
+  onDelete,
+  canDelete,
+  extraBadges,
+  githubSlot,
+}: {
+  submission: SubmissionSummary;
+  subtitle: string;
+  onOpenReview: () => void | Promise<void>;
+  onDelete: () => void;
+  canDelete: boolean;
+  extraBadges?: ReactNode;
+  githubSlot: ReactNode;
+}) {
+  const title = submission.generatedAssessmentDraft.title;
+  const hint = intakeSubmissionReviewHint(submission.status);
+
+  return (
+    <div
+      className={cn(
+        "rounded-2xl border border-border/50 bg-card shadow-sm transition-[border-color,box-shadow]",
+        "hover:border-primary/35 hover:shadow-md",
+      )}
+    >
+      <button
+        type="button"
+        className={cn(
+          "group w-full cursor-pointer rounded-t-2xl p-4 text-left transition-colors",
+          "hover:bg-muted/15",
+          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+        )}
+        onClick={() => void onOpenReview()}
+        aria-label={`Gjennomgå forslag: ${title}`}
+      >
+        <div className="flex gap-3 sm:gap-4">
+          <div className="min-w-0 flex-1 space-y-2">
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <p className="text-foreground text-sm font-semibold sm:text-base">{title}</p>
+              <IntakeSubmissionStatusBadge status={submission.status} />
+            </div>
+            <p className="text-muted-foreground text-xs sm:text-sm">{subtitle}</p>
+            {extraBadges ? (
+              <div className="flex flex-wrap items-center gap-2 pt-0.5">{extraBadges}</div>
+            ) : null}
+            <p className="text-primary pt-1 text-xs font-medium sm:text-sm">{hint}</p>
+          </div>
+          <ChevronRight
+            className="text-muted-foreground mt-1 size-5 shrink-0 transition-transform group-hover:translate-x-0.5 group-hover:text-foreground sm:mt-2 sm:size-6"
+            aria-hidden
+          />
+        </div>
+      </button>
+      <div className="border-border/50 flex flex-wrap items-center justify-end gap-2 border-t bg-muted/[0.06] px-3 py-2.5">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="rounded-xl"
+          onClick={() => void onOpenReview()}
+        >
+          Gjennomgå
+        </Button>
+        {canDelete ? (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="rounded-lg text-muted-foreground hover:text-destructive"
+            onClick={onDelete}
+          >
+            <Trash2 className="size-4" />
+            Slett
+          </Button>
+        ) : null}
+      </div>
+      {githubSlot}
+    </div>
+  );
+}
+
 type SubmissionDetail = {
   form:
     | {
@@ -1765,7 +1907,7 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
     }
     if (ghKind === "issue") {
       return (
-        <div className="mt-3 flex flex-wrap items-center gap-2 rounded-2xl border border-border/50 bg-muted/15 px-3 py-2.5 text-sm">
+        <div className="mx-3 mb-3 flex flex-wrap items-center gap-2 rounded-2xl border border-border/50 bg-muted/15 px-3 py-2.5 text-sm">
           <GitBranch className="size-3.5 shrink-0 text-muted-foreground" />
           <span className="text-xs text-muted-foreground">GitHub:</span>
           <Link
@@ -1784,7 +1926,7 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
     }
     if (ghKind === "draft") {
       return (
-        <div className="mt-3 flex items-center gap-2 rounded-2xl border border-border/50 bg-muted/15 px-3 py-2.5 text-xs text-muted-foreground">
+        <div className="mx-3 mb-3 flex items-center gap-2 rounded-2xl border border-border/50 bg-muted/15 px-3 py-2.5 text-xs text-muted-foreground">
           <GitBranch className="size-3.5 shrink-0" />
           Utkast på GitHub-prosjekttavle
         </div>
@@ -1794,15 +1936,15 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
       return null;
     }
     return (
-      <div className="border-primary/25 bg-muted/15 mt-3 flex flex-col gap-3 rounded-2xl border p-4 sm:flex-row sm:items-center sm:justify-between">
+      <div className="border-primary/20 bg-muted/10 mx-3 mb-3 flex flex-col gap-3 rounded-2xl border border-dashed p-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex min-w-0 items-start gap-3">
           <div className="bg-primary/10 flex size-10 shrink-0 items-center justify-center rounded-xl">
             <GitBranch className="text-primary size-5" />
           </div>
           <div className="min-w-0 space-y-0.5">
-            <p className="text-sm font-medium">GitHub</p>
-            <p className="text-muted-foreground text-xs">
-              Issue eller utkast på prosjekt-tavlen.
+            <p className="text-sm font-medium">GitHub (valgfritt)</p>
+            <p className="text-muted-foreground text-xs leading-snug">
+              Kobler forslaget til prosjekt-tavlen. Godkjenning og vurdering gjør du i gjennomgang over.
             </p>
           </div>
         </div>
@@ -2332,7 +2474,7 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
                   open={showResponses}
                   onToggle={() => setShowResponses((prev) => !prev)}
                   title="Svar på dette skjemaet"
-                  description="Trykk «Gjennomgå» eller på raden under for å godkjenne eller avslå."
+                  description="Trykk på kortet eller «Gjennomgå» for å åpne gjennomgang. Godkjenning skjer i vinduet som åpnes."
                   trailing={<Badge variant="secondary">{activeFormResponseRows.length} svar</Badge>}
                 >
                   {activeFormResponseRows.length === 0 ? (
@@ -2340,83 +2482,28 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
                       Ingen har sendt inn dette skjemaet ennå.
                     </p>
                   ) : (
-                    <div className="space-y-2">
+                    <div className="space-y-3">
                       {activeFormResponseRows.map((submission) => (
-                          <div
-                            key={submission._id}
-                            className="rounded-2xl border border-border/50 bg-muted/10 p-3 transition hover:border-border/80 hover:bg-muted/20"
-                          >
-                            <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                              <button
-                                type="button"
-                                className="group flex min-w-0 flex-1 items-start gap-2 rounded-xl px-1 py-1 text-left outline-none ring-offset-background focus-visible:ring-2 focus-visible:ring-ring"
-                                onClick={() => void openSubmissionForReview(submission)}
-                              >
-                                <div className="min-w-0 flex-1">
-                                  <p className="truncate text-sm font-medium">
-                                    {submission.generatedAssessmentDraft.title}
-                                  </p>
-                                  <p className="mt-1 text-xs text-muted-foreground">
-                                    {new Date(submission.submittedAt).toLocaleString("nb-NO")}
-                                  </p>
-                                  <div className="mt-2 flex flex-wrap gap-2">
-                                    {submission.generatedRosSuggestion.shouldCreateRos ? (
-                                      <Badge variant="outline">ROS-forslag</Badge>
-                                    ) : null}
-                                    {submission.personDataSignal ? (
-                                      <Badge variant="outline">Persondata</Badge>
-                                    ) : null}
-                                    <Badge
-                                      variant={
-                                        submission.status === "approved"
-                                          ? "secondary"
-                                          : submission.status === "rejected"
-                                            ? "outline"
-                                            : "default"
-                                      }
-                                    >
-                                      {submission.status === "submitted"
-                                        ? "Ny"
-                                        : submission.status === "under_review"
-                                          ? "Under vurdering"
-                                          : submission.status === "approved"
-                                            ? "Godkjent"
-                                            : "Avslått"}
-                                    </Badge>
-                                  </div>
-                                </div>
-                                <ChevronRight
-                                  className="mt-0.5 size-5 shrink-0 text-muted-foreground transition group-hover:translate-x-0.5 group-hover:text-foreground"
-                                  aria-hidden
-                                />
-                              </button>
-                              <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
-                                <Button
-                                  type="button"
-                                  variant="secondary"
-                                  size="sm"
-                                  className="rounded-xl"
-                                  onClick={() => void openSubmissionForReview(submission)}
-                                >
-                                  Gjennomgå
-                                </Button>
-                                {canDeleteIntakeSubmissions ? (
-                                  <Button
-                                    type="button"
-                                    variant="ghost"
-                                    size="sm"
-                                    className="rounded-lg text-muted-foreground hover:text-destructive"
-                                    onClick={() => handleRemoveSubmission(submission)}
-                                  >
-                                    <Trash2 className="size-4" />
-                                    Slett
-                                  </Button>
-                                ) : null}
-                              </div>
-                            </div>
-                            {renderSubmissionGithubStrip(submission)}
-                          </div>
-                        ))}
+                        <IntakeSubmissionQueueCard
+                          key={submission._id}
+                          submission={submission}
+                          subtitle={new Date(submission.submittedAt).toLocaleString("nb-NO")}
+                          onOpenReview={() => void openSubmissionForReview(submission)}
+                          onDelete={() => handleRemoveSubmission(submission)}
+                          canDelete={canDeleteIntakeSubmissions}
+                          extraBadges={
+                            <>
+                              {submission.generatedRosSuggestion.shouldCreateRos ? (
+                                <Badge variant="outline">ROS-forslag</Badge>
+                              ) : null}
+                              {submission.personDataSignal ? (
+                                <Badge variant="outline">Persondata</Badge>
+                              ) : null}
+                            </>
+                          }
+                          githubSlot={renderSubmissionGithubStrip(submission)}
+                        />
+                      ))}
                     </div>
                   )}
                 </FormWorkspaceDisclosure>
@@ -2438,8 +2525,8 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
           <CardHeader className="pb-2">
             <CardTitle>Alle innsendte forslag</CardTitle>
             <CardDescription className="mt-1">
-              Samlet kø på tvers av skjemaer. Bruk «Gjennomgå» eller raden under for å godkjenne
-              og opprette vurdering.
+              Samlet kø på tvers av skjemaer. Trykk på et kort eller «Gjennomgå» for å åpne
+              gjennomgang — der godkjenner eller avslår du forslaget.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
@@ -2453,84 +2540,28 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
               </div>
             ) : (
               submissions.map((submission) => (
-                <div
+                <IntakeSubmissionQueueCard
                   key={submission._id}
-                  className="rounded-2xl border border-border/50 bg-card p-3 transition hover:border-border/80 hover:bg-muted/10"
-                >
-                  <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                    <button
-                      type="button"
-                      className="group flex min-w-0 flex-1 items-start gap-2 rounded-xl px-1 py-1 text-left outline-none ring-offset-background focus-visible:ring-2 focus-visible:ring-ring"
-                      onClick={() => void openSubmissionForReview(submission)}
-                    >
-                      <div className="min-w-0 flex-1">
-                        <p className="font-medium">{submission.generatedAssessmentDraft.title}</p>
-                        <p className="mt-1 text-sm text-muted-foreground">
-                          {submission.formTitle} ·{" "}
-                          {new Date(submission.submittedAt).toLocaleString("nb-NO")}
-                        </p>
-                      </div>
-                      <ChevronRight
-                        className="mt-0.5 size-5 shrink-0 text-muted-foreground transition group-hover:translate-x-0.5 group-hover:text-foreground"
-                        aria-hidden
-                      />
-                    </button>
-                    <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
-                      <Button
-                        type="button"
-                        variant="secondary"
-                        size="sm"
-                        className="rounded-xl"
-                        onClick={() => void openSubmissionForReview(submission)}
-                      >
-                        Gjennomgå
-                      </Button>
-                      <div className="flex items-center justify-end gap-2">
-                        <Badge
-                          variant={
-                            submission.status === "approved"
-                              ? "secondary"
-                              : submission.status === "rejected"
-                                ? "outline"
-                                : "default"
-                          }
-                        >
-                          {submission.status === "submitted"
-                            ? "Ny"
-                            : submission.status === "under_review"
-                              ? "Under vurdering"
-                              : submission.status === "approved"
-                                ? "Godkjent"
-                                : "Avslått"}
-                        </Badge>
-                        {canDeleteIntakeSubmissions ? (
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            className="rounded-lg text-muted-foreground hover:text-destructive"
-                            onClick={() => handleRemoveSubmission(submission)}
-                          >
-                            <Trash2 className="size-4" />
-                            Slett
-                          </Button>
-                        ) : null}
-                      </div>
-                    </div>
-                  </div>
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    {submission.personDataSignal ? (
-                      <Badge variant="outline">Persondata</Badge>
-                    ) : null}
-                    {submission.generatedRosSuggestion.shouldCreateRos ? (
-                      <Badge variant="outline">ROS-forslag</Badge>
-                    ) : null}
-                    <Badge variant="outline">
-                      {submission.generatedRosSuggestion.risks.length} risikoer
-                    </Badge>
-                  </div>
-                  {renderSubmissionGithubStrip(submission)}
-                </div>
+                  submission={submission}
+                  subtitle={`${submission.formTitle} · ${new Date(submission.submittedAt).toLocaleString("nb-NO")}`}
+                  onOpenReview={() => void openSubmissionForReview(submission)}
+                  onDelete={() => handleRemoveSubmission(submission)}
+                  canDelete={canDeleteIntakeSubmissions}
+                  extraBadges={
+                    <>
+                      {submission.personDataSignal ? (
+                        <Badge variant="outline">Persondata</Badge>
+                      ) : null}
+                      {submission.generatedRosSuggestion.shouldCreateRos ? (
+                        <Badge variant="outline">ROS-forslag</Badge>
+                      ) : null}
+                      <Badge variant="outline">
+                        {submission.generatedRosSuggestion.risks.length} risikoer
+                      </Badge>
+                    </>
+                  }
+                  githubSlot={renderSubmissionGithubStrip(submission)}
+                />
               ))
             )}
           </CardContent>
@@ -3810,17 +3841,17 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
       </Dialog>
 
       <Dialog open={reviewOpen} onOpenChange={setReviewOpen}>
-        <DialogContent size="xl" titleId="submission-review-title">
-          <DialogHeader>
-            <p id="submission-review-title" className="font-heading text-lg font-semibold">
+        <DialogContent
+          size="5xl"
+          titleId="submission-review-title"
+          className="max-h-[96dvh] max-w-[min(96vw,80rem)]"
+        >
+          <DialogHeader className="py-2.5 sm:px-6 sm:py-3">
+            <p id="submission-review-title" className="font-heading text-base font-semibold sm:text-lg">
               Gjennomgå forslag
             </p>
-            <p className="text-sm text-muted-foreground">
-              Sammenlign innsendte svar med auto-generert vurdering. Nederst trykker du «Godkjenn og
-              opprett vurdering» for å opprette saken — eller «Avslå» med begrunnelse.
-            </p>
           </DialogHeader>
-          <DialogBody className="space-y-6">
+          <DialogBody className="space-y-5 px-5 py-3 sm:px-6 sm:py-4">
             {submissionDetail ? (
               <>
                 {(() => {
@@ -3885,18 +3916,23 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
                     </div>
                   );
                 })()}
-                <section className="space-y-3">
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <p className="font-medium">Innsendte svar</p>
-                      <p className="text-sm text-muted-foreground">
-                        {submissionDetail.form?.title ?? "Skjema"} ·{" "}
-                        {new Date(submissionDetail.submission.submittedAt).toLocaleString(
-                          "nb-NO",
-                        )}
-                      </p>
+                <section className="space-y-3 rounded-2xl border border-border/40 bg-muted/[0.04] p-3 sm:p-4">
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                    <div className="flex min-w-0 items-start gap-2 sm:gap-3">
+                      <div className="bg-muted/30 flex size-8 shrink-0 items-center justify-center rounded-lg border border-border/50 sm:size-9 sm:rounded-xl">
+                        <FileText className="text-muted-foreground size-3.5 sm:size-4" aria-hidden />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="font-medium">Innsendte svar</p>
+                        <p className="text-muted-foreground mt-0.5 text-xs sm:text-sm">
+                          {submissionDetail.form?.title ?? "Skjema"} ·{" "}
+                          {new Date(submissionDetail.submission.submittedAt).toLocaleString(
+                            "nb-NO",
+                          )}
+                        </p>
+                      </div>
                     </div>
-                    <div className="flex flex-wrap gap-2">
+                    <div className="flex shrink-0 flex-wrap gap-2">
                       {submissionDetail.submission.personDataSignal ? (
                         <Badge variant="outline">Persondata</Badge>
                       ) : null}
@@ -3919,10 +3955,15 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
                       return (
                         <div
                           key={question._id}
-                          className="rounded-2xl border border-border/50 bg-muted/10 p-4"
+                          className="rounded-xl border border-border/60 bg-card/90 p-3.5 shadow-sm sm:rounded-2xl sm:p-4"
                         >
-                          <p className="text-sm font-medium">{question.label}</p>
-                          <p className="mt-2 whitespace-pre-wrap text-sm text-muted-foreground">
+                          <p className="text-muted-foreground text-[10px] font-semibold uppercase tracking-wide">
+                            Innsendt svar
+                          </p>
+                          <p className="text-foreground mt-1 text-sm font-medium leading-snug">
+                            {question.label}
+                          </p>
+                          <p className="text-foreground/90 mt-2 whitespace-pre-wrap text-sm leading-relaxed">
                             {answerLabel}
                           </p>
                         </div>
@@ -3932,20 +3973,11 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
                 </section>
 
                 <section className="space-y-3">
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <p className="font-medium">Generert vurdering</p>
-                      <p className="text-sm text-muted-foreground">
-                        Endringer merkes som auto-generert eller manuelt justert.
-                      </p>
-                    </div>
-                    <div className="w-full max-w-xs">
-                      <div className="mb-2 flex items-center justify-between text-xs text-muted-foreground">
-                        <span>Forslag klart til gjennomgang</span>
-                        <span>100 %</span>
-                      </div>
-                      <Progress value={100} className="h-2 rounded-full" />
-                    </div>
+                  <div>
+                    <p className="font-medium">Generert vurdering</p>
+                    <p className="text-muted-foreground text-xs sm:text-sm">
+                      Rediger før godkjenning — blir utgangspunktet for den nye vurderingen.
+                    </p>
                   </div>
                   <div className="space-y-2">
                     <Label>Tittel</Label>
@@ -4064,18 +4096,16 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
               <p className="text-sm text-muted-foreground">Laster forslag …</p>
             )}
           </DialogBody>
-          <DialogFooter className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-end sm:justify-between">
+          <DialogFooter className="gap-2 px-5 py-2.5 sm:flex-row sm:items-end sm:justify-between sm:gap-3 sm:px-6 sm:py-3">
             {submissionDetail && submissionDetail.submission.status !== "approved" ? (
-              <div className="min-w-0 w-full max-w-full flex-1 space-y-2 sm:max-w-md">
+              <div className="min-w-0 w-full max-w-full flex-1 space-y-1 sm:max-w-md">
                 <Textarea
                   value={rejectionReason}
                   onChange={(event) => setRejectionReason(event.target.value)}
-                  placeholder="Skriv kort hvorfor forslaget avslås (kun ved avslag)"
-                  className="min-h-24 w-full max-w-full"
+                  placeholder="Begrunnelse ved avslag (påkrevd) — vises internt"
+                  rows={2}
+                  className="min-h-[4.25rem] w-full max-w-full resize-y text-sm"
                 />
-                <p className="text-xs text-muted-foreground">
-                  Dette er påkrevd ved avslag og vises internt som begrunnelse.
-                </p>
                 {rejectionReasonMissing ? (
                   <p className="text-xs text-destructive">
                     Legg inn en kort begrunnelse før du klikker «Avslå».

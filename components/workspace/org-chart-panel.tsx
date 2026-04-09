@@ -31,6 +31,7 @@ import {
   Maximize2,
   Minimize2,
   Minus,
+  PenLine,
   Plus,
   Shield,
   Trash2,
@@ -118,11 +119,22 @@ function MerkantilContactRow({
 }) {
   const updateContact = useMutation(api.orgUnits.updateContact);
   const removeContact = useMutation(api.orgUnits.removeContact);
+  const [editOpen, setEditOpen] = useState(false);
   const [name, setName] = useState(contact.name);
   const [title, setTitle] = useState(contact.title ?? "");
   const [email, setEmail] = useState(contact.email ?? "");
   const [phone, setPhone] = useState(contact.phone ?? "");
   const [notes, setNotes] = useState(contact.notes ?? "");
+  const editTitleId = `org-contact-edit-${contact._id}`;
+
+  useEffect(() => {
+    if (!editOpen) return;
+    setName(contact.name);
+    setTitle(contact.title ?? "");
+    setEmail(contact.email ?? "");
+    setPhone(contact.phone ?? "");
+    setNotes(contact.notes ?? "");
+  }, [editOpen, contact]);
 
   async function save() {
     await updateContact({
@@ -133,107 +145,160 @@ function MerkantilContactRow({
       phone: phone.trim() === "" ? null : phone,
       notes: notes.trim() === "" ? null : notes,
     });
+    setEditOpen(false);
   }
 
-  if (!canEdit) {
-    return (
-      <div className="flex items-center gap-3 rounded-2xl bg-card px-4 py-3 shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.06]">
-        <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary/10">
-          <span className="text-xs font-bold text-primary">
+  return (
+    <>
+      <div className="flex items-center gap-2.5 rounded-xl border border-border/50 bg-card/80 px-3 py-2.5 shadow-sm ring-1 ring-black/[0.03] dark:ring-white/[0.05] sm:gap-3 sm:px-3.5">
+        <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 sm:size-9">
+          <span className="text-[11px] font-bold text-primary sm:text-xs">
             {contact.name.charAt(0).toUpperCase()}
           </span>
         </div>
         <div className="min-w-0 flex-1">
-          <p className="text-sm font-medium">{contact.name}</p>
-          <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
-            {contact.title && (
-              <span className="text-muted-foreground text-[10px]">{contact.title}</span>
-            )}
-            {contact.email && (
-              <a href={`mailto:${contact.email}`} className="text-primary text-[10px] hover:underline">
+          <p className="truncate text-sm font-medium leading-tight">{contact.name}</p>
+          <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5">
+            {contact.title ? (
+              <span className="text-muted-foreground max-w-full truncate text-[10px]">
+                {contact.title}
+              </span>
+            ) : null}
+            {contact.email ? (
+              <a
+                href={`mailto:${contact.email}`}
+                className="text-primary max-w-[11rem] truncate text-[10px] hover:underline sm:max-w-[14rem]"
+                onClick={(e) => e.stopPropagation()}
+              >
                 {contact.email}
               </a>
-            )}
-            {contact.phone && (
+            ) : null}
+            {contact.phone ? (
               <a
                 href={`tel:${contact.phone.replace(/\s/g, "")}`}
                 className="text-primary text-[10px] hover:underline"
+                onClick={(e) => e.stopPropagation()}
               >
                 {contact.phone}
               </a>
-            )}
+            ) : null}
           </div>
+          {contact.notes?.trim() ? (
+            <p className="text-muted-foreground mt-1 line-clamp-1 text-[10px] leading-snug">
+              {contact.notes.trim()}
+            </p>
+          ) : null}
         </div>
+        {canEdit ? (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="text-muted-foreground hover:text-foreground h-8 shrink-0 gap-1 rounded-lg px-2 text-xs"
+            onClick={(e) => {
+              e.stopPropagation();
+              setEditOpen(true);
+            }}
+            aria-label={`Rediger ${contact.name}`}
+          >
+            <PenLine className="size-3.5" aria-hidden />
+            <span className="hidden sm:inline">Rediger</span>
+          </Button>
+        ) : null}
       </div>
-    );
-  }
 
-  return (
-    <div className="group/contact rounded-2xl bg-card p-4 shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.06]">
-      <div className="grid gap-2.5 sm:grid-cols-2">
-        <div className="space-y-1">
-          <Label className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Navn</Label>
-          <Input
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            className="h-8 rounded-xl text-sm"
-          />
-        </div>
-        <div className="space-y-1">
-          <Label className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Stilling</Label>
-          <Input
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            className="h-8 rounded-xl text-sm"
-          />
-        </div>
-        <div className="space-y-1">
-          <Label className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">E-post</Label>
-          <Input
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            className="h-8 rounded-xl text-sm"
-          />
-        </div>
-        <div className="space-y-1">
-          <Label className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Telefon</Label>
-          <Input
-            type="tel"
-            value={phone}
-            onChange={(e) => setPhone(e.target.value)}
-            className="h-8 rounded-xl text-sm"
-          />
-        </div>
-      </div>
-      <div className="mt-2.5 space-y-1">
-        <Label className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Notater</Label>
-        <Textarea
-          value={notes}
-          onChange={(e) => setNotes(e.target.value)}
-          rows={2}
-          className="rounded-xl text-sm"
-        />
-      </div>
-      <div className="mt-3 flex flex-wrap gap-2">
-        <Button type="button" size="sm" className="rounded-xl" variant="secondary" onClick={() => void save()}>
-          Lagre
-        </Button>
-        <Button
-          type="button"
-          size="sm"
-          variant="ghost"
-          className="rounded-xl text-muted-foreground hover:text-destructive"
-          onClick={() => {
-            if (typeof window !== "undefined" && window.confirm("Fjerne kontakten?")) {
-              void removeContact({ contactId: contact._id });
-            }
-          }}
-        >
-          Fjern
-        </Button>
-      </div>
-    </div>
+      {canEdit ? (
+        <Dialog open={editOpen} onOpenChange={setEditOpen}>
+          <DialogContent size="md" titleId={editTitleId} className="max-h-[min(90vh,32rem)]">
+            <DialogHeader className="px-5 py-4 sm:px-6">
+              <h2 id={editTitleId} className="text-foreground text-base font-semibold tracking-tight">
+                Rediger kontakt
+              </h2>
+              <p className="text-muted-foreground mt-1 text-sm">{contact.name}</p>
+            </DialogHeader>
+            <DialogBody className="space-y-3 sm:space-y-4">
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="space-y-1">
+                  <Label className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                    Navn
+                  </Label>
+                  <Input
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    className="h-9 rounded-xl text-sm"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                    Stilling
+                  </Label>
+                  <Input
+                    value={title}
+                    onChange={(e) => setTitle(e.target.value)}
+                    className="h-9 rounded-xl text-sm"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                    E-post
+                  </Label>
+                  <Input
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    className="h-9 rounded-xl text-sm"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                    Telefon
+                  </Label>
+                  <Input
+                    type="tel"
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
+                    className="h-9 rounded-xl text-sm"
+                  />
+                </div>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  Notater
+                </Label>
+                <Textarea
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  rows={3}
+                  className="rounded-xl text-sm"
+                />
+              </div>
+            </DialogBody>
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="text-muted-foreground hover:text-destructive mr-auto rounded-xl"
+                onClick={() => {
+                  if (typeof window !== "undefined" && window.confirm("Fjerne kontakten?")) {
+                    void removeContact({ contactId: contact._id });
+                    setEditOpen(false);
+                  }
+                }}
+              >
+                Fjern kontakt
+              </Button>
+              <Button type="button" variant="secondary" size="sm" className="rounded-xl" onClick={() => setEditOpen(false)}>
+                Avbryt
+              </Button>
+              <Button type="button" size="sm" className="rounded-xl" onClick={() => void save()}>
+                Lagre
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      ) : null}
+    </>
   );
 }
 
@@ -258,7 +323,8 @@ function MerkantilContactsBlock({
   const [addPhone, setAddPhone] = useState("");
   const [addNotes, setAddNotes] = useState("");
   const [addMsg, setAddMsg] = useState<string | null>(null);
-  const [addFormOpen, setAddFormOpen] = useState(false);
+  const [addDialogOpen, setAddDialogOpen] = useState(false);
+  const addDialogTitleId = `org-contact-add-${unit._id}`;
 
   const hasLegacy =
     !!(unit.merkantilContactName ||
@@ -287,14 +353,14 @@ function MerkantilContactsBlock({
       setAddEmail("");
       setAddPhone("");
       setAddNotes("");
-      setAddFormOpen(false);
+      setAddDialogOpen(false);
     } catch (err) {
       setAddMsg(err instanceof Error ? err.message : "Kunne ikke legge til.");
     }
   }
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-2.5">
       {!embedded ? (
         <>
           <p className="text-muted-foreground text-[0.65rem] font-semibold uppercase tracking-wide">
@@ -306,8 +372,9 @@ function MerkantilContactsBlock({
           </p>
         </>
       ) : (
-        <p className="text-muted-foreground text-xs leading-relaxed">
-          Én eller flere personer per enhet (økonomi, IT, avtaler …).
+        <p className="text-muted-foreground text-[11px] leading-snug">
+          Kort visning i kortet — bruk <span className="font-medium text-foreground/80">Rediger</span>{" "}
+          eller <span className="font-medium text-foreground/80">Legg til</span> for fullt skjema.
         </p>
       )}
 
@@ -357,7 +424,7 @@ function MerkantilContactsBlock({
       ) : null}
 
       {contacts.length > 0 ? (
-        <ul className="space-y-3">
+        <ul className="space-y-2">
           {contacts.map((c) => (
             <li
               key={`${c._id}-${[c.name, c.title ?? "", c.email ?? "", c.phone ?? "", c.notes ?? ""].join("\x1f")}`}
@@ -371,145 +438,111 @@ function MerkantilContactsBlock({
       ) : null}
 
       {canEdit ? (
-        embedded ? (
-          <details
-            className="group rounded-xl border border-border/50 border-dashed bg-muted/10 open:border-dashed open:bg-muted/15"
-            open={addFormOpen}
-            onToggle={(e) => {
-              setAddFormOpen(e.currentTarget.open);
+        <>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="w-full rounded-xl border-dashed"
+            onClick={() => {
+              setAddMsg(null);
+              setAddDialogOpen(true);
             }}
           >
-            <summary className="cursor-pointer list-none px-3 py-2.5 text-sm font-medium [&::-webkit-details-marker]:hidden">
-              <span className="inline-flex w-full items-center gap-2">
-                <Plus className="size-4 shrink-0 text-primary" aria-hidden />
-                Legg til kontakt
-                <ChevronRight className="text-muted-foreground ml-auto size-4 shrink-0 transition-transform group-open:rotate-90" />
-              </span>
-            </summary>
-            <form
-              onSubmit={(ev) => void submitAdd(ev)}
-              className="border-border/40 space-y-3 border-t px-3 pb-3 pt-3"
-            >
-              <div className="grid gap-2.5 sm:grid-cols-2">
-                <div className="space-y-1">
-                  <Label className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Navn *</Label>
-                  <Input
-                    value={addName}
-                    onChange={(e) => setAddName(e.target.value)}
-                    className="h-8 rounded-xl text-sm"
-                    placeholder="Fornavn Etternavn"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Stilling</Label>
-                  <Input
-                    value={addTitle}
-                    onChange={(e) => setAddTitle(e.target.value)}
-                    className="h-8 rounded-xl text-sm"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">E-post</Label>
-                  <Input
-                    type="email"
-                    value={addEmail}
-                    onChange={(e) => setAddEmail(e.target.value)}
-                    className="h-8 rounded-xl text-sm"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Telefon</Label>
-                  <Input
-                    type="tel"
-                    value={addPhone}
-                    onChange={(e) => setAddPhone(e.target.value)}
-                    className="h-8 rounded-xl text-sm"
-                  />
-                </div>
-              </div>
-              <div className="space-y-1">
-                <Label className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Notater</Label>
-                <Textarea
-                  value={addNotes}
-                  onChange={(e) => setAddNotes(e.target.value)}
-                  rows={2}
-                  className="rounded-xl text-sm"
-                  placeholder="Ansvarsområde, avtalereferanse …"
-                />
-              </div>
-              {addMsg ? (
-                <p className="text-destructive text-xs" role="alert">
-                  {addMsg}
-                </p>
-              ) : null}
-              <Button type="submit" size="sm" className="rounded-xl" disabled={!addName.trim()}>
-                Legg til kontakt
-              </Button>
-            </form>
-          </details>
-        ) : (
-          <form
-            onSubmit={(ev) => void submitAdd(ev)}
-            className="rounded-2xl bg-muted/15 p-4 ring-1 ring-black/[0.04] dark:ring-white/[0.06]"
-          >
-            <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Legg til kontakt</p>
-            <div className="mt-3 grid gap-2.5 sm:grid-cols-2">
-              <div className="space-y-1">
-                <Label className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Navn *</Label>
-                <Input
-                  value={addName}
-                  onChange={(e) => setAddName(e.target.value)}
-                  className="h-8 rounded-xl text-sm"
-                  placeholder="Fornavn Etternavn"
-                />
-              </div>
-              <div className="space-y-1">
-                <Label className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Stilling</Label>
-                <Input
-                  value={addTitle}
-                  onChange={(e) => setAddTitle(e.target.value)}
-                  className="h-8 rounded-xl text-sm"
-                />
-              </div>
-              <div className="space-y-1">
-                <Label className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">E-post</Label>
-                <Input
-                  type="email"
-                  value={addEmail}
-                  onChange={(e) => setAddEmail(e.target.value)}
-                  className="h-8 rounded-xl text-sm"
-                />
-              </div>
-              <div className="space-y-1">
-                <Label className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Telefon</Label>
-                <Input
-                  type="tel"
-                  value={addPhone}
-                  onChange={(e) => setAddPhone(e.target.value)}
-                  className="h-8 rounded-xl text-sm"
-                />
-              </div>
-            </div>
-            <div className="mt-2.5 space-y-1">
-              <Label className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Notater</Label>
-              <Textarea
-                value={addNotes}
-                onChange={(e) => setAddNotes(e.target.value)}
-                rows={2}
-                className="rounded-xl text-sm"
-                placeholder="Ansvarsområde, avtalereferanse …"
-              />
-            </div>
-            {addMsg && (
-              <p className="text-destructive mt-2 text-xs" role="alert">
-                {addMsg}
-              </p>
-            )}
-            <Button type="submit" size="sm" className="mt-3 rounded-xl" disabled={!addName.trim()}>
-              Legg til kontakt
-            </Button>
-          </form>
-        )
+            <Plus className="size-4" aria-hidden />
+            Legg til kontakt
+          </Button>
+          <Dialog open={addDialogOpen} onOpenChange={setAddDialogOpen}>
+            <DialogContent size="md" titleId={addDialogTitleId} className="max-h-[min(90vh,34rem)]">
+              <DialogHeader className="px-5 py-4 sm:px-6">
+                <h2 id={addDialogTitleId} className="text-foreground text-base font-semibold tracking-tight">
+                  Ny kontaktperson
+                </h2>
+                <p className="text-muted-foreground mt-1 text-sm">{unit.name}</p>
+              </DialogHeader>
+              <form onSubmit={(ev) => void submitAdd(ev)} className="flex min-h-0 flex-1 flex-col">
+                <DialogBody className="space-y-3 sm:space-y-4">
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div className="space-y-1">
+                      <Label className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                        Navn *
+                      </Label>
+                      <Input
+                        value={addName}
+                        onChange={(e) => setAddName(e.target.value)}
+                        className="h-9 rounded-xl text-sm"
+                        placeholder="Fornavn Etternavn"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                        Stilling
+                      </Label>
+                      <Input
+                        value={addTitle}
+                        onChange={(e) => setAddTitle(e.target.value)}
+                        className="h-9 rounded-xl text-sm"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                        E-post
+                      </Label>
+                      <Input
+                        type="email"
+                        value={addEmail}
+                        onChange={(e) => setAddEmail(e.target.value)}
+                        className="h-9 rounded-xl text-sm"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                        Telefon
+                      </Label>
+                      <Input
+                        type="tel"
+                        value={addPhone}
+                        onChange={(e) => setAddPhone(e.target.value)}
+                        className="h-9 rounded-xl text-sm"
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                      Notater
+                    </Label>
+                    <Textarea
+                      value={addNotes}
+                      onChange={(e) => setAddNotes(e.target.value)}
+                      rows={3}
+                      className="rounded-xl text-sm"
+                      placeholder="Ansvarsområde, avtalereferanse …"
+                    />
+                  </div>
+                  {addMsg ? (
+                    <p className="text-destructive text-xs" role="alert">
+                      {addMsg}
+                    </p>
+                  ) : null}
+                </DialogBody>
+                <DialogFooter>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="rounded-xl"
+                    onClick={() => setAddDialogOpen(false)}
+                  >
+                    Avbryt
+                  </Button>
+                  <Button type="submit" size="sm" className="rounded-xl" disabled={!addName.trim()}>
+                    Legg til
+                  </Button>
+                </DialogFooter>
+              </form>
+            </DialogContent>
+          </Dialog>
+        </>
       ) : null}
     </div>
   );
@@ -568,22 +601,19 @@ function OrgBranch({
     !!(unit.merkantilContactName ||
       unit.merkantilContactEmail ||
       unit.merkantilContactPhone);
-  const contactsSummaryOpenDefault =
-    contactsForUnit.length > 0 || hasLegacyUnit;
 
-  const [rosPanelOpen, setRosPanelOpen] = useState(hasRosActivity);
-  const [contactsPanelOpen, setContactsPanelOpen] = useState(
-    contactsSummaryOpenDefault,
-  );
+  /** Start lukket — kortet blir kortere; brukeren åpner ROS / kontakter ved behov. */
+  const [rosPanelOpen, setRosPanelOpen] = useState(false);
+  const [contactsPanelOpen, setContactsPanelOpen] = useState(false);
 
   const wasExpandedRef = useRef(cardExpanded);
   useEffect(() => {
     if (cardExpanded && !wasExpandedRef.current) {
-      setRosPanelOpen(hasRosActivity);
-      setContactsPanelOpen(contactsSummaryOpenDefault);
+      setRosPanelOpen(false);
+      setContactsPanelOpen(false);
     }
     wasExpandedRef.current = cardExpanded;
-  }, [cardExpanded, hasRosActivity, contactsSummaryOpenDefault]);
+  }, [cardExpanded]);
 
   const [addDialog, setAddDialog] = useState<null | "child" | "sibling">(null);
   const addDialogTitleId = `org-add-${unit._id}-title`;
@@ -1852,31 +1882,41 @@ export function OrgChartPanel({
     }
   }, []);
 
+  /**
+   * Må koble wheel etter at viewport finnes i DOM. Første render kan være
+   * lasteskjelett uten ref — da ble lytter aldri registrert med []-deps.
+   */
   useEffect(() => {
     const el = chartViewportRef.current;
     if (!el) return;
 
     /**
-     * Wheel: musehjul (linje/side) zoomer uten modifikator.
-     * Styreflate: to-finger-rulling sender ofte piksel-delta uten Ctrl → la nettleseren rulle.
-     * Pinch / «smart zoom» på flere nettlesere: Ctrl/Cmd + wheel eller piksel-delta med Ctrl.
-     * Safari (WebKit): pinch bruker gesturechange (se under), ikke wheel.
+     * Zoom kun med Ctrl (Win/Linux) eller Cmd (macOS) + hjul — standard for
+     * «pinch-to-zoom»-simulering på trackpad i Chrome/Safari.
+     * Uten modifikator: vanlig vertikal rulling i viewport (pan).
+     * Shift+hjul: horisontal rulling (ikke zoom).
+     * Safari pinch: gesturechange (under).
      */
     const onWheel = (e: WheelEvent) => {
       if (e.shiftKey && !e.ctrlKey && !e.metaKey) {
         return;
       }
-      const pinchOrCtrlZoom = e.ctrlKey || e.metaKey;
-      const lineOrPage =
-        e.deltaMode === WheelEvent.DOM_DELTA_LINE ||
-        e.deltaMode === WheelEvent.DOM_DELTA_PAGE;
-      if (!pinchOrCtrlZoom && !lineOrPage) {
+      const zoomChord = e.ctrlKey || e.metaKey;
+      if (!zoomChord) {
         return;
       }
       e.preventDefault();
-      const factor =
-        e.deltaY > 0 ? 1 / ORG_CHART_ZOOM_STEP : ORG_CHART_ZOOM_STEP;
-      setChartZoom((z) => clampOrgChartZoom(z * factor));
+      const dy = e.deltaY;
+      if (dy === 0) return;
+      // Jevn zoom: liten faktor per piksel (trackpad) og fortsatt fornuftig med musehjul
+      const intensity =
+        e.deltaMode === WheelEvent.DOM_DELTA_LINE
+          ? 0.18
+          : e.deltaMode === WheelEvent.DOM_DELTA_PAGE
+            ? 0.45
+            : 0.0085;
+      const next = chartZoomRef.current * Math.exp(-dy * intensity);
+      setChartZoom(clampOrgChartZoom(next));
     };
 
     /** Safari / WebKit: sporingsflate pinch (scale relativt til gesturestart). */
@@ -1901,7 +1941,7 @@ export function OrgChartPanel({
       el.removeEventListener("gesturestart", onGestureStart);
       el.removeEventListener("gesturechange", onGestureChange);
     };
-  }, []);
+  }, [rows]);
 
   const panSessionRef = useRef<{
     pointerId: number;
@@ -1980,7 +2020,7 @@ export function OrgChartPanel({
       el.removeEventListener("pointerup", endPan);
       el.removeEventListener("pointercancel", endPan);
     };
-  }, [chartPanMode]);
+  }, [chartPanMode, rows]);
 
   const zoomOut = useCallback(() => {
     setChartZoom((z) => clampOrgChartZoom(z / ORG_CHART_ZOOM_STEP));
@@ -2099,7 +2139,8 @@ export function OrgChartPanel({
           <p>
             <strong className="text-foreground font-medium">Zoom</strong> med knappene over kartet,{" "}
             <kbd className="bg-muted rounded px-1 py-0.5 font-mono text-[10px]">Ctrl</kbd>{" "}
-            + musehjul, eller knip på styreflate.{" "}
+            (Mac: <kbd className="bg-muted rounded px-1 py-0.5 font-mono text-[10px]">⌘</kbd>
+            ) + musehjul eller to fingre på styreflate, eller knip i Safari.{" "}
             <strong className="text-foreground font-medium">Flytt utsnitt:</strong> aktiver «Dra kart» og dra i
             området utenfor kortene, eller hold{" "}
             <kbd className="bg-muted rounded px-1 py-0.5 font-mono text-[10px]">Alt</kbd>{" "}
@@ -2352,9 +2393,11 @@ export function OrgChartPanel({
                     <p className="text-muted-foreground max-w-2xl text-xs leading-relaxed">
                       <strong className="text-foreground font-medium">Trykk på et kort</strong> for å
                       zoome til minst 100 % og sentrere enheten.{" "}
-                      <strong className="text-foreground font-medium">Zoom:</strong> knapper,{" "}
-                      <kbd className="bg-muted rounded px-1 py-0.5 font-mono text-[10px]">Ctrl</kbd>{" "}
-                      + scroll eller knip. <strong className="text-foreground font-medium">Flytt kart:</strong>{" "}
+                      <strong className="text-foreground font-medium">Zoom:</strong> knapper, eller hold{" "}
+                      <kbd className="bg-muted rounded px-1 py-0.5 font-mono text-[10px]">Ctrl</kbd>
+                      /{" "}
+                      <kbd className="bg-muted rounded px-1 py-0.5 font-mono text-[10px]">⌘</kbd>
+                      {" "}og rull (mus eller styreflate). <strong className="text-foreground font-medium">Flytt kart:</strong>{" "}
                       «Dra kart» + dra i bakgrunnen,{" "}
                       <kbd className="bg-muted rounded px-1 py-0.5 font-mono text-[10px]">Alt</kbd>{" "}
                       + dra, eller midtknapp. <strong className="text-foreground font-medium">Rull:</strong> to fingre;{" "}
