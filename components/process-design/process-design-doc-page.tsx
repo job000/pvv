@@ -39,7 +39,10 @@ import {
   type ProcessDesignHukiRow,
   type ProcessDesignStepRow,
 } from "@/lib/process-design-doc-types";
-import { downloadProcessDesignPdf } from "@/lib/process-design-pdf";
+import {
+  buildProcessDesignPdfPreviewUrl,
+  downloadProcessDesignPdf,
+} from "@/lib/process-design-pdf";
 import { useMutation, useQuery } from "convex/react";
 import {
   AlertTriangle,
@@ -47,6 +50,7 @@ import {
   ChevronDown,
   ExternalLink,
   FileDown,
+  Eye,
   FileText,
   History,
   Link2,
@@ -735,16 +739,20 @@ function HukiEditor({
 function SecondaryActionsMenu({
   onAutofill,
   onSnapshot,
+  onPreviewPdf,
   onExportPdf,
   canAutofill,
   canEdit,
+  pdfPreviewing,
   pdfExporting,
 }: {
   onAutofill: () => void;
   onSnapshot: () => void;
+  onPreviewPdf: () => void;
   onExportPdf: () => void;
   canAutofill: boolean;
   canEdit: boolean;
+  pdfPreviewing: boolean;
   pdfExporting: boolean;
 }) {
   const [open, setOpen] = useState(false);
@@ -798,6 +806,22 @@ function SecondaryActionsMenu({
           >
             <History className="size-4 shrink-0 text-muted-foreground" />
             Lagre versjon
+          </button>
+          <button
+            type="button"
+            disabled={pdfPreviewing}
+            className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-left text-sm transition-colors hover:bg-muted disabled:opacity-50"
+            onClick={() => {
+              onPreviewPdf();
+              setOpen(false);
+            }}
+          >
+            {pdfPreviewing ? (
+              <Loader2 className="size-4 shrink-0 animate-spin text-muted-foreground" />
+            ) : (
+              <Eye className="size-4 shrink-0 text-muted-foreground" />
+            )}
+            Forhåndsvis PDF
           </button>
           <button
             type="button"
@@ -863,6 +887,9 @@ export function ProcessDesignDocPage({
   const [snapshotNote, setSnapshotNote] = useState("");
   const [snapshotOpen, setSnapshotOpen] = useState(false);
   const [pdfExporting, setPdfExporting] = useState(false);
+  const [pdfPreviewing, setPdfPreviewing] = useState(false);
+  const [pdfPreviewOpen, setPdfPreviewOpen] = useState(false);
+  const [pdfPreviewUrl, setPdfPreviewUrl] = useState<string | null>(null);
   const [conflictOpen, setConflictOpen] = useState(false);
   const [conflictHint, setConflictHint] = useState<string | null>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -1038,6 +1065,27 @@ export function ProcessDesignDocPage({
       });
     } finally {
       setPdfExporting(false);
+    }
+  };
+
+  const previewPdf = async () => {
+    setPdfPreviewing(true);
+    try {
+      const url = await buildProcessDesignPdfPreviewUrl({
+        assessmentTitle,
+        workspaceName: workspace?.name ?? null,
+        organizationLine: organizationLine.trim() || undefined,
+        payload,
+        generatedAt: new Date(),
+        publishedVersion: latestPublishedVersion,
+      });
+      setPdfPreviewUrl((current) => {
+        if (current) URL.revokeObjectURL(current);
+        return url;
+      });
+      setPdfPreviewOpen(true);
+    } finally {
+      setPdfPreviewing(false);
     }
   };
 
@@ -1222,6 +1270,24 @@ export function ProcessDesignDocPage({
                 variant="outline"
                 size="sm"
                 className="gap-1.5 rounded-xl"
+                onClick={() => void previewPdf()}
+                disabled={pdfPreviewing}
+              >
+                {pdfPreviewing ? (
+                  <Loader2
+                    className="size-3.5 animate-spin"
+                    aria-hidden
+                  />
+                ) : (
+                  <Eye className="size-3.5" aria-hidden />
+                )}
+                Forhåndsvis PDF
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="gap-1.5 rounded-xl"
                 onClick={applyAutofill}
                 disabled={!draftBundle?.draft || !canEdit}
                 title="Fyller tomme felt fra PVV, ROS og prosessregister"
@@ -1262,9 +1328,11 @@ export function ProcessDesignDocPage({
                 <SecondaryActionsMenu
                   onAutofill={applyAutofill}
                   onSnapshot={() => setSnapshotOpen(true)}
+                  onPreviewPdf={() => void previewPdf()}
                   onExportPdf={() => void exportPdf()}
                   canAutofill={!!draftBundle?.draft && canEdit}
                   canEdit={canEdit}
+                  pdfPreviewing={pdfPreviewing}
                   pdfExporting={pdfExporting}
                 />
               </div>
@@ -1824,6 +1892,72 @@ export function ProcessDesignDocPage({
           </div>
         </SheetContent>
       </Sheet>
+
+      {/* Snapshot dialog */}
+      <Dialog
+        open={pdfPreviewOpen}
+        onOpenChange={(open) => {
+          setPdfPreviewOpen(open);
+          if (!open && pdfPreviewUrl) {
+            URL.revokeObjectURL(pdfPreviewUrl);
+            setPdfPreviewUrl(null);
+          }
+        }}
+      >
+        <DialogContent
+          size="2xl"
+          titleId="pdd-pdf-preview-title"
+          className="max-h-[min(95vh,58rem)]"
+        >
+          <DialogHeader>
+            <p
+              id="pdd-pdf-preview-title"
+              className="font-heading text-lg font-semibold"
+            >
+              Forhåndsvis PDF
+            </p>
+            <p className="text-sm leading-relaxed text-muted-foreground">
+              Slik ser eksporten ut nå basert på gjeldende innhold i dokumentet.
+            </p>
+          </DialogHeader>
+          <DialogBody className="space-y-3">
+            <div className="overflow-hidden rounded-2xl border border-border/60 bg-muted/20">
+              {pdfPreviewUrl ? (
+                <iframe
+                  src={pdfPreviewUrl}
+                  title="PDD PDF-forhåndsvisning"
+                  className="h-[min(72vh,48rem)] w-full bg-background"
+                />
+              ) : (
+                <div className="flex h-[min(72vh,48rem)] items-center justify-center text-sm text-muted-foreground">
+                  Ingen forhåndsvisning tilgjengelig.
+                </div>
+              )}
+            </div>
+          </DialogBody>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setPdfPreviewOpen(false)}
+            >
+              Lukk
+            </Button>
+            <Button
+              type="button"
+              onClick={() => void exportPdf()}
+              disabled={pdfExporting}
+            >
+              {pdfExporting ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <FileDown className="size-4" />
+              )}
+              Last ned PDF
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Snapshot dialog */}
       <Dialog open={snapshotOpen} onOpenChange={setSnapshotOpen}>

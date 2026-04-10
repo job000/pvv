@@ -36,6 +36,7 @@ import {
   Loader2,
   Shield,
   Trash2,
+  Workflow,
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -60,6 +61,16 @@ type CoverageRow = {
       pipelineStatus: string;
     }>;
   };
+  pdd: {
+    count: number;
+    latestAt: number | null;
+    documents: Array<{
+      documentId: Id<"processDesignDocuments">;
+      assessmentId: Id<"assessments">;
+      title: string;
+      updatedAt: number;
+    }>;
+  };
   ros: {
     count: number;
     latestAt: number | null;
@@ -70,6 +81,15 @@ type CoverageRow = {
     }>;
   };
 };
+
+function formatCoverageUpdatedAt(ts: number | null): string {
+  if (ts == null) return "Ikke oppdatert ennå";
+  try {
+    return `sist oppdatert ${new Date(ts).toLocaleDateString("nb-NO")}`;
+  } catch {
+    return `sist oppdatert ${ts}`;
+  }
+}
 
 function sourceBadges(c: CoverageRow) {
   const hasIssue =
@@ -107,10 +127,11 @@ function sourceBadges(c: CoverageRow) {
 function coverageAccent(c: CoverageRow): string {
   const hasPvv = c.pvv.count > 0;
   const hasRos = c.ros.count > 0;
-  if (hasPvv && hasRos) {
+  const hasPdd = c.pdd.count > 0;
+  if (hasPvv && hasRos && hasPdd) {
     return "border-l-emerald-500/90";
   }
-  if (hasPvv || hasRos) {
+  if (hasPvv || hasRos || hasPdd) {
     return "border-l-amber-500/85";
   }
   return "border-l-slate-400/50";
@@ -121,6 +142,55 @@ function githubIssueUrl(c: CoverageRow): string | null {
     return null;
   }
   return `https://github.com/${c.githubRepoFullName.trim()}/issues/${c.githubIssueNumber}`;
+}
+
+function ProcessDocumentSummaryRow({
+  icon: Icon,
+  toneClass,
+  label,
+  title,
+  href,
+  updatedAt,
+  count,
+}: {
+  icon: typeof ClipboardList;
+  toneClass: string;
+  label: string;
+  title?: string;
+  href?: string;
+  updatedAt: number | null;
+  count: number;
+}) {
+  return (
+    <div className="flex gap-2.5 rounded-xl border border-border/50 bg-background/70 px-3 py-3">
+      <div
+        className={cn(
+          "flex size-8 shrink-0 items-center justify-center rounded-lg",
+          toneClass,
+        )}
+      >
+        <Icon className="size-4" aria-hidden />
+      </div>
+      <div className="min-w-0 flex-1">
+        {href && title ? (
+          <Link
+            href={href}
+            className="line-clamp-1 text-sm font-medium text-foreground underline-offset-4 hover:text-primary hover:underline"
+          >
+            {label} - {title}
+          </Link>
+        ) : (
+          <p className="text-sm font-medium text-muted-foreground">
+            {label} - ingen dokumentasjon ennå
+          </p>
+        )}
+        <p className="mt-1 text-xs text-muted-foreground">
+          {count > 1 ? `${count} dokumenter · ` : ""}
+          {formatCoverageUpdatedAt(updatedAt)}
+        </p>
+      </div>
+    </div>
+  );
 }
 
 function ProcessCoverageDetailDialog({
@@ -173,7 +243,7 @@ function ProcessCoverageDetailDialog({
                     {row.name}
                   </h2>
                   <span id="process-coverage-detail-desc" className="sr-only">
-                    PVV og ROS for denne prosessen.
+                    Dokumentasjon for denne prosessen.
                   </span>
                 </div>
                 {sourceBadges(row)}
@@ -255,6 +325,54 @@ function ProcessCoverageDetailDialog({
                             }
                           </Badge>
                         )}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </section>
+
+              <section
+                className="rounded-xl border border-border/60 bg-blue-500/[0.06] p-4 dark:bg-blue-950/20"
+                aria-labelledby="pdd-detail-heading"
+              >
+                <div className="mb-3 flex items-center gap-2">
+                  <Workflow className="size-5 shrink-0 text-blue-700 dark:text-blue-300" />
+                  <h3
+                    id="pdd-detail-heading"
+                    className="text-foreground text-base font-semibold"
+                  >
+                    Prosessdesign / PDD ({row.pdd.count})
+                  </h3>
+                </div>
+                {row.pdd.documents.length === 0 ? (
+                  <p className="text-muted-foreground text-sm">
+                    Ingen PDD koblet til prosessen ennå.
+                  </p>
+                ) : (
+                  <ul className="divide-border/60 divide-y rounded-lg border border-border/50 bg-background">
+                    {row.pdd.documents.map((d) => (
+                      <li
+                        key={d.documentId}
+                        className="flex flex-col gap-2 px-3 py-3 sm:flex-row sm:items-center sm:justify-between"
+                      >
+                        <div className="min-w-0 flex-1">
+                          <Link
+                            href={`/w/${workspaceId}/a/${d.assessmentId}/prosessdesign`}
+                            className="text-foreground hover:text-primary font-medium underline-offset-4 hover:underline"
+                          >
+                            {d.title}
+                          </Link>
+                          <p className="text-muted-foreground mt-0.5 text-xs">
+                            {formatCoverageUpdatedAt(d.updatedAt)}
+                          </p>
+                        </div>
+                        <Link
+                          href={`/w/${workspaceId}/a/${d.assessmentId}/prosessdesign`}
+                          className="text-primary inline-flex shrink-0 items-center gap-1 text-sm font-medium"
+                        >
+                          Åpne
+                          <ChevronRight className="size-4" aria-hidden />
+                        </Link>
                       </li>
                     ))}
                   </ul>
@@ -364,8 +482,12 @@ function ProcessCoverageDetailDialog({
 
 export function ProcessCoverageOverview({
   workspaceId,
+  title = "Dokumentasjon per prosess",
+  description = "Hold oversikt over vurderinger, risiko og prosessdesign for hver prosess.",
 }: {
   workspaceId: Id<"workspaces">;
+  title?: string;
+  description?: string;
 }) {
   const router = useRouter();
   const rows = useQuery(api.candidates.listProcessCoverage, { workspaceId });
@@ -536,8 +658,9 @@ export function ProcessCoverageOverview({
             id="process-coverage-heading"
             className="font-heading text-lg font-semibold tracking-tight text-foreground sm:text-xl"
           >
-            PVV og ROS per prosess
+            {title}
           </h2>
+          <p className="mt-1 text-sm text-muted-foreground">{description}</p>
         </div>
         <FilterToolbar className="w-full sm:ml-auto sm:max-w-2xl">
           <SearchInput
@@ -614,61 +737,45 @@ export function ProcessCoverageOverview({
                   </div>
 
                   <div className="border-border/50 space-y-2.5 border-t pt-3">
-                    <div
-                      className="flex gap-2.5"
-                      role="group"
-                      aria-label="PVV-vurderinger"
-                    >
-                      <div className="bg-primary/10 text-primary flex size-8 shrink-0 items-center justify-center rounded-lg">
-                        <ClipboardList className="size-4" aria-hidden />
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        {c.pvv.count === 0 ? (
-                          <p className="text-muted-foreground text-sm">
-                            Ingen vurdering
-                          </p>
-                        ) : (
-                          <p className="text-foreground text-sm tabular-nums">
-                            {c.pvv.count === 1
-                              ? "1 vurdering"
-                              : `${c.pvv.count} vurderinger`}
-                            {c.pvv.latestAt != null ? (
-                              <span className="text-muted-foreground">
-                                {" · "}
-                                {formatRelativeUpdatedAt(c.pvv.latestAt)}
-                              </span>
-                            ) : null}
-                          </p>
-                        )}
-                      </div>
-                    </div>
-
-                    <div
-                      className="flex gap-2.5"
-                      role="group"
-                      aria-label="ROS-analyser"
-                    >
-                      <div className="bg-emerald-500/12 text-emerald-800 dark:text-emerald-200 flex size-8 shrink-0 items-center justify-center rounded-lg">
-                        <Shield className="size-4" aria-hidden />
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        {c.ros.count === 0 ? (
-                          <p className="text-muted-foreground text-sm">Ingen ROS</p>
-                        ) : (
-                          <p className="text-foreground text-sm tabular-nums">
-                            {c.ros.count === 1
-                              ? "1 analyse"
-                              : `${c.ros.count} analyser`}
-                            {c.ros.latestAt != null ? (
-                              <span className="text-muted-foreground">
-                                {" · "}
-                                {formatRelativeUpdatedAt(c.ros.latestAt)}
-                              </span>
-                            ) : null}
-                          </p>
-                        )}
-                      </div>
-                    </div>
+                    <ProcessDocumentSummaryRow
+                      icon={ClipboardList}
+                      toneClass="bg-primary/10 text-primary"
+                      label="PVV"
+                      title={c.pvv.assessments[0]?.title}
+                      href={
+                        c.pvv.assessments[0]
+                          ? `/w/${workspaceId}/a/${c.pvv.assessments[0].assessmentId}`
+                          : undefined
+                      }
+                      updatedAt={c.pvv.latestAt}
+                      count={c.pvv.count}
+                    />
+                    <ProcessDocumentSummaryRow
+                      icon={Shield}
+                      toneClass="bg-emerald-500/12 text-emerald-800 dark:text-emerald-200"
+                      label="Risiko"
+                      title={c.ros.analyses[0]?.title}
+                      href={
+                        c.ros.analyses[0]
+                          ? `/w/${workspaceId}/ros/a/${c.ros.analyses[0].analysisId}`
+                          : undefined
+                      }
+                      updatedAt={c.ros.latestAt}
+                      count={c.ros.count}
+                    />
+                    <ProcessDocumentSummaryRow
+                      icon={Workflow}
+                      toneClass="bg-blue-500/12 text-blue-800 dark:text-blue-200"
+                      label="PDD"
+                      title={c.pdd.documents[0]?.title}
+                      href={
+                        c.pdd.documents[0]
+                          ? `/w/${workspaceId}/a/${c.pdd.documents[0].assessmentId}/prosessdesign`
+                          : undefined
+                      }
+                      updatedAt={c.pdd.latestAt}
+                      count={c.pdd.count}
+                    />
                   </div>
 
                   <div className="mt-auto flex flex-col gap-2 border-t border-border/40 pt-3">

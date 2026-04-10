@@ -18,6 +18,7 @@ import { ORG_UNIT_KIND_LABELS } from "@/lib/helsesector-labels";
 import { COMPLIANCE_STATUS_LABELS } from "@/lib/helsesector-labels";
 import { OrgUnitRosKpiStrip, type OrgRosRollup } from "@/components/workspace/org-unit-ros-kpi-strip";
 import { OrgUnitTreeOverviewStrip } from "@/components/workspace/org-unit-tree-overview-strip";
+import { ProcessCoverageOverview } from "@/components/workspace/process-coverage-overview";
 import { toast } from "@/lib/app-toast";
 import { formatUserFacingError } from "@/lib/user-facing-error";
 import { cn } from "@/lib/utils";
@@ -2646,6 +2647,22 @@ export function OrgChartPanel({
         </div>
         </OrgChartInteractionContext.Provider>
       )}
+
+      <section className="space-y-3 rounded-2xl border border-border/50 bg-card/70 p-4 shadow-sm sm:p-5">
+        <div className="space-y-1">
+          <h2 className="text-lg font-semibold tracking-tight text-foreground">
+            Dokumentasjon i organisasjonen
+          </h2>
+          <p className="text-sm text-muted-foreground">
+            Finn prosesser og deres PVV, risiko og PDD fra samme sted, også når du starter i organisasjonsvisningen.
+          </p>
+        </div>
+        <ProcessCoverageOverview
+          workspaceId={workspaceId}
+          title="Prosesser og tilknyttet dokumentasjon"
+          description="Filtrer på organisasjonsenhet for å se hvilke dokumenter som finnes per prosess, og hva som sist ble oppdatert."
+        />
+      </section>
     </div>
   );
 }

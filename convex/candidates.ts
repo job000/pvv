@@ -618,6 +618,19 @@ export const listProcessCoverage = query({
       )
       .collect();
 
+    const processDesignDocs = await ctx.db
+      .query("processDesignDocuments")
+      .withIndex("by_workspace", (q) => q.eq("workspaceId", args.workspaceId))
+      .collect();
+
+    const pddByAssessmentId = new Map<
+      Id<"assessments">,
+      Doc<"processDesignDocuments">
+    >();
+    for (const doc of processDesignDocs) {
+      pddByAssessmentId.set(doc.assessmentId, doc);
+    }
+
     const pvvByCode = new Map<
       string,
       Array<{
@@ -625,6 +638,15 @@ export const listProcessCoverage = query({
         title: string;
         updatedAt: number;
         pipelineStatus: string;
+      }>
+    >();
+    const pddByCode = new Map<
+      string,
+      Array<{
+        documentId: Id<"processDesignDocuments">;
+        assessmentId: Id<"assessments">;
+        title: string;
+        updatedAt: number;
       }>
     >();
 
@@ -651,9 +673,30 @@ export const listProcessCoverage = query({
       const list = pvvByCode.get(codeKey) ?? [];
       list.push(row);
       pvvByCode.set(codeKey, list);
+
+      const pddDoc = pddByAssessmentId.get(a._id);
+      if (pddDoc) {
+        const pddPayload = pddDoc.payload as { processTitle?: string } | undefined;
+        const pddList = pddByCode.get(codeKey) ?? [];
+        const pvvProcessName = draft?.payload?.processName?.trim();
+        pddList.push({
+          documentId: pddDoc._id,
+          assessmentId: a._id,
+          title:
+            pddPayload?.processTitle?.trim() ||
+            pvvProcessName ||
+            a.title ||
+            "Prosessdesign",
+          updatedAt: pddDoc.updatedAt,
+        });
+        pddByCode.set(codeKey, pddList);
+      }
     }
 
     for (const [, list] of pvvByCode) {
+      list.sort((x, y) => y.updatedAt - x.updatedAt);
+    }
+    for (const [, list] of pddByCode) {
       list.sort((x, y) => y.updatedAt - x.updatedAt);
     }
 
@@ -697,6 +740,7 @@ export const listProcessCoverage = query({
         const codeKey = normalizeProcessCode(c.code);
         const pvvList = pvvByCode.get(codeKey) ?? [];
         const rosList = rosByCandidateId.get(c._id) ?? [];
+        const pddList = pddByCode.get(codeKey) ?? [];
         return {
           candidateId: c._id,
           name: c.name,
@@ -710,6 +754,11 @@ export const listProcessCoverage = query({
             count: pvvList.length,
             latestAt: pvvList[0]?.updatedAt ?? null,
             assessments: pvvList,
+          },
+          pdd: {
+            count: pddList.length,
+            latestAt: pddList[0]?.updatedAt ?? null,
+            documents: pddList,
           },
           ros: {
             count: rosList.length,

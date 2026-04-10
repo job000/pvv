@@ -35,7 +35,10 @@ type DiagramRasters = {
   toBe: PddDiagramRaster[] | null;
 };
 
-function buildProcessDesignPdf(data: ProcessDesignPdfInput, diagrams: DiagramRasters): void {
+function buildProcessDesignPdfDocument(
+  data: ProcessDesignPdfInput,
+  diagrams: DiagramRasters,
+): jsPDF {
   const doc = new jsPDF({ unit: "mm", format: "a4" });
   const margin = 16;
   let cursor = margin;
@@ -404,16 +407,42 @@ function buildProcessDesignPdf(data: ProcessDesignPdfInput, diagrams: DiagramRas
     shortTitle,
     docTypeLabel: "RPA prosessdesign",
   });
-  doc.save(`rpa-prosessdesign-${isoDate}.pdf`);
+  return doc;
+}
+
+async function buildProcessDesignPdfBlob(
+  data: ProcessDesignPdfInput,
+): Promise<Blob> {
+  const [asIs, toBe] = await Promise.all([
+    rasterizePddDiagramSnapshot(data.payload.asIsDiagramSnapshot),
+    rasterizePddDiagramSnapshot(data.payload.toBeDiagramSnapshot),
+  ]);
+  const doc = buildProcessDesignPdfDocument(data, { asIs, toBe });
+  return doc.output("blob");
 }
 
 /**
  * A4-PDF — RPA Process Design Document. Rasteriserer lagrede tldraw-diagrammer i nettleseren.
  */
 export async function downloadProcessDesignPdf(data: ProcessDesignPdfInput): Promise<void> {
-  const [asIs, toBe] = await Promise.all([
-    rasterizePddDiagramSnapshot(data.payload.asIsDiagramSnapshot),
-    rasterizePddDiagramSnapshot(data.payload.toBeDiagramSnapshot),
-  ]);
-  buildProcessDesignPdf(data, { asIs, toBe });
+  const blob = await buildProcessDesignPdfBlob(data);
+  const url = URL.createObjectURL(blob);
+  try {
+    const isoDate = data.generatedAt.toISOString().slice(0, 10);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `rpa-prosessdesign-${isoDate}.pdf`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+  } finally {
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+}
+
+export async function buildProcessDesignPdfPreviewUrl(
+  data: ProcessDesignPdfInput,
+): Promise<string> {
+  const blob = await buildProcessDesignPdfBlob(data);
+  return URL.createObjectURL(blob);
 }
