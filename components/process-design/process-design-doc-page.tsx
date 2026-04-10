@@ -100,8 +100,8 @@ function Field({
   placeholder?: string;
 }) {
   return (
-    <div className="space-y-1.5">
-      <Label className="text-[0.8rem] font-medium text-muted-foreground">
+    <div className="space-y-2">
+      <Label className="text-[0.76rem] font-semibold tracking-[0.01em] text-muted-foreground">
         {label}
       </Label>
       <Textarea
@@ -110,7 +110,7 @@ function Field({
         rows={rows}
         disabled={disabled}
         placeholder={placeholder}
-        className="min-h-0 resize-y text-sm"
+        className="min-h-0 resize-y rounded-xl border-border/60 bg-background/70 text-sm shadow-sm"
       />
     </div>
   );
@@ -124,12 +124,37 @@ function ReadOnlyBlock({
   children: React.ReactNode;
 }) {
   return (
-    <div className="space-y-1">
-      <p className="text-[0.8rem] font-medium text-muted-foreground">{label}</p>
-      <div className="rounded-lg border border-border/40 bg-muted/20 px-3 py-2.5 text-sm">
+    <div className="space-y-2">
+      <p className="text-[0.76rem] font-semibold tracking-[0.01em] text-muted-foreground">
+        {label}
+      </p>
+      <div className="rounded-xl border border-border/50 bg-muted/20 px-3.5 py-3 text-sm shadow-sm">
         {children}
       </div>
     </div>
+  );
+}
+
+function StatusBadge({
+  children,
+  tone = "default",
+}: {
+  children: React.ReactNode;
+  tone?: "default" | "warning" | "success";
+}) {
+  const toneClass =
+    tone === "warning"
+      ? "border-amber-500/20 bg-amber-500/10 text-amber-700 dark:text-amber-300"
+      : tone === "success"
+        ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
+        : "border-border/60 bg-muted/40 text-muted-foreground";
+
+  return (
+    <span
+      className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-medium ${toneClass}`}
+    >
+      {children}
+    </span>
   );
 }
 
@@ -146,21 +171,21 @@ function CollapsibleSection({
 }) {
   const [open, setOpen] = useState(defaultOpen);
   return (
-    <div className="rounded-xl border border-border/60 bg-muted/10">
+    <div className="rounded-2xl border border-border/60 bg-card/70 shadow-sm backdrop-blur-sm">
       <button
         type="button"
-        className="flex w-full touch-manipulation items-center gap-2.5 px-4 py-3 text-left"
+        className="flex w-full touch-manipulation items-center gap-2.5 px-4 py-3.5 text-left sm:px-5"
         onClick={() => setOpen(!open)}
       >
         <Icon className="size-4 shrink-0 text-muted-foreground" />
-        <span className="flex-1 text-sm font-semibold">{title}</span>
+        <span className="flex-1 text-sm font-semibold text-foreground">{title}</span>
         <ChevronDown
           className={`size-4 text-muted-foreground transition-transform ${open ? "rotate-180" : ""}`}
           aria-hidden
         />
       </button>
       {open && (
-        <div className="border-t border-border/40 px-4 pb-4 pt-3">
+        <div className="border-t border-border/40 px-4 pb-4 pt-3 sm:px-5">
           {children}
         </div>
       )}
@@ -1011,7 +1036,7 @@ export function ProcessDesignDocPage({
   const rosAnalyses = rosCtx ?? [];
 
   return (
-    <div className="mx-auto max-w-3xl space-y-6 px-4 pb-28 sm:px-6 lg:px-0 lg:pb-12">
+    <div className="mx-auto max-w-4xl space-y-5 px-4 pb-28 sm:space-y-6 sm:px-6 lg:px-0 lg:pb-12">
       {/* Back nav */}
       <Link
         href={`/w/${wid}/a/${assessmentId}`}
@@ -1021,10 +1046,60 @@ export function ProcessDesignDocPage({
         Til vurdering
       </Link>
 
-      <ProductPageHeader
-        title="Prosessdesign (PDD)"
-        description="Dokumenter prosess, roller, flyt og automatiseringskrav."
-      />
+      <section className="overflow-hidden rounded-3xl border border-border/60 bg-gradient-to-b from-muted/40 to-background shadow-sm">
+        <div className="space-y-4 p-4 sm:p-6">
+          <div className="space-y-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <StatusBadge tone={dirty ? "warning" : "success"}>
+                {dirty ? "Ulagrede endringer" : "Lagret utkast"}
+              </StatusBadge>
+              {versionCount > 0 ? (
+                <StatusBadge>{versionCount} versjoner</StatusBadge>
+              ) : null}
+              {processFromRegistry ? (
+                <StatusBadge>Prosess koblet</StatusBadge>
+              ) : null}
+            </div>
+            <ProductPageHeader
+              title="Prosessdesign (PDD)"
+              description="Bygg et tydelig prosessdesign for RPA med flyt, roller, risiko og koblinger til PVV, ROS og prosessregister."
+            />
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-3">
+            <div className="rounded-2xl border border-border/50 bg-background/70 p-3 shadow-sm">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+                Dokument
+              </p>
+              <p className="mt-1 line-clamp-2 text-sm font-semibold text-foreground">
+                {payload.processTitle?.trim() || assessmentTitle}
+              </p>
+            </div>
+            <div className="rounded-2xl border border-border/50 bg-background/70 p-3 shadow-sm">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+                Kilder
+              </p>
+              <p className="mt-1 text-sm text-foreground">
+                {[
+                  "PVV",
+                  processFromRegistry ? "Prosessregister" : null,
+                  rosAnalyses.length > 0 ? `${rosAnalyses.length} ROS` : null,
+                ]
+                  .filter(Boolean)
+                  .join(" · ")}
+              </p>
+            </div>
+            <div className="rounded-2xl border border-border/50 bg-background/70 p-3 shadow-sm">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+                Neste steg
+              </p>
+              <p className="mt-1 text-sm text-foreground">
+                Start med oversikt, tegn As-Is og fyll deretter To-Be og risiko.
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
 
       {!hasDoc ? (
         <ProductEmptyState
@@ -1055,23 +1130,58 @@ export function ProcessDesignDocPage({
       ) : (
         <>
           {/* Top toolbar */}
-          <div className="flex items-center gap-2">
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-medium text-foreground">
-                {payload.processTitle?.trim() || assessmentTitle}
-              </p>
-              {dirty && (
-                <p className="text-xs text-amber-600 dark:text-amber-400">
-                  Ulagrede endringer
+          <div className="rounded-2xl border border-border/60 bg-card/70 p-3 shadow-sm backdrop-blur-sm sm:p-4">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="min-w-0">
+                <p className="truncate text-base font-semibold text-foreground">
+                  {payload.processTitle?.trim() || assessmentTitle}
                 </p>
-              )}
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Hold innholdet oppdatert og eksporter delbar PDF ved behov.
+                </p>
+              </div>
+
+              <div className="hidden flex-wrap gap-2 sm:flex sm:justify-end">
+                {versionCount > 0 && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="gap-1.5 rounded-xl"
+                    onClick={() => setHistoryOpen(true)}
+                  >
+                    <History className="size-3.5" aria-hidden />
+                    Historikk
+                    <span className="inline-flex size-5 items-center justify-center rounded-full bg-muted text-[10px] font-semibold">
+                      {versionCount}
+                    </span>
+                  </Button>
+                )}
+                {canEdit && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="gap-1.5 rounded-xl"
+                    onClick={handleSave}
+                    disabled={saving || !dirty}
+                  >
+                    {saving ? (
+                      <Loader2 className="size-4 animate-spin" />
+                    ) : (
+                      <Save className="size-3.5" />
+                    )}
+                    Lagre
+                  </Button>
+                )}
+              </div>
             </div>
-            <div className="hidden gap-2 sm:flex">
+
+            <div className="mt-3 grid grid-cols-2 gap-2 sm:mt-4 sm:flex sm:flex-wrap">
               <Button
                 type="button"
                 variant="outline"
                 size="sm"
-                className="gap-1.5"
+                className="gap-1.5 rounded-xl"
                 onClick={applyAutofill}
                 disabled={!draftBundle?.draft || !canEdit}
                 title="Fyller tomme felt fra PVV, ROS og prosessregister"
@@ -1083,7 +1193,7 @@ export function ProcessDesignDocPage({
                 type="button"
                 variant="outline"
                 size="sm"
-                className="gap-1.5"
+                className="gap-1.5 rounded-xl"
                 onClick={() => setSnapshotOpen(true)}
                 disabled={!canEdit}
               >
@@ -1094,7 +1204,7 @@ export function ProcessDesignDocPage({
                 type="button"
                 variant="outline"
                 size="sm"
-                className="gap-1.5"
+                className="gap-1.5 rounded-xl"
                 onClick={() => void exportPdf()}
                 disabled={pdfExporting}
               >
@@ -1108,50 +1218,17 @@ export function ProcessDesignDocPage({
                 )}
                 Eksporter PDF
               </Button>
-            </div>
-            {versionCount > 0 && (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="gap-1.5"
-                onClick={() => setHistoryOpen(true)}
-              >
-                <History className="size-3.5" aria-hidden />
-                <span className="hidden sm:inline">Historikk</span>
-                <span className="inline-flex size-5 items-center justify-center rounded-full bg-muted text-[10px] font-semibold">
-                  {versionCount}
-                </span>
-              </Button>
-            )}
-            <div className="sm:hidden">
-              <SecondaryActionsMenu
-                onAutofill={applyAutofill}
-                onSnapshot={() => setSnapshotOpen(true)}
-                onExportPdf={() => void exportPdf()}
-                canAutofill={!!draftBundle?.draft && canEdit}
-                canEdit={canEdit}
-                pdfExporting={pdfExporting}
-              />
-            </div>
-            {canEdit && (
-              <div className="hidden sm:block">
-                <Button
-                  type="button"
-                  size="sm"
-                  className="gap-1.5"
-                  onClick={handleSave}
-                  disabled={saving || !dirty}
-                >
-                  {saving ? (
-                    <Loader2 className="size-4 animate-spin" />
-                  ) : (
-                    <Save className="size-3.5" />
-                  )}
-                  Lagre
-                </Button>
+              <div className="sm:hidden">
+                <SecondaryActionsMenu
+                  onAutofill={applyAutofill}
+                  onSnapshot={() => setSnapshotOpen(true)}
+                  onExportPdf={() => void exportPdf()}
+                  canAutofill={!!draftBundle?.draft && canEdit}
+                  canEdit={canEdit}
+                  pdfExporting={pdfExporting}
+                />
               </div>
-            )}
+            </div>
           </div>
 
           {/* Koblinger — read-only data from linked sources */}
@@ -1215,14 +1292,17 @@ export function ProcessDesignDocPage({
           <Accordion
             multiple
             defaultValue={["overview", "asis", "tobe"]}
-            className="w-full"
+            className="space-y-3"
           >
             {/* ---- 1. Oversikt ---- */}
-            <AccordionItem value="overview">
-              <AccordionTrigger className="text-sm font-semibold">
+            <AccordionItem
+              value="overview"
+              className="overflow-hidden rounded-2xl border border-border/60 bg-card/70 px-4 shadow-sm backdrop-blur-sm sm:px-5"
+            >
+              <AccordionTrigger className="py-4 text-sm font-semibold no-underline hover:no-underline">
                 Prosessoversikt
               </AccordionTrigger>
-              <AccordionContent className="space-y-4 pt-2">
+              <AccordionContent className="space-y-5 border-t border-border/40 pt-4">
                 <Field
                   label="Prosesstittel"
                   value={payload.processTitle ?? payload.asIsProcessName ?? ""}
@@ -1298,11 +1378,14 @@ export function ProcessDesignDocPage({
             </AccordionItem>
 
             {/* ---- 2. As-Is ---- */}
-            <AccordionItem value="asis">
-              <AccordionTrigger className="text-sm font-semibold">
+            <AccordionItem
+              value="asis"
+              className="overflow-hidden rounded-2xl border border-border/60 bg-card/70 px-4 shadow-sm backdrop-blur-sm sm:px-5"
+            >
+              <AccordionTrigger className="py-4 text-sm font-semibold no-underline hover:no-underline">
                 As-Is — nåværende prosess
               </AccordionTrigger>
-              <AccordionContent className="space-y-4 pt-2">
+              <AccordionContent className="space-y-5 border-t border-border/40 pt-4">
                 <Field
                   label="Beskrivelse av nåsituasjonen"
                   value={payload.asIsShortDescription ?? ""}
@@ -1378,11 +1461,14 @@ export function ProcessDesignDocPage({
             </AccordionItem>
 
             {/* ---- 3. To-Be ---- */}
-            <AccordionItem value="tobe">
-              <AccordionTrigger className="text-sm font-semibold">
+            <AccordionItem
+              value="tobe"
+              className="overflow-hidden rounded-2xl border border-border/60 bg-card/70 px-4 shadow-sm backdrop-blur-sm sm:px-5"
+            >
+              <AccordionTrigger className="py-4 text-sm font-semibold no-underline hover:no-underline">
                 To-Be — fremtidig prosess
               </AccordionTrigger>
-              <AccordionContent className="space-y-4 pt-2">
+              <AccordionContent className="space-y-5 border-t border-border/40 pt-4">
                 <ProcessTextDiagramBlock
                   sectionLabel="To-Be prosesskart"
                   diagramHint="Tegn fremtidig flyt — bruk Pil-verktøyet for koblinger."
@@ -1430,11 +1516,14 @@ export function ProcessDesignDocPage({
             </AccordionItem>
 
             {/* ---- 4. HUKI ---- */}
-            <AccordionItem value="huki">
-              <AccordionTrigger className="text-sm font-semibold">
+            <AccordionItem
+              value="huki"
+              className="overflow-hidden rounded-2xl border border-border/60 bg-card/70 px-4 shadow-sm backdrop-blur-sm sm:px-5"
+            >
+              <AccordionTrigger className="py-4 text-sm font-semibold no-underline hover:no-underline">
                 HUKI — roller og ansvar
               </AccordionTrigger>
-              <AccordionContent className="pt-2">
+              <AccordionContent className="border-t border-border/40 pt-4">
                 <HukiEditor
                   rows={payload.hukiRows ?? []}
                   disabled={!canEdit}
@@ -1447,11 +1536,14 @@ export function ProcessDesignDocPage({
             </AccordionItem>
 
             {/* ---- 5. Risiko og feilhåndtering ---- */}
-            <AccordionItem value="risk">
-              <AccordionTrigger className="text-sm font-semibold">
+            <AccordionItem
+              value="risk"
+              className="overflow-hidden rounded-2xl border border-border/60 bg-card/70 px-4 shadow-sm backdrop-blur-sm sm:px-5"
+            >
+              <AccordionTrigger className="py-4 text-sm font-semibold no-underline hover:no-underline">
                 Risiko og feilhåndtering
               </AccordionTrigger>
-              <AccordionContent className="space-y-4 pt-2">
+              <AccordionContent className="space-y-5 border-t border-border/40 pt-4">
                 {/* ROS risks — read-only from linked analyses */}
                 {rosAnalyses.length > 0 && (
                   <div className="space-y-2">
@@ -1567,11 +1659,14 @@ export function ProcessDesignDocPage({
             </AccordionItem>
 
             {/* ---- 6. Tillegg ---- */}
-            <AccordionItem value="extra">
-              <AccordionTrigger className="text-sm font-semibold">
+            <AccordionItem
+              value="extra"
+              className="overflow-hidden rounded-2xl border border-border/60 bg-card/70 px-4 shadow-sm backdrop-blur-sm sm:px-5"
+            >
+              <AccordionTrigger className="py-4 text-sm font-semibold no-underline hover:no-underline">
                 Tilleggsinformasjon
               </AccordionTrigger>
-              <AccordionContent className="space-y-4 pt-2">
+              <AccordionContent className="space-y-5 border-t border-border/40 pt-4">
                 <Field
                   label="Andre observasjoner"
                   value={payload.otherObservations ?? ""}
@@ -1606,11 +1701,11 @@ export function ProcessDesignDocPage({
 
           {/* Mobile sticky bottom bar */}
           {canEdit && (
-            <div className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-background/95 px-4 py-3 backdrop-blur-sm sm:hidden [padding-bottom:calc(0.75rem+env(safe-area-inset-bottom))]">
+            <div className="fixed inset-x-0 bottom-0 z-40 border-t border-border/60 bg-background/90 px-4 py-3 backdrop-blur-xl sm:hidden [padding-bottom:calc(0.75rem+env(safe-area-inset-bottom))]">
               <Button
                 type="button"
                 size="lg"
-                className="w-full gap-2"
+                className="h-12 w-full gap-2 rounded-2xl shadow-sm"
                 onClick={handleSave}
                 disabled={saving || !dirty}
               >
