@@ -14,6 +14,10 @@ export type OrgRosRollup = {
   maxAfter: number;
   /** PVV-vurderinger (aggregeres i org-tre-query) */
   assessmentCount?: number;
+  /** Vurderinger med påbegynt prosessdesign (PDD) i treet */
+  pddCount?: number;
+  /** Vurderinger med fullført prosessdesign (PDD) i treet */
+  pddCompletedCount?: number;
   /** Godkjente inntak via vurdering (aggregeres i org-tre-query) */
   intakeSubmissionCount?: number;
   /** Inntaksskjema direkte knyttet til enhet (aggregeres i org-tre-query) */

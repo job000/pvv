@@ -15,6 +15,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { api } from "@/convex/_generated/api";
 import type { Doc, Id } from "@/convex/_generated/dataModel";
 import { ORG_UNIT_KIND_LABELS } from "@/lib/helsesector-labels";
+import { COMPLIANCE_STATUS_LABELS } from "@/lib/helsesector-labels";
 import { OrgUnitRosKpiStrip, type OrgRosRollup } from "@/components/workspace/org-unit-ros-kpi-strip";
 import { OrgUnitTreeOverviewStrip } from "@/components/workspace/org-unit-tree-overview-strip";
 import { toast } from "@/lib/app-toast";
@@ -36,6 +37,7 @@ import {
   Shield,
   Trash2,
   Users,
+  Workflow,
 } from "lucide-react";
 import Link from "next/link";
 import {
@@ -591,12 +593,17 @@ function OrgBranch({
       maxBefore: 0,
       maxAfter: 0,
       assessmentCount: 0,
+      pddCount: 0,
+      pddCompletedCount: 0,
       intakeSubmissionCount: 0,
       intakeFormCount: 0,
     };
 
   const hasRosActivity =
     rollup.candidateCount > 0 || rollup.analysisCount > 0;
+  const assessmentCount = rollup.assessmentCount ?? 0;
+  const pddCount = rollup.pddCount ?? 0;
+  const pddCompletedCount = rollup.pddCompletedCount ?? 0;
   const hasLegacyUnit =
     !!(unit.merkantilContactName ||
       unit.merkantilContactEmail ||
@@ -770,7 +777,8 @@ function OrgBranch({
               contactsForUnit.length > 0 ||
               rollup.analysisCount > 0 ||
               rollup.candidateCount > 0 ||
-              (rollup.assessmentCount ?? 0) > 0 ||
+              assessmentCount > 0 ||
+              pddCount > 0 ||
               (rollup.intakeSubmissionCount ?? 0) > 0 ||
               (rollup.intakeFormCount ?? 0) > 0) ? (
               <div className="mt-1.5 flex flex-wrap items-center gap-1">
@@ -782,6 +790,11 @@ function OrgBranch({
                 {contactsForUnit.length > 0 && (
                   <span className="text-muted-foreground border-border/40 inline-flex items-center rounded border px-1 py-px text-[9px] font-medium sm:px-1.5 sm:text-[10px]">
                     {contactsForUnit.length} kontakt{contactsForUnit.length === 1 ? "" : "er"}
+                  </span>
+                )}
+                {pddCount > 0 && (
+                  <span className="inline-flex items-center rounded border border-blue-500/20 bg-blue-500/10 px-1 py-px text-[9px] font-medium text-blue-700 dark:text-blue-300 sm:px-1.5 sm:text-[10px]">
+                    {pddCount} PDD
                   </span>
                 )}
               </div>
@@ -807,6 +820,50 @@ function OrgBranch({
 
         {cardExpanded ? (
           <>
+            <div className="border-t border-border/35 px-4 py-3 sm:px-5">
+              <div className="rounded-xl border border-border/40 bg-muted/10 p-3">
+                <div className="flex items-start gap-2.5">
+                  <div className="bg-blue-500/10 text-blue-700 dark:text-blue-300 flex size-8 shrink-0 items-center justify-center rounded-lg">
+                    <Workflow className="size-4" aria-hidden />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div>
+                        <p className="text-sm font-medium text-foreground">
+                          Prosessdesign (RPA)
+                        </p>
+                        <p className="mt-0.5 text-xs text-muted-foreground">
+                          {pddCount > 0
+                            ? `${pddCount} vurdering${pddCount === 1 ? "" : "er"} med påbegynt prosessdesign i denne grenen`
+                            : "Ingen påbegynte prosessdesign i denne grenen ennå"}
+                        </p>
+                      </div>
+                      <Link
+                        href={`/w/${workspaceId}/prosessdesign`}
+                        className="text-primary text-[11px] font-medium hover:underline"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        Åpne prosessdesign
+                      </Link>
+                    </div>
+                    {assessmentCount > 0 ? (
+                      <div className="mt-2 flex flex-wrap gap-1.5">
+                        <span className="inline-flex items-center rounded-full border border-border/50 bg-background/80 px-2 py-1 text-[10px] font-medium text-muted-foreground">
+                          {pddCompletedCount} ferdig dokumentert
+                        </span>
+                        <span className="inline-flex items-center rounded-full border border-border/50 bg-background/80 px-2 py-1 text-[10px] font-medium text-muted-foreground">
+                          {Math.max(
+                            assessmentCount - pddCompletedCount,
+                            0,
+                          )} gjenstår / pågår
+                        </span>
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
+              </div>
+            </div>
+
             <details
               className="group border-t border-border/35"
               open={rosPanelOpen}
@@ -2155,7 +2212,7 @@ export function OrgChartPanel({
           </p>
           <p>
             Under enhetsnavnet vises en <strong className="text-foreground font-medium">firfeltet oversikt</strong>{" "}
-            (prosess, ROS, vurdering, inntak): tallene omfatter underenheter og er snarveier til
+            (prosess, ROS, PDD, vurdering, inntak): tallene omfatter underenheter og er snarveier til
             arbeidsflatene.
           </p>
         </div>

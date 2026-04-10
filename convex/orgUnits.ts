@@ -587,6 +587,10 @@ export type OrgUnitRosRollup = {
   maxAfter: number;
   /** PVV-vurderinger med org.-enhet i under-treet */
   assessmentCount: number;
+  /** Vurderinger i under-treet der PDD/prosessdesign er påbegynt eller fullført */
+  pddCount: number;
+  /** Vurderinger i under-treet der PDD/prosessdesign er fullført */
+  pddCompletedCount: number;
   /** Godkjente inntak der tilknyttet vurdering har org.-enhet i under-treet */
   intakeSubmissionCount: number;
   /** Inntaksskjema direkte knyttet til enhet i under-treet */
@@ -662,10 +666,19 @@ export const rosRollupByOrgUnit = query({
 
     /** Direkte antall vurderinger per org.-enhet (kun egen enhet, ikke subtre ennå). */
     const directAssessmentCount = new Map<Id<"orgUnits">, number>();
+    const directPddCount = new Map<Id<"orgUnits">, number>();
+    const directPddCompletedCount = new Map<Id<"orgUnits">, number>();
     for (const a of assessments) {
       if (!a.orgUnitId) continue;
       const k = a.orgUnitId;
       directAssessmentCount.set(k, (directAssessmentCount.get(k) ?? 0) + 1);
+      const pddStatus = a.pddStatus ?? "not_started";
+      if (pddStatus !== "not_started" && pddStatus !== "not_applicable") {
+        directPddCount.set(k, (directPddCount.get(k) ?? 0) + 1);
+      }
+      if (pddStatus === "completed") {
+        directPddCompletedCount.set(k, (directPddCompletedCount.get(k) ?? 0) + 1);
+      }
     }
 
     /** Godkjente inntak per org.-enhet (via vurderingens orgUnitId). */
@@ -758,6 +771,14 @@ export const rosRollupByOrgUnit = query({
       for (const [oid, n] of directAssessmentCount) {
         if (sub.has(oid)) assessmentCount += n;
       }
+      let pddCount = 0;
+      for (const [oid, n] of directPddCount) {
+        if (sub.has(oid)) pddCount += n;
+      }
+      let pddCompletedCount = 0;
+      for (const [oid, n] of directPddCompletedCount) {
+        if (sub.has(oid)) pddCompletedCount += n;
+      }
       let intakeSubmissionCount = 0;
       for (const [oid, n] of directIntakeSubmissionCount) {
         if (sub.has(oid)) intakeSubmissionCount += n;
@@ -772,6 +793,8 @@ export const rosRollupByOrgUnit = query({
         maxBefore,
         maxAfter,
         assessmentCount,
+        pddCount,
+        pddCompletedCount,
         intakeSubmissionCount,
         intakeFormCount,
       };
@@ -798,8 +821,19 @@ export const rosRollupByOrgUnit = query({
       unMaxA = Math.max(unMaxA, maxAfterLevel(r));
     }
     let unAssess = 0;
+    let unPdd = 0;
+    let unPddCompleted = 0;
     for (const a of assessments) {
-      if (!a.orgUnitId) unAssess++;
+      if (!a.orgUnitId) {
+        unAssess++;
+        const pddStatus = a.pddStatus ?? "not_started";
+        if (pddStatus !== "not_started" && pddStatus !== "not_applicable") {
+          unPdd++;
+        }
+        if (pddStatus === "completed") {
+          unPddCompleted++;
+        }
+      }
     }
     let unIntake = 0;
     for (const s of intakeSubmissions) {
@@ -820,6 +854,8 @@ export const rosRollupByOrgUnit = query({
       maxBefore: unMaxB,
       maxAfter: unMaxA,
       assessmentCount: unAssess,
+      pddCount: unPdd,
+      pddCompletedCount: unPddCompleted,
       intakeSubmissionCount: unIntake,
       intakeFormCount: unIntakeForm,
     };

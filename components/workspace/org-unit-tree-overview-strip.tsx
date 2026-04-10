@@ -3,7 +3,7 @@
 import type { OrgRosRollup } from "@/components/workspace/org-unit-ros-kpi-strip";
 import type { Id } from "@/convex/_generated/dataModel";
 import { cn } from "@/lib/utils";
-import { ClipboardList, FileText, Inbox, Layers } from "lucide-react";
+import { ClipboardList, FileText, Inbox, Layers, Workflow } from "lucide-react";
 import Link from "next/link";
 
 type Item = {
@@ -15,7 +15,7 @@ type Item = {
 };
 
 /**
- * Fire søyler: prosess, ROS, PVV-vurdering, godkjente inntak (skjema → vurdering).
+ * Fem søyler: prosess, ROS, prosessdesign (PDD), PVV-vurdering, godkjente inntak (skjema → vurdering).
  * Tall aggregeres for underenheter (samme logikk som ROS-stripe).
  */
 export function OrgUnitTreeOverviewStrip({
@@ -31,6 +31,7 @@ export function OrgUnitTreeOverviewStrip({
   compact?: boolean;
 }) {
   const assessmentCount = stats.assessmentCount ?? 0;
+  const pddCount = stats.pddCount ?? 0;
   const intakeSubmissionCount = stats.intakeSubmissionCount ?? 0;
   const { candidateCount, analysisCount } = stats;
 
@@ -48,6 +49,13 @@ export function OrgUnitTreeOverviewStrip({
       short: "ROS",
       value: analysisCount,
       icon: FileText,
+    },
+    {
+      href: `/w/${workspaceId}/prosessdesign`,
+      label: "PDD",
+      short: "PDD",
+      value: pddCount,
+      icon: Workflow,
     },
     {
       href: `/w/${workspaceId}/vurderinger`,
@@ -68,12 +76,12 @@ export function OrgUnitTreeOverviewStrip({
   return (
     <div
       className={cn(
-        "grid grid-cols-4 gap-1 sm:gap-0 sm:divide-x sm:divide-border/25",
+        "grid grid-cols-5 gap-1 sm:gap-0 sm:divide-x sm:divide-border/25",
         compact && "gap-0 sm:divide-foreground/15",
         className,
       )}
       role="group"
-      aria-label="Oversikt: prosess, ROS, vurdering og inntak (inkluderer underenheter)"
+      aria-label="Oversikt: prosess, ROS, prosessdesign, vurdering og inntak (inkluderer underenheter)"
     >
       {items.map(({ href, label, short, value, icon: Icon }, i) => (
         <Link
