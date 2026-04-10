@@ -9,6 +9,7 @@ import {
   ClipboardList,
   FileText,
   LayoutDashboard,
+  ScrollText,
   Settings2,
   Share2,
   Shield,
@@ -18,7 +19,7 @@ import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { Suspense } from "react";
 
-type NavKind = "default" | "vurderinger" | "prosesser";
+type NavKind = "default" | "vurderinger" | "prosesser" | "prosessdesign";
 
 type NavItem = {
   href: string;
@@ -80,6 +81,13 @@ function navSections(wid: string): { heading: string; items: NavItem[] }[] {
           exact: false,
           kind: "default",
         },
+        {
+          href: `/w/${wid}/prosessdesign`,
+          label: "Prosessdesign (RPA)",
+          icon: ScrollText,
+          exact: false,
+          kind: "prosessdesign",
+        },
       ],
     },
     {
@@ -133,6 +141,11 @@ function isActive(
       return true;
     }
     return false;
+  }
+
+  if (kind === "prosessdesign") {
+    if (pathname.startsWith(`/w/${wid}/prosessdesign`)) return true;
+    return /\/a\/[^/]+\/prosessdesign/.test(pathname);
   }
 
   if (exact) {

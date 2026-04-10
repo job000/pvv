@@ -402,6 +402,116 @@ export type IntakeGeneratedAssessment = Infer<
 >;
 export type IntakeRosSuggestion = Infer<typeof intakeRosSuggestionValidator>;
 
+/** RPA Process Design Document — strukturert innhold (CoE / IT-leverandør-mal) */
+const processDesignAppRowValidator = v.object({
+  name: v.string(),
+  type: v.optional(v.string()),
+  env: v.optional(v.string()),
+  comments: v.optional(v.string()),
+  phase: v.optional(v.string()),
+});
+
+const processDesignStepRowValidator = v.object({
+  stepNo: v.optional(v.string()),
+  input: v.optional(v.string()),
+  description: v.string(),
+  details: v.optional(v.string()),
+  exception: v.optional(v.string()),
+  actions: v.optional(v.string()),
+  rules: v.optional(v.string()),
+});
+
+const processDesignContactRowValidator = v.object({
+  role: v.string(),
+  name: v.string(),
+  contact: v.string(),
+  notes: v.optional(v.string()),
+});
+
+const processDesignHistoryRowValidator = v.object({
+  date: v.string(),
+  version: v.string(),
+  role: v.string(),
+  name: v.string(),
+  organization: v.optional(v.string()),
+  comments: v.optional(v.string()),
+});
+
+const processDesignExceptionRowValidator = v.object({
+  id: v.optional(v.string()),
+  name: v.string(),
+  step: v.optional(v.string()),
+  params: v.optional(v.string()),
+  action: v.string(),
+});
+
+const processDesignApprovalRowValidator = v.object({
+  version: v.optional(v.string()),
+  flow: v.optional(v.string()),
+  role: v.optional(v.string()),
+  name: v.optional(v.string()),
+  org: v.optional(v.string()),
+  signature: v.optional(v.string()),
+});
+
+const processDesignHukiRowValidator = v.object({
+  activity: v.string(),
+  h: v.optional(v.string()),
+  u: v.optional(v.string()),
+  k: v.optional(v.string()),
+  i: v.optional(v.string()),
+});
+
+export const processDesignDocumentPayloadValidator = v.object({
+  processTitle: v.optional(v.string()),
+  shortDescription: v.optional(v.string()),
+  executiveSummary: v.optional(v.string()),
+  purpose: v.optional(v.string()),
+  objectives: v.optional(v.string()),
+  keyContacts: v.optional(v.array(processDesignContactRowValidator)),
+  prerequisites: v.optional(v.string()),
+  asIsProcessName: v.optional(v.string()),
+  asIsProcessArea: v.optional(v.string()),
+  asIsDepartment: v.optional(v.string()),
+  asIsShortDescription: v.optional(v.string()),
+  asIsRoles: v.optional(v.string()),
+  asIsSchedule: v.optional(v.string()),
+  asIsVolume: v.optional(v.string()),
+  asIsHandleTime: v.optional(v.string()),
+  asIsExecutionTime: v.optional(v.string()),
+  asIsPeak: v.optional(v.string()),
+  asIsFte: v.optional(v.string()),
+  asIsInputData: v.optional(v.string()),
+  asIsOutputData: v.optional(v.string()),
+  asIsApplications: v.optional(v.array(processDesignAppRowValidator)),
+  asIsProcessMap: v.optional(v.string()),
+  /** tldraw dokument-snapshot (JSON) — se sanitize i processDesignDocs */
+  asIsDiagramSnapshot: v.optional(v.string()),
+  asIsSteps: v.optional(v.array(processDesignStepRowValidator)),
+  toBeMap: v.optional(v.string()),
+  toBeDiagramSnapshot: v.optional(v.string()),
+  toBeSteps: v.optional(v.string()),
+  parallelInitiatives: v.optional(v.string()),
+  inScope: v.optional(v.string()),
+  outOfScope: v.optional(v.string()),
+  hukiRows: v.optional(v.array(processDesignHukiRowValidator)),
+  businessExceptionsKnown: v.optional(v.array(processDesignExceptionRowValidator)),
+  businessExceptionsUnknown: v.optional(v.string()),
+  appErrorsKnown: v.optional(v.array(processDesignExceptionRowValidator)),
+  appErrorsUnknown: v.optional(v.string()),
+  reporting: v.optional(v.string()),
+  otherObservations: v.optional(v.string()),
+  additionalSources: v.optional(v.string()),
+  targetTimeline: v.optional(v.string()),
+  appendix: v.optional(v.string()),
+  documentHistory: v.optional(v.array(processDesignHistoryRowValidator)),
+  approvalRows: v.optional(v.array(processDesignApprovalRowValidator)),
+});
+
+export type ProcessDesignDocumentPayload = Infer<
+  typeof processDesignDocumentPayloadValidator
+>;
+
 /** ROS / PDD (risiko og personvern i helse/forvaltning) */
 export const complianceStatusValidator = v.union(
   v.literal("not_started"),
@@ -923,7 +1033,11 @@ export default defineSchema({
       "status",
       "submittedAt",
     ])
-    .index("by_link_and_submitted_at", ["linkId", "submittedAt"]),
+    .index("by_link_and_submitted_at", ["linkId", "submittedAt"])
+    .index("by_approved_assessment_submitted", [
+      "approvedAssessmentId",
+      "submittedAt",
+    ]),
 
   intakeFormActivations: defineTable({
     sourceFormId: v.id("intakeForms"),
@@ -1258,4 +1372,37 @@ export default defineSchema({
     .index("by_token", ["token"])
     .index("by_assessment", ["assessmentId"])
     .index("by_email", ["email"]),
+
+  /**
+   * RPA prosessdesign-dokument (Process Design Document) per PVV-vurdering.
+   * Ulike fra personvernkonsekvens (PDD) på vurderingens kontekstkort.
+   */
+  processDesignDocuments: defineTable({
+    workspaceId: v.id("workspaces"),
+    assessmentId: v.id("assessments"),
+    /** Vises på forsiden av PDF — ofte virksomhetslinje */
+    organizationLine: v.optional(v.string()),
+    payload: processDesignDocumentPayloadValidator,
+    /** Optimistisk lås ved samtidig redigering */
+    revision: v.optional(v.number()),
+    updatedAt: v.number(),
+    updatedByUserId: v.id("users"),
+    createdAt: v.number(),
+    createdByUserId: v.id("users"),
+  })
+    .index("by_workspace", ["workspaceId"])
+    .index("by_assessment", ["assessmentId"]),
+
+  processDesignDocumentVersions: defineTable({
+    workspaceId: v.id("workspaces"),
+    documentId: v.id("processDesignDocuments"),
+    assessmentId: v.id("assessments"),
+    version: v.number(),
+    note: v.optional(v.string()),
+    payload: processDesignDocumentPayloadValidator,
+    createdAt: v.number(),
+    createdByUserId: v.id("users"),
+  })
+    .index("by_document", ["documentId"])
+    .index("by_document_version", ["documentId", "version"]),
 });

@@ -20,7 +20,7 @@ import {
   type ComplianceStatusKey,
 } from "@/lib/helsesector-labels";
 import { useMutation, useQuery } from "convex/react";
-import { Building2, ExternalLink, Shield } from "lucide-react";
+import { Building2, ExternalLink, FileText, Shield } from "lucide-react";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
 import { useMemo } from "react";
@@ -321,6 +321,25 @@ export function AssessmentContextCard({
               </ul>
             </div>
           ) : null}
+          <div className="bg-muted/25 space-y-2 rounded-xl border p-4">
+            <div className="flex items-center gap-2">
+              <FileText className="text-muted-foreground size-4" aria-hidden />
+              <p className="text-foreground text-sm font-medium">
+                RPA prosessdesign (PDD)
+              </p>
+            </div>
+            <p className="text-muted-foreground text-xs leading-relaxed">
+              Teknisk prosessdokument for automatisering — koblet til denne vurderingen. «Fyll fra kilder» henter blant
+              annet fra prosessregister, vurderingsutkast og koblede ROS-analyser.
+            </p>
+            <Link
+              href={`/w/${workspaceId}/a/${assessmentId}/prosessdesign`}
+              className="text-primary inline-flex items-center gap-1 text-sm font-medium underline-offset-4 hover:underline"
+            >
+              Åpne RPA prosessdesign
+              <ExternalLink className="size-3.5 opacity-70" aria-hidden />
+            </Link>
+          </div>
           <div className="flex flex-wrap gap-2">
             <Button
               type="button"

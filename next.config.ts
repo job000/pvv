@@ -7,6 +7,7 @@ const projectRoot = path.dirname(fileURLToPath(import.meta.url));
 const nodeModules = path.join(projectRoot, "node_modules");
 
 const nextConfig: NextConfig = {
+  transpilePackages: ["@tldraw/tldraw", "tldraw", "@tldraw/editor", "@tldraw/store"],
   /** Reduser XSS-/clickjacking-risiko på offentlige skjemasider (/f/…). */
   async headers() {
     return [

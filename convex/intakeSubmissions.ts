@@ -16,7 +16,11 @@ import {
   intakeSubmitterMetaValidator,
 } from "./schema";
 import { getAuthUserId } from "@convex-dev/auth/server";
-import { requireUserId, requireWorkspaceMember } from "./lib/access";
+import {
+  getAssessmentIfReadable,
+  requireUserId,
+  requireWorkspaceMember,
+} from "./lib/access";
 import { generateIntakeSuggestion } from "./lib/intakeMapping";
 import { buildPublicIntakeScreeningSummary } from "./lib/intakePublicScreening";
 import { createAssessmentWithPayload } from "./lib/assessmentCreation";
@@ -227,6 +231,35 @@ export const listApprovedForProcessregister = query({
       });
     }
     return out;
+  },
+});
+
+/** Siste godkjente inntak knyttet til vurderingen (én rad per indeks). */
+export const getApprovedSubmissionForAssessment = query({
+  args: { assessmentId: v.id("assessments") },
+  handler: async (ctx, args) => {
+    const readable = await getAssessmentIfReadable(ctx, args.assessmentId);
+    if (!readable) {
+      return null;
+    }
+    const sub = await ctx.db
+      .query("intakeSubmissions")
+      .withIndex("by_approved_assessment_submitted", (q) =>
+        q.eq("approvedAssessmentId", args.assessmentId),
+      )
+      .order("desc")
+      .first();
+    if (!sub) {
+      return null;
+    }
+    const form = await ctx.db.get(sub.formId);
+    return {
+      submittedAt: sub.submittedAt,
+      formTitle: form?.title ?? null,
+      submitterMeta: sub.submitterMeta,
+      answers: sub.answers,
+      generatedRosSuggestion: sub.generatedRosSuggestion,
+    };
   },
 });
 

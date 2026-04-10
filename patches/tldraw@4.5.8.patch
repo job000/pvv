@@ -1,0 +1,62 @@
+diff --git a/dist-cjs/lib/shapes/arrow/arrowTargetState.js b/dist-cjs/lib/shapes/arrow/arrowTargetState.js
+index 7f822a2641d263a01592ace490dfd123c0506b3f..6a9324e7f7b18434faf0b76af38a7b03b4507303 100644
+--- a/dist-cjs/lib/shapes/arrow/arrowTargetState.js
++++ b/dist-cjs/lib/shapes/arrow/arrowTargetState.js
+@@ -124,10 +124,10 @@ function updateArrowTargetState({
+   }
+   const isExact = util.options.shouldBeExact(editor, precise);
+   if (isExact) precise = true;
+-  const shouldSnapCenter = !isExact && precise && targetGeometryInTargetSpace.isClosed;
+-  const shouldSnapEdges = !isExact && (precise && arrowKind === "elbow" || !targetGeometryInTargetSpace.isClosed);
++  const shouldSnapCenter = !isExact && precise && targetGeometryInTargetSpace.isClosed && arrowKind === "elbow";
++  const shouldSnapEdges = !isExact && (precise && arrowKind === "elbow" || !targetGeometryInTargetSpace.isClosed || precise && arrowKind === "arc" && targetGeometryInTargetSpace.isClosed);
+   const shouldSnapEdgePoints = !isExact && precise && arrowKind === "elbow" && targetGeometryInTargetSpace.isClosed;
+-  const shouldSnapNone = precise && (targetGeometryInTargetSpace.isClosed || isExact);
++  const shouldSnapNone = precise && ((targetGeometryInTargetSpace.isClosed && arrowKind !== "arc") || isExact);
+   const shouldSnapCenterAxis = !isExact && precise && arrowKind === "elbow" && targetGeometryInTargetSpace.isClosed;
+   let snap = "none";
+   let anchorInPageSpace = pointInPageSpace;
+diff --git a/dist-cjs/lib/shapes/arrow/shared.js b/dist-cjs/lib/shapes/arrow/shared.js
+index 7b20ad90f0bdabbdcc9961bdfa4da4bc91d5c2c5..d01c2b84a6a471ddde777b1ca70fb52b1f8bb7bf 100644
+--- a/dist-cjs/lib/shapes/arrow/shared.js
++++ b/dist-cjs/lib/shapes/arrow/shared.js
+@@ -147,7 +147,7 @@ function removeArrowBinding(editor, arrow, terminal) {
+   editor.deleteBindings(existing);
+ }
+ const MIN_ARROW_LENGTH = 10;
+-const BOUND_ARROW_OFFSET = 10;
++const BOUND_ARROW_OFFSET = 1;
+ const WAY_TOO_BIG_ARROW_BEND_FACTOR = 10;
+ const STROKE_SIZES = {
+   s: 2,
+diff --git a/dist-esm/lib/shapes/arrow/arrowTargetState.mjs b/dist-esm/lib/shapes/arrow/arrowTargetState.mjs
+index bcb5113cd5e8ad6372f5c82327ef56c978f7844b..3507b128abc2dec9997411270c993b35bf41d205 100644
+--- a/dist-esm/lib/shapes/arrow/arrowTargetState.mjs
++++ b/dist-esm/lib/shapes/arrow/arrowTargetState.mjs
+@@ -115,10 +115,10 @@ function updateArrowTargetState({
+   }
+   const isExact = util.options.shouldBeExact(editor, precise);
+   if (isExact) precise = true;
+-  const shouldSnapCenter = !isExact && precise && targetGeometryInTargetSpace.isClosed;
+-  const shouldSnapEdges = !isExact && (precise && arrowKind === "elbow" || !targetGeometryInTargetSpace.isClosed);
++  const shouldSnapCenter = !isExact && precise && targetGeometryInTargetSpace.isClosed && arrowKind === "elbow";
++  const shouldSnapEdges = !isExact && (precise && arrowKind === "elbow" || !targetGeometryInTargetSpace.isClosed || precise && arrowKind === "arc" && targetGeometryInTargetSpace.isClosed);
+   const shouldSnapEdgePoints = !isExact && precise && arrowKind === "elbow" && targetGeometryInTargetSpace.isClosed;
+-  const shouldSnapNone = precise && (targetGeometryInTargetSpace.isClosed || isExact);
++  const shouldSnapNone = precise && ((targetGeometryInTargetSpace.isClosed && arrowKind !== "arc") || isExact);
+   const shouldSnapCenterAxis = !isExact && precise && arrowKind === "elbow" && targetGeometryInTargetSpace.isClosed;
+   let snap = "none";
+   let anchorInPageSpace = pointInPageSpace;
+diff --git a/dist-esm/lib/shapes/arrow/shared.mjs b/dist-esm/lib/shapes/arrow/shared.mjs
+index 8b02418407781b5b95532c61d06f07f368ab74ed..cc1052f03cc46e55aed504b1ad2c3291815deba6 100644
+--- a/dist-esm/lib/shapes/arrow/shared.mjs
++++ b/dist-esm/lib/shapes/arrow/shared.mjs
+@@ -117,7 +117,7 @@ function removeArrowBinding(editor, arrow, terminal) {
+   editor.deleteBindings(existing);
+ }
+ const MIN_ARROW_LENGTH = 10;
+-const BOUND_ARROW_OFFSET = 10;
++const BOUND_ARROW_OFFSET = 1;
+ const WAY_TOO_BIG_ARROW_BEND_FACTOR = 10;
+ const STROKE_SIZES = {
+   s: 2,

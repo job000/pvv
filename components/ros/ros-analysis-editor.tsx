@@ -2565,12 +2565,20 @@ export function RosAnalysisEditor({
                     <Link2 className="size-5 text-primary" />
                   </div>
                   <div className="min-w-0 flex-1 space-y-1">
-                    <Link
-                      href={`/w/${workspaceId}/a/${l.assessmentId}`}
-                      className="text-sm font-medium text-primary hover:underline"
-                    >
-                      {l.title}
-                    </Link>
+                    <div className="flex flex-col gap-1 sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-3 sm:gap-y-1">
+                      <Link
+                        href={`/w/${workspaceId}/a/${l.assessmentId}`}
+                        className="text-sm font-medium text-primary hover:underline"
+                      >
+                        {l.title}
+                      </Link>
+                      <Link
+                        href={`/w/${workspaceId}/a/${l.assessmentId}/prosessdesign`}
+                        className="text-muted-foreground text-xs font-medium underline-offset-4 hover:text-primary hover:underline"
+                      >
+                        RPA prosessdesign (PDD)
+                      </Link>
+                    </div>
                     <div className="flex flex-wrap items-center gap-2">
                       <span className={cn(
                         "inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-semibold",

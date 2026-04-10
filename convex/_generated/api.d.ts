@@ -45,6 +45,7 @@ import type * as lib_userSearch from "../lib/userSearch.js";
 import type * as notificationEmailInternal from "../notificationEmailInternal.js";
 import type * as notificationEmails from "../notificationEmails.js";
 import type * as orgUnits from "../orgUnits.js";
+import type * as processDesignDocs from "../processDesignDocs.js";
 import type * as reminderInternal from "../reminderInternal.js";
 import type * as reminders from "../reminders.js";
 import type * as reviewSchedule from "../reviewSchedule.js";
@@ -102,6 +103,7 @@ declare const fullApi: ApiFromModules<{
   notificationEmailInternal: typeof notificationEmailInternal;
   notificationEmails: typeof notificationEmails;
   orgUnits: typeof orgUnits;
+  processDesignDocs: typeof processDesignDocs;
   reminderInternal: typeof reminderInternal;
   reminders: typeof reminders;
   reviewSchedule: typeof reviewSchedule;

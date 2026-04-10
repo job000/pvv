@@ -1,0 +1,4 @@
+packages: []
+
+patchedDependencies:
+  tldraw@4.5.8: patches/tldraw@4.5.8.patch

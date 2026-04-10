@@ -22,6 +22,7 @@ import {
   type RosCellItem,
   type RosCellItemMatrix,
 } from "../lib/ros-cell-items";
+import { buildRosPddDigest } from "../lib/ros-pdd-digest";
 import {
   computeRosSummary,
   type RosSummary,
@@ -2000,6 +2001,8 @@ export const getRosContextForAssessment = query({
       pvvLinkNote: string | undefined;
       rosSummary: RosSummary;
       separateAfterLayout: boolean;
+      /** Utvidet tekst til RPA prosessdesign (PDD) — matrise, kontekst, kortlager */
+      pddDigest: ReturnType<typeof buildRosPddDigest>;
     }> = [];
     for (const l of links) {
       const ros = await ctx.db.get(l.rosAnalysisId);
@@ -2011,6 +2014,22 @@ export const getRosContextForAssessment = query({
         matrixBefore: ros.matrixValues,
         matrixAfter: matrixValuesAfter,
       });
+      const cellItems = normalizeCellItems(
+        ros.matrixValues,
+        ros.cellNotes,
+        ros.cellItems as RosCellItemMatrix | undefined,
+      );
+      const pddDigest = buildRosPddDigest({
+        notes: ros.notes,
+        contextSummary: ros.contextSummary,
+        methodologyStatement: ros.methodologyStatement,
+        scopeAndCriteria: ros.scopeAndCriteria,
+        axisScaleNotes: ros.axisScaleNotes,
+        rowLabels: ros.rowLabels,
+        colLabels: ros.colLabels,
+        cellItems,
+        riskPoolBefore: ros.riskPoolBefore,
+      });
       out.push({
         linkId: l._id,
         rosAnalysisId: ros._id,
@@ -2021,6 +2040,7 @@ export const getRosContextForAssessment = query({
         pvvLinkNote: l.pvvLinkNote,
         rosSummary,
         separateAfterLayout: hasSeparateAfterLayout(ros),
+        pddDigest,
       });
     }
     return out;

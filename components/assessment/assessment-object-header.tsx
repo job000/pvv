@@ -13,6 +13,7 @@ import {
   AlertCircle,
   ClipboardList,
   ExternalLink,
+  FileText,
   FolderKanban,
   GitBranch,
   Link2,
@@ -64,6 +65,8 @@ export function AssessmentObjectHeader({
     ? `/w/${wid}/ros/a/${firstRosAnalysisId}`
     : `/w/${wid}/ros`;
   const processRegisterHref = `/w/${wid}/vurderinger?fane=prosesser`;
+  const processDesignHref =
+    assessmentId != null ? `/w/${wid}/a/${assessmentId}/prosessdesign` : null;
 
   const githubIssueHref =
     evaluationContext?.kind === "candidate" &&
@@ -223,17 +226,32 @@ export function AssessmentObjectHeader({
               </span>
             </p>
           ) : null}
-          <Link
-            href={rosHref}
-            className={buttonVariants({
-              variant: "outline",
-              size: "sm",
-              className: "inline-flex gap-1.5",
-            })}
-          >
-            <Link2 className="size-3.5" aria-hidden />
-            {hasRosAnalysisLink ? "Åpne ROS-analyse" : "Gå til ROS"}
-          </Link>
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            {processDesignHref ? (
+              <Link
+                href={processDesignHref}
+                className={buttonVariants({
+                  variant: "outline",
+                  size: "sm",
+                  className: "inline-flex gap-1.5",
+                })}
+              >
+                <FileText className="size-3.5" aria-hidden />
+                RPA prosessdesign
+              </Link>
+            ) : null}
+            <Link
+              href={rosHref}
+              className={buttonVariants({
+                variant: "outline",
+                size: "sm",
+                className: "inline-flex gap-1.5",
+              })}
+            >
+              <Link2 className="size-3.5" aria-hidden />
+              {hasRosAnalysisLink ? "Åpne ROS-analyse" : "Gå til ROS"}
+            </Link>
+          </div>
         </div>
       </div>
     </div>

@@ -10,6 +10,7 @@ import { getAuthUserId } from "@convex-dev/auth/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import {
   canReadAssessment,
+  getAssessmentIfReadable,
   requireUserId,
   requireWorkspaceMember,
 } from "./lib/access";
@@ -528,6 +529,67 @@ export const listByWorkspace = query({
       .query("candidates")
       .withIndex("by_workspace", (q) => q.eq("workspaceId", args.workspaceId))
       .collect();
+  },
+});
+
+/** Prosess i registeret som vurderingens utkast peker på (kode eller kandidat-ID). */
+export const getLinkedCandidateForAssessment = query({
+  args: { assessmentId: v.id("assessments") },
+  handler: async (ctx, args) => {
+    const readable = await getAssessmentIfReadable(ctx, args.assessmentId);
+    if (!readable) {
+      return null;
+    }
+    const { assessment } = readable;
+    const draft = await ctx.db
+      .query("assessmentDrafts")
+      .withIndex("by_assessment", (q) => q.eq("assessmentId", args.assessmentId))
+      .unique();
+    const payload = draft?.payload as { candidateId?: string } | undefined;
+    const raw = (payload?.candidateId ?? "").trim();
+    if (!raw) {
+      return { linked: false as const };
+    }
+
+    let cand: Doc<"candidates"> | null = null;
+    try {
+      const byId = await ctx.db.get(raw as Id<"candidates">);
+      if (byId && byId.workspaceId === assessment.workspaceId) {
+        cand = byId;
+      }
+    } catch {
+      // Utkastet kan lagre prosesskode i candidateId; db.get kaster på ugyldig ID-lengde/format.
+    }
+    if (!cand) {
+      const code = normalizeProcessCode(raw);
+      cand = await ctx.db
+        .query("candidates")
+        .withIndex("by_workspace_code", (q) =>
+          q.eq("workspaceId", assessment.workspaceId).eq("code", code),
+        )
+        .unique();
+    }
+    if (!cand) {
+      return { linked: false as const };
+    }
+
+    let orgUnitName: string | undefined;
+    if (cand.orgUnitId) {
+      const ou = await ctx.db.get(cand.orgUnitId);
+      orgUnitName = ou?.name ?? undefined;
+    }
+
+    return {
+      linked: true as const,
+      candidateId: cand._id,
+      code: cand.code,
+      name: cand.name,
+      notes: cand.notes,
+      linkHintBusinessOwner: cand.linkHintBusinessOwner,
+      linkHintSystems: cand.linkHintSystems,
+      linkHintComplianceNotes: cand.linkHintComplianceNotes,
+      orgUnitName,
+    };
   },
 });
 
