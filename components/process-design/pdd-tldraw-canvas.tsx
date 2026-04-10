@@ -148,7 +148,7 @@ export function PddTldrawCanvas({
   const heightClass =
     layoutVariant === "fullscreen"
       ? "h-full min-h-0 flex-1"
-      : "h-[min(24rem,55vh)] min-h-[14rem] sm:h-[min(28rem,60vh)] sm:min-h-[16rem]";
+      : "h-[clamp(22rem,68svh,34rem)] min-h-[22rem] sm:h-[min(34rem,70vh)] sm:min-h-[24rem]";
 
   const trapScrollKeys = useCallback((e: ReactKeyboardEvent) => {
     const scrollKeys = new Set([
@@ -171,7 +171,7 @@ export function PddTldrawCanvas({
     <div
       onKeyDown={trapScrollKeys}
       className={[
-        "relative w-full overflow-hidden rounded-xl border border-border bg-muted/10 touch-manipulation",
+        "relative w-full overflow-hidden rounded-2xl border border-border/60 bg-muted/10 touch-manipulation shadow-sm [overscroll-behavior:contain]",
         heightClass,
         className ?? "",
       ]

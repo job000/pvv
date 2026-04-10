@@ -232,18 +232,40 @@ function ProcessTextDiagramBlock({
     return () => document.removeEventListener("fullscreenchange", sync);
   }, []);
 
+  useEffect(() => {
+    if (!diagramFullscreen || document.fullscreenElement) return;
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prevOverflow;
+    };
+  }, [diagramFullscreen]);
+
   const toggleDiagramFullscreen = useCallback(async () => {
     const el = diagramShellRef.current;
     if (!el) return;
-    try {
-      if (document.fullscreenElement === el) {
+    if (document.fullscreenElement === el) {
+      try {
         await document.exitFullscreen();
-      } else {
+      } catch {
+        setDiagramFullscreen(false);
+      }
+      return;
+    }
+    if (diagramFullscreen && !document.fullscreenElement) {
+      setDiagramFullscreen(false);
+      return;
+    }
+    try {
+      if ("requestFullscreen" in el) {
         await el.requestFullscreen();
+        setDiagramFullscreen(true);
+        return;
       }
     } catch {
-      /* may be blocked */
+      /* fallback below */
     }
+    setDiagramFullscreen(true);
   }, []);
 
   return (
@@ -251,7 +273,7 @@ function ProcessTextDiagramBlock({
       <Label className="text-[0.8rem] font-medium text-muted-foreground">
         {sectionLabel}
       </Label>
-      <div className="inline-flex rounded-lg border border-border bg-muted/40 p-0.5">
+      <div className="inline-flex w-full rounded-xl border border-border bg-muted/40 p-0.5 sm:w-auto">
         <button
           type="button"
           className={`touch-manipulation rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
@@ -259,6 +281,7 @@ function ProcessTextDiagramBlock({
               ? "bg-background text-foreground shadow-sm"
               : "text-muted-foreground hover:text-foreground"
           }`}
+          style={{ flex: 1 }}
           onClick={() => setMode("beskrivelse")}
         >
           Beskrivelse
@@ -270,6 +293,7 @@ function ProcessTextDiagramBlock({
               ? "bg-background text-foreground shadow-sm"
               : "text-muted-foreground hover:text-foreground"
           }`}
+          style={{ flex: 1 }}
           onClick={() => setMode("diagram")}
         >
           Diagram
@@ -288,61 +312,77 @@ function ProcessTextDiagramBlock({
           ref={diagramShellRef}
           className={
             diagramFullscreen
-              ? "box-border flex h-[100dvh] w-screen flex-col gap-2 overflow-hidden bg-background p-3"
-              : "flex flex-col gap-2"
+              ? "fixed inset-0 z-[90] box-border flex h-[100svh] w-screen flex-col overflow-hidden bg-background px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-[max(0.75rem,env(safe-area-inset-top))]"
+              : "flex flex-col gap-3"
           }
         >
-          <p className="text-xs leading-relaxed text-muted-foreground">
-            {diagramHint}
-          </p>
-          <div className="flex flex-wrap items-center justify-end gap-2">
-            {canEdit && diagramValue?.trim() ? (
+          <div
+            className={
+              diagramFullscreen
+                ? "mb-3 shrink-0 rounded-2xl border border-border/60 bg-background/95 p-3 shadow-lg backdrop-blur"
+                : "space-y-2"
+            }
+          >
+            <p className="text-xs leading-relaxed text-muted-foreground">
+              {diagramFullscreen
+                ? "Bruk to fingre for zoom og én finger for å tegne eller flytte objekter."
+                : diagramHint}
+            </p>
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
+              {canEdit && diagramValue?.trim() ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  className="h-9 justify-center text-xs text-muted-foreground sm:h-8"
+                  onClick={() => {
+                    if (confirm("Slette alt i diagrammet?")) onDiagramJson("");
+                  }}
+                >
+                  Tøm diagram
+                </Button>
+              ) : null}
               <Button
                 type="button"
                 size="sm"
-                variant="ghost"
-                className="h-8 text-xs text-muted-foreground"
-                onClick={() => {
-                  if (confirm("Slette alt i diagrammet?")) onDiagramJson("");
-                }}
+                variant="outline"
+                className="h-10 touch-manipulation justify-center rounded-xl sm:h-9"
+                onClick={toggleDiagramFullscreen}
               >
-                Tøm diagram
+                {diagramFullscreen ? (
+                  <>
+                    <Minimize2
+                      className="mr-1.5 size-3.5 shrink-0"
+                      aria-hidden
+                    />
+                    Avslutt fullskjerm
+                  </>
+                ) : (
+                  <>
+                    <Maximize2
+                      className="mr-1.5 size-3.5 shrink-0"
+                      aria-hidden
+                    />
+                    Fullskjerm
+                  </>
+                )}
               </Button>
-            ) : null}
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              className="touch-manipulation"
-              onClick={toggleDiagramFullscreen}
-            >
-              {diagramFullscreen ? (
-                <>
-                  <Minimize2
-                    className="mr-1.5 size-3.5 shrink-0"
-                    aria-hidden
-                  />
-                  Avslutt fullskjerm
-                </>
-              ) : (
-                <>
-                  <Maximize2
-                    className="mr-1.5 size-3.5 shrink-0"
-                    aria-hidden
-                  />
-                  Fullskjerm
-                </>
-              )}
-            </Button>
+            </div>
           </div>
-          <PddTldrawCanvas
-            snapshotJson={diagramValue}
-            onSnapshotChange={onDiagramJson}
-            readOnly={!canEdit}
-            instanceKey={instanceKey}
-            layoutVariant={diagramFullscreen ? "fullscreen" : "embed"}
-            className={diagramFullscreen ? "min-h-0 flex-1" : undefined}
-          />
+          <div className={diagramFullscreen ? "min-h-0 flex-1" : ""}>
+            <PddTldrawCanvas
+              snapshotJson={diagramValue}
+              onSnapshotChange={onDiagramJson}
+              readOnly={!canEdit}
+              instanceKey={instanceKey}
+              layoutVariant={diagramFullscreen ? "fullscreen" : "embed"}
+              className={
+                diagramFullscreen
+                  ? "min-h-0 flex-1 rounded-[1.5rem]"
+                  : undefined
+              }
+            />
+          </div>
         </div>
       )}
     </div>
