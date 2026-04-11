@@ -35,12 +35,15 @@ export function DialogContent({
   size = "lg",
   titleId,
   descriptionId,
+  /** Legg f.eks. `z-[210]` når dialogen skal over en annen modal (bekreftelse). */
+  portalClassName,
 }: {
   className?: string;
   children: React.ReactNode;
   size?: "sm" | "md" | "lg" | "xl" | "2xl" | "3xl" | "4xl" | "5xl" | "6xl" | "7xl";
   titleId?: string;
   descriptionId?: string;
+  portalClassName?: string;
 }) {
   const ctx = React.useContext(DialogContext);
   if (!ctx) {
@@ -101,7 +104,12 @@ export function DialogContent({
   }[size];
 
   return createPortal(
-    <div className="fixed inset-0 z-[200] flex items-end justify-center p-3 sm:items-center sm:p-6">
+    <div
+      className={cn(
+        "fixed inset-0 z-[200] flex items-end justify-center p-3 sm:items-center sm:p-6",
+        portalClassName,
+      )}
+    >
       <button
         type="button"
         aria-label="Lukk"

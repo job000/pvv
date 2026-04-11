@@ -935,6 +935,12 @@ function ManageMembersDialog({
   const [addingUserId, setAddingUserId] = useState<string>("");
   const [addingRole, setAddingRole] = useState<string>("member");
   const [error, setError] = useState<string | null>(null);
+  const [removeConfirm, setRemoveConfirm] = useState<{
+    membershipId: Id<"workspaceMembers">;
+    label: string;
+  } | null>(null);
+  const [removing, setRemoving] = useState(false);
+  const [removeError, setRemoveError] = useState<string | null>(null);
 
   const existingIds = useMemo(
     () => new Set(ws?.members.map((m) => m.userId) ?? []),
@@ -960,13 +966,23 @@ function ManageMembersDialog({
     }
   };
 
-  const handleRemove = async (membershipId: Id<"workspaceMembers">, memberName: string | null) => {
-    if (!confirm(`Fjern ${memberName ?? "bruker"} fra arbeidsområdet?`)) return;
-    await removeMember({ membershipId });
+  const confirmRemoveMember = async () => {
+    if (!removeConfirm) return;
+    setRemoveError(null);
+    setRemoving(true);
+    try {
+      await removeMember({ membershipId: removeConfirm.membershipId });
+      setRemoveConfirm(null);
+    } catch (e: unknown) {
+      setRemoveError(e instanceof Error ? e.message : "Kunne ikke fjerne medlem.");
+    } finally {
+      setRemoving(false);
+    }
   };
 
   return (
-    <Dialog open={isOpen} onOpenChange={(v) => { if (!v) { onClose(); setError(null); setAddingUserId(""); } }}>
+    <>
+    <Dialog open={isOpen} onOpenChange={(v) => { if (!v) { onClose(); setError(null); setAddingUserId(""); setRemoveConfirm(null); setRemoveError(null); } }}>
       <DialogContent size="lg">
         <DialogHeader>
           <h2 className="text-lg font-semibold">Medlemmer — {ws?.name}</h2>
@@ -1012,7 +1028,10 @@ function ManageMembersDialog({
           {/* Member list */}
           {ws && ws.members.length > 0 ? (
             <div className="divide-y divide-border/40 overflow-hidden rounded-xl border border-border/50">
-              {ws.members.map((m) => (
+              {ws.members.map((m) => {
+                const isOwner = m.userId === ws.ownerUserId || m.role === "owner";
+                const displayLabel = (m.name ?? m.email ?? "brukeren").trim();
+                return (
                 <div key={m._id} className="flex items-center gap-3 px-3 py-2.5">
                   <Avatar name={m.name} email={m.email} image={null} />
                   <div className="min-w-0 flex-1">
@@ -1023,16 +1042,33 @@ function ManageMembersDialog({
                     value={m.role}
                     onChange={(r) => updateRole({ membershipId: m._id, role: r as "owner" | "admin" | "member" | "viewer" })}
                   />
-                  <button
-                    type="button"
-                    onClick={() => handleRemove(m._id, m.name)}
-                    className="inline-flex size-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
-                    title="Fjern"
-                  >
-                    <UserMinus className="size-3.5" />
-                  </button>
+                  {isOwner ? (
+                    <span
+                      className="inline-flex size-8 shrink-0 items-center justify-center rounded-lg text-muted-foreground/40"
+                      title="Eieren kan ikke fjernes her"
+                      aria-hidden
+                    >
+                      <UserMinus className="size-3.5 opacity-40" />
+                    </span>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setRemoveError(null);
+                        setRemoveConfirm({
+                          membershipId: m._id,
+                          label: displayLabel,
+                        });
+                      }}
+                      className="inline-flex size-8 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+                      title="Fjern fra arbeidsområde"
+                    >
+                      <UserMinus className="size-3.5" />
+                    </button>
+                  )}
                 </div>
-              ))}
+                );
+              })}
             </div>
           ) : (
             <p className="py-6 text-center text-sm text-muted-foreground">Ingen medlemmer</p>
@@ -1043,5 +1079,57 @@ function ManageMembersDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+
+    <Dialog
+      open={removeConfirm !== null}
+      onOpenChange={(v) => {
+        if (!v) {
+          setRemoveConfirm(null);
+          setRemoveError(null);
+        }
+      }}
+    >
+      <DialogContent size="sm" portalClassName="z-[210]" titleId="remove-member-title" descriptionId="remove-member-desc">
+        <DialogHeader>
+          <h2 id="remove-member-title" className="text-lg font-semibold">
+            Fjern medlem?
+          </h2>
+          <p id="remove-member-desc" className="text-sm text-muted-foreground">
+            {removeConfirm
+              ? `Er du sikker på at du vil fjerne «${removeConfirm.label}» fra dette arbeidsområdet? Brukeren mister tilgang til alt innhold her.`
+              : null}
+          </p>
+        </DialogHeader>
+        <DialogBody className="pt-0 sm:pt-0">
+          {removeError && (
+            <p className="text-sm text-destructive" role="alert">
+              {removeError}
+            </p>
+          )}
+        </DialogBody>
+        <DialogFooter className="gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => {
+              setRemoveConfirm(null);
+              setRemoveError(null);
+            }}
+            disabled={removing}
+          >
+            Avbryt
+          </Button>
+          <Button
+            type="button"
+            variant="destructive"
+            onClick={() => void confirmRemoveMember()}
+            disabled={removing}
+          >
+            {removing ? "Fjerner …" : "Ja, fjern"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+    </>
   );
 }

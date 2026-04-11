@@ -251,6 +251,13 @@ export const removeMemberFromWorkspace = mutation({
     await requireSuperAdmin(ctx);
     const m = await ctx.db.get(args.membershipId);
     if (!m) throw new Error("Medlemskap finnes ikke.");
+    const w = await ctx.db.get(m.workspaceId);
+    if (!w) throw new Error("Arbeidsområde finnes ikke.");
+    if (m.userId === w.ownerUserId) {
+      throw new Error(
+        "Kan ikke fjerne eier fra arbeidsområdet. Overfør eierskap i innstillinger eller slett området.",
+      );
+    }
     await ctx.db.delete(args.membershipId);
   },
 });
