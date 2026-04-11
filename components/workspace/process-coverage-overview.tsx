@@ -40,7 +40,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 type CoverageRow = {
   candidateId: Id<"candidates">;
@@ -741,6 +741,8 @@ export function ProcessCoverageOverview({
   const createRosAnalysis = useMutation(api.ros.createAnalysis);
   const [q, setQ] = useState("");
   const [orgUnitFilter, setOrgUnitFilter] = useState<"" | Id<"orgUnits">>("");
+  const [pageSize, setPageSize] = useState<5 | 10 | 20>(10);
+  const [page, setPage] = useState(1);
   const [detail, setDetail] = useState<CoverageRow | null>(null);
   const [deleteBusyId, setDeleteBusyId] = useState<Id<"candidates"> | null>(
     null,
@@ -920,6 +922,21 @@ export function ProcessCoverageOverview({
     };
   }, [rows]);
 
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const currentPage = Math.min(page, totalPages);
+  const pageStart = (currentPage - 1) * pageSize;
+  const paginatedFiltered = filtered.slice(pageStart, pageStart + pageSize);
+
+  useEffect(() => {
+    setPage(1);
+  }, [q, orgUnitFilter, pageSize]);
+
+  useEffect(() => {
+    if (page > totalPages) {
+      setPage(totalPages);
+    }
+  }, [page, totalPages]);
+
   if (rows === undefined || (rows.length > 0 && orgUnits === undefined)) {
     return (
       <div
@@ -1044,35 +1061,63 @@ export function ProcessCoverageOverview({
         </FilterToolbar>
       </div>
 
-      <div className="grid gap-2 sm:grid-cols-3">
-        <div className="rounded-2xl border border-border/50 bg-card/60 px-4 py-3">
-          <p className="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
-            Prosesser
+      <div className="flex flex-col gap-3 rounded-2xl border border-border/45 bg-card/60 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
+          <p className="text-sm font-medium text-foreground">
+            Viser{" "}
+            <span className="tabular-nums">
+              {filtered.length === 0 ? 0 : pageStart + 1}-
+              {Math.min(pageStart + pageSize, filtered.length)}
+            </span>{" "}
+            av <span className="tabular-nums">{filtered.length}</span> prosesser
           </p>
-          <p className="mt-1 text-2xl font-semibold text-foreground tabular-nums">
-            {summary.total}
-          </p>
-        </div>
-        <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/[0.06] px-4 py-3">
-          <p className="text-[11px] font-medium uppercase tracking-[0.12em] text-emerald-700 dark:text-emerald-300">
-            Komplette
-          </p>
-          <p className="mt-1 text-2xl font-semibold text-foreground tabular-nums">
-            {summary.complete}
+          <p className="text-muted-foreground mt-0.5 text-xs">
+            Begrens hvor mange prosesser som vises samtidig.
           </p>
         </div>
-        <div className="rounded-2xl border border-amber-500/20 bg-amber-500/[0.06] px-4 py-3">
-          <p className="text-[11px] font-medium uppercase tracking-[0.12em] text-amber-700 dark:text-amber-300">
-            Mangler PDD
-          </p>
-          <p className="mt-1 text-2xl font-semibold text-foreground tabular-nums">
-            {summary.withoutPdd}
-          </p>
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+          <NativeSelectField
+            id="process-coverage-page-size"
+            label="Per side"
+            value={String(pageSize)}
+            onChange={(e) => setPageSize(Number(e.target.value) as 5 | 10 | 20)}
+            aria-label="Velg antall prosesser per side"
+            className="w-full sm:w-[8rem]"
+          >
+            <option value="5">5 per side</option>
+            <option value="10">10 per side</option>
+            <option value="20">20 per side</option>
+          </NativeSelectField>
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              className="h-10 rounded-xl px-3"
+              disabled={currentPage <= 1}
+              onClick={() => setPage((prev) => Math.max(1, prev - 1))}
+            >
+              Forrige
+            </Button>
+            <div className="min-w-[5rem] text-center text-sm font-medium tabular-nums text-muted-foreground">
+              {currentPage} / {totalPages}
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              className="h-10 rounded-xl px-3"
+              disabled={currentPage >= totalPages}
+              onClick={() =>
+                setPage((prev) => Math.min(totalPages, prev + 1))
+              }
+            >
+              Neste
+            </Button>
+          </div>
         </div>
       </div>
 
       <ul className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-        {filtered.map((c) => {
+        {paginatedFiltered.map((c) => {
           const issueUrl = githubIssueUrl(c);
           const orgLabel = orgUnitSearchLabel(c.orgUnitId ?? undefined, orgUnitsList);
           const hasPvv = c.pvv.count > 0;
@@ -1236,6 +1281,33 @@ export function ProcessCoverageOverview({
           );
         })}
       </ul>
+
+      <div className="grid gap-2 sm:grid-cols-3">
+        <div className="rounded-2xl border border-border/50 bg-card/60 px-4 py-3">
+          <p className="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
+            Prosesser
+          </p>
+          <p className="mt-1 text-2xl font-semibold text-foreground tabular-nums">
+            {summary.total}
+          </p>
+        </div>
+        <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/[0.06] px-4 py-3">
+          <p className="text-[11px] font-medium uppercase tracking-[0.12em] text-emerald-700 dark:text-emerald-300">
+            Komplette
+          </p>
+          <p className="mt-1 text-2xl font-semibold text-foreground tabular-nums">
+            {summary.complete}
+          </p>
+        </div>
+        <div className="rounded-2xl border border-amber-500/20 bg-amber-500/[0.06] px-4 py-3">
+          <p className="text-[11px] font-medium uppercase tracking-[0.12em] text-amber-700 dark:text-amber-300">
+            Mangler PDD
+          </p>
+          <p className="mt-1 text-2xl font-semibold text-foreground tabular-nums">
+            {summary.withoutPdd}
+          </p>
+        </div>
+      </div>
 
       {filtered.length === 0 && rows.length > 0 ? (
         <p className="text-muted-foreground text-center text-sm">
