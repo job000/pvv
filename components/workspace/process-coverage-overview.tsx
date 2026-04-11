@@ -3,6 +3,7 @@
 import { PipelineStatusSelect } from "@/components/assessment/pipeline-status-select";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button-variants";
 import {
   Dialog,
   DialogBody,
@@ -538,13 +539,12 @@ function ProcessCoverageDetailDialog({
                       Ingen PDD koblet til prosessen ennå.
                     </p>
                     {pddTargetAssessment ? (
-                      <Button asChild type="button" variant="outline">
-                        <Link
-                          href={`/w/${workspaceId}/a/${pddTargetAssessment.assessmentId}/prosessdesign`}
-                        >
-                          Åpne prosessdesign for vurderingen
-                        </Link>
-                      </Button>
+                      <Link
+                        href={`/w/${workspaceId}/a/${pddTargetAssessment.assessmentId}/prosessdesign`}
+                        className={buttonVariants({ variant: "outline" })}
+                      >
+                        Åpne prosessdesign for vurderingen
+                      </Link>
                     ) : (
                       <p className="text-muted-foreground text-xs">
                         Start eller koble en vurdering først, så kan PDD opprettes derfra.
