@@ -2660,7 +2660,6 @@ export function OrgChartPanel({
         <ProcessCoverageOverview
           workspaceId={workspaceId}
           title="Prosesser og tilknyttet dokumentasjon"
-          description="Filtrer på organisasjonsenhet for å se hvilke dokumenter som finnes per prosess, og hva som sist ble oppdatert."
         />
       </section>
     </div>
