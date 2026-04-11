@@ -36,12 +36,6 @@ type ScrollSnapshot = {
   top: number;
 };
 
-type FrozenScrollSnapshot = ScrollSnapshot & {
-  overflowX?: string;
-  overflowY?: string;
-  overscrollBehavior?: string;
-};
-
 function isWindowTarget(target: ScrollTarget): target is Window {
   return target === window;
 }
@@ -94,57 +88,6 @@ function restoreScrollPosition(snapshot: ScrollSnapshot) {
   ) {
     snapshot.target.scrollTo({ left: snapshot.left, top: snapshot.top, behavior: "instant" });
   }
-}
-
-function freezeScrollTarget(target: ScrollTarget): FrozenScrollSnapshot {
-  const position = readScrollPosition(target);
-  if (isWindowTarget(target)) {
-    const root = document.documentElement;
-    const body = document.body;
-    const snapshot: FrozenScrollSnapshot = {
-      target,
-      ...position,
-      overflowX: root.style.overflowX,
-      overflowY: root.style.overflowY,
-      overscrollBehavior: root.style.overscrollBehavior,
-    };
-    root.style.overflowX = "hidden";
-    root.style.overflowY = "hidden";
-    root.style.overscrollBehavior = "contain";
-    body.style.overflowX = "hidden";
-    body.style.overflowY = "hidden";
-    return snapshot;
-  }
-
-  const snapshot: FrozenScrollSnapshot = {
-    target,
-    ...position,
-    overflowX: target.style.overflowX,
-    overflowY: target.style.overflowY,
-    overscrollBehavior: target.style.overscrollBehavior,
-  };
-  target.style.overflowX = "hidden";
-  target.style.overflowY = "hidden";
-  target.style.overscrollBehavior = "contain";
-  return snapshot;
-}
-
-function unfreezeScrollTarget(snapshot: FrozenScrollSnapshot) {
-  restoreScrollPosition(snapshot);
-  if (isWindowTarget(snapshot.target)) {
-    const root = document.documentElement;
-    const body = document.body;
-    root.style.overflowX = snapshot.overflowX ?? "";
-    root.style.overflowY = snapshot.overflowY ?? "";
-    root.style.overscrollBehavior = snapshot.overscrollBehavior ?? "";
-    body.style.overflowX = "";
-    body.style.overflowY = "";
-    return;
-  }
-
-  snapshot.target.style.overflowX = snapshot.overflowX ?? "";
-  snapshot.target.style.overflowY = snapshot.overflowY ?? "";
-  snapshot.target.style.overscrollBehavior = snapshot.overscrollBehavior ?? "";
 }
 
 export function parsePddTldrawDocumentSnapshot(
@@ -273,31 +216,41 @@ export function PddTldrawCanvas({
     const el = containerRef.current;
     if (!el) return;
 
-    let frozenTargets: FrozenScrollSnapshot[] = [];
-    let releaseTimer: ReturnType<typeof setTimeout> | null = null;
+    let snapshots: ScrollSnapshot[] = [];
     let armedUntil = 0;
+    let frameId: number | null = null;
 
-    const release = () => {
-      if (releaseTimer) {
-        clearTimeout(releaseTimer);
-        releaseTimer = null;
+    const stopLoop = () => {
+      if (frameId !== null) {
+        cancelAnimationFrame(frameId);
+        frameId = null;
       }
-      for (const snapshot of frozenTargets) {
-        unfreezeScrollTarget(snapshot);
+    };
+
+    const tick = () => {
+      if (Date.now() >= armedUntil) {
+        stopLoop();
+        return;
       }
-      frozenTargets = [];
+      for (const snapshot of snapshots) {
+        restoreScrollPosition(snapshot);
+      }
+      frameId = requestAnimationFrame(tick);
     };
 
     const lock = (ms: number) => {
-      release();
-      frozenTargets = getScrollTargets(el).map((target) => freezeScrollTarget(target));
-      releaseTimer = setTimeout(() => {
-        release();
-      }, ms);
+      snapshots = getScrollTargets(el).map((target) => {
+        const position = readScrollPosition(target);
+        return { target, ...position };
+      });
+      armedUntil = Date.now() + ms;
+      if (frameId === null) {
+        frameId = requestAnimationFrame(tick);
+      }
     };
 
     const arm = (ms: number) => {
-      armedUntil = Date.now() + ms;
+      lock(ms);
     };
 
     const isArmed = () => Date.now() < armedUntil;
@@ -321,7 +274,7 @@ export function PddTldrawCanvas({
     document.addEventListener("focusin", onFocusIn, true);
 
     return () => {
-      release();
+      stopLoop();
       document.removeEventListener("pointerdown", onPointerDown, true);
       document.removeEventListener("focusin", onFocusIn, true);
     };
