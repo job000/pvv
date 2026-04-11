@@ -33,6 +33,7 @@ import {
 import { useRouter } from "next/navigation";
 import {
   useCallback,
+  useEffect,
   useMemo,
   useState,
   type Dispatch,
@@ -629,7 +630,20 @@ function WorkspacesPanel({
   const [q, setQ] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
   const [editWs, setEditWs] = useState<WsRow | null>(null);
-  const [managingMembers, setManagingMembers] = useState<WsRow | null>(null);
+  const [managingWorkspaceId, setManagingWorkspaceId] = useState<Id<"workspaces"> | null>(null);
+
+  const managingWs = useMemo(() => {
+    if (!managingWorkspaceId || !workspaces) return null;
+    return workspaces.find((w) => w._id === managingWorkspaceId) ?? null;
+  }, [workspaces, managingWorkspaceId]);
+
+  useEffect(() => {
+    if (!managingWorkspaceId) return;
+    if (workspaces === undefined) return;
+    if (!workspaces.some((w) => w._id === managingWorkspaceId)) {
+      queueMicrotask(() => setManagingWorkspaceId(null));
+    }
+  }, [managingWorkspaceId, workspaces]);
 
   const filtered = useMemo(() => {
     if (!workspaces) return [];
@@ -712,7 +726,7 @@ function WorkspacesPanel({
                 <div className="flex items-center justify-end gap-1 pl-12 sm:w-28 sm:pl-0">
                   <button
                     type="button"
-                    onClick={() => setManagingMembers(w)}
+                    onClick={() => setManagingWorkspaceId(w._id)}
                     className="inline-flex size-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                     title="Medlemmer"
                   >
@@ -744,9 +758,10 @@ function WorkspacesPanel({
       <CreateWorkspaceDialog open={createOpen} setOpen={setCreateOpen} allUsers={allUsers} />
       <EditWorkspaceDialog ws={editWs} onClose={() => setEditWs(null)} />
       <ManageMembersDialog
-        ws={managingMembers}
+        key={managingWs?._id ?? "closed"}
+        ws={managingWs}
         allUsers={allUsers}
-        onClose={() => setManagingMembers(null)}
+        onClose={() => setManagingWorkspaceId(null)}
         removeMember={removeMember}
         updateRole={updateRole}
         addMember={addMember}

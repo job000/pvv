@@ -392,7 +392,10 @@ export const addMemberToWorkspace = mutation({
         q.eq("userId", args.userId).eq("workspaceId", args.workspaceId),
       )
       .unique();
-    if (existing) throw new Error("Brukeren er allerede medlem.");
+    // Idempotent: unngå feil ved dobbeltklikk, stale UI eller race
+    if (existing) {
+      return;
+    }
     await ctx.db.insert("workspaceMembers", {
       workspaceId: args.workspaceId,
       userId: args.userId,
