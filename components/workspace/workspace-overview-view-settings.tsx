@@ -22,6 +22,13 @@ import { LayoutGrid, Loader2, PanelLeft, RotateCcw, Settings2 } from "lucide-rea
 import { useCallback, useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
 
+const DEFAULT_WORKSPACE_OVERVIEW_SHORTCUT_IDS: WorkspaceOverviewShortcutId[] = [
+  "vurderinger",
+  "prosessregister",
+  "ros",
+  "organisasjon",
+];
+
 export function WorkspaceOverviewViewSettings({
   workspaceId,
   workspaceName,
@@ -54,15 +61,14 @@ export function WorkspaceOverviewViewSettings({
 
   const wid = String(workspaceId);
   const shortcuts = buildWorkspaceOverviewShortcuts(wid);
-
   const syncFromPrefs = useCallback(() => {
     if (prefs === undefined) return;
     if (prefs === null) {
-      setVisibleIds(new Set(WORKSPACE_OVERVIEW_SHORTCUT_IDS));
+      setVisibleIds(new Set(DEFAULT_WORKSPACE_OVERVIEW_SHORTCUT_IDS));
       setShowMetrics(true);
       setShowPriority(true);
       setShowRecent(true);
-      setShowBegreper(true);
+      setShowBegreper(false);
       return;
     }
     setVisibleIds(
@@ -201,7 +207,7 @@ export function WorkspaceOverviewViewSettings({
                   <span>
                     <span className="text-sm font-medium">Nøkkeltall</span>
                     <span className="text-muted-foreground block text-xs leading-snug">
-                      Fire kort (vurderinger, ROS, vent, prosessregister)
+                      Fokuskort og tre kompakte oversikter
                     </span>
                   </span>
                 </label>
@@ -240,7 +246,7 @@ export function WorkspaceOverviewViewSettings({
                   <span>
                     <span className="text-sm font-medium">Begreper</span>
                     <span className="text-muted-foreground block text-xs leading-snug">
-                      Kort forklaring på prosess, vurdering og ROS
+                      Ekstra forklaring nederst på dashboardet
                     </span>
                   </span>
                 </label>
@@ -272,6 +278,9 @@ export function WorkspaceOverviewViewSettings({
                   </label>
                 ))}
               </div>
+              <p className="text-xs text-muted-foreground">
+                Standardvisning viser kun de viktigste snarveiene.
+              </p>
             </div>
           </DialogBody>
           <DialogFooter className="flex-col gap-2 sm:flex-row sm:justify-between">

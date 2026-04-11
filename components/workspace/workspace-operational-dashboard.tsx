@@ -17,15 +17,12 @@ import {
 import { cn } from "@/lib/utils";
 import {
   ArrowRight,
-  ArrowUpRight,
   ClipboardList,
   Clock3,
-  PauseCircle,
   PlayCircle,
   ShieldAlert,
   ShieldPlus,
-  Sparkles,
-  Users,
+  Workflow,
 } from "lucide-react";
 import Link from "next/link";
 
@@ -41,31 +38,14 @@ type DashboardRow = {
   nextStepHint: string;
 };
 
-function dashboardMetricTone(
-  tone: "good" | "warning" | "action" | "neutral",
-): string {
+function dashboardMetricTone(tone: "warning" | "action" | "neutral"): string {
   switch (tone) {
-    case "good":
-      return "bg-emerald-500/[0.07] ring-emerald-500/20";
     case "warning":
       return "bg-amber-500/[0.08] ring-amber-500/25";
     case "action":
       return "bg-primary/[0.06] ring-primary/20";
     default:
       return "bg-card ring-black/[0.04] dark:ring-white/[0.06]";
-  }
-}
-
-function metricStatusClass(tone: "good" | "warning" | "action" | "neutral") {
-  switch (tone) {
-    case "good":
-      return "bg-emerald-500/12 text-emerald-900 dark:text-emerald-100";
-    case "warning":
-      return "bg-amber-500/14 text-amber-950 dark:text-amber-100";
-    case "action":
-      return "bg-primary/12 text-primary";
-    default:
-      return "bg-muted text-muted-foreground";
   }
 }
 
@@ -85,7 +65,7 @@ function DashboardMetricCard({
   hint: string;
   href: string;
   icon: ComponentType<{ className?: string }>;
-  tone: "good" | "warning" | "action" | "neutral";
+  tone: "warning" | "action" | "neutral";
 }) {
   return (
     <Link
@@ -104,20 +84,11 @@ function DashboardMetricCard({
           <p className="font-heading mt-2 text-3xl font-semibold tracking-tight text-foreground">
             {value}
           </p>
+          <p className="mt-2 text-xs font-medium text-muted-foreground">{status}</p>
         </div>
         <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-background/80 shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.08]">
           <Icon className="size-4.5 text-foreground/80 transition-transform group-hover:scale-110" />
         </div>
-      </div>
-      <div className="mt-3">
-        <span
-          className={cn(
-            "inline-flex rounded-lg px-2 py-1 text-[10px] font-semibold",
-            metricStatusClass(tone),
-          )}
-        >
-          {status}
-        </span>
       </div>
     </Link>
   );
@@ -409,22 +380,21 @@ export function WorkspaceOperationalDashboard({
   })();
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       {showMetrics ? (
         <section className="space-y-4" aria-labelledby="workspace-focus-heading">
-          <div className="bg-muted/25 rounded-2xl border border-border/60 p-4 shadow-sm sm:p-5">
+          <div className="rounded-3xl border border-border/50 bg-card/80 p-4 shadow-sm sm:p-5">
             <div className="space-y-4">
               <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-                <div className="inline-flex items-center gap-2 rounded-full border border-border/70 bg-background px-3 py-1 text-[11px] font-semibold text-muted-foreground">
-                  <Sparkles className="text-primary size-3.5" aria-hidden />
-                  Neste steg
-                </div>
                 <h2
                   id="workspace-focus-heading"
                   className="font-heading text-lg font-semibold tracking-tight text-foreground sm:text-xl"
                 >
-                  Én ting å gjøre nå
+                  Fokus nå
                 </h2>
+                <p className="text-sm text-muted-foreground">
+                  Én anbefalt handling og noen få nøkkeltall.
+                </p>
               </div>
 
               <FocusActionCard
@@ -490,11 +460,11 @@ export function WorkspaceOperationalDashboard({
             </div>
           </div>
 
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="grid gap-3 sm:grid-cols-3">
             <DashboardMetricCard
               title="Uten ROS"
               value={withoutRosLinkCount}
-              status={withoutRosLinkCount > 0 ? "Trenger handling" : "OK"}
+              status={withoutRosLinkCount > 0 ? "Trenger handling" : "Ingen åpne mangler"}
               hint={
                 withoutRosLinkCount > 0
                   ? "Vurderinger som mangler ROS-kobling — klikk for liste."
@@ -502,12 +472,12 @@ export function WorkspaceOperationalDashboard({
               }
               href={`/w/${wid}/vurderinger`}
               icon={ShieldAlert}
-              tone={withoutRosLinkCount > 0 ? "warning" : "good"}
+              tone={withoutRosLinkCount > 0 ? "warning" : "neutral"}
             />
             <DashboardMetricCard
               title="Neste steg"
               value={readyForPrioritizationCount}
-              status={readyForPrioritizationCount > 0 ? "Klar" : "Tomt"}
+              status={readyForPrioritizationCount > 0 ? "Klar for prioritering" : "Ingen åpne"}
               hint={
                 readyForPrioritizationCount > 0
                   ? "Klare for prioritering eller beslutning."
@@ -518,25 +488,16 @@ export function WorkspaceOperationalDashboard({
               tone={readyForPrioritizationCount > 0 ? "action" : "neutral"}
             />
             <DashboardMetricCard
-              title="På vent"
-              value={onHoldCount}
-              status={onHoldCount > 0 ? "Venter" : "OK"}
-              hint={
-                onHoldCount > 0
-                  ? "Saker på vent som trenger oppklaring."
-                  : "Ingen vurderinger er satt på vent."
-              }
-              href={`/w/${wid}/vurderinger`}
-              icon={PauseCircle}
-              tone={onHoldCount > 0 ? "warning" : "good"}
-            />
-            <DashboardMetricCard
               title="Prosesser"
               value="Åpne"
-              status="Register"
-              hint="Prosessregisteret (under Vurderinger → fanen Prosesser)."
+              status="Register og dokumentasjon"
+              hint={
+                onHoldCount > 0
+                  ? "Prosessregisteret med prosesser, dokumentasjon og koblinger."
+                  : "Prosessregisteret med prosesser, dokumentasjon og koblinger."
+              }
               href={`/w/${wid}/vurderinger?fane=prosesser`}
-              icon={Users}
+              icon={Workflow}
               tone="neutral"
             />
           </div>
@@ -547,15 +508,15 @@ export function WorkspaceOperationalDashboard({
         <div
           className={
             showPriority && showRecent
-              ? "grid gap-6 xl:grid-cols-2"
-              : "grid max-w-3xl gap-6"
+              ? "grid gap-4 xl:grid-cols-2"
+              : "grid max-w-3xl gap-4"
           }
         >
           {showPriority ? (
             <section className="space-y-3">
               <div className="flex items-center justify-between gap-2">
                 <h2 className="font-heading text-base font-semibold tracking-tight">
-                  Høy prioritet
+                  Prioriter nå
                 </h2>
                 <Link
                   href={`/w/${wid}/vurderinger`}
@@ -587,7 +548,7 @@ export function WorkspaceOperationalDashboard({
             <section className="space-y-3">
               <div className="flex items-center justify-between gap-2">
                 <h2 className="font-heading text-base font-semibold tracking-tight">
-                  Sist oppdatert
+                  Sist jobbet med
                 </h2>
                 <Link
                   href={`/w/${wid}/vurderinger`}
@@ -700,7 +661,7 @@ function AssessmentDashRow({
           <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
             {row.effectivePriority.toFixed(1)}
           </span>
-          <ArrowUpRight className="size-4 shrink-0 text-muted-foreground transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5" />
+          <ArrowRight className="size-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
         </div>
       </div>
 
