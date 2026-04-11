@@ -998,7 +998,7 @@ export function WorkspaceCandidatesPanel({
   const [issueImportCode, setIssueImportCode] = useState("");
   const [issueImportBusy, setIssueImportBusy] = useState(false);
 
-  const [createTab, setCreateTab] = useState<"github" | "manual">("github");
+  const [createTab, setCreateTab] = useState<"github" | "manual">("manual");
 
   /** Én synlig importflyt om gangen: issue-URL eller prosjektkolonne */
   const [githubImportTab, setGithubImportTab] = useState<"issue" | "column">(
@@ -1972,16 +1972,29 @@ export function WorkspaceCandidatesPanel({
         {canEditCandidates ? (
           <div
             data-tutorial-anchor="github-prosess"
-            className="rounded-2xl border border-border/40 bg-muted/[0.08] p-4 sm:p-5"
+            className="rounded-3xl border border-border/40 bg-card/70 p-4 shadow-sm sm:p-5"
           >
-            {hubMode ? (
-              <h2 className="text-foreground mb-3 text-sm font-semibold tracking-tight">
-                Legg til eller importer
-              </h2>
-            ) : null}
+            <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+              <div className="space-y-1">
+                <h2 className="text-base font-semibold tracking-tight text-foreground">
+                  Legg til prosess
+                </h2>
+                <p className="text-sm text-muted-foreground">
+                  Start enkelt med manuell opprettelse. GitHub-import er tilgjengelig når du trenger det.
+                </p>
+              </div>
+              <Button
+                type="button"
+                className="h-11 rounded-2xl px-4 text-sm font-semibold shadow-sm sm:w-auto"
+                onClick={() => setNewProcessOpen(true)}
+              >
+                <Plus className="size-4" aria-hidden />
+                Ny prosess
+              </Button>
+            </div>
             {/* Top-level tabs: GitHub vs Manual */}
             <div
-              className="mb-4 flex gap-1 rounded-xl border border-border/35 bg-muted/25 p-1"
+              className="mb-4 flex gap-1 rounded-2xl border border-border/35 bg-muted/25 p-1"
               role="tablist"
               aria-label="Opprett prosess"
             >
@@ -2389,18 +2402,25 @@ export function WorkspaceCandidatesPanel({
 
             {/* Manual creation panel */}
             {createTab === "manual" ? (
-              <div className="flex flex-col items-center gap-3 py-4 text-center">
-                <p className="text-muted-foreground text-sm">
-                  Opprett en ny prosess med egendefinert navn og detaljer.
-                </p>
-                <Button
-                  type="button"
-                  className="h-10 gap-2 rounded-xl px-6 shadow-sm"
-                  onClick={() => setNewProcessOpen(true)}
-                >
-                  <Plus className="size-4" aria-hidden />
-                  Ny prosess
-                </Button>
+              <div className="rounded-2xl border border-dashed border-border/50 bg-muted/15 px-4 py-5">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="space-y-1">
+                    <p className="text-sm font-medium text-foreground">
+                      Opprett manuelt
+                    </p>
+                    <p className="text-sm text-muted-foreground">
+                      Legg inn navn, prosess-ID og organisasjon først. Flere detaljer kan fylles ut senere.
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    className="h-11 rounded-2xl px-4 text-sm font-semibold shadow-sm"
+                    onClick={() => setNewProcessOpen(true)}
+                  >
+                    <Plus className="size-4" aria-hidden />
+                    Ny prosess
+                  </Button>
+                </div>
               </div>
             ) : null}
           </div>

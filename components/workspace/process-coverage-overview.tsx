@@ -162,7 +162,7 @@ function ProcessDocumentSummaryRow({
   count: number;
 }) {
   return (
-    <div className="flex gap-2.5 rounded-xl border border-border/50 bg-background/70 px-3 py-3">
+    <div className="flex gap-2.5 rounded-xl border border-border/40 bg-background/60 px-3 py-2.5">
       <div
         className={cn(
           "flex size-8 shrink-0 items-center justify-center rounded-lg",
@@ -177,11 +177,11 @@ function ProcessDocumentSummaryRow({
             href={href}
             className="line-clamp-1 text-sm font-medium text-foreground underline-offset-4 hover:text-primary hover:underline"
           >
-            {label} - {title}
+            {label}: {title}
           </Link>
         ) : (
           <p className="text-sm font-medium text-muted-foreground">
-            {label} - ingen dokumentasjon ennå
+            {label}: ingen dokumentasjon ennå
           </p>
         )}
         <p className="mt-1 text-xs text-muted-foreground">
@@ -592,6 +592,23 @@ export function ProcessCoverageOverview({
     });
   }, [rows, q, orgUnitFilter, orgUnits]);
 
+  const summary = useMemo(() => {
+    const source = rows ?? [];
+    const complete = source.filter(
+      (row) => row.pvv.count > 0 && row.ros.count > 0 && row.pdd.count > 0,
+    ).length;
+    const needsAttention = source.filter(
+      (row) => row.pvv.count === 0 || row.ros.count === 0 || row.pdd.count === 0,
+    ).length;
+    const withoutPdd = source.filter((row) => row.pdd.count === 0).length;
+    return {
+      total: source.length,
+      complete,
+      needsAttention,
+      withoutPdd,
+    };
+  }, [rows]);
+
   if (rows === undefined || (rows.length > 0 && orgUnits === undefined)) {
     return (
       <div
@@ -692,9 +709,37 @@ export function ProcessCoverageOverview({
         </FilterToolbar>
       </div>
 
+      <div className="grid gap-2 sm:grid-cols-3">
+        <div className="rounded-2xl border border-border/50 bg-card/60 px-4 py-3">
+          <p className="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
+            Prosesser
+          </p>
+          <p className="mt-1 text-2xl font-semibold text-foreground tabular-nums">
+            {summary.total}
+          </p>
+        </div>
+        <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/[0.06] px-4 py-3">
+          <p className="text-[11px] font-medium uppercase tracking-[0.12em] text-emerald-700 dark:text-emerald-300">
+            Komplette
+          </p>
+          <p className="mt-1 text-2xl font-semibold text-foreground tabular-nums">
+            {summary.complete}
+          </p>
+        </div>
+        <div className="rounded-2xl border border-amber-500/20 bg-amber-500/[0.06] px-4 py-3">
+          <p className="text-[11px] font-medium uppercase tracking-[0.12em] text-amber-700 dark:text-amber-300">
+            Mangler PDD
+          </p>
+          <p className="mt-1 text-2xl font-semibold text-foreground tabular-nums">
+            {summary.withoutPdd}
+          </p>
+        </div>
+      </div>
+
       <ul className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         {filtered.map((c) => {
           const issueUrl = githubIssueUrl(c);
+          const orgLabel = orgUnitSearchLabel(c.orgUnitId ?? undefined, orgUnitsList);
           const hasPvv = c.pvv.count > 0;
           const awaitingMembership = membership === undefined;
           const startBlocked =
@@ -708,21 +753,61 @@ export function ProcessCoverageOverview({
             <li key={c.candidateId}>
               <article
                 className={cn(
-                  "flex h-full flex-col overflow-hidden rounded-2xl border border-l-4 border-border/45 bg-card text-left shadow-[0_1px_3px_rgba(0,0,0,0.04)] ring-1 ring-black/[0.03] dark:ring-white/[0.05]",
+                  "flex h-full flex-col overflow-hidden rounded-3xl border border-l-4 border-border/45 bg-card/80 text-left shadow-[0_1px_3px_rgba(0,0,0,0.04)] ring-1 ring-black/[0.03] backdrop-blur-sm dark:ring-white/[0.05]",
                   coverageAccent(c),
                 )}
               >
-                <div className="flex flex-1 flex-col gap-3 p-4">
-                  <div className="space-y-2">
+                <div className="flex flex-1 flex-col gap-4 p-4 sm:p-5">
+                  <div className="space-y-3">
                     <div className="flex flex-wrap items-start justify-between gap-2">
-                      <p className="text-primary font-mono text-xs font-semibold tracking-wide">
+                      <p className="text-primary font-mono text-[11px] font-semibold tracking-[0.14em]">
                         {c.code}
                       </p>
                       {sourceBadges(c)}
                     </div>
-                    <h3 className="text-foreground line-clamp-2 text-base font-semibold leading-snug">
-                      {c.name}
-                    </h3>
+                    <div className="space-y-1.5">
+                      <h3 className="text-foreground line-clamp-2 text-lg font-semibold leading-snug">
+                        {c.name}
+                      </h3>
+                      {orgLabel !== "—" ? (
+                        <p className="text-sm text-muted-foreground">{orgLabel}</p>
+                      ) : null}
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      <Badge
+                        variant="outline"
+                        className={cn(
+                          "rounded-full px-2 py-0.5 text-[10px] font-medium",
+                          c.pvv.count > 0
+                            ? "border-primary/30 bg-primary/5 text-primary"
+                            : "text-muted-foreground",
+                        )}
+                      >
+                        PVV {c.pvv.count > 0 ? "klar" : "mangler"}
+                      </Badge>
+                      <Badge
+                        variant="outline"
+                        className={cn(
+                          "rounded-full px-2 py-0.5 text-[10px] font-medium",
+                          c.ros.count > 0
+                            ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
+                            : "text-muted-foreground",
+                        )}
+                      >
+                        ROS {c.ros.count > 0 ? "klar" : "mangler"}
+                      </Badge>
+                      <Badge
+                        variant="outline"
+                        className={cn(
+                          "rounded-full px-2 py-0.5 text-[10px] font-medium",
+                          c.pdd.count > 0
+                            ? "border-blue-500/30 bg-blue-500/10 text-blue-700 dark:text-blue-300"
+                            : "text-muted-foreground",
+                        )}
+                      >
+                        PDD {c.pdd.count > 0 ? "klar" : "mangler"}
+                      </Badge>
+                    </div>
                     {issueUrl ? (
                       <a
                         href={issueUrl}
@@ -736,7 +821,10 @@ export function ProcessCoverageOverview({
                     ) : null}
                   </div>
 
-                  <div className="border-border/50 space-y-2.5 border-t pt-3">
+                  <div className="border-border/40 space-y-2.5 border-t pt-4">
+                    <p className="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
+                      Dokumenter
+                    </p>
                     <ProcessDocumentSummaryRow
                       icon={ClipboardList}
                       toneClass="bg-primary/10 text-primary"
@@ -778,10 +866,10 @@ export function ProcessCoverageOverview({
                     />
                   </div>
 
-                  <div className="mt-auto flex flex-col gap-2 border-t border-border/40 pt-3">
+                  <div className="mt-auto flex flex-col gap-2 border-t border-border/40 pt-4">
                     <Button
                       type="button"
-                      className="h-11 min-h-[44px] w-full justify-center gap-2 text-[13px] font-semibold shadow-sm sm:h-10 sm:min-h-0 sm:min-w-[12rem]"
+                      className="h-11 min-h-[44px] w-full justify-center gap-2 rounded-2xl text-[13px] font-semibold shadow-sm"
                       disabled={startDisabled}
                       onClick={() => void goToPvvForProcess(c)}
                     >
@@ -800,33 +888,12 @@ export function ProcessCoverageOverview({
                     </Button>
                     <Button
                       type="button"
-                      variant="outline"
-                      className="h-11 min-h-[44px] w-full text-[13px] font-medium sm:h-10 sm:min-h-0"
+                      variant="ghost"
+                      className="h-10 w-full rounded-2xl text-[13px] font-medium text-muted-foreground hover:text-foreground"
                       onClick={() => setDetail(c)}
                     >
-                      Detaljer
+                      Se alle dokumenter
                     </Button>
-                    {canCreatePvv ? (
-                      <Button
-                        type="button"
-                        variant="outline"
-                        className="text-destructive hover:bg-destructive/10 h-11 min-h-[44px] w-full gap-2 border-destructive/35 text-[13px] font-medium sm:h-10 sm:min-h-0"
-                        disabled={deleteBusyId === c.candidateId}
-                        title={`Slett prosess ${c.code} fra registeret`}
-                        aria-label={`Slett prosess ${c.code}`}
-                        onClick={() => void deleteProcess(c)}
-                      >
-                        {deleteBusyId === c.candidateId ? (
-                          <Loader2
-                            className="size-4 shrink-0 animate-spin"
-                            aria-hidden
-                          />
-                        ) : (
-                          <Trash2 className="size-4 shrink-0" aria-hidden />
-                        )}
-                        Slett
-                      </Button>
-                    ) : null}
                   </div>
                 </div>
               </article>
