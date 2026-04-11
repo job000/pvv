@@ -433,7 +433,7 @@ export function TasksBoard() {
           </p>
         </div>
         <div
-          className="border-border/40 inline-flex shrink-0 rounded-lg border bg-muted/30 p-0.5"
+          className="inline-flex shrink-0 rounded-2xl border border-border/45 bg-card/75 p-1 shadow-sm"
           role="group"
           aria-label="Visning"
         >
@@ -441,7 +441,7 @@ export function TasksBoard() {
             type="button"
             variant={view === "kanban" ? "secondary" : "ghost"}
             size="sm"
-            className="h-8 gap-1 rounded-md px-2.5 text-xs shadow-none"
+            className="h-9 gap-1 rounded-xl px-3 text-xs shadow-none"
             onClick={() => setView("kanban")}
           >
             <LayoutGrid className="size-3.5" aria-hidden />
@@ -451,7 +451,7 @@ export function TasksBoard() {
             type="button"
             variant={view === "list" ? "secondary" : "ghost"}
             size="sm"
-            className="h-8 gap-1 rounded-md px-2.5 text-xs shadow-none"
+            className="h-9 gap-1 rounded-xl px-3 text-xs shadow-none"
             onClick={() => setView("list")}
           >
             <List className="size-3.5" aria-hidden />
@@ -461,7 +461,7 @@ export function TasksBoard() {
       </div>
 
       {tasks.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-border/50 bg-muted/[0.04] px-6 py-10 text-center">
+        <div className="rounded-3xl border border-dashed border-border/50 bg-card/45 px-6 py-12 text-center shadow-sm">
           <List className="text-muted-foreground mx-auto mb-2 size-8 opacity-50" aria-hidden />
           <p className="text-foreground text-sm font-medium">Ingen oppgaver</p>
           <p className="text-muted-foreground mx-auto mt-1 max-w-sm text-xs leading-relaxed">

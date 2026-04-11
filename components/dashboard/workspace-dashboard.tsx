@@ -125,17 +125,17 @@ export function WorkspaceDashboardGrid({
   return (
     <>
       {workspaces.length > 0 ? (
-        <details className="border-border/40 bg-muted/15 group rounded-xl border open:bg-muted/25">
-          <summary className="hover:bg-muted/25 cursor-pointer list-none rounded-xl px-4 py-3 text-sm font-medium transition-colors [&::-webkit-details-marker]:hidden">
+        <details className="group rounded-2xl border border-border/45 bg-card/65 shadow-sm open:bg-card/80">
+          <summary className="cursor-pointer list-none rounded-2xl px-4 py-3.5 text-sm font-medium transition-colors hover:bg-muted/20 [&::-webkit-details-marker]:hidden">
             <span className="inline-flex w-full items-center justify-between gap-2">
               <span>Nytt arbeidsområde</span>
               <ChevronRight className="text-muted-foreground size-4 shrink-0 transition-transform group-open:rotate-90" />
             </span>
           </summary>
-          <div className="border-border/35 border-t px-4 pb-4 pt-2">{createBlock}</div>
+          <div className="border-t border-border/35 px-4 pb-4 pt-2">{createBlock}</div>
         </details>
       ) : (
-        <section className="border-border/40 rounded-xl border bg-muted/[0.08] p-4">
+        <section className="rounded-2xl border border-border/45 bg-card/65 p-4 shadow-sm">
           <p className="text-foreground mb-3 text-sm font-medium">Opprett første område</p>
           {createBlock}
         </section>
@@ -183,7 +183,7 @@ export function WorkspaceDashboardGrid({
           </p>
         ) : null}
 
-        <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {filteredWorkspaces.map(({ workspace, role }) => {
             const isOwner = role === "owner";
             const canManage = role === "owner" || role === "admin";
@@ -194,14 +194,14 @@ export function WorkspaceDashboardGrid({
               <div
                 key={workspace._id}
                 className={cn(
-                  "group border-border/40 bg-card/80 relative cursor-pointer rounded-xl border p-4 transition-colors",
-                  "hover:border-border/60",
-                  isDefault && "border-primary/25 bg-primary/[0.03]",
+                  "group relative cursor-pointer rounded-2xl border p-4 shadow-sm transition-all",
+                  "border-border/45 bg-card/75 hover:-translate-y-0.5 hover:border-border/65",
+                  isDefault && "border-primary/25 bg-primary/[0.04]",
                 )}
               >
                 <Link
                   href={`/w/${workspace._id}`}
-                  className="absolute inset-0 z-[1] rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                  className="absolute inset-0 z-[1] rounded-2xl focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                   aria-label={`Åpne ${workspace.name}`}
                 />
 
@@ -233,7 +233,7 @@ export function WorkspaceDashboardGrid({
                       <div ref={isMenuOpen ? menuRef : undefined} className="pointer-events-auto">
                         <button
                           type="button"
-                          className="text-muted-foreground/50 hover:text-foreground hover:bg-muted/60 flex size-8 items-center justify-center rounded-lg opacity-0 transition-all duration-200 group-hover:opacity-100"
+                          className="text-muted-foreground/50 hover:text-foreground hover:bg-muted/60 flex size-8 items-center justify-center rounded-xl opacity-0 transition-all duration-200 group-hover:opacity-100"
                           onClick={(e) => {
                             e.preventDefault();
                             e.stopPropagation();
@@ -250,7 +250,7 @@ export function WorkspaceDashboardGrid({
                               className="fixed inset-0 z-40"
                               onClick={() => setMenuOpenId(null)}
                             />
-                            <div className="absolute right-0 top-full z-50 mt-1 w-48 rounded-xl bg-card p-1.5 shadow-xl ring-1 ring-black/[0.08] dark:ring-white/[0.12]">
+                            <div className="absolute right-0 top-full z-50 mt-1 w-48 rounded-2xl bg-card p-1.5 shadow-xl ring-1 ring-black/[0.08] dark:ring-white/[0.12]">
                               <button
                                 type="button"
                                 className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-[13px] text-foreground transition-colors hover:bg-muted/70"
