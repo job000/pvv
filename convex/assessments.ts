@@ -64,6 +64,9 @@ async function refreshCachedPriority(
     cachedCriticality: computed.criticality,
     cachedEase: computed.ease,
     cachedEaseLabel: computed.easeLabel,
+    cachedDeliveryConfidence: computed.deliveryConfidence,
+    cachedEconomicCaseScore: computed.economicCaseScore,
+    cachedReadinessScore: computed.readinessScore,
   });
 }
 
@@ -136,6 +139,9 @@ export type WorkspaceDashboardAssessmentRow = {
   pddStatus: "not_started" | "in_progress" | "completed" | "not_applicable";
   cachedAp?: number;
   cachedCriticality?: number;
+  cachedDeliveryConfidence?: number;
+  cachedEconomicCaseScore?: number;
+  cachedReadinessScore?: number;
   manualPriorityOverride?: number;
 };
 
@@ -159,6 +165,9 @@ function buildDashboardRow(
     pddStatus: a.pddStatus ?? "not_started",
     cachedAp: a.cachedAp,
     cachedCriticality: a.cachedCriticality,
+    cachedDeliveryConfidence: a.cachedDeliveryConfidence,
+    cachedEconomicCaseScore: a.cachedEconomicCaseScore,
+    cachedReadinessScore: a.cachedReadinessScore,
     manualPriorityOverride: a.manualPriorityOverride,
   };
 }

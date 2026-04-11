@@ -41,7 +41,6 @@ import {
   type PipelineStatus,
 } from "@/lib/assessment-pipeline";
 import {
-  compliancePlainLine,
   effectiveAssessmentPriority,
   formatRelativeUpdatedAt,
   priorityBandBadgeClass,
@@ -68,7 +67,6 @@ import {
   Plus,
   RefreshCw,
   Search,
-  Shield,
   Sparkles,
   Trash2,
   User,
@@ -86,10 +84,7 @@ import {
   orgUnitSearchLabel,
 } from "@/lib/org-unit-filter";
 import { prosessRegisterCopy } from "@/lib/prosess-register-copy";
-import {
-  WORKSPACE_ROLE_DESC_NB,
-  WORKSPACE_ROLE_LABEL_NB,
-} from "@/lib/role-labels-nb";
+import { WORKSPACE_ROLE_LABEL_NB } from "@/lib/role-labels-nb";
 import { GithubIssueStartCard } from "@/components/github/github-issue-start-card";
 import { WorkspaceCandidateRow } from "./workspace-candidate-row";
 import { WorkspaceGithubIntegrationCard } from "./workspace-github-integration-card";
@@ -933,32 +928,6 @@ export function WorkspaceCandidatesPanel({
     [previewGithubIssueAction, workspaceId],
   );
 
-  const openGhPreviewByUrl = useCallback(
-    async (issueUrl: string) => {
-      setDraftGhPreview(null);
-      setGhPreviewLoading(true);
-      setGhPreviewOpen(true);
-      setGhPreview(null);
-      try {
-        const data = await previewGithubIssueByUrlAction({
-          workspaceId,
-          issueUrl,
-        });
-        setGhPreview({
-          ...data,
-          comments: Array.isArray(data.comments) ? data.comments : [],
-        });
-      } catch (err) {
-        toast.error(
-          formatUserFacingError(err, "Kunne ikke hente forhåndsvisning"),
-        );
-        setGhPreviewOpen(false);
-      } finally {
-        setGhPreviewLoading(false);
-      }
-    },
-    [previewGithubIssueByUrlAction, workspaceId],
-  );
   const [editCandidateId, setEditCandidateId] =
     useState<Id<"candidates"> | null>(null);
 
@@ -1391,37 +1360,6 @@ export function WorkspaceCandidatesPanel({
     }
   }
 
-  async function registerRepoIssueFromOverviewTable(
-    candidateId: Id<"candidates">,
-  ) {
-    const opt =
-      autoRegStatusId.trim() ||
-      w.githubAutoRegisterProcessStatusOptionId?.trim() ||
-      githubProjectStatus.options?.[0]?.id;
-    if (!opt) {
-      toast.error(
-        "Velg standardstatus under «Automatisk GitHub-prosjekt», eller vent til statuslisten er lastet.",
-      );
-      return;
-    }
-    setRowGithubBusyId(candidateId);
-    try {
-      await createGithubRepoIssueForCandidate({
-        candidateId,
-        statusOptionId: opt,
-      });
-      toast.success(
-        "GitHub-issue opprettet, lagt i tavle og synket fra PVV.",
-      );
-    } catch (e) {
-      toast.error(
-        e instanceof Error ? e.message : "Kunne ikke opprette issue i repo.",
-      );
-    } finally {
-      setRowGithubBusyId(null);
-    }
-  }
-
   async function deleteCandidateFromOverview(
     candidateId: Id<"candidates">,
     c: Doc<"candidates">,
@@ -1664,20 +1602,9 @@ export function WorkspaceCandidatesPanel({
       {hubMode ? (
         <div
           data-tutorial-anchor="prosess-oversikt-header"
-          className="text-muted-foreground flex flex-wrap items-center justify-between gap-2 border-b border-border/40 px-5 py-3 text-xs sm:px-6 sm:text-sm"
+          className="text-muted-foreground flex items-center gap-2 border-b border-border/40 px-5 py-3 text-xs sm:px-6 sm:text-sm"
         >
           <span>{statusLine}</span>
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className="text-muted-foreground hover:text-foreground h-8 gap-1 px-2 text-xs"
-            title="Kort om registeret"
-            onClick={() => setProcessRegHelpOpen(true)}
-          >
-            <HelpCircle className="size-3.5" aria-hidden />
-            Om registeret
-          </Button>
         </div>
       ) : (
         <CardHeader className="px-6 pb-5 pt-6">
@@ -1740,10 +1667,10 @@ export function WorkspaceCandidatesPanel({
                       id="prosessregister-oversikt-heading"
                       className="text-foreground text-base font-semibold tracking-tight"
                     >
-                      Dine rader
+                      Start og finn prosesser
                     </h2>
                     <p className="text-muted-foreground text-xs leading-relaxed">
-                      Skjemavurderinger uten egen P-ID vises først. Registrerte prosesser har ID som brukes i vurdering og ROS.
+                      Nye eller innsendte prosesser ligger øverst. Registrerte prosesser brukes videre i vurdering og ROS.
                     </p>
                   </div>
                   {candidates.length > 0 ||
@@ -1977,10 +1904,10 @@ export function WorkspaceCandidatesPanel({
             <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
               <div className="space-y-1">
                 <h2 className="text-base font-semibold tracking-tight text-foreground">
-                  Legg til prosess
+                  Opprett prosess
                 </h2>
                 <p className="text-sm text-muted-foreground">
-                  Start enkelt med manuell opprettelse. GitHub-import er tilgjengelig når du trenger det.
+                  Start manuelt. Bruk GitHub bare når prosessen allerede kommer derfra.
                 </p>
               </div>
               <Button
@@ -1992,7 +1919,6 @@ export function WorkspaceCandidatesPanel({
                 Ny prosess
               </Button>
             </div>
-            {/* Top-level tabs: GitHub vs Manual */}
             <div
               className="mb-4 flex gap-1 rounded-2xl border border-border/35 bg-muted/25 p-1"
               role="tablist"
@@ -2011,7 +1937,7 @@ export function WorkspaceCandidatesPanel({
                 onClick={() => setCreateTab("github")}
               >
                 <GitBranch className="size-4 shrink-0 opacity-80" aria-hidden />
-                GitHub
+                Fra GitHub
               </button>
               <button
                 type="button"
@@ -2026,7 +1952,7 @@ export function WorkspaceCandidatesPanel({
                 onClick={() => setCreateTab("manual")}
               >
                 <Plus className="size-4 shrink-0 opacity-80" aria-hidden />
-                Manuelt
+                Opprett selv
               </button>
             </div>
 

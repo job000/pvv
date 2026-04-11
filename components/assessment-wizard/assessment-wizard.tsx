@@ -39,6 +39,11 @@ import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import type { AssessmentPayload } from "@/lib/assessment-types";
 import {
+  buildGovernanceReadinessSummary,
+  readinessLabelFromScore,
+  type DecisionReadinessStatus,
+} from "@/lib/assessment-governance";
+import {
   derivedBaselineHoursFromPayload,
   syncWorkloadDerivedFields,
 } from "@/lib/assessment-workload-sync";
@@ -111,6 +116,8 @@ function normalizeDraftPayload(raw: AssessmentPayload): AssessmentPayload {
     rpaBarrierNotes: raw.rpaBarrierNotes ?? "",
     rpaLifecycleContact: raw.rpaLifecycleContact ?? "",
     rpaManualFallbackWhenRobotFails: raw.rpaManualFallbackWhenRobotFails ?? "",
+    implementationBuildCost: raw.implementationBuildCost ?? 350000,
+    annualRunCost: raw.annualRunCost ?? 75000,
     rpaBenefitKindsAndOperationsNotes:
       raw.rpaBenefitKindsAndOperationsNotes ?? "",
     valuePainPointIds: raw.valuePainPointIds ?? [],
@@ -308,6 +315,9 @@ export function AssessmentWizard({ assessmentId }: Props) {
   });
   const versions = useQuery(api.assessments.listVersions, { assessmentId });
   const rosContext = useQuery(api.ros.getRosContextForAssessment, {
+    assessmentId,
+  });
+  const processDesignData = useQuery(api.processDesignDocs.getForAssessment, {
     assessmentId,
   });
   const candidates = useQuery(
@@ -1530,6 +1540,11 @@ export function AssessmentWizard({ assessmentId }: Props) {
                     payload={payload}
                   />
                 ) : null}
+                <AssessmentDecisionReadinessPanel
+                  payload={payload}
+                  assessment={assessment}
+                  hasProcessDesignDocument={Boolean(processDesignData?.document)}
+                />
               </div>
             </Slide>
 
@@ -2036,6 +2051,21 @@ function riskLevelLabel(criticality: number): "Høy" | "Middels" | "Lav" {
   return "Lav";
 }
 
+function readinessTone(status: DecisionReadinessStatus): string {
+  switch (status) {
+    case "ready":
+      return "bg-emerald-500/10 text-emerald-900 dark:text-emerald-100";
+    case "in_progress":
+      return "bg-amber-500/10 text-amber-950 dark:text-amber-100";
+    case "missing":
+      return "bg-muted text-foreground";
+  }
+}
+
+function formatCurrencyShort(value: number): string {
+  return `${Math.round(value).toLocaleString("nb-NO")} kr`;
+}
+
 function QuickResultHero({
   computed,
   workspaceId,
@@ -2079,6 +2109,12 @@ function QuickResultHero({
     payload.processDescription?.trim() || payload.processName?.trim() || title;
   const hoursSaved = Math.max(0, Math.round(computed.benH));
   const risk = riskLevelLabel(computed.criticality);
+  const readinessSummary = buildGovernanceReadinessSummary({
+    payload,
+    rosStatus: undefined,
+    pddStatus: undefined,
+    hasProcessDesignDocument: false,
+  });
 
   return (
     <div
@@ -2124,6 +2160,33 @@ function QuickResultHero({
             </p>
             <p className="text-muted-foreground mt-1 text-[11px]">Hvor mye som kan automatiseres av dagens manuelle tid</p>
           </div>
+          <div className="rounded-2xl bg-background/85 px-4 py-4 shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.08]">
+            <p className="text-muted-foreground text-xs font-semibold">Økonomisk case</p>
+            <p className="font-heading mt-1 text-2xl font-semibold text-foreground">
+              {readinessLabelFromScore(computed.economicCaseScore)}
+            </p>
+            <p className="text-muted-foreground mt-1 text-[11px]">
+              Netto {formatCurrencyShort(computed.netBenefitAnnual)} per år
+            </p>
+          </div>
+          <div className="rounded-2xl bg-background/85 px-4 py-4 shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.08]">
+            <p className="text-muted-foreground text-xs font-semibold">Leveranse</p>
+            <p className="font-heading mt-1 text-2xl font-semibold text-foreground">
+              {readinessLabelFromScore(computed.deliveryConfidence)}
+            </p>
+            <p className="text-muted-foreground mt-1 text-[11px]">
+              Gjennomføring og trygg drift
+            </p>
+          </div>
+          <div className="rounded-2xl bg-background/85 px-4 py-4 shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.08]">
+            <p className="text-muted-foreground text-xs font-semibold">Beslutningsklarhet</p>
+            <p className="font-heading mt-1 text-2xl font-semibold text-foreground">
+              {readinessSummary.readyCount}/{readinessSummary.totalCount}
+            </p>
+            <p className="text-muted-foreground mt-1 text-[11px]">
+              {readinessSummary.readinessLabel} readiness
+            </p>
+          </div>
         </div>
 
         <p className="text-muted-foreground text-[11px]">
@@ -2147,6 +2210,81 @@ function QuickResultHero({
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+function AssessmentDecisionReadinessPanel({
+  payload,
+  assessment,
+  hasProcessDesignDocument,
+}: {
+  payload: AssessmentPayload;
+  assessment: {
+    rosStatus?: string | null;
+    pddStatus?: string | null;
+  };
+  hasProcessDesignDocument: boolean;
+}) {
+  const summary = buildGovernanceReadinessSummary({
+    payload,
+    rosStatus: assessment.rosStatus,
+    pddStatus: assessment.pddStatus,
+    hasProcessDesignDocument,
+  });
+
+  return (
+    <div className="space-y-4 rounded-2xl bg-muted/10 p-5 ring-1 ring-black/[0.04] dark:ring-white/[0.06]">
+      <div className="space-y-1">
+        <h3 className="text-base font-semibold text-foreground">Beslutningsklarhet</h3>
+        <p className="text-sm leading-relaxed text-muted-foreground">
+          Ett samlet bilde av hva som mangler før saken er klar for prioritering,
+          styring og videre leveranse.
+        </p>
+      </div>
+      <div className="grid gap-3 sm:grid-cols-3">
+        <div className="rounded-xl bg-background/85 px-4 py-3 shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.08]">
+          <p className="text-xs font-semibold text-muted-foreground">Readiness</p>
+          <p className="mt-1 text-2xl font-semibold text-foreground">{summary.readinessLabel}</p>
+        </div>
+        <div className="rounded-xl bg-background/85 px-4 py-3 shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.08]">
+          <p className="text-xs font-semibold text-muted-foreground">Score</p>
+          <p className="mt-1 text-2xl font-semibold text-foreground">{summary.readinessScore}</p>
+        </div>
+        <div className="rounded-xl bg-background/85 px-4 py-3 shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.08]">
+          <p className="text-xs font-semibold text-muted-foreground">Klare områder</p>
+          <p className="mt-1 text-2xl font-semibold text-foreground">
+            {summary.readyCount}/{summary.totalCount}
+          </p>
+        </div>
+      </div>
+      <ul className="grid gap-3 sm:grid-cols-2">
+        {summary.requirements.map((item) => (
+          <li
+            key={item.key}
+            className="rounded-xl border border-border/50 bg-background/75 p-4"
+          >
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-sm font-semibold text-foreground">{item.label}</p>
+              <span
+                className={cn(
+                  "rounded-full px-2.5 py-1 text-[10px] font-semibold",
+                  readinessTone(item.status),
+                )}
+              >
+                {item.status === "ready"
+                  ? "Klar"
+                  : item.status === "in_progress"
+                    ? "Pågår"
+                    : "Mangler"}
+              </span>
+            </div>
+            <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+              {item.description}
+            </p>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }

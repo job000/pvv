@@ -85,10 +85,10 @@ function formatRelative(ts: number | undefined): string {
 type Tab = "maler" | "analyser" | "oversikt" | "bibliotek";
 
 const FLOW_TABS = [
-  { id: "analyser" as const, label: "Analyser", icon: ClipboardList },
+  { id: "analyser" as const, label: "Arbeid", icon: ClipboardList },
   { id: "maler" as const, label: "Maler", icon: Grid3x3 },
-  { id: "oversikt" as const, label: "Dashboard", icon: BarChart3 },
-  { id: "bibliotek" as const, label: "Bibliotek", icon: BookMarked },
+  { id: "oversikt" as const, label: "Status", icon: BarChart3 },
+  { id: "bibliotek" as const, label: "Stotte", icon: BookMarked },
 ] as const;
 
 function RosFlowNav({
@@ -606,7 +606,7 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
               id="ros-dashboard-heading"
               className="font-heading text-lg font-semibold tracking-tight text-foreground"
             >
-              Dashboard
+              Status
             </h2>
             <p className="text-muted-foreground mt-2 text-sm leading-relaxed">
               Oversikt over analyser, prosessdekning og nøkkeltall — uten startskjema for nye ROS.
@@ -627,10 +627,10 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <h2 className="font-heading text-lg font-semibold tracking-tight">
-                Maler
+                  ROS-maler
               </h2>
               <p className="text-muted-foreground mt-0.5 text-sm">
-                En mal definerer rammeverket for risikovurderinger — matrisestørrelse, akser og nivåer. Analyser bruker malen.
+                  Lag noen få enkle maler som andre kan bruke når de starter analyser.
               </p>
             </div>
             <Button
@@ -799,22 +799,14 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
                 </div>
                 <div className="space-y-1">
                   <h2 className="font-heading text-xl font-semibold tracking-tight text-foreground sm:text-2xl">
-                    ROS-analyser
+                    Start eller fortsett ROS
                   </h2>
                   <p className="max-w-xl text-sm leading-relaxed text-muted-foreground">
-                    Start en ny analyse raskt, eller fortsett i en eksisterende. Hold oppstarten enkel og gjør koblinger til prosess og vurdering når det trengs.
+                    Start en analyse, jobb ferdig og kom tilbake senere ved behov. Hold oppstarten enkel.
                   </p>
                 </div>
               </div>
               <div className="flex flex-wrap gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="rounded-2xl"
-                  onClick={() => setTab("maler")}
-                >
-                  Se maler
-                </Button>
                 <Button
                   type="button"
                   className="gap-2 rounded-2xl shadow-sm"
@@ -823,14 +815,30 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
                   <Plus className="size-4" aria-hidden />
                   Ny analyse
                 </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="rounded-2xl"
+                  onClick={() => setTab("maler")}
+                >
+                  Se maler
+                </Button>
               </div>
             </div>
           </section>
 
-          <GithubIssueStartCard
-            workspaceId={workspaceId}
-            variant="ros"
-          />
+          <div className="rounded-2xl border border-border/50 bg-card/55 p-4 shadow-sm">
+            <p className="text-sm font-medium text-foreground">Mest brukt flyt</p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Start ny ROS fra prosess, GitHub eller tom analyse. Velg mal når du starter.
+            </p>
+            <div className="mt-4">
+              <GithubIssueStartCard
+                workspaceId={workspaceId}
+                variant="ros"
+              />
+            </div>
+          </div>
 
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
@@ -1064,7 +1072,7 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
               onClick={() => setScaleRefOpen(true)}
             >
               <Info className="size-3.5 text-primary" aria-hidden />
-              Skalareferanse
+              Skala
             </Button>
             <Button
               type="button"
@@ -1074,7 +1082,7 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
               onClick={() => setMethodHelpOpen(true)}
             >
               <HelpCircle className="size-3.5" aria-hidden />
-              Hjelp og metode
+              Metode
             </Button>
           </div>
 

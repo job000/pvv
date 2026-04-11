@@ -393,7 +393,7 @@ export function WorkspaceOperationalDashboard({
                   Fokus nå
                 </h2>
                 <p className="text-sm text-muted-foreground">
-                  Én anbefalt handling og noen få nøkkeltall.
+                  Én anbefalt handling og de viktigste køene akkurat nå.
                 </p>
               </div>
 
@@ -475,7 +475,7 @@ export function WorkspaceOperationalDashboard({
               tone={withoutRosLinkCount > 0 ? "warning" : "neutral"}
             />
             <DashboardMetricCard
-              title="Neste steg"
+              title="Beslutning neste"
               value={readyForPrioritizationCount}
               status={readyForPrioritizationCount > 0 ? "Klar for prioritering" : "Ingen åpne"}
               hint={
@@ -516,7 +516,7 @@ export function WorkspaceOperationalDashboard({
             <section className="space-y-3">
               <div className="flex items-center justify-between gap-2">
                 <h2 className="font-heading text-base font-semibold tracking-tight">
-                  Prioriter nå
+                  Høyest prioritet
                 </h2>
                 <Link
                   href={`/w/${wid}/vurderinger`}
@@ -548,7 +548,7 @@ export function WorkspaceOperationalDashboard({
             <section className="space-y-3">
               <div className="flex items-center justify-between gap-2">
                 <h2 className="font-heading text-base font-semibold tracking-tight">
-                  Sist jobbet med
+                  Siste aktivitet
                 </h2>
                 <Link
                   href={`/w/${wid}/vurderinger`}

@@ -48,6 +48,8 @@ export function buildAssessmentContextForAi(args: {
   rpaImplementationDifficulty?: number;
   rpaLifecycleContact?: string;
   rpaManualFallbackWhenRobotFails?: string;
+  implementationBuildCost?: number;
+  annualRunCost?: number;
   rpaBenefitKindsAndOperationsNotes?: string;
 }): string {
   const scopeLine =
@@ -124,6 +126,12 @@ export function buildAssessmentContextForAi(args: {
   }
   pushIf("Kontaktperson til produksjon", args.rpaLifecycleContact);
   pushIf("Manuell reserve ved robotfeil", args.rpaManualFallbackWhenRobotFails);
+  if (args.implementationBuildCost !== undefined) {
+    parts.push(`Antatt byggekostnad: ${Math.round(args.implementationBuildCost).toLocaleString("nb-NO")} kr`);
+  }
+  if (args.annualRunCost !== undefined) {
+    parts.push(`Antatt årlig driftskostnad: ${Math.round(args.annualRunCost).toLocaleString("nb-NO")} kr`);
+  }
   pushIf("Gevinst, tid, ventetid, robot vs. manuelt", args.rpaBenefitKindsAndOperationsNotes);
 
   if (args.priorityScore !== undefined) {

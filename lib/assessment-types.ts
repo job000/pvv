@@ -74,6 +74,8 @@ export type AssessmentPayload = {
   rpaImplementationDifficulty?: number;
   rpaLifecycleContact?: string;
   rpaManualFallbackWhenRobotFails?: string;
+  implementationBuildCost?: number;
+  annualRunCost?: number;
   rpaBenefitKindsAndOperationsNotes?: string;
 
   /** Flervalg verdisteg (arkiv) */

@@ -44,6 +44,8 @@ export function defaultAssessmentPayload(): AssessmentPayload {
     hfEconomicRationaleNotes: "",
     hfCriticalManualGapNotes: "",
     hfOperationsSupportNotes: "",
+    implementationBuildCost: 350000,
+    annualRunCost: 75000,
     valuePainPointIds: [],
     valueGainIds: [],
   };
@@ -121,6 +123,9 @@ export async function createAssessmentWithPayload(
     cachedCriticality: computed.criticality,
     cachedEase: computed.ease,
     cachedEaseLabel: computed.easeLabel,
+    cachedDeliveryConfidence: computed.deliveryConfidence,
+    cachedEconomicCaseScore: computed.economicCaseScore,
+    cachedReadinessScore: computed.readinessScore,
     kanbanRank: await nextAssessmentKanbanRank(
       ctx,
       args.workspaceId,

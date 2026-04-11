@@ -144,6 +144,57 @@ function githubIssueUrl(c: CoverageRow): string | null {
   return `https://github.com/${c.githubRepoFullName.trim()}/issues/${c.githubIssueNumber}`;
 }
 
+function missingCoverageLabels(c: CoverageRow): string[] {
+  const missing: string[] = [];
+  if (c.pvv.count === 0) missing.push("vurdering");
+  if (c.ros.count === 0) missing.push("ROS");
+  if (c.pdd.count === 0) missing.push("PDD");
+  return missing;
+}
+
+function coverageStatusCopy(c: CoverageRow): {
+  label: string;
+  detail: string;
+  toneClass: string;
+} {
+  const missing = missingCoverageLabels(c);
+  if (missing.length === 0) {
+    return {
+      label: "Komplett",
+      detail: "Denne prosessen har vurdering, ROS og prosessdesign.",
+      toneClass:
+        "border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
+    };
+  }
+  if (missing.length === 3) {
+    return {
+      label: "Ikke startet",
+      detail: "Ingen dokumentasjon er koblet til prosessen ennå.",
+      toneClass:
+        "border-slate-500/20 bg-slate-500/10 text-slate-700 dark:text-slate-300",
+    };
+  }
+  return {
+    label: "Mangler noe",
+    detail: `Mangler ${missing.join(", ")} før prosessen er komplett.`,
+    toneClass:
+      "border-amber-500/25 bg-amber-500/10 text-amber-700 dark:text-amber-300",
+  };
+}
+
+function nextStepCopy(c: CoverageRow): string {
+  if (c.pvv.count === 0) {
+    return "Start med vurdering for å beskrive prosessen og samle grunnlaget.";
+  }
+  if (c.ros.count === 0) {
+    return "Opprett eller koble en ROS for å dokumentere risiko.";
+  }
+  if (c.pdd.count === 0) {
+    return "Legg til prosessdesign slik at løsning og drift er beskrevet.";
+  }
+  return "Åpne detaljene for å se eller oppdatere dokumentasjonen.";
+}
+
 function ProcessDocumentSummaryRow({
   icon: Icon,
   toneClass,
@@ -721,11 +772,9 @@ function ProcessCoverageDetailDialog({
 export function ProcessCoverageOverview({
   workspaceId,
   title = "Dokumentasjon per prosess",
-  description = "Hold oversikt over vurderinger, risiko og prosessdesign for hver prosess.",
 }: {
   workspaceId: Id<"workspaces">;
   title?: string;
-  description?: string;
 }) {
   const router = useRouter();
   const rows = useQuery(api.candidates.listProcessCoverage, { workspaceId });
@@ -905,23 +954,6 @@ export function ProcessCoverageOverview({
     });
   }, [rows, q, orgUnitFilter, orgUnits]);
 
-  const summary = useMemo(() => {
-    const source = rows ?? [];
-    const complete = source.filter(
-      (row) => row.pvv.count > 0 && row.ros.count > 0 && row.pdd.count > 0,
-    ).length;
-    const needsAttention = source.filter(
-      (row) => row.pvv.count === 0 || row.ros.count === 0 || row.pdd.count === 0,
-    ).length;
-    const withoutPdd = source.filter((row) => row.pdd.count === 0).length;
-    return {
-      total: source.length,
-      complete,
-      needsAttention,
-      withoutPdd,
-    };
-  }, [rows]);
-
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const currentPage = Math.min(page, totalPages);
   const pageStart = (currentPage - 1) * pageSize;
@@ -1021,7 +1053,7 @@ export function ProcessCoverageOverview({
         }
       />
 
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+      <div className="flex flex-col gap-3">
         <div>
           <h2
             id="process-coverage-heading"
@@ -1029,15 +1061,17 @@ export function ProcessCoverageOverview({
           >
             {title}
           </h2>
-          <p className="mt-1 text-sm text-muted-foreground">{description}</p>
+          <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
+            Se raskt hva som mangler per prosess, og åpne riktig dokument videre.
+          </p>
         </div>
-        <FilterToolbar className="w-full sm:ml-auto sm:max-w-2xl">
+        <FilterToolbar className="w-full">
           <SearchInput
             value={q}
             onChange={(e) => setQ(e.target.value)}
             placeholder="Søk i navn, ID eller organisasjon …"
             aria-label="Filtrer prosesser"
-            className="min-w-0 flex-1 sm:min-w-[min(100%,18rem)]"
+            className="min-w-0 flex-1 sm:min-w-[min(100%,20rem)]"
           />
           <NativeSelectField
             id="process-coverage-org"
@@ -1061,32 +1095,32 @@ export function ProcessCoverageOverview({
         </FilterToolbar>
       </div>
 
-      <div className="flex flex-col gap-3 rounded-2xl border border-border/45 bg-card/60 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="min-w-0">
+      <div className="flex flex-col gap-3 rounded-2xl border border-border/45 bg-card/40 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0 space-y-1">
           <p className="text-sm font-medium text-foreground">
+            {filtered.length} prosesser
+          </p>
+          <p className="text-xs text-muted-foreground">
             Viser{" "}
             <span className="tabular-nums">
               {filtered.length === 0 ? 0 : pageStart + 1}-
               {Math.min(pageStart + pageSize, filtered.length)}
             </span>{" "}
-            av <span className="tabular-nums">{filtered.length}</span> prosesser
-          </p>
-          <p className="text-muted-foreground mt-0.5 text-xs">
-            Begrens hvor mange prosesser som vises samtidig.
+            av {filtered.length}
           </p>
         </div>
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
           <NativeSelectField
             id="process-coverage-page-size"
-            label="Per side"
+            label="Vis"
             value={String(pageSize)}
             onChange={(e) => setPageSize(Number(e.target.value) as 5 | 10 | 20)}
             aria-label="Velg antall prosesser per side"
             className="w-full sm:w-[8rem]"
           >
-            <option value="5">5 per side</option>
-            <option value="10">10 per side</option>
-            <option value="20">20 per side</option>
+            <option value="5">5</option>
+            <option value="10">10</option>
+            <option value="20">20</option>
           </NativeSelectField>
           <div className="flex items-center gap-2">
             <Button
@@ -1120,6 +1154,8 @@ export function ProcessCoverageOverview({
         {paginatedFiltered.map((c) => {
           const issueUrl = githubIssueUrl(c);
           const orgLabel = orgUnitSearchLabel(c.orgUnitId ?? undefined, orgUnitsList);
+          const status = coverageStatusCopy(c);
+          const missing = missingCoverageLabels(c);
           const hasPvv = c.pvv.count > 0;
           const awaitingMembership = membership === undefined;
           const startBlocked =
@@ -1138,14 +1174,14 @@ export function ProcessCoverageOverview({
                 )}
               >
                 <div className="flex flex-1 flex-col gap-4 p-4 sm:p-5">
-                  <div className="space-y-3">
+                  <div className="space-y-4">
                     <div className="flex flex-wrap items-start justify-between gap-2">
                       <p className="text-primary font-mono text-[11px] font-semibold tracking-[0.14em]">
                         {c.code}
                       </p>
                       {sourceBadges(c)}
                     </div>
-                    <div className="space-y-1.5">
+                    <div className="space-y-2">
                       <h3 className="text-foreground line-clamp-2 text-lg font-semibold leading-snug">
                         {c.name}
                       </h3>
@@ -1153,62 +1189,43 @@ export function ProcessCoverageOverview({
                         <p className="text-sm text-muted-foreground">{orgLabel}</p>
                       ) : null}
                     </div>
-                    <div className="flex flex-wrap gap-1.5">
-                      <Badge
-                        variant="outline"
-                        className={cn(
-                          "rounded-full px-2 py-0.5 text-[10px] font-medium",
-                          c.pvv.count > 0
-                            ? "border-primary/30 bg-primary/5 text-primary"
-                            : "text-muted-foreground",
-                        )}
-                      >
-                        PVV {c.pvv.count > 0 ? "klar" : "mangler"}
-                      </Badge>
-                      <Badge
-                        variant="outline"
-                        className={cn(
-                          "rounded-full px-2 py-0.5 text-[10px] font-medium",
-                          c.ros.count > 0
-                            ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
-                            : "text-muted-foreground",
-                        )}
-                      >
-                        ROS {c.ros.count > 0 ? "klar" : "mangler"}
-                      </Badge>
-                      <Badge
-                        variant="outline"
-                        className={cn(
-                          "rounded-full px-2 py-0.5 text-[10px] font-medium",
-                          c.pdd.count > 0
-                            ? "border-blue-500/30 bg-blue-500/10 text-blue-700 dark:text-blue-300"
-                            : "text-muted-foreground",
-                        )}
-                      >
-                        PDD {c.pdd.count > 0 ? "klar" : "mangler"}
-                      </Badge>
+                    <div className="rounded-2xl border border-border/45 bg-background/50 p-3">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Badge
+                          variant="outline"
+                          className={cn("rounded-full px-2.5 py-0.5 text-[11px] font-medium", status.toneClass)}
+                        >
+                          {status.label}
+                        </Badge>
+                        {issueUrl ? (
+                          <a
+                            href={issueUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 text-xs font-medium text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+                          >
+                            GitHub
+                            <ExternalLink className="size-3 opacity-70" aria-hidden />
+                          </a>
+                        ) : null}
+                      </div>
+                      <p className="mt-2 text-sm text-muted-foreground">
+                        {status.detail}
+                      </p>
+                      <p className="mt-2 text-sm font-medium text-foreground">
+                        Neste steg: {nextStepCopy(c)}
+                      </p>
                     </div>
-                    {issueUrl ? (
-                      <a
-                        href={issueUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 text-xs font-medium underline-offset-4 hover:underline"
-                      >
-                        Issue på GitHub
-                        <ExternalLink className="size-3 opacity-70" aria-hidden />
-                      </a>
-                    ) : null}
                   </div>
 
-                  <div className="border-border/40 space-y-2.5 border-t pt-4">
+                  <div className="space-y-2 rounded-2xl border border-border/40 bg-background/35 p-3">
                     <p className="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
-                      Dokumenter
+                      Status
                     </p>
                     <ProcessDocumentSummaryRow
                       icon={ClipboardList}
                       toneClass="bg-primary/10 text-primary"
-                      label="PVV"
+                      label="Vurdering"
                       title={c.pvv.assessments[0]?.title}
                       href={
                         c.pvv.assessments[0]
@@ -1221,7 +1238,7 @@ export function ProcessCoverageOverview({
                     <ProcessDocumentSummaryRow
                       icon={Shield}
                       toneClass="bg-emerald-500/12 text-emerald-800 dark:text-emerald-200"
-                      label="Risiko"
+                      label="ROS"
                       title={c.ros.analyses[0]?.title}
                       href={
                         c.ros.analyses[0]
@@ -1234,7 +1251,7 @@ export function ProcessCoverageOverview({
                     <ProcessDocumentSummaryRow
                       icon={Workflow}
                       toneClass="bg-blue-500/12 text-blue-800 dark:text-blue-200"
-                      label="PDD"
+                      label="Prosessdesign"
                       title={c.pdd.documents[0]?.title}
                       href={
                         c.pdd.documents[0]
@@ -1244,6 +1261,11 @@ export function ProcessCoverageOverview({
                       updatedAt={c.pdd.latestAt}
                       count={c.pdd.count}
                     />
+                    {missing.length > 0 ? (
+                      <p className="text-xs text-muted-foreground">
+                        Mangler nå: {missing.join(", ")}.
+                      </p>
+                    ) : null}
                   </div>
 
                   <div className="mt-auto flex flex-col gap-2 border-t border-border/40 pt-4">
@@ -1281,33 +1303,6 @@ export function ProcessCoverageOverview({
           );
         })}
       </ul>
-
-      <div className="grid gap-2 sm:grid-cols-3">
-        <div className="rounded-2xl border border-border/50 bg-card/60 px-4 py-3">
-          <p className="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
-            Prosesser
-          </p>
-          <p className="mt-1 text-2xl font-semibold text-foreground tabular-nums">
-            {summary.total}
-          </p>
-        </div>
-        <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/[0.06] px-4 py-3">
-          <p className="text-[11px] font-medium uppercase tracking-[0.12em] text-emerald-700 dark:text-emerald-300">
-            Komplette
-          </p>
-          <p className="mt-1 text-2xl font-semibold text-foreground tabular-nums">
-            {summary.complete}
-          </p>
-        </div>
-        <div className="rounded-2xl border border-amber-500/20 bg-amber-500/[0.06] px-4 py-3">
-          <p className="text-[11px] font-medium uppercase tracking-[0.12em] text-amber-700 dark:text-amber-300">
-            Mangler PDD
-          </p>
-          <p className="mt-1 text-2xl font-semibold text-foreground tabular-nums">
-            {summary.withoutPdd}
-          </p>
-        </div>
-      </div>
 
       {filtered.length === 0 && rows.length > 0 ? (
         <p className="text-muted-foreground text-center text-sm">

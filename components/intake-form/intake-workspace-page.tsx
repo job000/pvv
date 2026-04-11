@@ -55,9 +55,7 @@ import {
   ExternalLink,
   FileText,
   GitBranch,
-  LayoutGrid,
   Link2,
-  List,
   Plus,
   Settings2,
   ShieldAlert,
@@ -1189,12 +1187,10 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
       }
     >
   >({});
-  const [formsView, setFormsView] = useState<"cards" | "compact">("compact");
-  /** Når false: kun kompakt sammendrag under listen — mer plass til køen til høyre. */
+  const formsView = "compact" as const;
   const [formWorkspacePanelExpanded, setFormWorkspacePanelExpanded] =
     useState(true);
   const prevActiveFormIdRef = useRef<Id<"intakeForms"> | null>(null);
-  const [showFormOverview, setShowFormOverview] = useState(false);
   const [showResponses, setShowResponses] = useState(false);
 
   const selectedForm = forms.find((form) => form._id === activeFormId) ?? null;
@@ -1216,13 +1212,6 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
     }
   }, [activeFormId]);
 
-  const selectedFormQuestions = useMemo(
-    () => (editorData ? toEditableQuestions(editorData.questions) : []),
-    [editorData],
-  );
-  const selectedFormLayoutMode = editorData?.form.layoutMode ?? "one_per_screen";
-  const selectedFormConfirmationMode = editorData?.form.confirmationMode ?? "none";
-  const selectedFormDescription = editorData?.form.description ?? "";
   const integrationDraft = activeFormId ? integrationDrafts[activeFormId] : undefined;
   const rosIntegrationEnabled =
     integrationDraft?.rosIntegrationEnabled ?? Boolean(editorData?.form.rosIntegrationEnabled);
@@ -1258,28 +1247,6 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
   )
     ? selectedTargetWorkspaceId
     : (targetWorkspaceOptions[0]?.id ?? null);
-  const selectedFormBadges = useMemo(() => {
-    if (!selectedForm) {
-      return [];
-    }
-    return [
-      `${selectedForm.questionCount} spørsmål`,
-      `${selectedForm.responseCount} svar`,
-      selectedFormConfirmationMode === "email_copy"
-        ? "E-postbekreftelse"
-        : "Ingen bekreftelse",
-      selectedFormLayoutMode === "one_per_screen"
-        ? (editorData?.form.questionsPerPage ?? 1) > 1
-          ? `Stegvis (${editorData?.form.questionsPerPage ?? 1} per side)`
-          : "Stegvis (1 per side)"
-        : "Gruppert visning",
-    ];
-  }, [
-    selectedForm,
-    selectedFormConfirmationMode,
-    selectedFormLayoutMode,
-    editorData?.form.questionsPerPage,
-  ]);
   const updateQuestions = (updater: (prev: EditableQuestion[]) => EditableQuestion[]) =>
     setQuestions((prev) => normalizeQuestionVisibility(updater(prev)));
   const updateSingleQuestion = (
@@ -1866,36 +1833,6 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
   const activeFormResponseRows = activeFormId
     ? submissions.filter((submission) => submission.formId === activeFormId)
     : [];
-  const mappingSummary = selectedFormQuestions.reduce(
-    (acc, question) => {
-      for (const target of question.mappingTargets) {
-        if (
-          target.kind === "assessmentText" ||
-          target.kind === "assessmentScale" ||
-          target.kind === "assessmentNumber" ||
-          target.kind === "assessmentChoice"
-        ) {
-          acc.assessment += 1;
-        } else if (
-          target.kind === "rosConsequence" ||
-          target.kind === "rosRiskDescription"
-        ) {
-          acc.ros += 1;
-        } else if (target.kind === "pvvPersonalData") {
-          acc.pvv += 1;
-        } else if (target.kind === "derivedFrequency") {
-          acc.assessment += 1;
-        } else if (
-          target.kind === "assessmentStabilityBoth" ||
-          target.kind === "assessmentScaleInvertedLength"
-        ) {
-          acc.assessment += 1;
-        }
-      }
-      return acc;
-    },
-    { assessment: 0, ros: 0, pvv: 0 },
-  );
   const rejectionReasonMissing = rejectionReason.trim().length === 0;
 
   const renderSubmissionGithubStrip = (submission: SubmissionSummary) => {
@@ -1976,96 +1913,28 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
 
   return (
     <div className="space-y-6 pb-6">
-      <header className="border-border/50 bg-muted/10 flex flex-col gap-4 rounded-2xl border p-4 sm:p-5">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-          <div className="min-w-0 space-y-1">
-            <h1 className="font-heading text-xl font-semibold tracking-tight">
-              Skjemaer
-            </h1>
-            <p className="text-muted-foreground max-w-xl text-sm leading-snug">
-              Del lenke → motta svar → godkjenn → vurdering (ROS valgfritt).
-            </p>
-          </div>
-          <Button type="button" className="h-11 shrink-0 rounded-xl" onClick={handleCreateForm}>
-            <Plus className="size-4" />
-            Nytt skjema
-          </Button>
+      <header className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0 space-y-1">
+          <h1 className="font-heading text-xl font-semibold tracking-tight">
+            Skjemaer
+          </h1>
+          <p className="text-muted-foreground text-sm">
+            {forms.length} skjemaer{pendingCount > 0 ? ` · ${pendingCount} ventende svar` : ""}
+          </p>
         </div>
-        <div className="grid gap-2 sm:grid-cols-3">
-          <div className="bg-card rounded-2xl border border-border/50 px-4 py-3 shadow-sm">
-            <p className="text-muted-foreground text-[11px] font-medium uppercase tracking-wide">
-              Skjemaer
-            </p>
-            <p className="font-heading mt-0.5 text-2xl font-semibold tabular-nums">
-              {forms.length}
-            </p>
-          </div>
-          <div className="bg-card rounded-2xl border border-border/50 px-4 py-3 shadow-sm">
-            <p className="text-muted-foreground text-[11px] font-medium uppercase tracking-wide">
-              Ventende
-            </p>
-            <p className="font-heading mt-0.5 text-2xl font-semibold tabular-nums">
-              {pendingCount}
-            </p>
-          </div>
-          <div className="bg-card rounded-2xl border border-border/50 px-4 py-3 shadow-sm">
-            <p className="text-muted-foreground text-[11px] font-medium uppercase tracking-wide">
-              ROS-maler
-            </p>
-            <p className="font-heading mt-0.5 text-2xl font-semibold tabular-nums">
-              {rosTemplates?.length ?? 0}
-            </p>
-          </div>
-        </div>
+        <Button type="button" className="h-11 shrink-0 rounded-xl" onClick={handleCreateForm}>
+          <Plus className="size-4" />
+          Nytt skjema
+        </Button>
       </header>
 
       <section className="grid gap-5 xl:grid-cols-[1.1fr_0.9fr]">
         <Card className="rounded-3xl">
-          <CardHeader className="gap-3 pb-2">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-              <div>
-                <CardTitle>Dine skjemaer</CardTitle>
-                <CardDescription className="mt-1">
-                  Velg et skjema for å redigere, dele lenke eller behandle svar.
-                </CardDescription>
-              </div>
-              <div className="flex flex-wrap items-center gap-2">
-                <div
-                  className="inline-flex rounded-full border border-border/50 bg-muted/40 p-0.5 shadow-inner"
-                  role="group"
-                  aria-label="Visning av skjemaliste"
-                >
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="ghost"
-                    className={cn(
-                      "gap-1.5 rounded-full px-3.5",
-                      formsView === "cards" &&
-                        "bg-background text-foreground shadow-sm ring-1 ring-border/60",
-                    )}
-                    onClick={() => setFormsView("cards")}
-                  >
-                    <LayoutGrid className="size-3.5" />
-                    Kort
-                  </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="ghost"
-                    className={cn(
-                      "gap-1.5 rounded-full px-3.5",
-                      formsView === "compact" &&
-                        "bg-background text-foreground shadow-sm ring-1 ring-border/60",
-                    )}
-                    onClick={() => setFormsView("compact")}
-                  >
-                    <List className="size-3.5" />
-                    Kompakt
-                  </Button>
-                </div>
-              </div>
-            </div>
+          <CardHeader className="gap-1 pb-2">
+            <CardTitle>Dine skjemaer</CardTitle>
+            <CardDescription>
+              Velg et skjema for å redigere, dele lenke eller behandle svar.
+            </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
             {forms.length === 0 ? (
@@ -2077,22 +1946,9 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
                 </p>
               </div>
             ) : formsForSidebarList.length === 0 ? (
-              <div className="border-border/60 bg-muted/10 space-y-2 rounded-2xl border border-dashed px-3 py-3 text-sm text-muted-foreground">
-                <p>
-                  Skjemaet vises i panelet under — vi gjentar det ikke som rad her, så du slipper to
-                  like kort.
-                </p>
-                {formWorkspacePanelExpanded ? (
-                  <p className="text-xs">
-                    Pil opp øverst til høyre gjør oversikten kompakt; detaljene ligger fortsatt rett
-                    under.
-                  </p>
-                ) : (
-                  <p className="text-xs">
-                    Trykk på oversiktsfeltet under for å utvide til full visning.
-                  </p>
-                )}
-              </div>
+              <p className="text-muted-foreground px-1 text-sm">
+                Valgt skjema vises under.
+              </p>
             ) : (
               <div
                 className={
@@ -2298,7 +2154,7 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
                   <ChevronUp className="size-5" />
                 </Button>
                 <div className="border-border/50 flex flex-col gap-3 border-b pb-4 pr-11 pt-0.5 sm:flex-row sm:items-start sm:justify-between sm:pr-12">
-                  <div className="min-w-0 space-y-3">
+                  <div className="min-w-0 space-y-2">
                     <div className="flex flex-wrap items-center gap-2">
                       <p className="font-heading text-xl font-semibold">{selectedForm.title}</p>
                       <Badge variant={selectedForm.status === "published" ? "secondary" : "outline"}>
@@ -2308,29 +2164,17 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
                             ? "Arkivert"
                             : "Utkast"}
                       </Badge>
-                      {selectedForm.isTemplate ? <Badge variant="outline">Delt som mal</Badge> : null}
-                      {selectedForm.sourceTemplateFormId ? (
-                        <Badge variant="outline">Kopi fra mal</Badge>
-                      ) : null}
                     </div>
-                    {selectedFormDescription.trim() ? (
-                      <p className="text-muted-foreground max-w-3xl text-sm leading-snug">
-                        {selectedFormDescription}
-                      </p>
-                    ) : null}
-                    <div className="flex flex-wrap gap-2">
-                      {selectedFormBadges.map((badge) => (
-                        <Badge key={badge} variant="outline">
-                          {badge}
-                        </Badge>
-                      ))}
-                    </div>
+                    <p className="text-muted-foreground text-sm tabular-nums">
+                      {selectedForm.questionCount} spørsmål · {activeFormResponseRows.length} svar · {links.length} lenker
+                    </p>
                   </div>
                   <div className="flex w-full flex-wrap gap-2 sm:w-auto sm:justify-end">
                     {selectedForm.status === "published" ? (
                       <Button
                         type="button"
                         variant="outline"
+                        size="sm"
                         className="rounded-xl"
                         onClick={() => handleSetFormStatus("draft")}
                       >
@@ -2340,13 +2184,9 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
                       <Button
                         type="button"
                         variant="outline"
+                        size="sm"
                         className="rounded-xl"
                         disabled={selectedForm.questionCount === 0}
-                        title={
-                          selectedForm.questionCount === 0
-                            ? "Åpne «Rediger skjema», legg til minst ett spørsmål og lagre før du publiserer."
-                            : undefined
-                        }
                         onClick={() => handleSetFormStatus("published")}
                       >
                         Publiser
@@ -2354,6 +2194,7 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
                     ) : null}
                     <Button
                       type="button"
+                      size="sm"
                       className="rounded-xl"
                       disabled={!editorData}
                       onClick={() => {
@@ -2366,108 +2207,24 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
                     <Button
                       type="button"
                       variant="outline"
-                      className="rounded-xl"
-                      disabled={!editorData}
-                      onClick={() => {
-                        primeEditorState(editorData);
-                        setPreviewOpen(true);
-                      }}
-                    >
-                      <ExternalLink className="size-4" />
-                      Forhåndsvis
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
+                      size="sm"
                       className="rounded-xl"
                       onClick={() => setSettingsOpen(true)}
                     >
                       <Settings2 className="size-4" />
-                      ROS, mal, lenker
+                      Innstillinger
                     </Button>
                     <Button
                       type="button"
-                      variant="outline"
+                      variant="ghost"
+                      size="sm"
                       className="rounded-xl text-destructive hover:bg-destructive/10 hover:text-destructive"
-                      title="Skjules med en gang — angre i varselet nederst"
                       onClick={() => void handleArchiveForm()}
                     >
                       <Trash2 className="size-4" />
-                      Slett
                     </Button>
                   </div>
                 </div>
-
-                <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
-                  <div className="border-border/50 bg-muted/10 rounded-xl border px-3 py-2.5">
-                    <p className="text-muted-foreground text-[10px] font-semibold uppercase tracking-wide">
-                      Innhold
-                    </p>
-                    <p className="mt-0.5 text-sm font-medium tabular-nums">
-                      {selectedForm.questionCount} spørsmål · {activeFormResponseRows.length} svar
-                    </p>
-                  </div>
-                  <div className="border-border/50 bg-muted/10 rounded-xl border px-3 py-2.5">
-                    <p className="text-muted-foreground text-[10px] font-semibold uppercase tracking-wide">
-                      Lenker
-                    </p>
-                    <p className="mt-0.5 text-sm font-medium tabular-nums">{links.length} aktive</p>
-                  </div>
-                  <div className="border-border/50 bg-muted/10 rounded-xl border px-3 py-2.5">
-                    <p className="text-muted-foreground text-[10px] font-semibold uppercase tracking-wide">
-                      Auto-utfylling
-                    </p>
-                    <p className="mt-0.5 text-sm font-medium leading-snug">
-                      {mappingSummary.assessment} vurdering · {mappingSummary.ros} ROS ·{" "}
-                      {mappingSummary.pvv} PVV
-                    </p>
-                  </div>
-                  <div className="border-border/50 bg-muted/10 rounded-xl border px-3 py-2.5">
-                    <p className="text-muted-foreground text-[10px] font-semibold uppercase tracking-wide">
-                      Deling
-                    </p>
-                    <p className="mt-0.5 text-sm font-medium tabular-nums">
-                      {activations.length} aktiveringer
-                    </p>
-                  </div>
-                </div>
-
-                <FormWorkspaceDisclosure
-                  instanceId="overview"
-                  open={showFormOverview}
-                  onToggle={() => setShowFormOverview((prev) => !prev)}
-                  title="Flere detaljer"
-                  description="Oppsett, koblinger og auto-utfylling (valgfritt å utvide)."
-                >
-                  <div className="grid gap-4 lg:grid-cols-2">
-                    <div className="rounded-2xl border border-border/50 bg-muted/10 p-4">
-                      <p className="text-sm font-medium">Skjemaoppsett</p>
-                      <div className="mt-3 flex flex-wrap gap-2">
-                        <Badge variant="outline">
-                          {selectedFormConfirmationMode === "email_copy"
-                            ? "E-postbekreftelse"
-                            : "Ingen bekreftelse"}
-                        </Badge>
-                        <Badge variant="outline">
-                          {selectedFormLayoutMode === "one_per_screen"
-                            ? "Ett spørsmål per skjerm"
-                            : "Gruppert visning"}
-                        </Badge>
-                      </div>
-                      <p className="text-muted-foreground mt-2 text-xs leading-snug">
-                        Juster i «ROS, mal, lenker» på hovedsiden.
-                      </p>
-                    </div>
-                    <div className="rounded-2xl border border-border/50 bg-muted/10 p-4">
-                      <p className="text-sm font-medium">Auto-utfylling</p>
-                      <div className="mt-2 flex flex-wrap gap-2">
-                        <Badge variant="outline">Vurdering {mappingSummary.assessment}</Badge>
-                        <Badge variant="outline">ROS {mappingSummary.ros}</Badge>
-                        <Badge variant="outline">PVV {mappingSummary.pvv}</Badge>
-                      </div>
-                    </div>
-                  </div>
-                </FormWorkspaceDisclosure>
 
                 <FormWorkspaceDisclosure
                   instanceId="responses"

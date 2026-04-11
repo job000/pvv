@@ -4,6 +4,8 @@ import {
   Building2,
   ClipboardList,
   FileText,
+  FolderKanban,
+  ScrollText,
   Settings2,
   Share2,
   Shield,
@@ -12,8 +14,10 @@ import {
 
 /** Stabile ID-er for snarveier — lagres per bruker per arbeidsområde. */
 export const WORKSPACE_OVERVIEW_SHORTCUT_IDS = [
+  "oversikt",
   "vurderinger",
   "prosessregister",
+  "prosessdesign",
   "skjemaer",
   "ros",
   "organisasjon",
@@ -39,6 +43,13 @@ export function buildWorkspaceOverviewShortcuts(
   const w = workspaceIdStr;
   return [
     {
+      id: "oversikt",
+      href: `/w/${w}`,
+      title: "Oversikt",
+      desc: "Neste steg og arbeidskø",
+      icon: FolderKanban,
+    },
+    {
       id: "vurderinger",
       href: `/w/${w}/vurderinger`,
       title: "Vurderinger",
@@ -51,6 +62,13 @@ export function buildWorkspaceOverviewShortcuts(
       title: "Prosesser",
       desc: "Prosesser og dokumentasjon",
       icon: Users,
+    },
+    {
+      id: "prosessdesign",
+      href: `/w/${w}/prosessdesign`,
+      title: "Prosessdesign",
+      desc: "Dokumentasjon for robotløp",
+      icon: ScrollText,
     },
     {
       id: "ros",

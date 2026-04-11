@@ -47,8 +47,13 @@ export const listComplianceReminderTargets = internalQuery({
   args: { now: v.number() },
   handler: async (ctx, args): Promise<ComplianceReminderTarget[]> => {
     const { now } = args;
-    const rows = await ctx.db.query("assessments").take(800);
     const out: ComplianceReminderTarget[] = [];
+
+    const rows = await ctx.db
+      .query("assessments")
+      .withIndex("by_workspace_updated")
+      .order("desc")
+      .take(800);
 
     for (const a of rows) {
       if (!complianceIncomplete(a)) continue;
@@ -106,7 +111,11 @@ export const listReviewDueReminderTargets = internalQuery({
     const { now } = args;
     const out: ReviewDueReminderTarget[] = [];
 
-    const assessments = await ctx.db.query("assessments").take(800);
+    const assessments = await ctx.db
+      .query("assessments")
+      .withIndex("by_workspace_updated")
+      .order("desc")
+      .take(800);
     for (const a of assessments) {
       if (a.nextRosPvvReviewAt == null || a.nextRosPvvReviewAt > now) {
         continue;
@@ -132,7 +141,11 @@ export const listReviewDueReminderTargets = internalQuery({
       });
     }
 
-    const rosRows = await ctx.db.query("rosAnalyses").take(800);
+    const rosRows = await ctx.db
+      .query("rosAnalyses")
+      .withIndex("by_workspace_updated")
+      .order("desc")
+      .take(800);
     for (const r of rosRows) {
       if (r.nextReviewAt == null || r.nextReviewAt > now) {
         continue;

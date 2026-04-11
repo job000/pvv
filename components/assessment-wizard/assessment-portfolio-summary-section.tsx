@@ -253,6 +253,42 @@ export function AssessmentPortfolioSummarySection({
           kolleger, ikke IT-manual.
         </p>
       </div>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div className="space-y-2">
+          <Label htmlFor="summary-build-cost">Antatt byggekostnad (engang)</Label>
+          <Input
+            id="summary-build-cost"
+            type="number"
+            min={0}
+            value={payload.implementationBuildCost ?? 0}
+            onChange={(e) =>
+              canEdit && update("implementationBuildCost", Number(e.target.value) || 0)
+            }
+            disabled={!canEdit}
+            placeholder="F.eks. 350000"
+            className="h-10 rounded-xl"
+          />
+          <p className="text-xs text-muted-foreground">
+            Bruk et grovt anslag for etablering, utvikling og innføring.
+          </p>
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="summary-run-cost">Antatt årlig driftskostnad</Label>
+          <Input
+            id="summary-run-cost"
+            type="number"
+            min={0}
+            value={payload.annualRunCost ?? 0}
+            onChange={(e) => canEdit && update("annualRunCost", Number(e.target.value) || 0)}
+            disabled={!canEdit}
+            placeholder="F.eks. 75000"
+            className="h-10 rounded-xl"
+          />
+          <p className="text-xs text-muted-foreground">
+            Lisens, drift, overvåking og mindre forvaltning per år.
+          </p>
+        </div>
+      </div>
       <div className="grid gap-4 sm:grid-cols-1">
         <div className="space-y-2">
           <Label htmlFor="summary-lifecycle-contact">

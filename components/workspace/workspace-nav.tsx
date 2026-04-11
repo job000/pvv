@@ -4,7 +4,6 @@ import type { ComponentType } from "react";
 import { cn } from "@/lib/utils";
 import type { Id } from "@/convex/_generated/dataModel";
 import {
-  Bell,
   Building2,
   ClipboardList,
   FileText,
@@ -31,27 +30,8 @@ type NavItem = {
 
 function navSections(wid: string): { heading: string; items: NavItem[] }[] {
   return [
-        {
-          heading: "Registre",
-          items: [
-        {
-          href: `/w/${wid}/vurderinger?fane=prosesser`,
-          label: "Prosesser",
-          icon: Users,
-          exact: false,
-          kind: "prosesser",
-        },
-        {
-          href: `/w/${wid}/organisasjon`,
-          label: "Organisasjon",
-          icon: Building2,
-          exact: false,
-          kind: "default",
-        },
-      ],
-    },
     {
-      heading: "Arbeid",
+      heading: "Oversikt",
       items: [
         {
           href: `/w/${wid}`,
@@ -61,19 +41,24 @@ function navSections(wid: string): { heading: string; items: NavItem[] }[] {
           kind: "default",
         },
         {
+          href: `/w/${wid}/vurderinger?fane=prosesser`,
+          label: "Prosesser",
+          icon: Users,
+          exact: false,
+          kind: "prosesser",
+        },
+        {
           href: `/w/${wid}/vurderinger`,
           label: "Vurderinger",
           icon: ClipboardList,
           exact: false,
           kind: "vurderinger",
         },
-        {
-          href: `/w/${wid}/skjemaer`,
-          label: "Skjemaer",
-          icon: FileText,
-          exact: false,
-          kind: "default",
-        },
+      ],
+    },
+    {
+      heading: "Dokumentasjon",
+      items: [
         {
           href: `/w/${wid}/ros`,
           label: "Risiko (ROS)",
@@ -83,7 +68,7 @@ function navSections(wid: string): { heading: string; items: NavItem[] }[] {
         },
         {
           href: `/w/${wid}/prosessdesign`,
-          label: "Prosessdesign (RPA)",
+          label: "Prosessdesign",
           icon: ScrollText,
           exact: false,
           kind: "prosessdesign",
@@ -91,19 +76,26 @@ function navSections(wid: string): { heading: string; items: NavItem[] }[] {
       ],
     },
     {
-      heading: "Innstillinger",
+      heading: "Admin",
       items: [
         {
-          href: `/w/${wid}/delinger`,
-          label: "Teammedlemmer",
-          icon: Share2,
+          href: `/w/${wid}/skjemaer`,
+          label: "Skjemaer",
+          icon: FileText,
           exact: false,
           kind: "default",
         },
         {
-          href: `/w/${wid}/varslinger`,
-          label: "Varslinger",
-          icon: Bell,
+          href: `/w/${wid}/organisasjon`,
+          label: "Organisasjon",
+          icon: Building2,
+          exact: false,
+          kind: "default",
+        },
+        {
+          href: `/w/${wid}/delinger`,
+          label: "Team",
+          icon: Share2,
           exact: false,
           kind: "default",
         },

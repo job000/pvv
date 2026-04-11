@@ -497,7 +497,7 @@ export function AssessmentVersionsBlock({
                   <p className="text-muted-foreground mb-1.5 text-[11px] font-semibold uppercase tracking-wide">
                     Beregning (lagret)
                   </p>
-                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 xl:grid-cols-6">
                     <Metric label="AP" v={`${previewData.computed.ap.toFixed(1)} %`} />
                     <Metric
                       label="Prioritet"
@@ -510,6 +510,14 @@ export function AssessmentVersionsBlock({
                     <Metric
                       label="Lettgrad"
                       v={previewData.computed.easeLabel}
+                    />
+                    <Metric
+                      label="Delivery"
+                      v={previewData.computed.deliveryConfidence.toFixed(1)}
+                    />
+                    <Metric
+                      label="Readiness"
+                      v={previewData.computed.readinessScore.toFixed(1)}
                     />
                   </div>
                 </div>
@@ -763,6 +771,8 @@ function ComputedCol({
     criticality: number;
     easeLabel: string;
     feasible: boolean;
+    deliveryConfidence: number;
+    readinessScore: number;
   };
   note: string | null | undefined;
   at: number;
@@ -796,6 +806,14 @@ function ComputedCol({
         <div className="flex justify-between gap-2">
           <dt className="text-muted-foreground">Gjennomførbar</dt>
           <dd>{c.feasible ? "Ja" : "Nei"}</dd>
+        </div>
+        <div className="flex justify-between gap-2">
+          <dt className="text-muted-foreground">Delivery</dt>
+          <dd className="tabular-nums">{c.deliveryConfidence.toFixed(1)}</dd>
+        </div>
+        <div className="flex justify-between gap-2">
+          <dt className="text-muted-foreground">Readiness</dt>
+          <dd className="tabular-nums">{c.readinessScore.toFixed(1)}</dd>
         </div>
       </dl>
     </div>

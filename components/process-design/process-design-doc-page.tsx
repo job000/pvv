@@ -270,7 +270,7 @@ function ProcessTextDiagramBlock({
       /* fallback below */
     }
     setDiagramFullscreen(true);
-  }, []);
+  }, [diagramFullscreen]);
 
   return (
     <div className="space-y-2">
@@ -1150,7 +1150,7 @@ export function ProcessDesignDocPage({
             </div>
             <ProductPageHeader
               title="Prosessdesign (PDD)"
-              description="Bygg et tydelig prosessdesign for RPA med flyt, roller, risiko og koblinger til PVV, ROS og prosessregister."
+              description="Dokumenter prosessen enkelt: forstå dagens flyt, beskriv ønsket flyt og gjør den klar for drift."
             />
           </div>
 
@@ -1182,7 +1182,7 @@ export function ProcessDesignDocPage({
                 Neste steg
               </p>
               <p className="mt-1 text-sm text-foreground">
-                Start med oversikt, tegn As-Is og fyll deretter To-Be og risiko.
+                Start med oversikt, deretter As-Is, To-Be og til slutt drift og risiko.
               </p>
             </div>
           </div>
@@ -1225,26 +1225,11 @@ export function ProcessDesignDocPage({
                   {payload.processTitle?.trim() || assessmentTitle}
                 </p>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  Hold innholdet oppdatert og eksporter delbar PDF ved behov.
+                  Lagre underveis. Eksport og historikk er sekundært.
                 </p>
               </div>
 
               <div className="hidden flex-wrap gap-2 sm:flex sm:justify-end">
-                {versionCount > 0 && (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="gap-1.5 rounded-xl"
-                    onClick={() => setHistoryOpen(true)}
-                  >
-                    <History className="size-3.5" aria-hidden />
-                    Historikk
-                    <span className="inline-flex size-5 items-center justify-center rounded-full bg-muted text-[10px] font-semibold">
-                      {versionCount}
-                    </span>
-                  </Button>
-                )}
                 {canEdit && (
                   <Button
                     type="button"
@@ -1261,6 +1246,17 @@ export function ProcessDesignDocPage({
                     Lagre
                   </Button>
                 )}
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="gap-1.5 rounded-xl"
+                  onClick={() => setSnapshotOpen(true)}
+                  disabled={!canEdit}
+                >
+                  <History className="size-3.5" aria-hidden />
+                  Versjon
+                </Button>
               </div>
             </div>
 
@@ -1295,39 +1291,22 @@ export function ProcessDesignDocPage({
                 <Sparkles className="size-3.5" aria-hidden />
                 Fyll fra kilder
               </Button>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="gap-1.5 rounded-xl"
-                onClick={() => setSnapshotOpen(true)}
-                disabled={!canEdit}
-              >
-                <History className="size-3.5" aria-hidden />
-                Lagre versjon
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="gap-1.5 rounded-xl"
-                onClick={() => void exportPdf()}
-                disabled={pdfExporting}
-              >
-                {pdfExporting ? (
-                  <Loader2
-                    className="size-3.5 animate-spin"
-                    aria-hidden
-                  />
-                ) : (
-                  <FileDown className="size-3.5" aria-hidden />
-                )}
-                Eksporter PDF
-              </Button>
               <div className="sm:hidden">
                 <SecondaryActionsMenu
                   onAutofill={applyAutofill}
                   onSnapshot={() => setSnapshotOpen(true)}
+                  onPreviewPdf={() => void previewPdf()}
+                  onExportPdf={() => void exportPdf()}
+                  canAutofill={!!draftBundle?.draft && canEdit}
+                  canEdit={canEdit}
+                  pdfPreviewing={pdfPreviewing}
+                  pdfExporting={pdfExporting}
+                />
+              </div>
+              <div className="hidden sm:block">
+                <SecondaryActionsMenu
+                  onAutofill={applyAutofill}
+                  onSnapshot={() => setHistoryOpen(true)}
                   onPreviewPdf={() => void previewPdf()}
                   onExportPdf={() => void exportPdf()}
                   canAutofill={!!draftBundle?.draft && canEdit}

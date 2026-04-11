@@ -3,6 +3,7 @@ import {
   valueTagContextUnit01,
   type AssessmentInputSnapshot,
 } from "./rpaScoring";
+import { buildGovernanceReadinessSummary } from "../../lib/assessment-governance";
 
 /** Standardverdier når felt mangler, er tomme eller er NaN (f.eks. tømt tallfelt i UI). */
 const SNAPSHOT_DEFAULTS: AssessmentInputSnapshot = {
@@ -27,6 +28,11 @@ const SNAPSHOT_DEFAULTS: AssessmentInputSnapshot = {
   criticalityBusinessImpact: 3,
   criticalityRegulatoryRisk: 3,
   valueContext01: 0,
+  buildCost: 350000,
+  annualRunCost: 75000,
+  implementationDifficulty: 3,
+  quickWinPotential: 3,
+  readinessScore: 0,
 };
 
 function readNum(
@@ -85,6 +91,31 @@ export function payloadToSnapshot(
   const painIds = readStringIdArray(p, "valuePainPointIds");
   const gainIds = readStringIdArray(p, "valueGainIds");
   const valueContext01 = valueTagContextUnit01(painIds.length, gainIds.length);
+  const readinessSummary = buildGovernanceReadinessSummary({
+    payload: {
+      processDescription: typeof p.processDescription === "string" ? p.processDescription : "",
+      processGoal: typeof p.processGoal === "string" ? p.processGoal : "",
+      processActors: typeof p.processActors === "string" ? p.processActors : "",
+      processSystems: typeof p.processSystems === "string" ? p.processSystems : "",
+      processFlowSummary: typeof p.processFlowSummary === "string" ? p.processFlowSummary : "",
+      processConstraints: typeof p.processConstraints === "string" ? p.processConstraints : "",
+      hfEconomicRationaleNotes:
+        typeof p.hfEconomicRationaleNotes === "string" ? p.hfEconomicRationaleNotes : "",
+      rpaBenefitKindsAndOperationsNotes:
+        typeof p.rpaBenefitKindsAndOperationsNotes === "string"
+          ? p.rpaBenefitKindsAndOperationsNotes
+          : "",
+      rpaLifecycleContact:
+        typeof p.rpaLifecycleContact === "string" ? p.rpaLifecycleContact : "",
+      rpaManualFallbackWhenRobotFails:
+        typeof p.rpaManualFallbackWhenRobotFails === "string"
+          ? p.rpaManualFallbackWhenRobotFails
+          : "",
+    },
+    rosStatus: typeof p.rosStatus === "string" ? p.rosStatus : null,
+    pddStatus: typeof p.pddStatus === "string" ? p.pddStatus : null,
+    hasProcessDesignDocument: false,
+  });
 
   return {
     processName: String(p.processName ?? SNAPSHOT_DEFAULTS.processName),
@@ -137,5 +168,21 @@ export function payloadToSnapshot(
       ),
     ),
     valueContext01,
+    buildCost: Math.max(0, readNum(p, "implementationBuildCost", SNAPSHOT_DEFAULTS.buildCost)),
+    annualRunCost: Math.max(
+      0,
+      readNum(p, "annualRunCost", SNAPSHOT_DEFAULTS.annualRunCost),
+    ),
+    implementationDifficulty: clampLikert5(
+      readNum(
+        p,
+        "rpaImplementationDifficulty",
+        SNAPSHOT_DEFAULTS.implementationDifficulty,
+      ),
+    ),
+    quickWinPotential: clampLikert5(
+      readNum(p, "rpaQuickWinPotential", SNAPSHOT_DEFAULTS.quickWinPotential),
+    ),
+    readinessScore: readinessSummary.readinessScore,
   };
 }

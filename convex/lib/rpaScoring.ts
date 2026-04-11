@@ -149,6 +149,65 @@ export function portfolioPriorityScore(apPercent: number, criticalityPercent: nu
   return Math.round(g * 10) / 10;
 }
 
+function invertLikert5Favorability(s: Likert5): number {
+  return (5 - s) / 4;
+}
+
+export function deliveryConfidencePercent(args: {
+  easePercent: number;
+  processStability: Likert5;
+  applicationStability: Likert5;
+  implementationDifficulty?: Likert5;
+  quickWinPotential?: Likert5;
+}): number {
+  const ease = Math.min(100, Math.max(0, args.easePercent));
+  const processStability = likert5ToUnit01(args.processStability);
+  const appStability = likert5ToUnit01(args.applicationStability);
+  const implementationEase = invertLikert5Favorability(args.implementationDifficulty ?? 3);
+  const quickWin = likert5ToUnit01(args.quickWinPotential ?? 3);
+  const raw =
+    0.45 * (ease / 100) +
+    0.2 * processStability +
+    0.15 * appStability +
+    0.1 * implementationEase +
+    0.1 * quickWin;
+  return Math.round(raw * 1000) / 10;
+}
+
+export function economicCasePercent(args: {
+  buildCost: number;
+  annualRunCost: number;
+  annualBenefit: number;
+}): number {
+  const build = Math.max(0, args.buildCost);
+  const run = Math.max(0, args.annualRunCost);
+  const benefit = Math.max(0, args.annualBenefit);
+  const netAnnual = Math.max(0, benefit - run);
+  if (benefit <= 0 || netAnnual <= 0) {
+    return 0;
+  }
+  const paybackMonths = build <= 0 ? 0 : (build / netAnnual) * 12;
+  if (paybackMonths <= 6) return 100;
+  if (paybackMonths <= 12) return 85;
+  if (paybackMonths <= 18) return 70;
+  if (paybackMonths <= 24) return 55;
+  if (paybackMonths <= 36) return 35;
+  return 20;
+}
+
+export function paybackMonths(args: {
+  buildCost: number;
+  annualRunCost: number;
+  annualBenefit: number;
+}): number | null {
+  const build = Math.max(0, args.buildCost);
+  const netAnnual = Math.max(0, args.annualBenefit - args.annualRunCost);
+  if (netAnnual <= 0) {
+    return null;
+  }
+  return Math.round(((build === 0 ? 0 : (build / netAnnual) * 12) * 10)) / 10;
+}
+
 function finiteOr(n: number, fallback: number): number {
   return Number.isFinite(n) ? n : fallback;
 }
@@ -274,6 +333,11 @@ export type AssessmentInputSnapshot = {
   criticalityRegulatoryRisk: Likert5;
   /** 0–1 fra valuePainPointIds + valueGainIds */
   valueContext01: number;
+  buildCost: number;
+  annualRunCost: number;
+  implementationDifficulty: Likert5;
+  quickWinPotential: Likert5;
+  readinessScore: number;
 };
 
 export type ComputedSnapshot = {
@@ -283,6 +347,9 @@ export type ComputedSnapshot = {
   ease: number;
   easeLabel: string;
   criticality: number;
+  deliveryConfidence: number;
+  economicCaseScore: number;
+  readinessScore: number;
   hoursY: number;
   fte: number;
   costY: number;
@@ -292,6 +359,10 @@ export type ComputedSnapshot = {
   benHPerEmp: number;
   benCPerEmp: number;
   benFtePerEmp: number;
+  buildCost: number;
+  annualRunCost: number;
+  netBenefitAnnual: number;
+  paybackMonths: number | null;
   priorityScore: number;
 };
 
@@ -356,6 +427,24 @@ export function computeAllResults(input: AssessmentInputSnapshot): ComputedSnaps
   const benHPerEmp = perEmployee(benH, input.employees);
   const benCPerEmp = perEmployee(benC, input.employees);
   const benFtePerEmp = perEmployee(benFte, input.employees);
+  const deliveryConfidence = deliveryConfidencePercent({
+    easePercent: ease,
+    processStability: input.processStability,
+    applicationStability: input.applicationStability,
+    implementationDifficulty: input.implementationDifficulty,
+    quickWinPotential: input.quickWinPotential,
+  });
+  const economicCaseScore = economicCasePercent({
+    buildCost: input.buildCost,
+    annualRunCost: input.annualRunCost,
+    annualBenefit: benC,
+  });
+  const netBenefitAnnual = Math.max(0, benC - input.annualRunCost);
+  const payback = paybackMonths({
+    buildCost: input.buildCost,
+    annualRunCost: input.annualRunCost,
+    annualBenefit: benC,
+  });
   const apSafe = finiteOr(ap, 0);
   const critSafe = finiteOr(criticality, 0);
   const priorityScore = portfolioPriorityScore(apSafe, critSafe);
@@ -366,6 +455,9 @@ export function computeAllResults(input: AssessmentInputSnapshot): ComputedSnaps
     ease: finiteOr(ease, 0),
     easeLabel: easeDifficultyLabel(finiteOr(ease, 0)),
     criticality: critSafe,
+    deliveryConfidence: finiteOr(deliveryConfidence, 0),
+    economicCaseScore: finiteOr(economicCaseScore, 0),
+    readinessScore: Math.min(100, Math.max(0, finiteOr(input.readinessScore, 0))),
     hoursY: finiteOr(hoursY, 0),
     fte: finiteOr(fte, 0),
     costY: finiteOr(costY, 0),
@@ -375,6 +467,10 @@ export function computeAllResults(input: AssessmentInputSnapshot): ComputedSnaps
     benHPerEmp: finiteOr(benHPerEmp, 0),
     benCPerEmp: finiteOr(benCPerEmp, 0),
     benFtePerEmp: finiteOr(benFtePerEmp, 0),
+    buildCost: finiteOr(input.buildCost, 0),
+    annualRunCost: finiteOr(input.annualRunCost, 0),
+    netBenefitAnnual: finiteOr(netBenefitAnnual, 0),
+    paybackMonths: payback,
     priorityScore,
   };
 }

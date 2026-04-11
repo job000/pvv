@@ -23,6 +23,7 @@ import { useCallback, useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
 
 const DEFAULT_WORKSPACE_OVERVIEW_SHORTCUT_IDS: WorkspaceOverviewShortcutId[] = [
+  "oversikt",
   "vurderinger",
   "prosessregister",
   "ros",

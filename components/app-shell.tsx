@@ -63,7 +63,9 @@ export function AppShell({
     return (
       <div className="flex min-h-[50vh] flex-col items-center justify-center gap-2 px-4">
         <div className="size-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-        <p className="text-muted-foreground text-sm">Laster …</p>
+        <p suppressHydrationWarning className="text-muted-foreground text-sm">
+          Laster ...
+        </p>
       </div>
     );
   }

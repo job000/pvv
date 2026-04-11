@@ -149,6 +149,10 @@ export const assessmentPayloadFields = {
   rpaLifecycleContact: v.optional(v.string()),
   /** Hvem tar manuelt arbeid hvis roboten stopper eller feiler */
   rpaManualFallbackWhenRobotFails: v.optional(v.string()),
+  /** Engangskostnad for å bygge / etablere løsningen */
+  implementationBuildCost: v.optional(v.number()),
+  /** Løpende årlig kostnad for drift, lisens eller forvaltning */
+  annualRunCost: v.optional(v.number()),
   /**
    * Fritekst: hvilken gevinst (tid, kvalitet, ventetid), manuell tid vs. tid med robot,
    * at oppgaver ikke blir liggende / glemt — for alle roller (ikke IT-språk).
@@ -171,6 +175,9 @@ export const computedSnapshotValidator = v.object({
   ease: v.number(),
   easeLabel: v.string(),
   criticality: v.number(),
+  deliveryConfidence: v.number(),
+  economicCaseScore: v.number(),
+  readinessScore: v.number(),
   hoursY: v.number(),
   fte: v.number(),
   costY: v.number(),
@@ -180,6 +187,10 @@ export const computedSnapshotValidator = v.object({
   benHPerEmp: v.number(),
   benCPerEmp: v.number(),
   benFtePerEmp: v.number(),
+  buildCost: v.number(),
+  annualRunCost: v.number(),
+  netBenefitAnnual: v.number(),
+  paybackMonths: v.union(v.number(), v.null()),
   /** Samlet porteføljeprioritet (geometrisk av AP og kritikalitet) */
   priorityScore: v.number(),
 });
@@ -852,6 +863,12 @@ export default defineSchema({
     cachedEase: v.optional(v.number()),
     /** Enkel / Middels / Vanskelig — fra siste utkast */
     cachedEaseLabel: v.optional(v.string()),
+    /** Egnethet for å levere trygt og raskt */
+    cachedDeliveryConfidence: v.optional(v.number()),
+    /** Økonomisk case basert på bygg, drift og årlig nytte */
+    cachedEconomicCaseScore: v.optional(v.number()),
+    /** Hvor beslutningsklar saken er på tvers av dokumentasjon og forankring */
+    cachedReadinessScore: v.optional(v.number()),
     /** 0–100 manuell justering av prioritet (overstyrer visning når satt) */
     manualPriorityOverride: v.optional(v.number()),
     /** Rekkefølge i Kanban-kolonne (lavere = høyere) */

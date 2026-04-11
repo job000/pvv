@@ -52,6 +52,8 @@ export type AssessmentPdfInput = {
   rpaImplementationDifficulty?: number;
   rpaLifecycleContact?: string;
   rpaManualFallbackWhenRobotFails?: string;
+  implementationBuildCost?: number;
+  annualRunCost?: number;
   rpaBenefitKindsAndOperationsNotes?: string;
   pipelineLabel: string;
   rosLabel: string;
@@ -63,9 +65,16 @@ export type AssessmentPdfInput = {
     feasible: boolean;
     ease: number;
     easeLabel: string;
+    deliveryConfidence: number;
+    economicCaseScore: number;
+    readinessScore: number;
     benH: number;
     benC: number;
     benFte: number;
+    annualRunCost: number;
+    buildCost: number;
+    netBenefitAnnual: number;
+    paybackMonths: number | null;
   };
   generatedAt: Date;
 };
@@ -445,8 +454,14 @@ export function downloadAssessmentPdf(data: AssessmentPdfInput): void {
     `Porteføljeprioritet: ${data.computed.priorityScore.toFixed(1)} / 100`,
     `Stabil nok for robot: ${data.computed.feasible ? "Ja" : "Nei — ustabil, avklar før oppstart"}`,
     `Gjennomførbarhet: ${data.computed.ease.toFixed(1)} % (${data.computed.easeLabel})`,
+    `Leveransetillit: ${data.computed.deliveryConfidence.toFixed(1)} / 100`,
+    `Økonomisk case: ${data.computed.economicCaseScore.toFixed(1)} / 100`,
+    `Readiness: ${data.computed.readinessScore.toFixed(1)} / 100`,
     `Timer spart /år (est.): ${data.computed.benH.toFixed(0)}`,
     `Besparelse /år (est.): ${Math.round(data.computed.benC).toLocaleString("nb-NO")} kr`,
+    `Driftskostnad /år (est.): ${Math.round(data.computed.annualRunCost).toLocaleString("nb-NO")} kr`,
+    `Netto gevinst /år (est.): ${Math.round(data.computed.netBenefitAnnual).toLocaleString("nb-NO")} kr`,
+    `Tilbakebetalingstid: ${data.computed.paybackMonths === null ? "Ikke beregnet" : `${data.computed.paybackMonths.toFixed(1)} mnd`}`,
     `Årsverk frigitt (est.): ${data.computed.benFte.toFixed(2)}`,
   ];
   let sInner = sPad * 2 + 5;

@@ -1,10 +1,25 @@
 "use client";
 
 import type { PvvHubTab } from "@/components/workspace/workspace-pvv-hub";
-import { WorkspacePvvHub } from "@/components/workspace/workspace-pvv-hub";
 import type { Id } from "@/convex/_generated/dataModel";
+import dynamic from "next/dynamic";
 import { useParams, useSearchParams } from "next/navigation";
 import { Suspense } from "react";
+
+const WorkspacePvvHub = dynamic(
+  () =>
+    import("@/components/workspace/workspace-pvv-hub").then((mod) => ({
+      default: mod.WorkspacePvvHub,
+    })),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="flex min-h-[20vh] items-center justify-center">
+        <div className="size-7 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+      </div>
+    ),
+  },
+);
 
 function VurderingerHubBody() {
   const params = useParams();
