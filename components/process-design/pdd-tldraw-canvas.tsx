@@ -44,6 +44,10 @@ type FrozenScrollSnapshot = ScrollSnapshot & {
   overscrollBehavior?: string;
 };
 
+function isWindowTarget(target: ScrollTarget): target is Window {
+  return target === window;
+}
+
 function isScrollable(element: HTMLElement) {
   const style = window.getComputedStyle(element);
   const overflowY = style.overflowY;
@@ -75,14 +79,14 @@ function getScrollTargets(start: HTMLElement): ScrollTarget[] {
 }
 
 function readScrollPosition(target: ScrollTarget) {
-  if (target === window) {
+  if (isWindowTarget(target)) {
     return { left: window.scrollX, top: window.scrollY };
   }
   return { left: target.scrollLeft, top: target.scrollTop };
 }
 
 function restoreScrollPosition(snapshot: ScrollSnapshot) {
-  if (snapshot.target === window) {
+  if (isWindowTarget(snapshot.target)) {
     window.scrollTo({ left: snapshot.left, top: snapshot.top, behavior: "instant" });
     return;
   }
@@ -96,7 +100,7 @@ function restoreScrollPosition(snapshot: ScrollSnapshot) {
 
 function freezeScrollTarget(target: ScrollTarget): FrozenScrollSnapshot {
   const position = readScrollPosition(target);
-  if (target === window) {
+  if (isWindowTarget(target)) {
     const root = document.documentElement;
     const body = document.body;
     const snapshot: FrozenScrollSnapshot = {
@@ -129,7 +133,7 @@ function freezeScrollTarget(target: ScrollTarget): FrozenScrollSnapshot {
 
 function unfreezeScrollTarget(snapshot: FrozenScrollSnapshot) {
   restoreScrollPosition(snapshot);
-  if (snapshot.target === window) {
+  if (isWindowTarget(snapshot.target)) {
     const root = document.documentElement;
     const body = document.body;
     root.style.overflowX = snapshot.overflowX ?? "";
