@@ -30,6 +30,121 @@ function configurePddArrowBindings(editor: Editor) {
   });
 }
 
+type ScrollTarget = Window | HTMLElement;
+
+type ScrollSnapshot = {
+  target: ScrollTarget;
+  left: number;
+  top: number;
+};
+
+type FrozenScrollSnapshot = ScrollSnapshot & {
+  overflowX?: string;
+  overflowY?: string;
+  overscrollBehavior?: string;
+};
+
+function isScrollable(element: HTMLElement) {
+  const style = window.getComputedStyle(element);
+  const overflowY = style.overflowY;
+  const overflowX = style.overflowX;
+  const canScrollY =
+    /(auto|scroll|overlay)/.test(overflowY) && element.scrollHeight > element.clientHeight;
+  const canScrollX =
+    /(auto|scroll|overlay)/.test(overflowX) && element.scrollWidth > element.clientWidth;
+  return canScrollY || canScrollX;
+}
+
+function getScrollTargets(start: HTMLElement): ScrollTarget[] {
+  const targets: ScrollTarget[] = [];
+  let current = start.parentElement;
+
+  while (current) {
+    if (isScrollable(current)) {
+      targets.push(current);
+    }
+    current = current.parentElement;
+  }
+
+  const root = document.scrollingElement;
+  if (root && (root.scrollHeight > window.innerHeight || root.scrollWidth > window.innerWidth)) {
+    targets.push(window);
+  }
+
+  return targets;
+}
+
+function readScrollPosition(target: ScrollTarget) {
+  if (target === window) {
+    return { left: window.scrollX, top: window.scrollY };
+  }
+  return { left: target.scrollLeft, top: target.scrollTop };
+}
+
+function restoreScrollPosition(snapshot: ScrollSnapshot) {
+  if (snapshot.target === window) {
+    window.scrollTo({ left: snapshot.left, top: snapshot.top, behavior: "instant" });
+    return;
+  }
+  if (
+    snapshot.target.scrollLeft !== snapshot.left ||
+    snapshot.target.scrollTop !== snapshot.top
+  ) {
+    snapshot.target.scrollTo({ left: snapshot.left, top: snapshot.top, behavior: "instant" });
+  }
+}
+
+function freezeScrollTarget(target: ScrollTarget): FrozenScrollSnapshot {
+  const position = readScrollPosition(target);
+  if (target === window) {
+    const root = document.documentElement;
+    const body = document.body;
+    const snapshot: FrozenScrollSnapshot = {
+      target,
+      ...position,
+      overflowX: root.style.overflowX,
+      overflowY: root.style.overflowY,
+      overscrollBehavior: root.style.overscrollBehavior,
+    };
+    root.style.overflowX = "hidden";
+    root.style.overflowY = "hidden";
+    root.style.overscrollBehavior = "contain";
+    body.style.overflowX = "hidden";
+    body.style.overflowY = "hidden";
+    return snapshot;
+  }
+
+  const snapshot: FrozenScrollSnapshot = {
+    target,
+    ...position,
+    overflowX: target.style.overflowX,
+    overflowY: target.style.overflowY,
+    overscrollBehavior: target.style.overscrollBehavior,
+  };
+  target.style.overflowX = "hidden";
+  target.style.overflowY = "hidden";
+  target.style.overscrollBehavior = "contain";
+  return snapshot;
+}
+
+function unfreezeScrollTarget(snapshot: FrozenScrollSnapshot) {
+  restoreScrollPosition(snapshot);
+  if (snapshot.target === window) {
+    const root = document.documentElement;
+    const body = document.body;
+    root.style.overflowX = snapshot.overflowX ?? "";
+    root.style.overflowY = snapshot.overflowY ?? "";
+    root.style.overscrollBehavior = snapshot.overscrollBehavior ?? "";
+    body.style.overflowX = "";
+    body.style.overflowY = "";
+    return;
+  }
+
+  snapshot.target.style.overflowX = snapshot.overflowX ?? "";
+  snapshot.target.style.overflowY = snapshot.overflowY ?? "";
+  snapshot.target.style.overscrollBehavior = snapshot.overscrollBehavior ?? "";
+}
+
 export function parsePddTldrawDocumentSnapshot(
   json: string | undefined,
 ): Partial<TLEditorSnapshot> | undefined {
@@ -150,6 +265,66 @@ export function PddTldrawCanvas({
       ? "h-full min-h-0 flex-1"
       : "h-[clamp(22rem,68svh,34rem)] min-h-[22rem] sm:h-[min(34rem,70vh)] sm:min-h-[24rem]";
 
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+
+    let frozenTargets: FrozenScrollSnapshot[] = [];
+    let releaseTimer: ReturnType<typeof setTimeout> | null = null;
+    let armedUntil = 0;
+
+    const release = () => {
+      if (releaseTimer) {
+        clearTimeout(releaseTimer);
+        releaseTimer = null;
+      }
+      for (const snapshot of frozenTargets) {
+        unfreezeScrollTarget(snapshot);
+      }
+      frozenTargets = [];
+    };
+
+    const lock = (ms: number) => {
+      release();
+      frozenTargets = getScrollTargets(el).map((target) => freezeScrollTarget(target));
+      releaseTimer = setTimeout(() => {
+        release();
+      }, ms);
+    };
+
+    const arm = (ms: number) => {
+      armedUntil = Date.now() + ms;
+    };
+
+    const isArmed = () => Date.now() < armedUntil;
+
+    const onPointerDown = (event: Event) => {
+      const target = event.target;
+      if (!(target instanceof HTMLElement)) return;
+      if (!el.contains(target)) return;
+      arm(1800);
+      lock(1800);
+    };
+
+    const onFocusIn = (event: Event) => {
+      const target = event.target;
+      if (!(target instanceof HTMLElement)) return;
+      if (!el.contains(target) && !isArmed()) return;
+      lock(1500);
+    };
+
+    document.addEventListener("pointerdown", onPointerDown, true);
+    document.addEventListener("focusin", onFocusIn, true);
+
+    return () => {
+      release();
+      document.removeEventListener("pointerdown", onPointerDown, true);
+      document.removeEventListener("focusin", onFocusIn, true);
+    };
+  }, []);
+
   const trapScrollKeys = useCallback((e: ReactKeyboardEvent) => {
     const scrollKeys = new Set([
       "ArrowUp",
@@ -162,16 +337,27 @@ export function PddTldrawCanvas({
       "End",
       " ",
     ]);
-    if (scrollKeys.has(e.key)) {
-      e.stopPropagation();
+    if (!scrollKeys.has(e.key)) return;
+    const target = e.target as HTMLElement;
+    if (
+      target.closest("input") ||
+      target.closest("textarea") ||
+      target.closest("select") ||
+      target.closest("[role='textbox']") ||
+      target.closest("[contenteditable='true']")
+    ) {
+      return;
     }
+    e.preventDefault();
+    e.stopPropagation();
   }, []);
 
   return (
     <div
+      ref={containerRef}
       onKeyDown={trapScrollKeys}
       className={[
-        "relative w-full overflow-hidden rounded-2xl border border-border/60 bg-muted/10 touch-manipulation shadow-sm [overscroll-behavior:contain]",
+        "relative w-full overflow-hidden rounded-2xl border border-border/60 bg-muted/10 touch-manipulation shadow-sm [overscroll-behavior:contain] [overflow-anchor:none]",
         heightClass,
         className ?? "",
       ]

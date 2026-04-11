@@ -88,7 +88,7 @@ export function WorkspaceShell({
         </SheetContent>
       </Sheet>
 
-      <div className="mx-auto min-h-0 w-full max-w-[min(100%,var(--page-max-width))] flex-1 overflow-y-auto px-[var(--spacing-page-x,1rem)] py-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:px-6 sm:py-5">
+      <div className="mx-auto min-h-0 w-full max-w-[min(100%,var(--page-max-width))] flex-1 overflow-y-auto px-[var(--spacing-page-x,1rem)] py-4 pb-[max(1rem,env(safe-area-inset-bottom))] [overflow-anchor:none] sm:px-6 sm:py-5">
         {children}
       </div>
     </div>
