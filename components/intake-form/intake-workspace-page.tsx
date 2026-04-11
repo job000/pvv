@@ -1187,7 +1187,7 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
       }
     >
   >({});
-  const formsView = "compact" as const;
+  const formsView: "compact" | "cards" = "compact";
   const [formWorkspacePanelExpanded, setFormWorkspacePanelExpanded] =
     useState(true);
   const prevActiveFormIdRef = useRef<Id<"intakeForms"> | null>(null);
