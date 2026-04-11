@@ -34,9 +34,13 @@ const nextConfig: NextConfig = {
       shadcn: path.join(nodeModules, "shadcn"),
     },
   },
+  /**
+   * Kun `resolve.alias` — ikke overstyr `resolve.modules`. Å sette `modules` først til
+   * prosjektets `node_modules` kan bryte Next.js sin webpack-kjede for CSS
+   * (mini-css-extract-plugin: «You forgot to add MiniCssExtractPlugin»).
+   */
   webpack: (config) => {
     config.resolve = config.resolve ?? {};
-    config.resolve.modules = [nodeModules, ...(config.resolve.modules ?? ["node_modules"])];
     config.resolve.alias = {
       ...config.resolve.alias,
       tailwindcss: path.join(nodeModules, "tailwindcss"),
