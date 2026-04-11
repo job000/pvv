@@ -1345,6 +1345,23 @@ export const createAnalysis = mutation({
           }
         : {}),
     });
+    if (args.candidateId) {
+      const existingCandidateLink = await ctx.db
+        .query("candidateRosAnalysisLinks")
+        .withIndex("by_candidate_and_ros_analysis", (q) =>
+          q.eq("candidateId", args.candidateId!).eq("rosAnalysisId", analysisId),
+        )
+        .unique();
+      if (!existingCandidateLink) {
+        await ctx.db.insert("candidateRosAnalysisLinks", {
+          workspaceId: args.workspaceId,
+          candidateId: args.candidateId,
+          rosAnalysisId: analysisId,
+          createdByUserId: userId,
+          createdAt: now,
+        });
+      }
+    }
     for (const aid of idSet) {
       const existing = await ctx.db
         .query("rosAnalysisAssessments")

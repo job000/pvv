@@ -20,10 +20,6 @@ import {
 } from "./lib/githubCandidateSync";
 import { normalizeGithubRepoFullName } from "./lib/github";
 import {
-  cascadeDeleteAssessmentData,
-  cascadeDeleteRosAnalysisData,
-} from "./lib/cascadeDeletePvv";
-import {
   assertGithubIssueNotIntakeLinked,
   assertGithubProjectItemNotIntakeLinked,
   loadIntakeGithubOccupiedRefs,
@@ -46,29 +42,34 @@ function draftPayloadMatchesCandidate(
   return normalizeProcessCode(raw) === normalizeProcessCode(candidate.code);
 }
 
-async function collectAssessmentIdsLinkedToCandidate(
-  ctx: MutationCtx,
-  candidate: Doc<"candidates">,
-): Promise<Id<"assessments">[]> {
-  const assessments = await ctx.db
-    .query("assessments")
-    .withIndex("by_workspace", (q) =>
-      q.eq("workspaceId", candidate.workspaceId),
-    )
-    .collect();
-  const out: Id<"assessments">[] = [];
-  for (const a of assessments) {
-    const draft = await ctx.db
-      .query("assessmentDrafts")
-      .withIndex("by_assessment", (q) => q.eq("assessmentId", a._id))
-      .unique();
-    if (!draft) continue;
-    const payload = draft.payload as { candidateId?: string };
-    if (draftPayloadMatchesCandidate(payload, candidate)) {
-      out.push(a._id);
-    }
+function candidateIdsFromDraftPayload(
+  payload: { candidateId?: string } | undefined,
+  candidateById: Map<string, Doc<"candidates">>,
+  candidateByCode: Map<string, Doc<"candidates">>,
+): Id<"candidates">[] {
+  const raw = (payload?.candidateId ?? "").trim();
+  if (!raw) {
+    return [];
   }
-  return out;
+  const direct = candidateById.get(raw);
+  if (direct) {
+    return [direct._id];
+  }
+  const byCode = candidateByCode.get(normalizeProcessCode(raw));
+  return byCode ? [byCode._id] : [];
+}
+
+function pushUniqueLinkedItem<T extends { assessmentId?: string; analysisId?: string }>(
+  map: Map<string, T[]>,
+  key: string,
+  item: T,
+  uniqueKey: string,
+) {
+  const list = map.get(key) ?? [];
+  if (!list.some((row) => uniqueKey === String(row.assessmentId ?? row.analysisId))) {
+    list.push(item);
+    map.set(key, list);
+  }
 }
 
 export type PvvAssessmentResultSummary = {
@@ -541,33 +542,46 @@ export const getLinkedCandidateForAssessment = query({
       return null;
     }
     const { assessment } = readable;
-    const draft = await ctx.db
-      .query("assessmentDrafts")
+    const explicitLinks = await ctx.db
+      .query("candidateAssessmentLinks")
       .withIndex("by_assessment", (q) => q.eq("assessmentId", args.assessmentId))
-      .unique();
-    const payload = draft?.payload as { candidateId?: string } | undefined;
-    const raw = (payload?.candidateId ?? "").trim();
-    if (!raw) {
-      return { linked: false as const };
-    }
-
+      .collect();
     let cand: Doc<"candidates"> | null = null;
-    try {
-      const byId = await ctx.db.get(raw as Id<"candidates">);
-      if (byId && byId.workspaceId === assessment.workspaceId) {
-        cand = byId;
+    for (const link of explicitLinks) {
+      const linkedCandidate = await ctx.db.get(link.candidateId);
+      if (linkedCandidate && linkedCandidate.workspaceId === assessment.workspaceId) {
+        cand = linkedCandidate;
+        break;
       }
-    } catch {
-      // Utkastet kan lagre prosesskode i candidateId; db.get kaster på ugyldig ID-lengde/format.
     }
     if (!cand) {
-      const code = normalizeProcessCode(raw);
-      cand = await ctx.db
-        .query("candidates")
-        .withIndex("by_workspace_code", (q) =>
-          q.eq("workspaceId", assessment.workspaceId).eq("code", code),
-        )
+      const draft = await ctx.db
+        .query("assessmentDrafts")
+        .withIndex("by_assessment", (q) => q.eq("assessmentId", args.assessmentId))
         .unique();
+      const payload = draft?.payload as { candidateId?: string } | undefined;
+      const raw = (payload?.candidateId ?? "").trim();
+      if (!raw) {
+        return { linked: false as const };
+      }
+
+      try {
+        const byId = await ctx.db.get(raw as Id<"candidates">);
+        if (byId && byId.workspaceId === assessment.workspaceId) {
+          cand = byId;
+        }
+      } catch {
+        // Utkastet kan lagre prosesskode i candidateId; db.get kaster på ugyldig ID-lengde/format.
+      }
+      if (!cand) {
+        const code = normalizeProcessCode(raw);
+        cand = await ctx.db
+          .query("candidates")
+          .withIndex("by_workspace_code", (q) =>
+            q.eq("workspaceId", assessment.workspaceId).eq("code", code),
+          )
+          .unique();
+      }
     }
     if (!cand) {
       return { linked: false as const };
@@ -593,6 +607,79 @@ export const getLinkedCandidateForAssessment = query({
   },
 });
 
+export const linkAssessment = mutation({
+  args: {
+    candidateId: v.id("candidates"),
+    assessmentId: v.id("assessments"),
+  },
+  handler: async (ctx, args) => {
+    const userId = await requireUserId(ctx);
+    const candidate = await ctx.db.get(args.candidateId);
+    if (!candidate) {
+      throw new Error("Prosessen finnes ikke.");
+    }
+    await requireWorkspaceMember(ctx, candidate.workspaceId, userId, "member");
+    const assessment = await ctx.db.get(args.assessmentId);
+    if (!assessment || assessment.workspaceId !== candidate.workspaceId) {
+      throw new Error("Vurderingen finnes ikke i samme arbeidsområde.");
+    }
+    if (!(await canReadAssessment(ctx, assessment, userId))) {
+      throw new Error("Du har ikke tilgang til vurderingen.");
+    }
+    const existing = await ctx.db
+      .query("candidateAssessmentLinks")
+      .withIndex("by_candidate_and_assessment", (q) =>
+        q.eq("candidateId", args.candidateId).eq("assessmentId", args.assessmentId),
+      )
+      .unique();
+    if (existing) {
+      return existing._id;
+    }
+    return await ctx.db.insert("candidateAssessmentLinks", {
+      workspaceId: candidate.workspaceId,
+      candidateId: args.candidateId,
+      assessmentId: args.assessmentId,
+      createdByUserId: userId,
+      createdAt: Date.now(),
+    });
+  },
+});
+
+export const linkRosAnalysis = mutation({
+  args: {
+    candidateId: v.id("candidates"),
+    rosAnalysisId: v.id("rosAnalyses"),
+  },
+  handler: async (ctx, args) => {
+    const userId = await requireUserId(ctx);
+    const candidate = await ctx.db.get(args.candidateId);
+    if (!candidate) {
+      throw new Error("Prosessen finnes ikke.");
+    }
+    await requireWorkspaceMember(ctx, candidate.workspaceId, userId, "member");
+    const analysis = await ctx.db.get(args.rosAnalysisId);
+    if (!analysis || analysis.workspaceId !== candidate.workspaceId) {
+      throw new Error("ROS-analysen finnes ikke i samme arbeidsområde.");
+    }
+    const existing = await ctx.db
+      .query("candidateRosAnalysisLinks")
+      .withIndex("by_candidate_and_ros_analysis", (q) =>
+        q.eq("candidateId", args.candidateId).eq("rosAnalysisId", args.rosAnalysisId),
+      )
+      .unique();
+    if (existing) {
+      return existing._id;
+    }
+    return await ctx.db.insert("candidateRosAnalysisLinks", {
+      workspaceId: candidate.workspaceId,
+      candidateId: args.candidateId,
+      rosAnalysisId: args.rosAnalysisId,
+      createdByUserId: userId,
+      createdAt: Date.now(),
+    });
+  },
+});
+
 /**
  * Per prosess: koblede PVV-vurderinger (via utkastets prosess-ID) og ROS-analyser,
  * med tidspunkt — for oversiktskort i prosessregisteret.
@@ -610,6 +697,41 @@ export const listProcessCoverage = query({
       .query("candidates")
       .withIndex("by_workspace", (q) => q.eq("workspaceId", args.workspaceId))
       .collect();
+    const candidateById = new Map(
+      candidates.map((candidate) => [String(candidate._id), candidate] as const),
+    );
+    const candidateByCode = new Map(
+      candidates.map((candidate) => [
+        normalizeProcessCode(candidate.code),
+        candidate,
+      ] as const),
+    );
+
+    const candidateAssessmentLinks = await ctx.db
+      .query("candidateAssessmentLinks")
+      .withIndex("by_workspace", (q) => q.eq("workspaceId", args.workspaceId))
+      .collect();
+    const candidateIdsByAssessmentId = new Map<string, Id<"candidates">[]>();
+    for (const link of candidateAssessmentLinks) {
+      const list = candidateIdsByAssessmentId.get(String(link.assessmentId)) ?? [];
+      if (!list.includes(link.candidateId)) {
+        list.push(link.candidateId);
+        candidateIdsByAssessmentId.set(String(link.assessmentId), list);
+      }
+    }
+
+    const candidateRosLinks = await ctx.db
+      .query("candidateRosAnalysisLinks")
+      .withIndex("by_workspace", (q) => q.eq("workspaceId", args.workspaceId))
+      .collect();
+    const candidateIdsByRosAnalysisId = new Map<string, Id<"candidates">[]>();
+    for (const link of candidateRosLinks) {
+      const list = candidateIdsByRosAnalysisId.get(String(link.rosAnalysisId)) ?? [];
+      if (!list.includes(link.candidateId)) {
+        list.push(link.candidateId);
+        candidateIdsByRosAnalysisId.set(String(link.rosAnalysisId), list);
+      }
+    }
 
     const assessments = await ctx.db
       .query("assessments")
@@ -631,7 +753,7 @@ export const listProcessCoverage = query({
       pddByAssessmentId.set(doc.assessmentId, doc);
     }
 
-    const pvvByCode = new Map<
+    const pvvByCandidateId = new Map<
       string,
       Array<{
         assessmentId: Id<"assessments">;
@@ -640,7 +762,7 @@ export const listProcessCoverage = query({
         pipelineStatus: string;
       }>
     >();
-    const pddByCode = new Map<
+    const pddByCandidateId = new Map<
       string,
       Array<{
         documentId: Id<"processDesignDocuments">;
@@ -659,44 +781,53 @@ export const listProcessCoverage = query({
         .withIndex("by_assessment", (q) => q.eq("assessmentId", a._id))
         .unique();
       const payload = draft?.payload as { candidateId?: string } | undefined;
-      const codeRaw = (payload?.candidateId ?? "").trim();
-      if (!codeRaw) {
+      const linkedCandidateIds = new Set<Id<"candidates">>([
+        ...candidateIdsFromDraftPayload(payload, candidateById, candidateByCode),
+        ...(candidateIdsByAssessmentId.get(String(a._id)) ?? []),
+      ]);
+      if (linkedCandidateIds.size === 0) {
         continue;
       }
-      const codeKey = normalizeProcessCode(codeRaw);
       const row = {
         assessmentId: a._id,
         title: a.title,
         updatedAt: a.updatedAt,
         pipelineStatus: a.pipelineStatus ?? "not_assessed",
       };
-      const list = pvvByCode.get(codeKey) ?? [];
-      list.push(row);
-      pvvByCode.set(codeKey, list);
-
       const pddDoc = pddByAssessmentId.get(a._id);
-      if (pddDoc) {
-        const pddPayload = pddDoc.payload as { processTitle?: string } | undefined;
-        const pddList = pddByCode.get(codeKey) ?? [];
-        const pvvProcessName = draft?.payload?.processName?.trim();
-        pddList.push({
-          documentId: pddDoc._id,
-          assessmentId: a._id,
-          title:
-            pddPayload?.processTitle?.trim() ||
-            pvvProcessName ||
-            a.title ||
-            "Prosessdesign",
-          updatedAt: pddDoc.updatedAt,
-        });
-        pddByCode.set(codeKey, pddList);
+      const pvvProcessName = draft?.payload?.processName?.trim();
+      const pddPayload = pddDoc?.payload as { processTitle?: string } | undefined;
+      for (const candidateId of linkedCandidateIds) {
+        pushUniqueLinkedItem(
+          pvvByCandidateId,
+          String(candidateId),
+          row,
+          String(a._id),
+        );
+        if (pddDoc) {
+          pushUniqueLinkedItem(
+            pddByCandidateId,
+            String(candidateId),
+            {
+              documentId: pddDoc._id,
+              assessmentId: a._id,
+              title:
+                pddPayload?.processTitle?.trim() ||
+                pvvProcessName ||
+                a.title ||
+                "Prosessdesign",
+              updatedAt: pddDoc.updatedAt,
+            },
+            String(pddDoc._id),
+          );
+        }
       }
     }
 
-    for (const [, list] of pvvByCode) {
+    for (const [, list] of pvvByCandidateId) {
       list.sort((x, y) => y.updatedAt - x.updatedAt);
     }
-    for (const [, list] of pddByCode) {
+    for (const [, list] of pddByCandidateId) {
       list.sort((x, y) => y.updatedAt - x.updatedAt);
     }
 
@@ -704,6 +835,18 @@ export const listProcessCoverage = query({
       .query("rosAnalyses")
       .withIndex("by_workspace", (q) => q.eq("workspaceId", args.workspaceId))
       .collect();
+    const rosAssessmentLinks = await ctx.db
+      .query("rosAnalysisAssessments")
+      .withIndex("by_workspace", (q) => q.eq("workspaceId", args.workspaceId))
+      .collect();
+    const assessmentIdsByRosAnalysisId = new Map<string, Id<"assessments">[]>();
+    for (const link of rosAssessmentLinks) {
+      const list = assessmentIdsByRosAnalysisId.get(String(link.rosAnalysisId)) ?? [];
+      if (!list.includes(link.assessmentId)) {
+        list.push(link.assessmentId);
+        assessmentIdsByRosAnalysisId.set(String(link.rosAnalysisId), list);
+      }
+    }
 
     const rosByCandidateId = new Map<
       Id<"candidates">,
@@ -715,7 +858,16 @@ export const listProcessCoverage = query({
     >();
 
     for (const r of rosRows) {
-      if (!r.candidateId) {
+      const linkedCandidateIds = new Set<Id<"candidates">>([
+        ...(r.candidateId ? [r.candidateId] : []),
+        ...(candidateIdsByRosAnalysisId.get(String(r._id)) ?? []),
+      ]);
+      for (const assessmentId of assessmentIdsByRosAnalysisId.get(String(r._id)) ?? []) {
+        for (const candidateId of candidateIdsByAssessmentId.get(String(assessmentId)) ?? []) {
+          linkedCandidateIds.add(candidateId);
+        }
+      }
+      if (linkedCandidateIds.size === 0) {
         continue;
       }
       const item = {
@@ -723,9 +875,13 @@ export const listProcessCoverage = query({
         title: r.title,
         updatedAt: r.updatedAt,
       };
-      const list = rosByCandidateId.get(r.candidateId) ?? [];
-      list.push(item);
-      rosByCandidateId.set(r.candidateId, list);
+      for (const candidateId of linkedCandidateIds) {
+        const list = rosByCandidateId.get(candidateId) ?? [];
+        if (!list.some((row) => row.analysisId === r._id)) {
+          list.push(item);
+          rosByCandidateId.set(candidateId, list);
+        }
+      }
     }
 
     for (const [, list] of rosByCandidateId) {
@@ -737,10 +893,10 @@ export const listProcessCoverage = query({
         a.code.localeCompare(b.code, "nb", { sensitivity: "base" }),
       )
       .map((c) => {
-        const codeKey = normalizeProcessCode(c.code);
-        const pvvList = pvvByCode.get(codeKey) ?? [];
+        const candidateKey = String(c._id);
+        const pvvList = pvvByCandidateId.get(candidateKey) ?? [];
         const rosList = rosByCandidateId.get(c._id) ?? [];
-        const pddList = pddByCode.get(codeKey) ?? [];
+        const pddList = pddByCandidateId.get(candidateKey) ?? [];
         return {
           candidateId: c._id,
           name: c.name,
@@ -1136,53 +1292,31 @@ export const remove = mutation({
     }
     await requireWorkspaceMember(ctx, row.workspaceId, userId, "member");
 
-    const assessmentIds = await collectAssessmentIdsLinkedToCandidate(ctx, row);
-    const rosRows = await ctx.db
-      .query("rosAnalyses")
-      .withIndex("by_candidate", (q) =>
-        q.eq("candidateId", args.candidateId),
-      )
+    const assessmentLinks = await ctx.db
+      .query("candidateAssessmentLinks")
+      .withIndex("by_candidate", (q) => q.eq("candidateId", args.candidateId))
       .collect();
-    const rosIds = new Set(rosRows.map((r) => r._id));
-
-    const intakeRows = await ctx.db
-      .query("intakeSubmissions")
-      .withIndex("by_workspace_and_submitted_at", (q) =>
-        q.eq("workspaceId", row.workspaceId),
-      )
-      .take(500);
-    for (const sub of intakeRows) {
-      if (
-        sub.approvedAssessmentId &&
-        assessmentIds.includes(sub.approvedAssessmentId)
-      ) {
-        const patch: {
-          approvedAssessmentId: undefined;
-          status: "under_review";
-          reviewedAt: undefined;
-          reviewedByUserId: undefined;
-          approvedRosAnalysisId?: undefined;
-        } = {
-          approvedAssessmentId: undefined,
-          status: "under_review",
-          reviewedAt: undefined,
-          reviewedByUserId: undefined,
-        };
-        if (
-          sub.approvedRosAnalysisId &&
-          rosIds.has(sub.approvedRosAnalysisId)
-        ) {
-          patch.approvedRosAnalysisId = undefined;
-        }
-        await ctx.db.patch(sub._id, patch);
-      }
+    for (const link of assessmentLinks) {
+      await ctx.db.delete(link._id);
     }
 
-    for (const aid of assessmentIds) {
-      await cascadeDeleteAssessmentData(ctx, aid);
+    const rosLinks = await ctx.db
+      .query("candidateRosAnalysisLinks")
+      .withIndex("by_candidate", (q) => q.eq("candidateId", args.candidateId))
+      .collect();
+    for (const link of rosLinks) {
+      await ctx.db.delete(link._id);
     }
-    for (const r of rosRows) {
-      await cascadeDeleteRosAnalysisData(ctx, r._id);
+
+    const legacyRosRows = await ctx.db
+      .query("rosAnalyses")
+      .withIndex("by_candidate", (q) => q.eq("candidateId", args.candidateId))
+      .collect();
+    for (const rosRow of legacyRosRows) {
+      await ctx.db.patch(rosRow._id, {
+        candidateId: undefined,
+        updatedAt: Date.now(),
+      });
     }
 
     await ctx.db.delete(args.candidateId);

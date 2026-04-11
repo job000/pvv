@@ -205,6 +205,15 @@ function ProcessCoverageDetailDialog({
   canDeleteProcess,
   onDeleteProcess,
   deleteProcessBusy,
+  assessments,
+  analyses,
+  templates,
+  onLinkAssessment,
+  onLinkRos,
+  onCreateRos,
+  linkAssessmentBusy,
+  linkRosBusy,
+  createRosBusy,
 }: {
   workspaceId: Id<"workspaces">;
   row: CoverageRow | null;
@@ -217,11 +226,93 @@ function ProcessCoverageDetailDialog({
   canDeleteProcess: boolean;
   onDeleteProcess: (row: CoverageRow) => void;
   deleteProcessBusy: boolean;
+  assessments:
+    | Array<{
+        _id: Id<"assessments">;
+        title: string;
+      }>
+    | undefined;
+  analyses:
+    | Array<{
+        _id: Id<"rosAnalyses">;
+        title: string;
+      }>
+    | undefined;
+  templates:
+    | Array<{
+        _id: Id<"rosTemplates">;
+        name: string;
+      }>
+    | undefined;
+  onLinkAssessment: (
+    row: CoverageRow,
+    assessmentId: Id<"assessments">,
+  ) => Promise<void>;
+  onLinkRos: (row: CoverageRow, analysisId: Id<"rosAnalyses">) => Promise<void>;
+  onCreateRos: (
+    row: CoverageRow,
+    templateId: Id<"rosTemplates">,
+  ) => Promise<void>;
+  linkAssessmentBusy: boolean;
+  linkRosBusy: boolean;
+  createRosBusy: boolean;
 }) {
   const issueUrl = row ? githubIssueUrl(row) : null;
+  const [selectedAssessmentId, setSelectedAssessmentId] = useState("");
+  const [selectedAnalysisId, setSelectedAnalysisId] = useState("");
+  const [selectedTemplateId, setSelectedTemplateId] = useState("");
+
+  const linkedAssessmentIds = useMemo(
+    () => new Set((row?.pvv.assessments ?? []).map((assessment) => String(assessment.assessmentId))),
+    [row?.pvv.assessments],
+  );
+  const linkedAnalysisIds = useMemo(
+    () => new Set((row?.ros.analyses ?? []).map((analysis) => String(analysis.analysisId))),
+    [row?.ros.analyses],
+  );
+  const linkableAssessments = useMemo(
+    () =>
+      (assessments ?? []).filter(
+        (assessment) => !linkedAssessmentIds.has(String(assessment._id)),
+      ),
+    [assessments, linkedAssessmentIds],
+  );
+  const linkableAnalyses = useMemo(
+    () =>
+      (analyses ?? []).filter(
+        (analysis) => !linkedAnalysisIds.has(String(analysis._id)),
+      ),
+    [analyses, linkedAnalysisIds],
+  );
+  const effectiveSelectedAssessmentId = linkableAssessments.some(
+    (assessment) => String(assessment._id) === selectedAssessmentId,
+  )
+    ? selectedAssessmentId
+    : "";
+  const effectiveSelectedAnalysisId = linkableAnalyses.some(
+    (analysis) => String(analysis._id) === selectedAnalysisId,
+  )
+    ? selectedAnalysisId
+    : "";
+  const effectiveSelectedTemplateId = templates?.some(
+    (template) => String(template._id) === selectedTemplateId,
+  )
+    ? selectedTemplateId
+    : templates?.[0]?._id
+      ? String(templates[0]._id)
+      : "";
+  const pddTargetAssessment = row?.pvv.assessments[0] ?? null;
+  const handleOpenChange = (nextOpen: boolean) => {
+    if (!nextOpen) {
+      setSelectedAssessmentId("");
+      setSelectedAnalysisId("");
+      setSelectedTemplateId("");
+    }
+    onOpenChange(nextOpen);
+  };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent
         size="2xl"
         titleId="process-coverage-detail-title"
@@ -329,6 +420,52 @@ function ProcessCoverageDetailDialog({
                     ))}
                   </ul>
                 )}
+                <div className="mt-3 space-y-2 rounded-lg border border-dashed border-border/60 bg-background/50 p-3">
+                  <p className="text-xs font-medium text-muted-foreground">
+                    Koble eksisterende vurdering
+                  </p>
+                  {assessments === undefined ? (
+                    <p className="text-muted-foreground text-xs">Laster vurderinger …</p>
+                  ) : linkableAssessments.length === 0 ? (
+                    <p className="text-muted-foreground text-xs">
+                      Ingen andre vurderinger å koble til akkurat nå.
+                    </p>
+                  ) : (
+                    <div className="flex flex-col gap-2 sm:flex-row">
+                      <select
+                        className="border-input bg-background h-10 flex-1 rounded-lg border px-3 text-sm"
+                        value={effectiveSelectedAssessmentId}
+                        onChange={(e) => setSelectedAssessmentId(e.target.value)}
+                        disabled={linkAssessmentBusy}
+                      >
+                        <option value="">Velg vurdering …</option>
+                        {linkableAssessments.map((assessment) => (
+                          <option key={assessment._id} value={assessment._id}>
+                            {assessment.title}
+                          </option>
+                        ))}
+                      </select>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        disabled={
+                          linkAssessmentBusy ||
+                          !effectiveSelectedAssessmentId ||
+                          !row
+                        }
+                        onClick={() => {
+                          if (!row || !effectiveSelectedAssessmentId) return;
+                          void onLinkAssessment(
+                            row,
+                            effectiveSelectedAssessmentId as Id<"assessments">,
+                          ).then(() => setSelectedAssessmentId(""));
+                        }}
+                      >
+                        {linkAssessmentBusy ? "Kobler …" : "Koble"}
+                      </Button>
+                    </div>
+                  )}
+                </div>
               </section>
 
               <section
@@ -345,9 +482,24 @@ function ProcessCoverageDetailDialog({
                   </h3>
                 </div>
                 {row.pdd.documents.length === 0 ? (
-                  <p className="text-muted-foreground text-sm">
-                    Ingen PDD koblet til prosessen ennå.
-                  </p>
+                  <div className="space-y-3">
+                    <p className="text-muted-foreground text-sm">
+                      Ingen PDD koblet til prosessen ennå.
+                    </p>
+                    {pddTargetAssessment ? (
+                      <Button asChild type="button" variant="outline">
+                        <Link
+                          href={`/w/${workspaceId}/a/${pddTargetAssessment.assessmentId}/prosessdesign`}
+                        >
+                          Åpne prosessdesign for vurderingen
+                        </Link>
+                      </Button>
+                    ) : (
+                      <p className="text-muted-foreground text-xs">
+                        Start eller koble en vurdering først, så kan PDD opprettes derfra.
+                      </p>
+                    )}
+                  </div>
                 ) : (
                   <ul className="divide-border/60 divide-y rounded-lg border border-border/50 bg-background">
                     {row.pdd.documents.map((d) => (
@@ -425,6 +577,92 @@ function ProcessCoverageDetailDialog({
                     ))}
                   </ul>
                 )}
+                <div className="mt-3 space-y-3 rounded-lg border border-dashed border-border/60 bg-background/50 p-3">
+                  <div className="space-y-2">
+                    <p className="text-xs font-medium text-muted-foreground">
+                      Koble eksisterende ROS
+                    </p>
+                    {analyses === undefined ? (
+                      <p className="text-muted-foreground text-xs">Laster ROS-analyser …</p>
+                    ) : linkableAnalyses.length === 0 ? (
+                      <p className="text-muted-foreground text-xs">
+                        Ingen andre ROS-analyser å koble til akkurat nå.
+                      </p>
+                    ) : (
+                      <div className="flex flex-col gap-2 sm:flex-row">
+                        <select
+                          className="border-input bg-background h-10 flex-1 rounded-lg border px-3 text-sm"
+                          value={effectiveSelectedAnalysisId}
+                          onChange={(e) => setSelectedAnalysisId(e.target.value)}
+                          disabled={linkRosBusy}
+                        >
+                          <option value="">Velg ROS-analyse …</option>
+                          {linkableAnalyses.map((analysis) => (
+                            <option key={analysis._id} value={analysis._id}>
+                              {analysis.title}
+                            </option>
+                          ))}
+                        </select>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          disabled={
+                            linkRosBusy || !effectiveSelectedAnalysisId || !row
+                          }
+                          onClick={() => {
+                            if (!row || !effectiveSelectedAnalysisId) return;
+                            void onLinkRos(
+                              row,
+                              effectiveSelectedAnalysisId as Id<"rosAnalyses">,
+                            ).then(() => setSelectedAnalysisId(""));
+                          }}
+                        >
+                          {linkRosBusy ? "Kobler …" : "Koble"}
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                  <div className="space-y-2">
+                    <p className="text-xs font-medium text-muted-foreground">
+                      Opprett ny ROS for prosessen
+                    </p>
+                    {templates === undefined ? (
+                      <p className="text-muted-foreground text-xs">Laster maler …</p>
+                    ) : templates.length === 0 ? (
+                      <p className="text-muted-foreground text-xs">
+                        Opprett en ROS-mal først i ROS-arbeidsflaten.
+                      </p>
+                    ) : (
+                      <div className="flex flex-col gap-2 sm:flex-row">
+                        <select
+                          className="border-input bg-background h-10 flex-1 rounded-lg border px-3 text-sm"
+                          value={effectiveSelectedTemplateId}
+                          onChange={(e) => setSelectedTemplateId(e.target.value)}
+                          disabled={createRosBusy}
+                        >
+                          {templates.map((template) => (
+                            <option key={template._id} value={template._id}>
+                              {template.name}
+                            </option>
+                          ))}
+                        </select>
+                        <Button
+                          type="button"
+                          disabled={createRosBusy || !effectiveSelectedTemplateId || !row}
+                          onClick={() => {
+                            if (!row || !effectiveSelectedTemplateId) return;
+                            void onCreateRos(
+                              row,
+                              effectiveSelectedTemplateId as Id<"rosTemplates">,
+                            );
+                          }}
+                        >
+                          {createRosBusy ? "Oppretter …" : "Opprett ROS"}
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                </div>
               </section>
 
             </DialogBody>
@@ -493,8 +731,14 @@ export function ProcessCoverageOverview({
   const rows = useQuery(api.candidates.listProcessCoverage, { workspaceId });
   const orgUnits = useQuery(api.orgUnits.listByWorkspace, { workspaceId });
   const membership = useQuery(api.workspaces.getMyMembership, { workspaceId });
+  const assessments = useQuery(api.assessments.listByWorkspace, { workspaceId });
+  const analyses = useQuery(api.ros.listAnalyses, { workspaceId });
+  const templates = useQuery(api.ros.listTemplates, { workspaceId });
   const createAssessment = useMutation(api.assessments.create);
   const removeCandidate = useMutation(api.candidates.remove);
+  const linkAssessment = useMutation(api.candidates.linkAssessment);
+  const linkRos = useMutation(api.candidates.linkRosAnalysis);
+  const createRosAnalysis = useMutation(api.ros.createAnalysis);
   const [q, setQ] = useState("");
   const [orgUnitFilter, setOrgUnitFilter] = useState<"" | Id<"orgUnits">>("");
   const [detail, setDetail] = useState<CoverageRow | null>(null);
@@ -503,6 +747,15 @@ export function ProcessCoverageOverview({
   );
   const [creatingCandidateId, setCreatingCandidateId] =
     useState<Id<"candidates"> | null>(null);
+  const [linkAssessmentCandidateId, setLinkAssessmentCandidateId] = useState<
+    Id<"candidates"> | null
+  >(null);
+  const [linkRosCandidateId, setLinkRosCandidateId] = useState<
+    Id<"candidates"> | null
+  >(null);
+  const [createRosCandidateId, setCreateRosCandidateId] = useState<
+    Id<"candidates"> | null
+  >(null);
 
   const canCreatePvv =
     membership &&
@@ -568,6 +821,64 @@ export function ProcessCoverageOverview({
       toast.error(formatUserFacingError(e, "Kunne ikke slette prosessen."));
     } finally {
       setDeleteBusyId(null);
+    }
+  }
+
+  async function linkExistingAssessmentToProcess(
+    c: CoverageRow,
+    assessmentId: Id<"assessments">,
+  ) {
+    setLinkAssessmentCandidateId(c.candidateId);
+    try {
+      await linkAssessment({
+        candidateId: c.candidateId,
+        assessmentId,
+      });
+      toast.success("Vurdering koblet til prosessen.");
+    } catch (e) {
+      toast.error(formatUserFacingError(e, "Kunne ikke koble vurderingen."));
+    } finally {
+      setLinkAssessmentCandidateId(null);
+    }
+  }
+
+  async function linkExistingRosToProcess(
+    c: CoverageRow,
+    analysisId: Id<"rosAnalyses">,
+  ) {
+    setLinkRosCandidateId(c.candidateId);
+    try {
+      await linkRos({
+        candidateId: c.candidateId,
+        rosAnalysisId: analysisId,
+      });
+      toast.success("ROS koblet til prosessen.");
+    } catch (e) {
+      toast.error(formatUserFacingError(e, "Kunne ikke koble ROS."));
+    } finally {
+      setLinkRosCandidateId(null);
+    }
+  }
+
+  async function createRosForProcess(
+    c: CoverageRow,
+    templateId: Id<"rosTemplates">,
+  ) {
+    setCreateRosCandidateId(c.candidateId);
+    try {
+      const analysisId = await createRosAnalysis({
+        workspaceId,
+        templateId,
+        candidateId: c.candidateId,
+        orgUnitId: c.orgUnitId ?? undefined,
+        title: `ROS — ${c.name} (${c.code})`,
+      });
+      toast.success("ROS opprettet for prosessen.");
+      router.push(`/w/${workspaceId}/ros/a/${analysisId}`);
+    } catch (e) {
+      toast.error(formatUserFacingError(e, "Kunne ikke opprette ROS."));
+    } finally {
+      setCreateRosCandidateId(null);
     }
   }
 
@@ -666,6 +977,30 @@ export function ProcessCoverageOverview({
         onDeleteProcess={(row) => void deleteProcess(row)}
         deleteProcessBusy={
           detail !== null && deleteBusyId === detail.candidateId
+        }
+        assessments={assessments?.map((assessment) => ({
+          _id: assessment._id,
+          title: assessment.title,
+        }))}
+        analyses={analyses?.map((analysis) => ({
+          _id: analysis._id,
+          title: analysis.title,
+        }))}
+        templates={templates?.map((template) => ({
+          _id: template._id,
+          name: template.name,
+        }))}
+        onLinkAssessment={linkExistingAssessmentToProcess}
+        onLinkRos={linkExistingRosToProcess}
+        onCreateRos={createRosForProcess}
+        linkAssessmentBusy={
+          detail !== null && linkAssessmentCandidateId === detail.candidateId
+        }
+        linkRosBusy={
+          detail !== null && linkRosCandidateId === detail.candidateId
+        }
+        createRosBusy={
+          detail !== null && createRosCandidateId === detail.candidateId
         }
       />
 

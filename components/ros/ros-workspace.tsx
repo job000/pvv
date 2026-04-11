@@ -102,7 +102,7 @@ function RosFlowNav({
 }) {
   return (
     <nav
-      className="relative -mx-1 flex max-w-full flex-nowrap items-stretch gap-1 overflow-x-auto border-b border-border/50 px-1 pb-0 [scrollbar-width:none] sm:mx-0 sm:gap-0 sm:px-0 [&::-webkit-scrollbar]:hidden"
+      className="relative -mx-1 flex max-w-full flex-nowrap items-stretch gap-1 overflow-x-auto rounded-2xl border border-border/50 bg-card/70 p-1 shadow-sm [scrollbar-width:none] sm:mx-0 sm:px-1 [&::-webkit-scrollbar]:hidden"
       role="tablist"
       aria-label="ROS-faner"
     >
@@ -123,10 +123,10 @@ function RosFlowNav({
             aria-selected={active}
             onClick={() => onTab(s.id)}
             className={cn(
-              "group relative flex shrink-0 items-center gap-2 px-4 pb-3 pt-2 text-sm font-medium transition-colors duration-150",
+              "group relative flex shrink-0 items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium transition-colors duration-150",
               active
-                ? "text-foreground"
-                : "text-muted-foreground hover:text-foreground/80",
+                ? "bg-background text-foreground shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.06]"
+                : "text-muted-foreground hover:bg-background/60 hover:text-foreground/80",
             )}
           >
             <Icon
@@ -150,7 +150,7 @@ function RosFlowNav({
               </span>
             ) : null}
             {active ? (
-              <span className="bg-primary absolute inset-x-0 -bottom-px h-0.5 rounded-full" />
+              <span className="bg-primary absolute inset-x-3 bottom-0 h-0.5 rounded-full" />
             ) : null}
           </button>
         );
@@ -181,6 +181,7 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
   const { prefs: rosUiPrefs, updatePrefs: updateRosUiPrefs } =
     useRosWorkspaceUiPrefs(workspaceId);
   const rawFane = searchParams.get("fane");
+  const rawNewTemplate = searchParams.get("nyMal");
   const tab: Tab = useMemo(() => {
     if (
       rawFane === "analyser" ||
@@ -263,7 +264,7 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
     } else {
       setAnaSectorPackId("general");
     }
-  }, [createDialogOpen, workspace?.defaultRosSectorPackId, workspace?._id]);
+  }, [createDialogOpen, workspace]);
 
   const openBuilderForEdit = useCallback(
     (t: {
@@ -414,6 +415,26 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
     setTemplateDialogOpen(true);
   }, []);
 
+  useEffect(() => {
+    if (tab !== "maler" || rawNewTemplate !== "1") {
+      return;
+    }
+    openNewTemplateDialog();
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete("nyMal");
+    params.set("fane", "maler");
+    router.replace(`/w/${workspaceId}/ros?${params.toString()}`, {
+      scroll: false,
+    });
+  }, [
+    openNewTemplateDialog,
+    rawNewTemplate,
+    router,
+    searchParams,
+    tab,
+    workspaceId,
+  ]);
+
   /** Én mal i arbeidsområdet → forhåndsvelg (mindre friksjon for store organisasjoner). */
   useEffect(() => {
     if (templates === undefined || templates.length !== 1) return;
@@ -561,9 +582,13 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
 
   const templatesList = templates ?? [];
   const analysesList = analyses ?? [];
+  const defaultTemplateLabel =
+    hub?.defaultTemplateId && templatesList.length > 0
+      ? templatesList.find((template) => template._id === hub.defaultTemplateId)?.name ?? null
+      : null;
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-6">
       <RosFlowNav
         tab={tab}
         onTab={setTab}
@@ -756,26 +781,72 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
         </div>
       ) : (
         <>
+          <section className="rounded-3xl border border-border/60 bg-gradient-to-br from-card via-card to-muted/20 p-4 shadow-sm sm:p-5">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+              <div className="max-w-2xl space-y-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge variant="secondary" className="rounded-full px-2.5 py-1 text-[11px] font-medium">
+                    {analysesList.length} analyse{analysesList.length === 1 ? "" : "r"}
+                  </Badge>
+                  <Badge variant="secondary" className="rounded-full px-2.5 py-1 text-[11px] font-medium">
+                    {templatesList.length} mal{templatesList.length === 1 ? "" : "er"}
+                  </Badge>
+                  {defaultTemplateLabel ? (
+                    <Badge variant="secondary" className="rounded-full px-2.5 py-1 text-[11px] font-medium">
+                      Standardmal: {defaultTemplateLabel}
+                    </Badge>
+                  ) : null}
+                </div>
+                <div className="space-y-1">
+                  <h2 className="font-heading text-xl font-semibold tracking-tight text-foreground sm:text-2xl">
+                    ROS-analyser
+                  </h2>
+                  <p className="max-w-xl text-sm leading-relaxed text-muted-foreground">
+                    Start en ny analyse raskt, eller fortsett i en eksisterende. Hold oppstarten enkel og gjør koblinger til prosess og vurdering når det trengs.
+                  </p>
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="rounded-2xl"
+                  onClick={() => setTab("maler")}
+                >
+                  Se maler
+                </Button>
+                <Button
+                  type="button"
+                  className="gap-2 rounded-2xl shadow-sm"
+                  onClick={() => setCreateDialogOpen(true)}
+                >
+                  <Plus className="size-4" aria-hidden />
+                  Ny analyse
+                </Button>
+              </div>
+            </div>
+          </section>
+
           <GithubIssueStartCard
             workspaceId={workspaceId}
             variant="ros"
-            defaultTemplateId={hub?.defaultTemplateId ?? null}
           />
 
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <h2 className="font-heading text-lg font-semibold tracking-tight">
-                Alle ROS-analyser
+                Oversikt over analyser
               </h2>
               {analysesList.length > 0 ? (
                 <p className="text-muted-foreground mt-0.5 text-sm tabular-nums">
-                  {analysesList.length} analyse{analysesList.length !== 1 ? "r" : ""} i arbeidsområdet
+                  {filteredSortedAnalyses.length} av {analysesList.length} analyse
+                  {analysesList.length !== 1 ? "r" : ""} vises
                 </p>
               ) : null}
             </div>
             <Button
               type="button"
-              className="shrink-0 gap-2 shadow-sm"
+              className="shrink-0 gap-2 rounded-2xl shadow-sm"
               onClick={() => setCreateDialogOpen(true)}
             >
               <Plus className="size-4" aria-hidden />
@@ -784,46 +855,48 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
           </div>
 
           {analysesList.length > 0 ? (
-            <div className="flex flex-col gap-3">
-              <SearchInput
-                value={analysisSearch}
-                onChange={(e) => setAnalysisSearch(e.target.value)}
-                placeholder="Søk i tittel, prosess eller organisasjon …"
-                aria-label="Filtrer analyser"
-              />
-              <FilterToolbar>
-                <NativeSelectField
-                  id="ros-ana-org"
-                  label="Organisasjon"
-                  value={analysisOrgFilter}
-                  onChange={(e) =>
-                    setAnalysisOrgFilter(
-                      e.target.value === "" ? "" : (e.target.value as Id<"orgUnits">),
-                    )
-                  }
-                  aria-label="Filtrer etter organisasjonsenhet"
-                  className="min-w-0 flex-1 sm:min-w-[min(100%,14rem)]"
-                >
-                  <option value="">Alle enheter</option>
-                  {(orgUnits ?? []).map((u) => (
-                    <option key={u._id} value={u._id}>
-                      {u.name}
-                    </option>
-                  ))}
-                </NativeSelectField>
-                <NativeSelectField
-                  id="ros-ana-sort"
-                  label="Sorter"
-                  value={analysisSort}
-                  onChange={(e) => setAnalysisSort(e.target.value as AnalysisSort)}
-                  aria-label="Sorter analyser"
-                  className="min-w-0 sm:w-[min(100%,12rem)]"
-                >
-                  <option value="updated">Sist oppdatert</option>
-                  <option value="title">Tittel A–Å</option>
-                  <option value="candidate">Prosess</option>
-                </NativeSelectField>
-              </FilterToolbar>
+            <div className="rounded-2xl border border-border/50 bg-card/55 p-3 shadow-sm sm:p-4">
+              <div className="flex flex-col gap-3">
+                <SearchInput
+                  value={analysisSearch}
+                  onChange={(e) => setAnalysisSearch(e.target.value)}
+                  placeholder="Søk i tittel, prosess eller organisasjon …"
+                  aria-label="Filtrer analyser"
+                />
+                <FilterToolbar>
+                  <NativeSelectField
+                    id="ros-ana-org"
+                    label="Organisasjon"
+                    value={analysisOrgFilter}
+                    onChange={(e) =>
+                      setAnalysisOrgFilter(
+                        e.target.value === "" ? "" : (e.target.value as Id<"orgUnits">),
+                      )
+                    }
+                    aria-label="Filtrer etter organisasjonsenhet"
+                    className="min-w-0 flex-1 sm:min-w-[min(100%,14rem)]"
+                  >
+                    <option value="">Alle enheter</option>
+                    {(orgUnits ?? []).map((u) => (
+                      <option key={u._id} value={u._id}>
+                        {u.name}
+                      </option>
+                    ))}
+                  </NativeSelectField>
+                  <NativeSelectField
+                    id="ros-ana-sort"
+                    label="Sorter"
+                    value={analysisSort}
+                    onChange={(e) => setAnalysisSort(e.target.value as AnalysisSort)}
+                    aria-label="Sorter analyser"
+                    className="min-w-0 sm:w-[min(100%,12rem)]"
+                  >
+                    <option value="updated">Sist oppdatert</option>
+                    <option value="title">Tittel A–Å</option>
+                    <option value="candidate">Prosess</option>
+                  </NativeSelectField>
+                </FilterToolbar>
+              </div>
             </div>
           ) : null}
 
@@ -873,13 +946,13 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
                   <Link
                     key={a._id}
                     href={`/w/${workspaceId}/ros/a/${a._id}`}
-                    className="group/card relative flex flex-col overflow-hidden rounded-2xl bg-card shadow-sm ring-1 ring-black/[0.04] transition-all duration-200 hover:shadow-md hover:ring-black/[0.08] active:scale-[0.995] dark:ring-white/[0.06] dark:hover:ring-white/[0.1]"
+                    className="group/card relative flex flex-col overflow-hidden rounded-3xl border border-border/50 bg-card/90 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md hover:border-primary/20 active:scale-[0.995]"
                   >
                     <div className="flex flex-1 gap-4 p-5">
-                      <div className="flex shrink-0 flex-col items-center gap-1">
+                      <div className="flex shrink-0 flex-col items-center gap-2">
                         <span
                           className={cn(
-                            "flex size-12 items-center justify-center rounded-xl text-lg font-bold tabular-nums shadow-sm",
+                            "flex size-12 items-center justify-center rounded-2xl text-lg font-bold tabular-nums shadow-sm ring-1 ring-black/5 dark:ring-white/10",
                             cellRiskClass(maxLvl),
                           )}
                         >
@@ -893,7 +966,7 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
                         </span>
                       </div>
                       <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-semibold text-foreground group-hover/card:text-primary">
+                        <p className="truncate text-[15px] font-semibold text-foreground group-hover/card:text-primary">
                           {a.title}
                         </p>
                         <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs">
@@ -919,7 +992,7 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
                           </p>
                         </div>
 
-                        <div className="mt-3 flex h-2 w-full overflow-hidden rounded-full bg-muted/40">
+                        <div className="mt-3.5 flex h-2 w-full overflow-hidden rounded-full bg-muted/40">
                           {(() => {
                             const counts = [0, 0, 0, 0, 0, 0];
                             for (const v of flat) counts[v]++;
@@ -936,7 +1009,7 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
                           })()}
                         </div>
 
-                        <div className="text-muted-foreground mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px]">
+                        <div className="text-muted-foreground mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px]">
                           <span>{a.rowLabels.length}×{a.colLabels.length}</span>
                           {highCount > 0 && (
                             <span className="font-semibold text-red-600 dark:text-red-400">
@@ -947,7 +1020,7 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
                         </div>
                       </div>
                     </div>
-                    <div className="pointer-events-none flex items-center gap-1.5 border-t border-border/30 bg-muted/5 px-4 py-2">
+                    <div className="pointer-events-none flex items-center gap-1.5 border-t border-border/30 bg-muted/10 px-4 py-2.5">
                       <button
                         type="button"
                         onClick={(e) => {
@@ -955,7 +1028,7 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
                           e.stopPropagation();
                           setVersionsQuickDialog({ analysisId: a._id, title: a.title });
                         }}
-                        className="pointer-events-auto text-muted-foreground hover:text-foreground inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] transition-colors hover:bg-muted/60"
+                        className="pointer-events-auto inline-flex items-center gap-1 rounded-xl px-2.5 py-1 text-[11px] text-muted-foreground transition-colors hover:bg-background hover:text-foreground"
                       >
                         <History className="size-3" aria-hidden />
                         {versionCount} vers.
@@ -965,7 +1038,7 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
                         type="button"
                         variant="ghost"
                         size="icon"
-                        className="pointer-events-auto size-7 text-muted-foreground/50 opacity-0 transition-opacity group-hover/card:opacity-100 hover:bg-destructive/10 hover:text-destructive"
+                        className="pointer-events-auto size-8 rounded-xl text-muted-foreground/50 opacity-0 transition-opacity group-hover/card:opacity-100 hover:bg-destructive/10 hover:text-destructive"
                         title="Slett"
                         onClick={(e) => {
                           e.preventDefault();

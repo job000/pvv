@@ -57,6 +57,12 @@ export async function cascadeDeleteAssessmentData(
     .collect();
   for (const rl of rosLinks) await ctx.db.delete(rl._id);
 
+  const candidateLinks = await ctx.db
+    .query("candidateAssessmentLinks")
+    .withIndex("by_assessment", (q) => q.eq("assessmentId", assessmentId))
+    .collect();
+  for (const link of candidateLinks) await ctx.db.delete(link._id);
+
   const pdd = await ctx.db
     .query("processDesignDocuments")
     .withIndex("by_assessment", (q) => q.eq("assessmentId", assessmentId))
@@ -91,6 +97,13 @@ export async function cascadeDeleteRosAnalysisData(
     .collect();
   for (const l of links) {
     await ctx.db.delete(l._id);
+  }
+  const candidateLinks = await ctx.db
+    .query("candidateRosAnalysisLinks")
+    .withIndex("by_ros_analysis", (q) => q.eq("rosAnalysisId", analysisId))
+    .collect();
+  for (const link of candidateLinks) {
+    await ctx.db.delete(link._id);
   }
   const versions = await ctx.db
     .query("rosAnalysisVersions")

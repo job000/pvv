@@ -279,20 +279,40 @@ export const create = mutation({
     const userId = await requireUserId(ctx);
     await requireWorkspaceMember(ctx, args.workspaceId, userId, "member");
     let payload = defaultAssessmentPayload();
+    let linkedCandidateId: Id<"candidates"> | undefined;
     if (args.fromCandidateId) {
       const cand = await ctx.db.get(args.fromCandidateId);
       if (!cand || cand.workspaceId !== args.workspaceId) {
         throw new Error("Fant ikke prosessen i dette arbeidsområdet.");
       }
       payload = mergeCandidateIntoAssessmentPayload(payload, cand);
+      linkedCandidateId = cand._id;
     }
-    return await createAssessmentWithPayload(ctx, {
+    const assessmentId = await createAssessmentWithPayload(ctx, {
       workspaceId: args.workspaceId,
       userId,
       title: args.title,
       shareWithWorkspace: args.shareWithWorkspace,
       payload,
     });
+    if (linkedCandidateId) {
+      const existing = await ctx.db
+        .query("candidateAssessmentLinks")
+        .withIndex("by_candidate_and_assessment", (q) =>
+          q.eq("candidateId", linkedCandidateId).eq("assessmentId", assessmentId),
+        )
+        .unique();
+      if (!existing) {
+        await ctx.db.insert("candidateAssessmentLinks", {
+          workspaceId: args.workspaceId,
+          candidateId: linkedCandidateId,
+          assessmentId,
+          createdByUserId: userId,
+          createdAt: Date.now(),
+        });
+      }
+    }
+    return assessmentId;
   },
 });
 

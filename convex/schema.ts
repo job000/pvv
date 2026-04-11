@@ -785,6 +785,38 @@ export default defineSchema({
     .index("by_workspace_code", ["workspaceId", "code"])
     .index("by_github_issue", ["githubRepoFullName", "githubIssueNumber"]),
 
+  /**
+   * Mange-til-mange: prosess i registeret ↔ PVV-vurdering.
+   * Eldre data kan fortsatt være koblet via `assessmentDrafts.payload.candidateId`.
+   */
+  candidateAssessmentLinks: defineTable({
+    workspaceId: v.id("workspaces"),
+    candidateId: v.id("candidates"),
+    assessmentId: v.id("assessments"),
+    createdByUserId: v.id("users"),
+    createdAt: v.number(),
+  })
+    .index("by_candidate", ["candidateId"])
+    .index("by_assessment", ["assessmentId"])
+    .index("by_candidate_and_assessment", ["candidateId", "assessmentId"])
+    .index("by_workspace", ["workspaceId"]),
+
+  /**
+   * Mange-til-mange: prosess i registeret ↔ ROS-analyse.
+   * Eldre data kan fortsatt være koblet via `rosAnalyses.candidateId`.
+   */
+  candidateRosAnalysisLinks: defineTable({
+    workspaceId: v.id("workspaces"),
+    candidateId: v.id("candidates"),
+    rosAnalysisId: v.id("rosAnalyses"),
+    createdByUserId: v.id("users"),
+    createdAt: v.number(),
+  })
+    .index("by_candidate", ["candidateId"])
+    .index("by_ros_analysis", ["rosAnalysisId"])
+    .index("by_candidate_and_ros_analysis", ["candidateId", "rosAnalysisId"])
+    .index("by_workspace", ["workspaceId"]),
+
   workspaceMembers: defineTable({
     workspaceId: v.id("workspaces"),
     userId: v.id("users"),
