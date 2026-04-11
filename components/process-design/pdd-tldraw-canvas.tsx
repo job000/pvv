@@ -1,7 +1,5 @@
 "use client";
 
-import "@tldraw/tldraw/tldraw.css";
-
 import {
   Tldraw,
   createTLStore,
