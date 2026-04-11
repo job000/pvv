@@ -140,6 +140,7 @@ export function PddTldrawCanvas({
     // Bruker ikke snapshotJson som dependency: lokale tegneoppdateringer skal ikke remounte store.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [instanceKey]);
+  const licenseKey = process.env.NEXT_PUBLIC_TLDRAW_LICENSE_KEY;
 
   const storeRef = useRef(store);
   storeRef.current = store;
@@ -320,6 +321,7 @@ export function PddTldrawCanvas({
         .join(" ")}
     >
       <Tldraw
+        licenseKey={licenseKey}
         store={store}
         onMount={(editor) => {
           editorRef.current = editor;
