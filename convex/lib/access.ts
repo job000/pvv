@@ -26,6 +26,27 @@ export async function requireUserId(
   return userId;
 }
 
+export async function isSuperAdmin(
+  ctx: QueryCtx | MutationCtx,
+  userId: Id<"users">,
+): Promise<boolean> {
+  const row = await ctx.db
+    .query("superAdmins")
+    .withIndex("by_user", (q) => q.eq("userId", userId))
+    .unique();
+  return row !== null;
+}
+
+export async function requireSuperAdmin(
+  ctx: QueryCtx | MutationCtx,
+): Promise<Id<"users">> {
+  const userId = await requireUserId(ctx);
+  if (!(await isSuperAdmin(ctx, userId))) {
+    throw new Error("Kun superadmin har tilgang.");
+  }
+  return userId;
+}
+
 export async function getWorkspaceMembership(
   ctx: QueryCtx | MutationCtx,
   workspaceId: Id<"workspaces">,

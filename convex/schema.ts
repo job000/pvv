@@ -562,6 +562,12 @@ export const pipelineStatusValidator = v.union(
 export default defineSchema({
   ...authTables,
 
+  /** App-wide superadmin flag — set directly in Convex dashboard or via seed script */
+  superAdmins: defineTable({
+    userId: v.id("users"),
+    grantedAt: v.number(),
+  }).index("by_user", ["userId"]),
+
   workspaces: defineTable({
     name: v.string(),
     ownerUserId: v.id("users"),

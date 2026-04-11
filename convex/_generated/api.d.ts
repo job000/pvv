@@ -52,6 +52,7 @@ import type * as reviewSchedule from "../reviewSchedule.js";
 import type * as ros from "../ros.js";
 import type * as rosAxisLists from "../rosAxisLists.js";
 import type * as rosLibrary from "../rosLibrary.js";
+import type * as superAdmin from "../superAdmin.js";
 import type * as userInAppNotifications from "../userInAppNotifications.js";
 import type * as users from "../users.js";
 import type * as weeklyDigestInternal from "../weeklyDigestInternal.js";
@@ -110,6 +111,7 @@ declare const fullApi: ApiFromModules<{
   ros: typeof ros;
   rosAxisLists: typeof rosAxisLists;
   rosLibrary: typeof rosLibrary;
+  superAdmin: typeof superAdmin;
   userInAppNotifications: typeof userInAppNotifications;
   users: typeof users;
   weeklyDigestInternal: typeof weeklyDigestInternal;
