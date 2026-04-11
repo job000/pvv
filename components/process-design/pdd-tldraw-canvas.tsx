@@ -1,5 +1,6 @@
 "use client";
 
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
   Tldraw,
   createTLStore,
@@ -281,6 +282,14 @@ export function PddTldrawCanvas({
     };
   }, []);
 
+  const requiresProductionLicense = useMemo(() => {
+    if (typeof window === "undefined") return false;
+    const { hostname, protocol } = window.location;
+    return protocol === "https:" && hostname !== "localhost" && hostname !== "127.0.0.1";
+  }, []);
+
+  const showLicenseFallback = requiresProductionLicense && !licenseKey;
+
   const trapScrollKeys = useCallback((e: ReactKeyboardEvent) => {
     const scrollKeys = new Set([
       "ArrowUp",
@@ -307,6 +316,31 @@ export function PddTldrawCanvas({
     e.preventDefault();
     e.stopPropagation();
   }, []);
+
+  if (showLicenseFallback) {
+    return (
+      <div
+        className={[
+          "relative w-full overflow-hidden rounded-2xl border border-border/60 bg-muted/10 p-4 shadow-sm",
+          heightClass,
+          className ?? "",
+        ]
+          .filter(Boolean)
+          .join(" ")}
+      >
+        <div className="flex h-full items-center justify-center">
+          <Alert className="max-w-xl border-amber-500/30 bg-amber-500/[0.06]">
+            <AlertTitle>Diagrammet er ikke tilgjengelig i produksjon ennå</AlertTitle>
+            <AlertDescription>
+              `tldraw` krever en gyldig produksjonslisens. Legg inn
+              ` NEXT_PUBLIC_TLDRAW_LICENSE_KEY ` i Vercel og redeploy, ellers vises
+              ikke diagrammet riktig.
+            </AlertDescription>
+          </Alert>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div
