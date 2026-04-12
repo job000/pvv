@@ -72,6 +72,10 @@ export type ProcessDesignDocumentPayload = {
   objectives?: string;
   keyContacts?: ProcessDesignContactRow[];
   prerequisites?: string;
+  orgPrimaryUnit?: string;
+  orgOperatingUnits?: string;
+  orgRolloutNotes?: string;
+  orgRosCoverage?: string;
 
   /* ---- As-Is ---- */
   asIsProcessName?: string;

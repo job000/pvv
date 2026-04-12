@@ -43,6 +43,7 @@ import {
   buildProcessDesignPdfPreviewUrl,
   downloadProcessDesignPdf,
 } from "@/lib/process-design-pdf";
+import { cn } from "@/lib/utils";
 import { useMutation, useQuery } from "convex/react";
 import {
   AlertTriangle,
@@ -67,7 +68,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import dynamic from "next/dynamic";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 
 const PddTldrawCanvas = dynamic(
   () =>
@@ -84,6 +85,65 @@ const PddTldrawCanvas = dynamic(
   },
 );
 
+function subscribeMobileViewport(callback: () => void) {
+  const mq = window.matchMedia("(max-width: 1023px)");
+  mq.addEventListener("change", callback);
+  return () => mq.removeEventListener("change", callback);
+}
+
+function getMobileViewport() {
+  return window.matchMedia("(max-width: 1023px)").matches;
+}
+
+function hasMeaningfulValue(value: unknown): boolean {
+  if (typeof value === "string") return value.trim().length > 0;
+  if (Array.isArray(value)) return value.length > 0;
+  return false;
+}
+
+function payloadHasMeaningfulContent(payload: ProcessDesignDocumentPayload): boolean {
+  return Object.values(payload).some((value) => hasMeaningfulValue(value));
+}
+
+function textareaHeightClass(rows: number): string {
+  if (rows <= 1) return "min-h-[3.25rem] sm:min-h-[2.75rem]";
+  if (rows <= 2) return "min-h-[5.75rem] sm:min-h-[4.75rem]";
+  if (rows <= 4) return "min-h-[8.5rem] sm:min-h-[7rem]";
+  if (rows <= 6) return "min-h-[11rem] sm:min-h-[9rem]";
+  return "min-h-[14rem] sm:min-h-[11rem]";
+}
+
+const PDD_SOURCE_MAPPING_GROUPS = [
+  {
+    title: "Prosessoversikt",
+    fields:
+      "Prosesstittel, kort beskrivelse, sammendrag, formål, mål, forutsetninger og virksomhetskontekst.",
+    sources:
+      "Primært fra vurdering. Prosessregister bidrar med prosessnavn, org-tilhørighet og compliance-hint. Inntak kan supplere med lokal kontekst.",
+  },
+  {
+    title: "As-Is",
+    fields:
+      "Nåsituasjon, roller, volum, tid, ressursbruk, systemer, trinn, input/output og prosessområde.",
+    sources:
+      "Primært fra vurdering og prosessregister. Inntak kan gi ekstra detaljinformasjon om hvordan prosessen faktisk utføres lokalt.",
+  },
+  {
+    title: "To-Be",
+    fields:
+      "Omfang, utenfor omfang, parallelle initiativ, framtidig flyt og milepæler.",
+    sources:
+      "Bygges mest fra vurderingen, men justeres med organisatoriske avhengigheter, eksisterende automasjoner og gjennomføringssignaler fra vurderingen.",
+  },
+  {
+    title: "Risiko og tillegg",
+    fields:
+      "Kjente/ukjente unntak, tekniske feil, rapportering, observasjoner, tilleggskilder og støtte for drift.",
+    sources:
+      "ROS er hovedkilde for risiko og kontroller. Vurdering tilfører fallback, barrierer og driftsbehov. Inntak kan supplere med konkrete lokale avvik.",
+  },
+] as const;
+
 /* ------------------------------------------------------------------ */
 /*  Primitives                                                         */
 /* ------------------------------------------------------------------ */
@@ -95,6 +155,9 @@ function Field({
   rows = 3,
   disabled,
   placeholder,
+  description,
+  sourceHint,
+  className,
 }: {
   label: string;
   value: string;
@@ -102,19 +165,35 @@ function Field({
   rows?: number;
   disabled?: boolean;
   placeholder?: string;
+  description?: string;
+  sourceHint?: string;
+  className?: string;
 }) {
   return (
-    <div className="space-y-2">
-      <Label className="text-[0.76rem] font-semibold tracking-[0.01em] text-muted-foreground">
-        {label}
-      </Label>
+    <div className="space-y-2.5">
+      <div className="space-y-1">
+        <div className="flex flex-wrap items-center gap-2">
+          <Label className="text-[0.76rem] font-semibold tracking-[0.01em] text-muted-foreground">
+            {label}
+          </Label>
+          {sourceHint ? <StatusBadge>{sourceHint}</StatusBadge> : null}
+        </div>
+        {description ? (
+          <p className="text-xs leading-5 text-muted-foreground">{description}</p>
+        ) : null}
+      </div>
       <Textarea
         value={value}
         onChange={(e) => onChange(e.target.value)}
         rows={rows}
         disabled={disabled}
         placeholder={placeholder}
-        className="min-h-0 resize-y rounded-xl border-border/60 bg-background/70 text-sm shadow-sm"
+        className={cn(
+          "resize-y rounded-2xl border-border/60 bg-background/80 px-3 py-2.5 text-sm leading-6 shadow-sm transition-colors",
+          "focus-visible:ring-1 focus-visible:ring-ring",
+          textareaHeightClass(rows),
+          className,
+        )}
       />
     </div>
   );
@@ -159,6 +238,22 @@ function StatusBadge({
     >
       {children}
     </span>
+  );
+}
+
+function SourceHintBadges({
+  hints,
+}: {
+  hints: string[];
+}) {
+  const cleanHints = hints.map((hint) => hint.trim()).filter(Boolean);
+  if (cleanHints.length === 0) return null;
+  return (
+    <div className="flex flex-wrap gap-2">
+      {cleanHints.map((hint) => (
+        <StatusBadge key={hint}>{hint}</StatusBadge>
+      ))}
+    </div>
   );
 }
 
@@ -211,6 +306,7 @@ function ProcessTextDiagramBlock({
   onDiagramJson,
   canEdit,
   instanceKey,
+  sourceHints = [],
 }: {
   sectionLabel: string;
   diagramHint: string;
@@ -221,62 +317,35 @@ function ProcessTextDiagramBlock({
   onDiagramJson: (json: string) => void;
   canEdit: boolean;
   instanceKey: string;
+  sourceHints?: string[];
 }) {
   const [mode, setMode] = useState<"beskrivelse" | "diagram">("beskrivelse");
-  const diagramShellRef = useRef<HTMLDivElement>(null);
   const [diagramFullscreen, setDiagramFullscreen] = useState(false);
+  const isMobileViewport = useSyncExternalStore(
+    subscribeMobileViewport,
+    getMobileViewport,
+    () => false,
+  );
+  const diagramDialogOpen = (isMobileViewport && mode === "diagram") || diagramFullscreen;
 
-  useEffect(() => {
-    const sync = () => {
-      setDiagramFullscreen(
-        document.fullscreenElement === diagramShellRef.current,
-      );
-    };
-    document.addEventListener("fullscreenchange", sync);
-    return () => document.removeEventListener("fullscreenchange", sync);
+  const toggleDiagramFullscreen = useCallback(() => {
+    setDiagramFullscreen((current) => !current);
   }, []);
 
   useEffect(() => {
-    if (!diagramFullscreen || document.fullscreenElement) return;
-    const prevOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = prevOverflow;
-    };
-  }, [diagramFullscreen]);
-
-  const toggleDiagramFullscreen = useCallback(async () => {
-    const el = diagramShellRef.current;
-    if (!el) return;
-    if (document.fullscreenElement === el) {
-      try {
-        await document.exitFullscreen();
-      } catch {
-        setDiagramFullscreen(false);
-      }
-      return;
-    }
-    if (diagramFullscreen && !document.fullscreenElement) {
+    if (mode !== "diagram") {
       setDiagramFullscreen(false);
-      return;
     }
-    try {
-      if ("requestFullscreen" in el) {
-        await el.requestFullscreen();
-        setDiagramFullscreen(true);
-        return;
-      }
-    } catch {
-      /* fallback below */
-    }
-    setDiagramFullscreen(true);
-  }, [diagramFullscreen]);
+  }, [mode]);
 
   return (
     <div className="space-y-2">
-      <Label className="text-[0.8rem] font-medium text-muted-foreground">
-        {sectionLabel}
-      </Label>
+      <div className="space-y-2">
+        <Label className="text-[0.8rem] font-medium text-muted-foreground">
+          {sectionLabel}
+        </Label>
+        <SourceHintBadges hints={sourceHints} />
+      </div>
       <div className="inline-flex w-full rounded-xl border border-border bg-muted/40 p-0.5 sm:w-auto">
         <button
           type="button"
@@ -307,30 +376,22 @@ function ProcessTextDiagramBlock({
         <Textarea
           value={textValue}
           onChange={(e) => onTextChange(e.target.value)}
-          rows={textRows}
+          rows={isMobileViewport ? Math.max(textRows, 8) : textRows}
           disabled={!canEdit}
-          className="min-h-0 resize-y text-sm"
+          className={cn(
+            "resize-y rounded-2xl border-border/60 bg-background/80 px-3 py-2.5 text-sm leading-6 shadow-sm",
+            isMobileViewport
+              ? "min-h-[14rem]"
+              : textareaHeightClass(textRows),
+          )}
         />
-      ) : (
+      ) : !isMobileViewport ? (
         <div
-          ref={diagramShellRef}
-          className={
-            diagramFullscreen
-              ? "fixed inset-0 z-[90] box-border flex h-[100svh] w-screen flex-col overflow-hidden bg-background px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-[max(0.75rem,env(safe-area-inset-top))]"
-              : "flex flex-col gap-3"
-          }
+          className="flex flex-col gap-3"
         >
-          <div
-            className={
-              diagramFullscreen
-                ? "mb-3 shrink-0 rounded-2xl border border-border/60 bg-background/95 p-3 shadow-lg backdrop-blur"
-                : "space-y-2"
-            }
-          >
+          <div className="space-y-2">
             <p className="text-xs leading-relaxed text-muted-foreground">
-              {diagramFullscreen
-                ? "Bruk to fingre for zoom og én finger for å tegne eller flytte objekter."
-                : diagramHint}
+              {diagramHint}
             </p>
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
               {canEdit && diagramValue?.trim() ? (
@@ -353,42 +414,105 @@ function ProcessTextDiagramBlock({
                 className="h-10 touch-manipulation justify-center rounded-xl sm:h-9"
                 onClick={toggleDiagramFullscreen}
               >
-                {diagramFullscreen ? (
-                  <>
-                    <Minimize2
-                      className="mr-1.5 size-3.5 shrink-0"
-                      aria-hidden
-                    />
-                    Avslutt fullskjerm
-                  </>
-                ) : (
-                  <>
-                    <Maximize2
-                      className="mr-1.5 size-3.5 shrink-0"
-                      aria-hidden
-                    />
-                    Fullskjerm
-                  </>
-                )}
+                <Maximize2
+                  className="mr-1.5 size-3.5 shrink-0"
+                  aria-hidden
+                />
+                Fullskjerm
               </Button>
             </div>
           </div>
-          <div className={diagramFullscreen ? "min-h-0 flex-1" : ""}>
+          <div>
             <PddTldrawCanvas
               snapshotJson={diagramValue}
               onSnapshotChange={onDiagramJson}
               readOnly={!canEdit}
               instanceKey={instanceKey}
-              layoutVariant={diagramFullscreen ? "fullscreen" : "embed"}
-              className={
-                diagramFullscreen
-                  ? "min-h-0 flex-1 rounded-[1.5rem]"
-                  : undefined
-              }
+              layoutVariant="embed"
             />
           </div>
         </div>
+      ) : (
+        <div className="rounded-2xl border border-border/60 bg-muted/10 p-4 text-sm text-muted-foreground">
+          Diagrammet er åpnet i mobilvisning. Bruk knappen under for å lukke og gå tilbake til
+          beskrivelse.
+        </div>
       )}
+      <Dialog
+        open={diagramDialogOpen}
+        onOpenChange={(open) => {
+          if (isMobileViewport) {
+            setMode(open ? "diagram" : "beskrivelse");
+          }
+          setDiagramFullscreen(open && !isMobileViewport);
+        }}
+      >
+        <DialogContent
+          size="7xl"
+          titleId={`${instanceKey}-diagram-title`}
+          className="h-[96vh] max-w-[min(96vw,96rem)] p-0"
+        >
+          <div className="flex h-full min-h-0 flex-col">
+            <DialogHeader className="space-y-3">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div className="space-y-1">
+                  <p id={`${instanceKey}-diagram-title`} className="font-heading text-lg font-semibold">
+                    {sectionLabel}
+                  </p>
+                  <p className="text-sm leading-relaxed text-muted-foreground">
+                    Bruk to fingre for zoom og én finger for å tegne eller flytte objekter.
+                  </p>
+                </div>
+                <div className="flex flex-col gap-2 sm:flex-row">
+                  {canEdit && diagramValue?.trim() ? (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      className="h-10 justify-center sm:h-9"
+                      onClick={() => {
+                        if (confirm("Slette alt i diagrammet?")) onDiagramJson("");
+                      }}
+                    >
+                      Tøm diagram
+                    </Button>
+                  ) : null}
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="h-10 justify-center sm:h-9"
+                    onClick={() => {
+                      if (isMobileViewport) {
+                        setMode("beskrivelse");
+                      } else {
+                        setDiagramFullscreen(false);
+                      }
+                    }}
+                  >
+                    {isMobileViewport ? (
+                      <X className="mr-1.5 size-3.5 shrink-0" aria-hidden />
+                    ) : (
+                      <Minimize2 className="mr-1.5 size-3.5 shrink-0" aria-hidden />
+                    )}
+                    {isMobileViewport ? "Lukk diagram" : "Avslutt fullskjerm"}
+                  </Button>
+                </div>
+              </div>
+            </DialogHeader>
+            <DialogBody className="min-h-0 flex-1 p-3 sm:p-4">
+              <PddTldrawCanvas
+                snapshotJson={diagramValue}
+                onSnapshotChange={onDiagramJson}
+                readOnly={!canEdit}
+                instanceKey={`${instanceKey}:${isMobileViewport ? "mobile" : "fullscreen"}`}
+                layoutVariant="fullscreen"
+                className="min-h-0 flex-1 rounded-[1.25rem] sm:rounded-[1.5rem]"
+              />
+            </DialogBody>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -444,10 +568,12 @@ function HukiEditor({
   rows,
   onChange,
   disabled,
+  sourceHints = [],
 }: {
   rows: ProcessDesignHukiRow[];
   onChange: (r: ProcessDesignHukiRow[]) => void;
   disabled: boolean;
+  sourceHints?: string[];
 }) {
   const update = (i: number, patch: Partial<ProcessDesignHukiRow>) => {
     onChange(rows.map((r, j) => (j === i ? { ...r, ...patch } : r)));
@@ -459,6 +585,14 @@ function HukiEditor({
 
   return (
     <div className="space-y-4">
+      <div className="space-y-2">
+        <div className="flex items-center gap-2">
+          <Label className="text-[0.8rem] font-medium text-muted-foreground">
+            HUKI-matrise
+          </Label>
+        </div>
+        <SourceHintBadges hints={sourceHints} />
+      </div>
       {/* Empty state */}
       {rows.length === 0 && (
         <div className="flex flex-col items-center gap-3 rounded-2xl border border-dashed border-border/60 bg-muted/20 py-10 text-center">
@@ -893,6 +1027,36 @@ export function ProcessDesignDocPage({
   const [conflictOpen, setConflictOpen] = useState(false);
   const [conflictHint, setConflictHint] = useState<string | null>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [openSections, setOpenSections] = useState<string[]>([
+    "overview",
+    "asis",
+    "tobe",
+  ]);
+  const autoAutofillKeyRef = useRef<string | null>(null);
+  const payloadRef = useRef(payload);
+  const organizationLineRef = useRef(organizationLine);
+  const revisionRef = useRef(revision);
+  const dirtyRef = useRef(dirty);
+  const canEditRef = useRef(false);
+  const hasDocRef = useRef(false);
+  const saveInFlightRef = useRef(false);
+  const saveQueuedRef = useRef(false);
+
+  useEffect(() => {
+    payloadRef.current = payload;
+  }, [payload]);
+
+  useEffect(() => {
+    organizationLineRef.current = organizationLine;
+  }, [organizationLine]);
+
+  useEffect(() => {
+    revisionRef.current = revision;
+  }, [revision]);
+
+  useEffect(() => {
+    dirtyRef.current = dirty;
+  }, [dirty]);
 
   const syncFromServer = useCallback(() => {
     if (!docState?.document) return;
@@ -917,7 +1081,11 @@ export function ProcessDesignDocPage({
   }, [docState?.document, syncFromServer]);
 
   const canEdit = docState?.canEdit ?? false;
+  canEditRef.current = canEdit;
   const assessmentTitle = docState?.assessment?.title ?? "Vurdering";
+  const hasDoc = docState !== undefined && docState !== null && docState.document !== null;
+  hasDocRef.current = hasDoc;
+  const versionCount = docState?.versions?.length ?? 0;
   const diagramInstanceKey = useMemo(
     () => `${String(assessmentId)}-${revision}`,
     [assessmentId, revision],
@@ -928,10 +1096,10 @@ export function ProcessDesignDocPage({
     setDirty(true);
   };
 
-  const applyAutofill = useCallback(() => {
+  const autofillSuggestion = useMemo(() => {
     const pl = draftBundle?.draft?.payload as AssessmentPayload | undefined;
-    if (!pl) return;
-    const suggestion = buildProcessDesignAutofill({
+    if (!pl) return null;
+    return buildProcessDesignAutofill({
       workspaceName: workspace?.name ?? null,
       assessmentTitle,
       payload: pl,
@@ -955,48 +1123,161 @@ export function ProcessDesignDocPage({
           }
         : null,
     });
-    setPayload((cur) => mergeAutofillEmptyOnly(cur, suggestion));
+  }, [
+    assessmentTitle,
+    draftBundle?.draft?.payload,
+    intake,
+    linkedCandidate,
+    rosCtx,
+    workspace?.name,
+  ]);
+
+  const persistDraft = useCallback(
+    async (options?: { silent?: boolean }) => {
+      if (!canEditRef.current || !hasDocRef.current) return;
+      if (!dirtyRef.current && options?.silent) return;
+      if (saveInFlightRef.current) {
+        saveQueuedRef.current = true;
+        return;
+      }
+
+      const payloadToSave = payloadRef.current;
+      const orgToSave = organizationLineRef.current.trim() || null;
+      const revisionToSave = revisionRef.current;
+      const signature = JSON.stringify({
+        organizationLine: orgToSave,
+        payload: payloadToSave,
+      });
+
+      saveInFlightRef.current = true;
+      saveQueuedRef.current = false;
+      setSaving(true);
+      setConflictHint(null);
+
+      try {
+        const res = await saveDraft({
+          assessmentId,
+          expectedRevision: revisionToSave,
+          organizationLine: orgToSave,
+          payload: payloadToSave,
+        });
+
+        if (res.ok) {
+          revisionRef.current = res.revision;
+          setRevision(res.revision);
+          const latestSignature = JSON.stringify({
+            organizationLine: organizationLineRef.current.trim() || null,
+            payload: payloadRef.current,
+          });
+          const stillDirty = latestSignature !== signature;
+          dirtyRef.current = stillDirty;
+          setDirty(stillDirty);
+          if (stillDirty) {
+            saveQueuedRef.current = true;
+          }
+        } else {
+          setConflictHint(
+            res.conflict.updatedByName
+              ? `Noen andre (${res.conflict.updatedByName}) lagret mens du redigerte.`
+              : "Noen andre lagret mens du redigerte.",
+          );
+          setConflictOpen(true);
+        }
+      } finally {
+        saveInFlightRef.current = false;
+        setSaving(false);
+        if (saveQueuedRef.current && canEditRef.current && hasDocRef.current) {
+          saveQueuedRef.current = false;
+          void persistDraft({ silent: true });
+        }
+      }
+    },
+    [assessmentId, saveDraft],
+  );
+
+  const applyAutofill = useCallback(() => {
+    if (!autofillSuggestion) return;
+    let changedPayload = false;
+    setPayload((cur) => {
+      const next = mergeAutofillEmptyOnly(cur, autofillSuggestion);
+      changedPayload = JSON.stringify(next) !== JSON.stringify(cur);
+      return next;
+    });
+    let changedOrganization = false;
     const orgSug = suggestedOrganizationLine(workspace?.name ?? null);
     if (orgSug && !organizationLine.trim()) {
       setOrganizationLine(orgSug);
+      changedOrganization = true;
     }
-    setDirty(true);
+    if (changedPayload || changedOrganization) {
+      setDirty(true);
+    }
   }, [
-    draftBundle?.draft?.payload,
-    workspace?.name,
-    assessmentTitle,
-    rosCtx,
-    intake,
-    linkedCandidate,
+    autofillSuggestion,
     organizationLine,
+    workspace?.name,
   ]);
 
   const handleSave = async () => {
     if (!canEdit || !docState?.document) return;
-    setSaving(true);
-    setConflictHint(null);
-    try {
-      const res = await saveDraft({
-        assessmentId,
-        expectedRevision: revision,
-        organizationLine: organizationLine.trim() || null,
-        payload,
-      });
-      if (res.ok) {
-        setRevision(res.revision);
-        setDirty(false);
-      } else {
-        setConflictHint(
-          res.conflict.updatedByName
-            ? `Noen andre (${res.conflict.updatedByName}) lagret mens du redigerte.`
-            : "Noen andre lagret mens du redigerte.",
-        );
-        setConflictOpen(true);
-      }
-    } finally {
-      setSaving(false);
-    }
+    await persistDraft();
   };
+
+  useEffect(() => {
+    if (!canEdit || !hasDoc || !dirty) return;
+    const timeout = window.setTimeout(() => {
+      void persistDraft({ silent: true });
+    }, 1200);
+    return () => window.clearTimeout(timeout);
+  }, [canEdit, hasDoc, dirty, payload, organizationLine, persistDraft]);
+
+  useEffect(() => {
+    const onVisibility = () => {
+      if (document.visibilityState !== "hidden") return;
+      if (!dirtyRef.current || !canEditRef.current || !hasDocRef.current) return;
+      void persistDraft({ silent: true });
+    };
+
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (!dirtyRef.current && !saveInFlightRef.current) return;
+      e.preventDefault();
+      e.returnValue = "";
+    };
+
+    document.addEventListener("visibilitychange", onVisibility);
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibility);
+      window.removeEventListener("beforeunload", onBeforeUnload);
+    };
+  }, [persistDraft]);
+
+  useEffect(() => {
+    if (!hasDoc || !canEdit || !autofillSuggestion) return;
+    if (dirty || revision > 1 || versionCount > 0) return;
+    if (
+      payloadHasMeaningfulContent(payload) ||
+      organizationLine.trim().length > 0 ||
+      !payloadHasMeaningfulContent(autofillSuggestion)
+    ) {
+      return;
+    }
+    const autoKey = `${String(assessmentId)}:${revision}`;
+    if (autoAutofillKeyRef.current === autoKey) return;
+    autoAutofillKeyRef.current = autoKey;
+    applyAutofill();
+  }, [
+    assessmentId,
+    applyAutofill,
+    autofillSuggestion,
+    canEdit,
+    dirty,
+    hasDoc,
+    organizationLine,
+    payload,
+    revision,
+    versionCount,
+  ]);
 
   const handleCreate = async () => {
     if (!canEdit) return;
@@ -1115,23 +1396,30 @@ export function ProcessDesignDocPage({
     );
   }
 
-  const hasDoc = docState.document !== null;
-  const versionCount = docState.versions?.length ?? 0;
-
   /* ---- Derived data from linked sources (no duplicate entry) ---- */
   const processFromRegistry =
     linkedCandidate?.linked === true ? linkedCandidate : null;
   const rosAnalyses = rosCtx ?? [];
+  const connectedSources = [
+    "PVV-vurdering",
+    processFromRegistry ? "Prosessregister" : null,
+    rosAnalyses.length > 0
+      ? `${rosAnalyses.length} ${rosAnalyses.length === 1 ? "ROS-analyse" : "ROS-analyser"}`
+      : null,
+    intake ? "Inntak" : null,
+  ].filter(Boolean) as string[];
+  const orgCoverageValue =
+    payload.orgOperatingUnits?.trim() || payload.orgRolloutNotes?.trim() || "";
 
   return (
     <div className="mx-auto max-w-4xl space-y-5 px-4 pb-28 sm:space-y-6 sm:px-6 lg:px-0 lg:pb-12">
       {/* Back nav */}
       <Link
-        href={`/w/${wid}/a/${assessmentId}`}
+        href={`/w/${wid}/prosessdesign`}
         className="inline-flex touch-manipulation items-center gap-1.5 rounded-lg py-1 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
       >
         <ArrowLeft className="size-4" aria-hidden />
-        Til vurdering
+        Til PDD-oversikt
       </Link>
 
       <section className="overflow-hidden rounded-3xl border border-border/60 bg-gradient-to-b from-muted/40 to-background shadow-sm">
@@ -1251,11 +1539,21 @@ export function ProcessDesignDocPage({
                   variant="outline"
                   size="sm"
                   className="gap-1.5 rounded-xl"
+                  onClick={() => setHistoryOpen(true)}
+                >
+                  <History className="size-3.5" aria-hidden />
+                  Versjonshistorikk
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="gap-1.5 rounded-xl"
                   onClick={() => setSnapshotOpen(true)}
                   disabled={!canEdit}
                 >
-                  <History className="size-3.5" aria-hidden />
-                  Versjon
+                  <Save className="size-3.5" aria-hidden />
+                  Lagre versjon
                 </Button>
               </div>
             </div>
@@ -1285,11 +1583,11 @@ export function ProcessDesignDocPage({
                 size="sm"
                 className="gap-1.5 rounded-xl"
                 onClick={applyAutofill}
-                disabled={!draftBundle?.draft || !canEdit}
-                title="Fyller tomme felt fra PVV, ROS og prosessregister"
+                disabled={!autofillSuggestion || !canEdit}
+                title="Fyller inn tomme PDD-felt fra koblet vurdering, ROS, prosessregister og inntak"
               >
                 <Sparkles className="size-3.5" aria-hidden />
-                Fyll fra kilder
+                Fyll inn manglende felt
               </Button>
               <div className="sm:hidden">
                 <SecondaryActionsMenu
@@ -1314,6 +1612,68 @@ export function ProcessDesignDocPage({
                   pdfPreviewing={pdfPreviewing}
                   pdfExporting={pdfExporting}
                 />
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-border/60 bg-muted/15 p-3.5 shadow-sm sm:p-4">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div className="space-y-1.5">
+                <p className="text-sm font-semibold text-foreground">Versjoner og historikk</p>
+                <p className="text-sm leading-6 text-muted-foreground">
+                  Du har {versionCount} lagrede {versionCount === 1 ? "versjon" : "versjoner"}.
+                  Åpne historikken for å se tidligere lagringer og gjenopprette en eldre versjon.
+                  Bruk "Lagre versjon" når du vil merke et bestemt punkt, for eksempel etter
+                  workshop eller godkjenning.
+                </p>
+                <p className="text-xs leading-5 text-muted-foreground">
+                  Sletting av enkeltversjoner er ikke tilgjengelig ennå. Eldre versjoner beholdes
+                  automatisk innenfor systemets historikkgrense.
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="gap-1.5 rounded-xl"
+                  onClick={() => setHistoryOpen(true)}
+                >
+                  <History className="size-3.5" aria-hidden />
+                  Åpne historikk
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="gap-1.5 rounded-xl"
+                  onClick={() => setSnapshotOpen(true)}
+                  disabled={!canEdit}
+                >
+                  <Save className="size-3.5" aria-hidden />
+                  Lagre ny versjon
+                </Button>
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-emerald-500/15 bg-emerald-500/5 p-3.5 shadow-sm sm:p-4">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+              <div className="space-y-1.5">
+                <p className="text-sm font-semibold text-foreground">
+                  PDD er koblet til kilder som kan fylle ut dokumentet
+                </p>
+                <p className="text-sm leading-6 text-muted-foreground">
+                  Tomme felt kan hentes inn automatisk fra vurdering, prosessregister, ROS og
+                  inntak. Du kan justere innholdet fritt etterpå.
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {connectedSources.map((source) => (
+                  <StatusBadge key={source} tone="success">
+                    {source}
+                  </StatusBadge>
+                ))}
               </div>
             </div>
           </div>
@@ -1375,10 +1735,36 @@ export function ProcessDesignDocPage({
             </div>
           </CollapsibleSection>
 
+          <CollapsibleSection title="Anbefalt mapping fra kilder" icon={Sparkles}>
+            <div className="grid gap-3 sm:grid-cols-2">
+              {PDD_SOURCE_MAPPING_GROUPS.map((group) => (
+                <div
+                  key={group.title}
+                  className="rounded-2xl border border-border/60 bg-muted/10 p-4 shadow-sm"
+                >
+                  <p className="text-sm font-semibold text-foreground">{group.title}</p>
+                  <p className="mt-2 text-xs font-medium uppercase tracking-[0.08em] text-muted-foreground">
+                    Felter
+                  </p>
+                  <p className="mt-1 text-sm leading-6 text-muted-foreground">
+                    {group.fields}
+                  </p>
+                  <p className="mt-3 text-xs font-medium uppercase tracking-[0.08em] text-muted-foreground">
+                    Hentes fra
+                  </p>
+                  <p className="mt-1 text-sm leading-6 text-muted-foreground">
+                    {group.sources}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </CollapsibleSection>
+
           {/* ============ MAIN SECTIONS ============ */}
           <Accordion
             multiple
-            defaultValue={["overview", "asis", "tobe"]}
+            value={openSections}
+            onValueChange={(value) => setOpenSections([...value])}
             className="space-y-3"
           >
             {/* ---- 1. Oversikt ---- */}
@@ -1397,6 +1783,10 @@ export function ProcessDesignDocPage({
                   rows={1}
                   disabled={!canEdit}
                   placeholder="Navnet på prosessen som skal automatiseres"
+                  description="Bruk et tydelig navn som matcher vurderingen eller prosessen i registeret."
+                  sourceHint={
+                    processFromRegistry ? "Koblet til prosessregister" : "Kan hentes fra vurdering"
+                  }
                 />
                 {processFromRegistry && (
                   <ReadOnlyBlock label="Fra prosessregisteret">
@@ -1417,29 +1807,37 @@ export function ProcessDesignDocPage({
                   rows={2}
                   disabled={!canEdit}
                   placeholder="Hva gjør prosessen, og hva er målet med automatiseringen?"
+                  description="Kort oppsummering som skal være lett å skanne på mobil og i oversikter."
+                  sourceHint="Fylles fra vurdering når feltet er tomt"
                 />
                 <Field
                   label="Detaljert beskrivelse / sammendrag"
                   value={payload.executiveSummary ?? ""}
                   onChange={(v) => setStr("executiveSummary", v)}
-                  rows={5}
+                  rows={6}
                   disabled={!canEdit}
                   placeholder="Utfyllende kontekst, bakgrunn og forventet effekt"
+                  description="Her bør formål, nåsituasjon og forventet effekt beskrives i hele setninger."
+                  sourceHint="Bygges fra vurdering, prosessregister og ROS"
                 />
                 <div className="grid gap-4 sm:grid-cols-2">
                   <Field
                     label="Formål"
                     value={payload.purpose ?? ""}
                     onChange={(v) => setStr("purpose", v)}
-                    rows={3}
+                    rows={4}
                     disabled={!canEdit}
+                    description="Hva skal dokumentet og automatiseringen hjelpe virksomheten med?"
+                    sourceHint="Forslås fra vurderingen"
                   />
                   <Field
                     label="Mål og forventet nytte"
                     value={payload.objectives ?? ""}
                     onChange={(v) => setStr("objectives", v)}
-                    rows={3}
+                    rows={4}
                     disabled={!canEdit}
+                    description="Fang opp gevinster, kvalitet, risiko og driftseffekt."
+                    sourceHint="Forslås fra vurderingen"
                   />
                 </div>
                 <Field
@@ -1452,14 +1850,58 @@ export function ProcessDesignDocPage({
                   rows={1}
                   disabled={!canEdit}
                   placeholder="F.eks. Avdeling for digitalisering"
+                  description="Vises på forsiden og gjør dokumentet enklere å plassere organisatorisk."
                 />
+                <div className="space-y-4 rounded-2xl border border-border/60 bg-muted/10 p-4 shadow-sm">
+                  <div className="space-y-1">
+                    <p className="text-sm font-semibold text-foreground">
+                      Hvor brukes prosessen?
+                    </p>
+                    <p className="text-sm leading-6 text-muted-foreground">
+                      Skriv kort hvor prosessen brukes i dag og hvis den skal breddes videre.
+                      Det som allerede er kjent fra vurdering, prosessregister eller ROS vises under,
+                      så du slipper å fylle inn det samme flere steder.
+                    </p>
+                  </div>
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    {(payload.orgPrimaryUnit ?? "").trim() ? (
+                      <ReadOnlyBlock label="Primær enhet">
+                        <p>{payload.orgPrimaryUnit}</p>
+                      </ReadOnlyBlock>
+                    ) : null}
+                    {(payload.orgRosCoverage ?? "").trim() ? (
+                      <ReadOnlyBlock label="ROS dekker">
+                        <p className="whitespace-pre-wrap">{payload.orgRosCoverage}</p>
+                      </ReadOnlyBlock>
+                    ) : null}
+                  </div>
+                  <Field
+                    label="Bruk og bredding"
+                    value={orgCoverageValue}
+                    onChange={(v) => {
+                      setPayload((p) => ({
+                        ...p,
+                        orgOperatingUnits: v,
+                        orgRolloutNotes: "",
+                      }));
+                      setDirty(true);
+                    }}
+                    rows={4}
+                    disabled={!canEdit}
+                    placeholder="F.eks. Brukes i team Øye i dag. Skal breddes til seksjon A og B etter pilot."
+                    description="Beskriv kort hvor prosessen brukes nå, og om den skal rulles ut eller allerede er breddet til flere enheter."
+                    sourceHint="Oppdateres i PDD"
+                  />
+                </div>
                 <Field
                   label="Forutsetninger"
                   value={payload.prerequisites ?? ""}
                   onChange={(v) => setStr("prerequisites", v)}
-                  rows={3}
+                  rows={4}
                   disabled={!canEdit}
                   placeholder="Hva må være på plass før automatisering kan starte?"
+                  description="Tilganger, testdata, godkjenninger og andre avklaringer før oppstart."
+                  sourceHint="Kan hentes fra vurdering og prosessregister"
                 />
               </AccordionContent>
             </AccordionItem>
@@ -1477,38 +1919,48 @@ export function ProcessDesignDocPage({
                   label="Beskrivelse av nåsituasjonen"
                   value={payload.asIsShortDescription ?? ""}
                   onChange={(v) => setStr("asIsShortDescription", v)}
-                  rows={5}
+                  rows={6}
                   disabled={!canEdit}
                   placeholder="Operasjon, aktivitet og utfall i nåværende prosess"
+                  description="Beskriv hvordan prosessen faktisk utføres i dag, steg for steg, før automatisering."
+                  sourceHint="Forslås fra vurdering og prosessregister"
                 />
                 <div className="grid gap-4 sm:grid-cols-2">
                   <Field
                     label="Roller"
                     value={payload.asIsRoles ?? ""}
                     onChange={(v) => setStr("asIsRoles", v)}
-                    rows={3}
+                    rows={4}
                     disabled={!canEdit}
+                    description="Hvem gjør hva i dag, og hvem berøres av prosessen?"
+                    sourceHint="Kan hentes fra vurderingen"
                   />
                   <Field
                     label="Volum og frekvens"
                     value={payload.asIsVolume ?? ""}
                     onChange={(v) => setStr("asIsVolume", v)}
-                    rows={3}
+                    rows={4}
                     disabled={!canEdit}
+                    description="Hvor ofte kjøres prosessen, og hvor stort volum håndteres?"
+                    sourceHint="Kan hentes fra vurderingen"
                   />
                   <Field
                     label="Behandlingstid"
                     value={payload.asIsHandleTime ?? ""}
                     onChange={(v) => setStr("asIsHandleTime", v)}
-                    rows={2}
+                    rows={3}
                     disabled={!canEdit}
+                    description="Angi typisk tidsbruk per sak eller prosessgjennomføring."
+                    sourceHint="Kan hentes fra vurderingen"
                   />
                   <Field
                     label="FTE / ressurs"
                     value={payload.asIsFte ?? ""}
                     onChange={(v) => setStr("asIsFte", v)}
-                    rows={2}
+                    rows={3}
                     disabled={!canEdit}
+                    description="Beskriv ressursbruk eller årsverk som går med i dagens prosess."
+                    sourceHint="Kan hentes fra vurderingen"
                   />
                 </div>
                 <ProcessTextDiagramBlock
@@ -1523,10 +1975,12 @@ export function ProcessDesignDocPage({
                   }
                   canEdit={canEdit}
                   instanceKey={diagramInstanceKey}
+                  sourceHints={["Fra vurdering", "Kan utdypes manuelt i PDD"]}
                 />
                 <ApplicationEditor
                   rows={payload.asIsApplications ?? []}
                   disabled={!canEdit}
+                  sourceHints={["Fra vurdering", "Fra prosessregister"]}
                   onChange={(rows) => {
                     setPayload((p) => ({
                       ...p,
@@ -1539,6 +1993,7 @@ export function ProcessDesignDocPage({
                   label="As-Is trinn"
                   rows={payload.asIsSteps ?? []}
                   disabled={!canEdit}
+                  sourceHints={["Fra vurdering", "Kan utdypes manuelt i PDD"]}
                   onChange={(rows) => {
                     setPayload((p) => ({ ...p, asIsSteps: rows }));
                     setDirty(true);
@@ -1568,36 +2023,45 @@ export function ProcessDesignDocPage({
                   }
                   canEdit={canEdit}
                   instanceKey={diagramInstanceKey}
+                  sourceHints={["Bygges i PDD", "Støttes av vurdering"]}
                 />
                 <Field
                   label="To-Be trinn i detalj"
                   value={payload.toBeSteps ?? ""}
                   onChange={(v) => setStr("toBeSteps", v)}
-                  rows={8}
+                  rows={10}
                   disabled={!canEdit}
+                  description="Beskriv fremtidig flyt tydelig, inkludert robotsteg, avhengigheter og manuelle håndtrykk."
+                  sourceHint="Bygges i PDD med støtte fra vurdering"
                 />
                 <div className="grid gap-4 sm:grid-cols-2">
                   <Field
                     label="I omfang (RPA)"
                     value={payload.inScope ?? ""}
                     onChange={(v) => setStr("inScope", v)}
-                    rows={4}
+                    rows={5}
                     disabled={!canEdit}
+                  description="Hva skal roboten eller løsningen faktisk håndtere? Ta også med hvis løsningen skal breddes eller rulles ut til flere team eller enheter."
+                    sourceHint="Forslås fra vurderingen"
                   />
                   <Field
                     label="Utenfor omfang"
                     value={payload.outOfScope ?? ""}
                     onChange={(v) => setStr("outOfScope", v)}
-                    rows={4}
+                    rows={5}
                     disabled={!canEdit}
+                    description="Hva må fortsatt håndteres manuelt eller i andre initiativer?"
+                    sourceHint="Forslås fra vurderingen"
                   />
                 </div>
                 <Field
                   label="Parallelle initiativ / overlapp"
                   value={payload.parallelInitiatives ?? ""}
                   onChange={(v) => setStr("parallelInitiatives", v)}
-                  rows={3}
+                  rows={4}
                   disabled={!canEdit}
+                  description="Noter andre prosjekter, forbedringer eller systemendringer som påvirker løsningen."
+                  sourceHint="Forslås fra vurdering og organisasjonskontekst"
                 />
               </AccordionContent>
             </AccordionItem>
@@ -1614,6 +2078,7 @@ export function ProcessDesignDocPage({
                 <HukiEditor
                   rows={payload.hukiRows ?? []}
                   disabled={!canEdit}
+                  sourceHints={["Fra vurdering", "Avklares og vedlikeholdes i PDD"]}
                   onChange={(rows) => {
                     setPayload((p) => ({ ...p, hukiRows: rows }));
                     setDirty(true);
@@ -1701,6 +2166,7 @@ export function ProcessDesignDocPage({
                   label="Kjente forretningsunntak (PDD-spesifikke)"
                   rows={payload.businessExceptionsKnown ?? []}
                   disabled={!canEdit}
+                  sourceHints={["Fra ROS", "Fra vurdering", "Fra skjema / inntak"]}
                   onChange={(rows) => {
                     setPayload((p) => ({
                       ...p,
@@ -1713,13 +2179,15 @@ export function ProcessDesignDocPage({
                   label="Ukjente forretningsunntak (standard handling)"
                   value={payload.businessExceptionsUnknown ?? ""}
                   onChange={(v) => setStr("businessExceptionsUnknown", v)}
-                  rows={3}
+                  rows={4}
                   disabled={!canEdit}
+                  description="Hva skal skje når roboten møter et ukjent forretningsavvik?"
                 />
                 <ExceptionRowsEditor
                   label="Kjente tekniske feil (PDD-spesifikke)"
                   rows={payload.appErrorsKnown ?? []}
                   disabled={!canEdit}
+                  sourceHints={["Fra ROS", "Fra vurdering"]}
                   onChange={(rows) => {
                     setPayload((p) => ({
                       ...p,
@@ -1732,15 +2200,18 @@ export function ProcessDesignDocPage({
                   label="Ukjente tekniske feil (standard handling)"
                   value={payload.appErrorsUnknown ?? ""}
                   onChange={(v) => setStr("appErrorsUnknown", v)}
-                  rows={3}
+                  rows={4}
                   disabled={!canEdit}
+                  description="Definer standard respons når tekniske feil ikke er forhåndsbeskrevet."
                 />
                 <Field
                   label="Rapportering og logging"
                   value={payload.reporting ?? ""}
                   onChange={(v) => setStr("reporting", v)}
-                  rows={4}
+                  rows={5}
                   disabled={!canEdit}
+                  description="Beskriv hva som logges, hvem som varsles, og hvordan avvik følges opp."
+                  sourceHint="Forslås som standardoppsett"
                 />
               </AccordionContent>
             </AccordionItem>
@@ -1758,29 +2229,35 @@ export function ProcessDesignDocPage({
                   label="Andre observasjoner"
                   value={payload.otherObservations ?? ""}
                   onChange={(v) => setStr("otherObservations", v)}
-                  rows={4}
+                  rows={5}
                   disabled={!canEdit}
+                  description="Samle supplerende observasjoner, driftsnotater og viktige avklaringer."
+                  sourceHint="Kan hentes fra ROS og vurdering"
                 />
                 <Field
                   label="Tilleggskilder / SOP / video"
                   value={payload.additionalSources ?? ""}
                   onChange={(v) => setStr("additionalSources", v)}
-                  rows={4}
+                  rows={5}
                   disabled={!canEdit}
+                  description="Lenker, notater, skjemaer og andre kilder som støtter prosessdesignet."
+                  sourceHint="Kan hentes fra prosessregister og inntak"
                 />
                 <Field
                   label="Tidsplan og milepæler"
                   value={payload.targetTimeline ?? ""}
                   onChange={(v) => setStr("targetTimeline", v)}
-                  rows={4}
+                  rows={5}
                   disabled={!canEdit}
+                  description="Skisser ønsket fremdrift fra design og test til drift."
                 />
                 <Field
                   label="Vedlegg"
                   value={payload.appendix ?? ""}
                   onChange={(v) => setStr("appendix", v)}
-                  rows={3}
+                  rows={4}
                   disabled={!canEdit}
+                  description="Noter vedlegg, filnavn eller referanser som hører til dokumentet."
                 />
               </AccordionContent>
             </AccordionItem>
@@ -1824,6 +2301,13 @@ export function ProcessDesignDocPage({
               </Button>
             </div>
             <div className="flex-1 overflow-y-auto px-4 py-3">
+              <div className="mb-4 rounded-2xl border border-border/60 bg-muted/15 p-3">
+                <p className="text-sm font-medium text-foreground">Slik bruker du versjoner</p>
+                <p className="mt-1 text-sm leading-6 text-muted-foreground">
+                  Hver rad er et tidligere lagret punkt i PDD-en. Du kan lese kommentar og dato,
+                  og gjenopprette en versjon hvis du vil gå tilbake til et tidligere innhold.
+                </p>
+              </div>
               {versionCount === 0 ? (
                 <p className="py-6 text-center text-sm text-muted-foreground">
                   Ingen historikk ennå.
@@ -1863,6 +2347,10 @@ export function ProcessDesignDocPage({
                           </Button>
                         )}
                       </div>
+                      <p className="mt-2 text-[11px] leading-5 text-muted-foreground">
+                        Gjenoppretting erstatter gjeldende utkast med denne versjonen. Dette sletter
+                        ikke selve historikkraden.
+                      </p>
                     </li>
                   ))}
                 </ul>
@@ -2067,42 +2555,47 @@ function ApplicationEditor({
   rows,
   onChange,
   disabled,
+  sourceHints = [],
 }: {
   rows: ProcessDesignAppRow[];
   onChange: (r: ProcessDesignAppRow[]) => void;
   disabled: boolean;
+  sourceHints?: string[];
 }) {
   const update = (i: number, patch: Partial<ProcessDesignAppRow>) => {
     onChange(rows.map((r, j) => (j === i ? { ...r, ...patch } : r)));
   };
   return (
     <div className="space-y-3">
-      <div className="flex items-center justify-between">
-        <Label className="text-[0.8rem] font-medium text-muted-foreground">
-          Applikasjoner
-        </Label>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          disabled={disabled}
-          className="gap-1"
-          onClick={() =>
-            onChange([
-              ...rows,
-              {
-                name: "",
-                type: "",
-                env: "",
-                comments: "",
-                phase: "As-Is / To-Be",
-              },
-            ])
-          }
-        >
-          <Plus className="size-3" aria-hidden />
-          Legg til
-        </Button>
+      <div className="space-y-2">
+        <div className="flex items-center justify-between">
+          <Label className="text-[0.8rem] font-medium text-muted-foreground">
+            Applikasjoner
+          </Label>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={disabled}
+            className="gap-1"
+            onClick={() =>
+              onChange([
+                ...rows,
+                {
+                  name: "",
+                  type: "",
+                  env: "",
+                  comments: "",
+                  phase: "As-Is / To-Be",
+                },
+              ])
+            }
+          >
+            <Plus className="size-3" aria-hidden />
+            Legg til
+          </Button>
+        </div>
+        <SourceHintBadges hints={sourceHints} />
       </div>
       {rows.length === 0 && (
         <p className="py-3 text-center text-xs text-muted-foreground">
@@ -2172,37 +2665,42 @@ function ExceptionRowsEditor({
   rows,
   onChange,
   disabled,
+  sourceHints = [],
 }: {
   label: string;
   rows: ProcessDesignExceptionRow[];
   onChange: (r: ProcessDesignExceptionRow[]) => void;
   disabled: boolean;
+  sourceHints?: string[];
 }) {
   const update = (i: number, patch: Partial<ProcessDesignExceptionRow>) => {
     onChange(rows.map((r, j) => (j === i ? { ...r, ...patch } : r)));
   };
   return (
     <div className="space-y-3">
-      <div className="flex items-center justify-between">
-        <Label className="text-[0.8rem] font-medium text-muted-foreground">
-          {label}
-        </Label>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          disabled={disabled}
-          className="gap-1"
-          onClick={() =>
-            onChange([
-              ...rows,
-              { name: "", action: "", step: "", params: "" },
-            ])
-          }
-        >
-          <Plus className="size-3" aria-hidden />
-          Legg til
-        </Button>
+      <div className="space-y-2">
+        <div className="flex items-center justify-between">
+          <Label className="text-[0.8rem] font-medium text-muted-foreground">
+            {label}
+          </Label>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={disabled}
+            className="gap-1"
+            onClick={() =>
+              onChange([
+                ...rows,
+                { name: "", action: "", step: "", params: "" },
+              ])
+            }
+          >
+            <Plus className="size-3" aria-hidden />
+            Legg til
+          </Button>
+        </div>
+        <SourceHintBadges hints={sourceHints} />
       </div>
       {rows.length === 0 && (
         <p className="py-3 text-center text-xs text-muted-foreground">
@@ -2258,45 +2756,50 @@ function StepsEditor({
   rows,
   onChange,
   disabled,
+  sourceHints = [],
 }: {
   label: string;
   rows: ProcessDesignStepRow[];
   onChange: (r: ProcessDesignStepRow[]) => void;
   disabled: boolean;
+  sourceHints?: string[];
 }) {
   const update = (i: number, patch: Partial<ProcessDesignStepRow>) => {
     onChange(rows.map((r, j) => (j === i ? { ...r, ...patch } : r)));
   };
   return (
     <div className="space-y-3">
-      <div className="flex items-center justify-between">
-        <Label className="text-[0.8rem] font-medium text-muted-foreground">
-          {label}
-        </Label>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          disabled={disabled}
-          className="gap-1"
-          onClick={() =>
-            onChange([
-              ...rows,
-              {
-                stepNo: String(rows.length + 1),
-                description: "",
-                input: "",
-                details: "",
-                exception: "",
-                actions: "",
-                rules: "",
-              },
-            ])
-          }
-        >
-          <Plus className="size-3" aria-hidden />
-          Legg til
-        </Button>
+      <div className="space-y-2">
+        <div className="flex items-center justify-between">
+          <Label className="text-[0.8rem] font-medium text-muted-foreground">
+            {label}
+          </Label>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={disabled}
+            className="gap-1"
+            onClick={() =>
+              onChange([
+                ...rows,
+                {
+                  stepNo: String(rows.length + 1),
+                  description: "",
+                  input: "",
+                  details: "",
+                  exception: "",
+                  actions: "",
+                  rules: "",
+                },
+              ])
+            }
+          >
+            <Plus className="size-3" aria-hidden />
+            Legg til
+          </Button>
+        </div>
+        <SourceHintBadges hints={sourceHints} />
       </div>
       {rows.length === 0 && (
         <p className="py-3 text-center text-xs text-muted-foreground">

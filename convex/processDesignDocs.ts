@@ -22,6 +22,7 @@ const MAX_CONTACT_ROWS = 40;
 const MAX_HISTORY_ROWS = 60;
 const MAX_EXCEPTION_ROWS = 120;
 const MAX_APPROVAL_ROWS = 24;
+const MAX_HUKI_ROWS = 120;
 const MAX_STRING = 48_000;
 /** tldraw JSON — hold under dokumentgrensen (Convex ~1 MiB totalt på dokumentet) */
 const MAX_DIAGRAM_SNAPSHOT_CHARS = 320_000;
@@ -101,6 +102,10 @@ function sanitizePayload(
   };
 
   for (const key of [
+    "orgPrimaryUnit",
+    "orgOperatingUnits",
+    "orgRolloutNotes",
+    "orgRosCoverage",
     "executiveSummary",
     "purpose",
     "objectives",
@@ -236,6 +241,17 @@ function sanitizePayload(
         signature: clampStr(r.signature, 400),
       }))
       .filter((r) => r.flow || r.role || r.name);
+  }
+  if (raw.hukiRows?.length) {
+    out.hukiRows = raw.hukiRows.slice(0, MAX_HUKI_ROWS).map((r) => ({
+      // Preserve newly added rows during autosave so users can fill them in
+      // without the server roundtrip removing the row immediately.
+      activity: (r.activity ?? "").trim().slice(0, 400),
+      h: (r.h ?? "").trim().slice(0, 200),
+      u: (r.u ?? "").trim().slice(0, 200),
+      k: (r.k ?? "").trim().slice(0, 200),
+      i: (r.i ?? "").trim().slice(0, 200),
+    }));
   }
   return out;
 }

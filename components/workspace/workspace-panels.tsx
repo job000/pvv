@@ -3797,7 +3797,7 @@ export function WorkspaceAssessmentsPanel({
                             </Badge>
                           ) : null}
                         </div>
-                        <div className="pointer-events-auto shrink-0">
+                        <div className="pointer-events-auto flex shrink-0 items-start gap-2">
                           {canEditPipeline ? (
                             <PipelineStatusSelect
                               assessmentId={a._id}
@@ -3812,6 +3812,36 @@ export function WorkspaceAssessmentsPanel({
                               {PIPELINE_STATUS_LABELS[pipeline]}
                             </Badge>
                           )}
+                          <button
+                            type="button"
+                            className="flex size-9 items-center justify-center rounded-xl text-muted-foreground/60 opacity-100 transition-all hover:bg-destructive/10 hover:text-destructive sm:opacity-0 sm:group-hover/card:opacity-100"
+                            title="Slett vurdering"
+                            aria-label={`Slett vurdering ${a.title}`}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (
+                                !window.confirm(
+                                  `Slette «${a.title}»?\n\nAlle data fjernes permanent.`,
+                                )
+                              ) {
+                                return;
+                              }
+                              void (async () => {
+                                try {
+                                  await deleteAssessment({ assessmentId: a._id });
+                                  toast.success("Vurdering slettet.");
+                                } catch (err) {
+                                  toast.error(
+                                    err instanceof Error
+                                      ? err.message
+                                      : "Kunne ikke slette vurderingen.",
+                                  );
+                                }
+                              })();
+                            }}
+                          >
+                            <Trash2 className="size-3.5" aria-hidden />
+                          </button>
                         </div>
                       </div>
 
@@ -3878,35 +3908,6 @@ export function WorkspaceAssessmentsPanel({
                       </div>
                     </div>
                   </div>
-                  <button
-                    type="button"
-                    className="pointer-events-auto absolute right-2 top-2 z-20 flex size-8 items-center justify-center rounded-lg text-muted-foreground/50 opacity-0 transition-all hover:bg-destructive/10 hover:text-destructive group-hover/card:opacity-100"
-                    title="Slett vurdering"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      if (
-                        !window.confirm(
-                          `Slette «${a.title}»?\n\nAlle data fjernes permanent.`,
-                        )
-                      ) {
-                        return;
-                      }
-                      void (async () => {
-                        try {
-                          await deleteAssessment({ assessmentId: a._id });
-                          toast.success("Vurdering slettet.");
-                        } catch (err) {
-                          toast.error(
-                            err instanceof Error
-                              ? err.message
-                              : "Kunne ikke slette vurderingen.",
-                          );
-                        }
-                      })();
-                    }}
-                  >
-                    <Trash2 className="size-3.5" />
-                  </button>
                 </li>
               );
             })}

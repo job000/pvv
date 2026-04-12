@@ -1,4 +1,5 @@
 import type { AssessmentPayload } from "@/lib/assessment-types";
+import { derivedBaselineHoursFromPayload } from "@/lib/assessment-workload-sync";
 import type { ProcessDesignDocumentPayload } from "@/lib/process-design-doc-types";
 import type { RosPddDigest } from "@/lib/ros-pdd-digest";
 import type { RosSummary } from "@/lib/ros-summary";
@@ -40,6 +41,70 @@ function formatIntakeAnswers(answers: IntakeAnswerLike[]): string {
   return lines.join("\n");
 }
 
+function formatCaseVolume(payload: AssessmentPayload): string | undefined {
+  if (
+    typeof payload.caseVolumeValue === "number" &&
+    payload.caseVolumeValue > 0
+  ) {
+    const unit =
+      payload.caseVolumeUnit === "day"
+        ? "per dag"
+        : payload.caseVolumeUnit === "month"
+          ? "per måned"
+          : "per uke";
+    return `${payload.caseVolumeValue} saker ${unit}`;
+  }
+  if (typeof payload.casesPerWeek === "number" && payload.casesPerWeek > 0) {
+    return `${payload.casesPerWeek} saker per uke`;
+  }
+  if (typeof payload.casesPerMonth === "number" && payload.casesPerMonth > 0) {
+    return `${payload.casesPerMonth} saker per måned`;
+  }
+  return undefined;
+}
+
+function formatProcessScope(
+  scope: AssessmentPayload["processScope"],
+): string | undefined {
+  if (scope === "single") return "Avgrenset til ett team / én enhet";
+  if (scope === "multi") return "På tvers av flere team / enheter";
+  if (scope === "unsure") return "Omfang må avklares nærmere";
+  return undefined;
+}
+
+function formatOpsSupportLevel(
+  level: AssessmentPayload["hfOperationsSupportLevel"],
+): string | undefined {
+  if (level === "l1") return "L1 / førstelinje";
+  if (level === "l2") return "L2 / applikasjonsnær drift";
+  if (level === "l3") return "L3 / spesialiststøtte";
+  if (level === "mixed") return "Kombinert støttebehov";
+  if (level === "unsure") return "Driftsnivå må avklares";
+  return undefined;
+}
+
+function formatBarrierLabel(
+  barrier: AssessmentPayload["rpaBarrierSelfAssessment"],
+): string | undefined {
+  if (barrier === "low_payback") return "Lav forventet lønnsomhet";
+  if (barrier === "not_rpa_suitable") return "Vurderes som lite egnet for RPA";
+  if (barrier === "integration_preferred") return "Bør heller løses som integrasjon";
+  if (barrier === "organizational_block") return "Organisatoriske hindre må avklares";
+  if (barrier === "unsure") return "Egnethet for RPA er usikker";
+  return undefined;
+}
+
+function formatExistingAutomation(
+  value: AssessmentPayload["rpaSimilarAutomationExists"],
+): string | undefined {
+  if (value === "yes_here") return "Lignende automatisering finnes allerede internt";
+  if (value === "yes_elsewhere_or_similar")
+    return "Lignende automatisering finnes i annen enhet / lignende prosess";
+  if (value === "no") return "Ingen kjent lignende automatisering";
+  if (value === "unsure") return "Må avklares om lignende automatisering finnes";
+  return undefined;
+}
+
 /**
  * Forslagsinnhold til RPA prosessdesign-dokument fra vurdering, ROS og inntak.
  * Slås sammen i UI (f.eks. bare inn i tomme felt).
@@ -77,6 +142,14 @@ export function buildProcessDesignAutofill(args: {
   } | null;
 }): ProcessDesignDocumentPayload {
   const p = args.payload;
+  const derivedBaselineHours = derivedBaselineHoursFromPayload(p);
+  const caseVolumeText = formatCaseVolume(p);
+  const processScopeText = formatProcessScope(p.processScope);
+  const opsSupportLevelText = formatOpsSupportLevel(p.hfOperationsSupportLevel);
+  const barrierText = formatBarrierLabel(p.rpaBarrierSelfAssessment);
+  const similarAutomationText = formatExistingAutomation(
+    p.rpaSimilarAutomationExists,
+  );
 
   const execParts: string[] = [];
   const procLine =
@@ -93,6 +166,9 @@ export function buildProcessDesignAutofill(args: {
   if (p.rpaBenefitKindsAndOperationsNotes?.trim()) {
     execParts.push(`Gevinst og drift: ${p.rpaBenefitKindsAndOperationsNotes.trim()}`);
   }
+  if (p.hfCriticalManualGapNotes?.trim()) {
+    execParts.push(`Kritiske manuelle gap: ${p.hfCriticalManualGapNotes.trim()}`);
+  }
   const executiveSummary = execParts.join("\n\n");
 
   const purpose =
@@ -105,6 +181,14 @@ export function buildProcessDesignAutofill(args: {
   objectivesLines.push("• Tydelig logging og sporbarhet i driftsmiljø");
   if (p.hfEconomicRationaleNotes?.trim()) {
     objectivesLines.push(`• Økonomi / begrunnelse: ${p.hfEconomicRationaleNotes.trim()}`);
+  }
+  if (typeof p.rpaExpectedBenefitVsEffort === "number") {
+    objectivesLines.push(
+      `• Forventet gevinst vs. innsats: ${p.rpaExpectedBenefitVsEffort}/5`,
+    );
+  }
+  if (typeof p.rpaQuickWinPotential === "number") {
+    objectivesLines.push(`• Quick win-potensial: ${p.rpaQuickWinPotential}/5`);
   }
   const objectives = objectivesLines.join("\n");
 
@@ -134,6 +218,14 @@ export function buildProcessDesignAutofill(args: {
       notes: p.processActors.trim().slice(0, 2000),
     });
   }
+  if (args.intake?.submitterMeta?.name?.trim()) {
+    keyContacts.push({
+      role: "Innsender av behov / skjema",
+      name: args.intake.submitterMeta.name.trim().slice(0, 200),
+      contact: args.intake.submitterMeta.email?.trim().slice(0, 400) ?? "",
+      notes: "Fra skjema / inntak",
+    });
+  }
 
   const prerequisitesParts: string[] = [
     "• Signert / godkjent prosessdesign og avklart omfang",
@@ -155,12 +247,25 @@ export function buildProcessDesignAutofill(args: {
       `• Samsvar / compliance (hint fra prosessregister): ${args.candidate.linkHintComplianceNotes.trim()}`,
     );
   }
+  if (p.hfOperationsSupportNotes?.trim()) {
+    prerequisitesParts.push(
+      `• Drift / supportkrav: ${p.hfOperationsSupportNotes.trim()}`,
+    );
+  }
   const prerequisites = prerequisitesParts.join("\n");
 
   const asIsDepartment =
     args.candidate?.linked && args.candidate.orgUnitName?.trim()
       ? args.candidate.orgUnitName.trim()
       : undefined;
+  const asIsProcessArea = [
+    processScopeText,
+    p.hfOrganizationalBreadthNotes?.trim()
+      ? `Organisatorisk bredde: ${p.hfOrganizationalBreadthNotes.trim()}`
+      : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
 
   const asIsShortParts: string[] = [];
   if (p.processFlowSummary?.trim()) {
@@ -170,6 +275,40 @@ export function buildProcessDesignAutofill(args: {
     asIsShortParts.push(`Volum / frekvens: ${p.processVolumeNotes.trim()}`);
   }
   const asIsShortDescription = asIsShortParts.join("\n\n");
+  const asIsScheduleParts = [
+    `Arbeidsår: ca. ${p.workingDays} dager × ${p.workingHoursPerDay} timer`,
+    caseVolumeText ? `Volum: ${caseVolumeText}` : "",
+    typeof p.employees === "number" && p.employees > 0
+      ? `Involverte medarbeidere: ${p.employees}`
+      : "",
+  ].filter(Boolean);
+  const asIsSchedule = asIsScheduleParts.join("\n");
+  const asIsExecutionTime = [
+    derivedBaselineHours != null
+      ? `Manuelt hovedarbeid: ca. ${derivedBaselineHours} timer per år`
+      : "",
+    p.reworkHours > 0 ? `Re-arbeid: ca. ${p.reworkHours} timer per år` : "",
+    p.auditHours > 0 ? `Kontroll / revisjon: ca. ${p.auditHours} timer per år` : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
+  const asIsPeak = [
+    caseVolumeText ? `Registrert volum: ${caseVolumeText}` : "",
+    p.processVolumeNotes?.trim() ? p.processVolumeNotes.trim() : "",
+  ]
+    .filter(Boolean)
+    .join("\n\n");
+  const asIsInputData = [
+    typeof p.structuredInput === "number"
+      ? `Grad av strukturert inndata: ${p.structuredInput}/5`
+      : "",
+    p.ocrRequired ? "OCR er markert som nødvendig i vurderingen." : "",
+    "Beskriv skjermbilder, filer, e-poster eller API/data som roboten mottar.",
+  ]
+    .filter(Boolean)
+    .join("\n");
+  const asIsOutputData =
+    "Beskriv resultat, registreringer, kvitteringer, logger og videreflyt som prosessen produserer.";
 
   const asIsApplications: NonNullable<
     ProcessDesignDocumentPayload["asIsApplications"]
@@ -283,6 +422,14 @@ export function buildProcessDesignAutofill(args: {
         "Følg tiltak og aksept i ROS. Ved avvik: eskalér i henhold til intern rutine.",
     });
   }
+  if (p.hfCriticalManualGapNotes?.trim()) {
+    businessExceptionsKnown.push({
+      name: "Kritiske manuelle gap / kontrollpunkter",
+      step: "Forretning",
+      params: "Fra vurdering",
+      action: p.hfCriticalManualGapNotes.trim(),
+    });
+  }
 
   if (p.rpaManualFallbackWhenRobotFails?.trim()) {
     appErrorsKnown.push({
@@ -298,6 +445,14 @@ export function buildProcessDesignAutofill(args: {
       step: "—",
       params: "—",
       action: p.rpaBarrierNotes.trim(),
+    });
+  }
+  if (barrierText) {
+    appErrorsKnown.push({
+      name: "RPA-egnethet / barriere",
+      step: "Design",
+      params: "Egenvurdering",
+      action: barrierText,
     });
   }
 
@@ -339,12 +494,23 @@ export function buildProcessDesignAutofill(args: {
     p.hfOperationsSupportNotes?.trim()
       ? `**Drift / tjenestenivå**\n${p.hfOperationsSupportNotes.trim()}`
       : "",
+    similarAutomationText
+      ? `**Lignende automatisering**\n${similarAutomationText}`
+      : "",
   ]
     .filter(Boolean)
     .join("\n\n");
 
-  const reporting =
-    "• Kjøringer / transaksjoner: logges i RPA-plattform\n• Avvik: hendelsesflyt til ansvarlig (se kontakter)\n• Periodisk gjennomgang sammen med forretning";
+  const reportingParts = [
+    "• Kjøringer / transaksjoner: logges i RPA-plattform",
+    "• Avvik: hendelsesflyt til ansvarlig (se kontakter)",
+    "• Periodisk gjennomgang sammen med forretning",
+    opsSupportLevelText ? `• Forventet driftsnivå: ${opsSupportLevelText}` : "",
+    p.hfSecurityInformationNotes?.trim()
+      ? `• Sikkerhet / informasjon: ${p.hfSecurityInformationNotes.trim()}`
+      : "",
+  ].filter(Boolean);
+  const reporting = reportingParts.join("\n");
 
   const asIsProcessNameFromRegister =
     args.candidate?.linked === true ? args.candidate.name : undefined;
@@ -353,6 +519,82 @@ export function buildProcessDesignAutofill(args: {
   const shortDescription = p.processDescription?.trim()
     ? p.processDescription.trim().split("\n")[0]?.slice(0, 200)
     : undefined;
+  const orgPrimaryUnit =
+    args.candidate?.linked && args.candidate.orgUnitName?.trim()
+      ? args.candidate.orgUnitName.trim()
+      : args.workspaceName?.trim() || undefined;
+  const orgOperatingUnits = [
+    processScopeText ? `Prosessen vurderes som ${processScopeText.toLowerCase()}.` : "",
+    p.hfOrganizationalBreadthNotes?.trim()
+      ? p.hfOrganizationalBreadthNotes.trim()
+      : "",
+    similarAutomationText
+      ? `Eksisterende eller lignende automasjon: ${similarAutomationText}`
+      : "",
+  ]
+    .filter(Boolean)
+    .join("\n\n");
+  const orgRosCoverage = args.rosContexts.length
+    ? args.rosContexts
+        .map((r) => {
+          const parts = [
+            `• ${r.title}`,
+            r.pddDigest?.contextSummary?.trim()
+              ? `Kontekst: ${r.pddDigest.contextSummary.trim()}`
+              : "",
+            r.pddDigest?.scopeAndCriteria?.trim()
+              ? `Omfang: ${r.pddDigest.scopeAndCriteria.trim()}`
+              : "",
+          ].filter(Boolean);
+          return parts.join("\n");
+        })
+        .join("\n\n")
+    : undefined;
+  const inScopeParts = [
+    p.processFlowSummary?.trim()
+      ? `Automatisering av hovedforløp som beskrevet i As-Is, innenfor avtalt datagrunnlag og tilganger.\n\n${p.processFlowSummary.trim().slice(0, 3000)}`
+      : "Kjerneprosess som beskrevet i As-Is og avtalt med prosesseier.",
+    processScopeText ? `Omfang: ${processScopeText}` : "",
+    p.rpaBenefitKindsAndOperationsNotes?.trim()
+      ? `Drifts- og gevinstperspektiv: ${p.rpaBenefitKindsAndOperationsNotes.trim()}`
+      : "",
+  ].filter(Boolean);
+  const outOfScopeParts = [
+    "Prosesser utenfor avtalt grensesnitt, manuelle vurderinger som krever skjønn, og endringer i kildesystemer uten eget prosjekt.",
+    barrierText ? `Avklaringspunkt før videre design: ${barrierText}.` : "",
+    similarAutomationText ? similarAutomationText : "",
+  ].filter(Boolean);
+  const parallelInitiatives = [
+    similarAutomationText ? `• ${similarAutomationText}` : "",
+    p.hfOrganizationalBreadthNotes?.trim()
+      ? `• Organisatorisk bredde / avhengigheter: ${p.hfOrganizationalBreadthNotes.trim()}`
+      : "",
+    p.processConstraints?.trim()
+      ? `• Begrensninger / avhengigheter: ${p.processConstraints.trim()}`
+      : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
+  const targetTimeline = [
+    typeof p.rpaImplementationDifficulty === "number"
+      ? `Vanskelighetsgrad vurdert til ${p.rpaImplementationDifficulty}/5.`
+      : "",
+    typeof p.rpaQuickWinPotential === "number"
+      ? `Quick win-potensial vurdert til ${p.rpaQuickWinPotential}/5.`
+      : "",
+    typeof p.implementationBuildCost === "number"
+      ? `Anslått etableringskostnad: ${p.implementationBuildCost} NOK.`
+      : "",
+    typeof p.annualRunCost === "number"
+      ? `Anslått årlig driftskostnad: ${p.annualRunCost} NOK.`
+      : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
+  const businessExceptionsUnknown =
+    "Ukjente forretningsunntak stoppes og sendes til prosesseier eller saksansvarlig for manuell vurdering.";
+  const appErrorsUnknown =
+    "Ukjente tekniske feil logges, varsles og settes til manuell fallback eller ny behandling etter avklart driftsrutine.";
 
   return {
     processTitle,
@@ -362,38 +604,46 @@ export function buildProcessDesignAutofill(args: {
     objectives,
     keyContacts: keyContacts.length ? keyContacts : undefined,
     prerequisites,
+    orgPrimaryUnit,
+    orgOperatingUnits: orgOperatingUnits || undefined,
+    orgRosCoverage,
     asIsProcessName: asIsProcessNameFromRegister ?? p.processName ?? args.assessmentTitle,
+    asIsProcessArea: asIsProcessArea || undefined,
     asIsDepartment,
     asIsShortDescription: asIsShortDescription || undefined,
     asIsRoles: p.processActors?.trim() || undefined,
+    asIsSchedule: asIsSchedule || undefined,
     asIsVolume: p.processVolumeNotes?.trim() || undefined,
     asIsHandleTime:
       p.timePerCaseValue != null
         ? `Ca. ${p.timePerCaseValue} ${p.timePerCaseUnit === "hours" ? "timer" : "minutter"} per sak`
         : undefined,
+    asIsExecutionTime: asIsExecutionTime || undefined,
+    asIsPeak: asIsPeak || undefined,
     asIsFte:
       p.manualFteEstimate != null
         ? `Omtrent ${p.manualFteEstimate} årsverk (estimat fra vurdering)`
         : undefined,
-    asIsInputData: "Avklares med forretning — beskriv data som roboten mottar",
-    asIsOutputData: "Avklares med forretning — beskriv leveranser og lagring",
+    asIsInputData,
+    asIsOutputData,
     asIsApplications:
       asIsApplications.length > 0 ? asIsApplications : undefined,
     asIsSteps: asIsSteps.length > 0 ? asIsSteps : undefined,
     toBeSteps:
       "• Utfyll To-Be-trinn etter løsningsdesign (RPA- flyt, systemgrenser, manuelle håndtrykk).\n" +
       "• Koble til testplan og godkjenning før produksjon.",
-    inScope: p.processFlowSummary?.trim()
-      ? `Automatisering av hovedforløp som beskrevet i As-Is, innenfor avtalt datagrunnlag og tilganger.\n\n${p.processFlowSummary.trim().slice(0, 3000)}`
-      : "Kjerneprosess som beskrevet i As-Is og avtalt med prosesseier.",
-    outOfScope:
-      "Prosesser utenfor avtalt grensesnitt, manuelle vurderinger som krever skjønn, og endringer i kildesystemer uten eget prosjekt.",
+    parallelInitiatives: parallelInitiatives || undefined,
+    inScope: inScopeParts.join("\n\n"),
+    outOfScope: outOfScopeParts.join("\n\n"),
     businessExceptionsKnown:
       businessExceptionsKnown.length > 0 ? businessExceptionsKnown : undefined,
+    businessExceptionsUnknown,
     appErrorsKnown: appErrorsKnown.length > 0 ? appErrorsKnown : undefined,
+    appErrorsUnknown,
     reporting,
     otherObservations: otherObservations || undefined,
     additionalSources: additionalSources || undefined,
+    targetTimeline: targetTimeline || undefined,
   };
 }
 
@@ -418,6 +668,10 @@ export function mergeAutofillEmptyOnly(
     "purpose",
     "objectives",
     "prerequisites",
+    "orgPrimaryUnit",
+    "orgOperatingUnits",
+    "orgRolloutNotes",
+    "orgRosCoverage",
     "asIsProcessName",
     "asIsProcessArea",
     "asIsDepartment",

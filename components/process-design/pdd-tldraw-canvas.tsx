@@ -29,68 +29,6 @@ function configurePddArrowBindings(editor: Editor) {
   });
 }
 
-type ScrollTarget = Window | HTMLElement;
-
-type ScrollSnapshot = {
-  target: ScrollTarget;
-  left: number;
-  top: number;
-};
-
-function isWindowTarget(target: ScrollTarget): target is Window {
-  return target === window;
-}
-
-function isScrollable(element: HTMLElement) {
-  const style = window.getComputedStyle(element);
-  const overflowY = style.overflowY;
-  const overflowX = style.overflowX;
-  const canScrollY =
-    /(auto|scroll|overlay)/.test(overflowY) && element.scrollHeight > element.clientHeight;
-  const canScrollX =
-    /(auto|scroll|overlay)/.test(overflowX) && element.scrollWidth > element.clientWidth;
-  return canScrollY || canScrollX;
-}
-
-function getScrollTargets(start: HTMLElement): ScrollTarget[] {
-  const targets: ScrollTarget[] = [];
-  let current = start.parentElement;
-
-  while (current) {
-    if (isScrollable(current)) {
-      targets.push(current);
-    }
-    current = current.parentElement;
-  }
-
-  const root = document.scrollingElement;
-  if (root && (root.scrollHeight > window.innerHeight || root.scrollWidth > window.innerWidth)) {
-    targets.push(window);
-  }
-
-  return targets;
-}
-
-function readScrollPosition(target: ScrollTarget) {
-  if (isWindowTarget(target)) {
-    return { left: window.scrollX, top: window.scrollY };
-  }
-  return { left: target.scrollLeft, top: target.scrollTop };
-}
-
-function restoreScrollPosition(snapshot: ScrollSnapshot) {
-  if (isWindowTarget(snapshot.target)) {
-    window.scrollTo({ left: snapshot.left, top: snapshot.top, behavior: "instant" });
-    return;
-  }
-  if (
-    snapshot.target.scrollLeft !== snapshot.left ||
-    snapshot.target.scrollTop !== snapshot.top
-  ) {
-    snapshot.target.scrollTo({ left: snapshot.left, top: snapshot.top, behavior: "instant" });
-  }
-}
-
 export function parsePddTldrawDocumentSnapshot(
   json: string | undefined,
 ): Partial<TLEditorSnapshot> | undefined {
@@ -207,80 +145,74 @@ export function PddTldrawCanvas({
     return () => cancelAnimationFrame(id);
   }, [layoutVariant]);
 
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el || layoutVariant === "fullscreen") return;
+
+    let rafId: number | null = null;
+    let lastScroll = { top: 0, left: 0 };
+
+    const rememberScroll = () => {
+      const root = document.scrollingElement;
+      if (!root) return;
+      lastScroll = { top: root.scrollTop, left: root.scrollLeft };
+    };
+
+    const restoreScroll = () => {
+      rafId = null;
+      const root = document.scrollingElement;
+      if (!root) return;
+      if (root.scrollTop !== lastScroll.top || root.scrollLeft !== lastScroll.left) {
+        root.scrollTo({
+          top: lastScroll.top,
+          left: lastScroll.left,
+          behavior: "instant",
+        });
+      }
+    };
+
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (!(target instanceof HTMLElement)) return;
+      const isTldrawUi =
+        el.contains(target) ||
+        target.closest("[data-tldraw-ui]") ||
+        target.closest(".tlui-popover") ||
+        target.closest(".tlui-menu") ||
+        target.closest(".tlui-style-panel");
+      if (!isTldrawUi) return;
+      rememberScroll();
+    };
+
+    const onFocusIn = (event: FocusEvent) => {
+      const target = event.target;
+      if (!(target instanceof HTMLElement)) return;
+      const isTldrawUi =
+        el.contains(target) ||
+        target.closest("[data-tldraw-ui]") ||
+        target.closest(".tlui-popover") ||
+        target.closest(".tlui-menu") ||
+        target.closest(".tlui-style-panel");
+      if (!isTldrawUi) return;
+      if (rafId !== null) cancelAnimationFrame(rafId);
+      rafId = requestAnimationFrame(restoreScroll);
+    };
+
+    document.addEventListener("pointerdown", onPointerDown, true);
+    document.addEventListener("focusin", onFocusIn, true);
+    return () => {
+      if (rafId !== null) cancelAnimationFrame(rafId);
+      document.removeEventListener("pointerdown", onPointerDown, true);
+      document.removeEventListener("focusin", onFocusIn, true);
+    };
+  }, [layoutVariant]);
+
   const heightClass =
     layoutVariant === "fullscreen"
       ? "h-full min-h-0 flex-1"
       : "h-[clamp(22rem,68svh,34rem)] min-h-[22rem] sm:h-[min(34rem,70vh)] sm:min-h-[24rem]";
 
   const containerRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const el = containerRef.current;
-    if (!el) return;
-
-    let snapshots: ScrollSnapshot[] = [];
-    let armedUntil = 0;
-    let frameId: number | null = null;
-
-    const stopLoop = () => {
-      if (frameId !== null) {
-        cancelAnimationFrame(frameId);
-        frameId = null;
-      }
-    };
-
-    const tick = () => {
-      if (Date.now() >= armedUntil) {
-        stopLoop();
-        return;
-      }
-      for (const snapshot of snapshots) {
-        restoreScrollPosition(snapshot);
-      }
-      frameId = requestAnimationFrame(tick);
-    };
-
-    const lock = (ms: number) => {
-      snapshots = getScrollTargets(el).map((target) => {
-        const position = readScrollPosition(target);
-        return { target, ...position };
-      });
-      armedUntil = Date.now() + ms;
-      if (frameId === null) {
-        frameId = requestAnimationFrame(tick);
-      }
-    };
-
-    const arm = (ms: number) => {
-      lock(ms);
-    };
-
-    const isArmed = () => Date.now() < armedUntil;
-
-    const onPointerDown = (event: Event) => {
-      const target = event.target;
-      if (!(target instanceof HTMLElement)) return;
-      if (!el.contains(target)) return;
-      arm(1800);
-      lock(1800);
-    };
-
-    const onFocusIn = (event: Event) => {
-      const target = event.target;
-      if (!(target instanceof HTMLElement)) return;
-      if (!el.contains(target) && !isArmed()) return;
-      lock(1500);
-    };
-
-    document.addEventListener("pointerdown", onPointerDown, true);
-    document.addEventListener("focusin", onFocusIn, true);
-
-    return () => {
-      stopLoop();
-      document.removeEventListener("pointerdown", onPointerDown, true);
-      document.removeEventListener("focusin", onFocusIn, true);
-    };
-  }, []);
 
   const requiresProductionLicense = useMemo(() => {
     if (typeof window === "undefined") return false;

@@ -236,6 +236,9 @@ function buildProcessDesignPdfDocument(
   addFieldBlock("Formål", p.purpose);
   addFieldBlock("Mål og forventet nytte", p.objectives);
   addFieldBlock("Forutsetninger", p.prerequisites);
+  addFieldBlock("Primær enhet / eierlinje", p.orgPrimaryUnit);
+  addFieldBlock("Hvor prosessen kjøres", p.orgOperatingUnits);
+  addFieldBlock("ROS gjelder for", p.orgRosCoverage);
 
   if (p.keyContacts?.length) {
     ensureSpace(10);

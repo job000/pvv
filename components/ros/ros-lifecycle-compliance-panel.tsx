@@ -141,8 +141,12 @@ export function RosLifecycleCompliancePanel({
               value={contextSummary}
               onChange={(e) => onChange({ contextSummary: e.target.value })}
               rows={3}
-              placeholder="System, prosess, grenser, antakelser …"
+              placeholder="System, prosess, grenser, antakelser og hvor prosessen kjøres (team, avdeling, seksjon, lokasjon) …"
             />
+            <p className="text-muted-foreground text-xs leading-5">
+              Ta med hvis prosessen er breddet eller planlegges breddet til flere
+              team, avdelinger, seksjoner eller lokasjoner.
+            </p>
           </div>
           <div className="space-y-2">
             <Label htmlFor="ros-scope-criteria">Omfang og risikokriterier</Label>
@@ -151,8 +155,12 @@ export function RosLifecycleCompliancePanel({
               value={scopeAndCriteria}
               onChange={(e) => onChange({ scopeAndCriteria: e.target.value })}
               rows={3}
-              placeholder="Hva inngår / utelates; hvordan tolkes akser og nivåer …"
+              placeholder="Hva inngår / utelates; hvordan tolkes akser og nivåer; om ROS gjelder ett team eller flere enheter …"
             />
+            <p className="text-muted-foreground text-xs leading-5">
+              Beskriv om ROS-en gjelder lokalt, eller om den dekker en breddet
+              prosess på tvers av flere enheter.
+            </p>
           </div>
           <div className="space-y-2">
             <Label htmlFor="ros-risk-ver">Versjon av kriterier / skala</Label>
