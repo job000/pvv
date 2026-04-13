@@ -626,6 +626,16 @@ function OrgBranch({
   const [deleteBusy, setDeleteBusy] = useState(false);
   const [moveBusy, setMoveBusy] = useState(false);
   const [moveSelectValue, setMoveSelectValue] = useState("");
+  const [nameEditOpen, setNameEditOpen] = useState(false);
+  const [nameDraft, setNameDraft] = useState(unit.name);
+  const [nameSaveBusy, setNameSaveBusy] = useState(false);
+  const updateOrgUnit = useMutation(api.orgUnits.update);
+
+  useEffect(() => {
+    if (!nameEditOpen) {
+      setNameDraft(unit.name);
+    }
+  }, [unit.name, nameEditOpen]);
 
   const descendants = useMemo(
     () => computeDescendantIds(unit._id, childrenByParent),
@@ -728,7 +738,7 @@ function OrgBranch({
         onClick={(e) => {
           if (!orgChartCtx) return;
           const t = e.target as HTMLElement;
-          if (t.closest("button, a, summary")) return;
+          if (t.closest("button, a, summary, input, textarea, select")) return;
           orgChartCtx.onCardSurfaceActivate(unit._id);
         }}
       >
@@ -761,14 +771,102 @@ function OrgBranch({
                 </span>
               </div>
             ) : null}
-            <p
-              className={cn(
-                "font-heading text-sm font-semibold leading-snug tracking-tight text-foreground/95 sm:text-[0.9375rem]",
-                unit.localCode ? "mt-0.5" : "mt-0.5",
-              )}
-            >
-              {unit.name}
-            </p>
+            {canEdit && nameEditOpen ? (
+              <div className="mt-0.5" onClick={(e) => e.stopPropagation()}>
+                <Input
+                  value={nameDraft}
+                  onChange={(e) => setNameDraft(e.target.value)}
+                  disabled={nameSaveBusy}
+                  autoFocus
+                  aria-label="Navn på organisasjonsenhet"
+                  className="font-heading h-9 text-sm font-semibold sm:text-[0.9375rem]"
+                  onBlur={() => {
+                    void (async () => {
+                      const trimmed = nameDraft.trim();
+                      if (!trimmed) {
+                        setNameDraft(unit.name);
+                        setNameEditOpen(false);
+                        return;
+                      }
+                      if (trimmed === unit.name) {
+                        setNameEditOpen(false);
+                        return;
+                      }
+                      setNameSaveBusy(true);
+                      try {
+                        await updateOrgUnit({
+                          orgUnitId: unit._id,
+                          name: trimmed,
+                        });
+                        toast.success("Navn oppdatert.");
+                        setNameEditOpen(false);
+                      } catch (e) {
+                        toast.error(
+                          formatUserFacingError(e, "Kunne ikke lagre navnet."),
+                        );
+                        setNameDraft(unit.name);
+                      } finally {
+                        setNameSaveBusy(false);
+                      }
+                    })();
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      (e.target as HTMLInputElement).blur();
+                    }
+                    if (e.key === "Escape") {
+                      e.preventDefault();
+                      setNameDraft(unit.name);
+                      setNameEditOpen(false);
+                    }
+                  }}
+                />
+              </div>
+            ) : (
+              <div className="mt-0.5 flex min-w-0 items-start gap-1">
+                {canEdit ? (
+                  <>
+                    <button
+                      type="button"
+                      className={cn(
+                        "font-heading text-left text-sm font-semibold leading-snug tracking-tight text-foreground/95 sm:text-[0.9375rem]",
+                        "hover:text-foreground rounded-md outline-none ring-offset-background focus-visible:ring-2 focus-visible:ring-ring",
+                        "min-w-0 flex-1 touch-manipulation",
+                      )}
+                      title="Trykk for å redigere navn"
+                      aria-label={`Rediger navn: ${unit.name}`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setNameEditOpen(true);
+                      }}
+                    >
+                      <span className="line-clamp-3">{unit.name}</span>
+                    </button>
+                    <button
+                      type="button"
+                      className="text-muted-foreground hover:bg-muted/60 hover:text-foreground mt-0.5 shrink-0 rounded-md p-1 touch-manipulation"
+                      title="Rediger navn"
+                      aria-label="Rediger navn på enheten"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setNameEditOpen(true);
+                      }}
+                    >
+                      <PenLine className="size-3.5 sm:size-4" aria-hidden />
+                    </button>
+                  </>
+                ) : (
+                  <p
+                    className={cn(
+                      "font-heading text-sm font-semibold leading-snug tracking-tight text-foreground/95 sm:text-[0.9375rem]",
+                    )}
+                  >
+                    {unit.name}
+                  </p>
+                )}
+              </div>
+            )}
             {!cardExpanded &&
             (kids.length > 0 ||
               contactsForUnit.length > 0 ||
