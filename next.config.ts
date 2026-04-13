@@ -49,6 +49,10 @@ const nextConfig: NextConfig = {
     config.resolve = config.resolve ?? {};
     config.resolve.alias = {
       ...config.resolve.alias,
+      /**
+       * Ikke alias `react` / `react-dom` hit: Next 16 bruker `next/dist/compiled/react` internt
+       * (devtools, segment explorer). Felles alias gir «Invalid hook call» / null `useContext` på SSR.
+       */
       /** Én `convex`-instans — hindrer duplikat React-kontekst og «Could not find Convex client». */
       convex: path.join(nodeModules, "convex"),
       /**

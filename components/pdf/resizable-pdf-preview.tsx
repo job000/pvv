@@ -1,5 +1,7 @@
 "use client";
 
+import "@/lib/polyfills/map-getOrInsertComputed";
+
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import {
@@ -22,8 +24,15 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
-import type { PDFDocumentProxy } from "pdfjs-dist";
 import { Document, Page, pdfjs } from "react-pdf";
+
+/** react-pdf sin `onLoadSuccess`-pdf (pdf.js); egen type unngår mismatch mellom pdfjs-dist og react-pdf. */
+type ReactPdfLoadedDocument = {
+  numPages: number;
+  getPage: (pageNum: number) => Promise<{
+    getViewport: (options: { scale: number }) => { width: number; height: number };
+  }>;
+};
 
 import "react-pdf/dist/Page/AnnotationLayer.css";
 import "react-pdf/dist/Page/TextLayer.css";
@@ -263,7 +272,7 @@ export function ResizablePdfPreview({
 
   const containerRef = useRef<HTMLDivElement>(null);
   const fullscreenTargetRef = useRef<HTMLDivElement | null>(null);
-  const pdfDocRef = useRef<PDFDocumentProxy | null>(null);
+  const pdfDocRef = useRef<ReactPdfLoadedDocument | null>(null);
   const mainPaneRef = useRef<HTMLDivElement>(null);
   const dragActiveRef = useRef(false);
   const pageWrapRefs = useRef<Map<number, HTMLDivElement>>(new Map());

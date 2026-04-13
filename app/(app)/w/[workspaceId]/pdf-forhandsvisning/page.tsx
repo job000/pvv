@@ -1,5 +1,8 @@
 "use client";
 
+import "react-pdf/dist/Page/AnnotationLayer.css";
+import "react-pdf/dist/Page/TextLayer.css";
+
 import {
   ProductEmptyState,
   ProductPageHeader,
@@ -22,7 +25,6 @@ import {
 import type { ProcessDesignDocumentPayload } from "@/lib/process-design-doc-types";
 import { buildRosPdfInputForPreview } from "@/lib/ros-pdf-input-from-server";
 import { buildRosAnalysisPdfBlob, downloadRosAnalysisPdf } from "@/lib/ros-pdf";
-import { ConvexClientProvider } from "@/components/providers/convex-provider";
 import { cn } from "@/lib/utils";
 import { useQuery } from "convex/react";
 import {
@@ -108,7 +110,7 @@ const TAB_CONFIG = [
   },
 ];
 
-function PdfForhandsvisningPageContent() {
+export default function PdfForhandsvisningPage() {
   const params = useParams();
   const workspaceId = params.workspaceId as Id<"workspaces">;
 
@@ -751,14 +753,5 @@ function PdfForhandsvisningPageContent() {
         </div>
       </section>
     </div>
-  );
-}
-
-/** Lokal ConvexProvider unngår manglende kontekst når siden lastes i egen JS-chunk (Webpack). */
-export default function PdfForhandsvisningPage() {
-  return (
-    <ConvexClientProvider>
-      <PdfForhandsvisningPageContent />
-    </ConvexClientProvider>
   );
 }
