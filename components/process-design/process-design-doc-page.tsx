@@ -51,6 +51,7 @@ import {
   ChevronDown,
   ExternalLink,
   FileDown,
+  FileX,
   Eye,
   FileText,
   History,
@@ -2595,61 +2596,82 @@ export function ProcessDesignDocPage({
           }
         }}
       >
-        <DialogContent size="md" titleId="pdd-leave-title" descriptionId="pdd-leave-desc">
-          <DialogHeader>
-            <p
-              id="pdd-leave-title"
-              className="font-heading text-lg font-semibold"
-            >
-              Vil du lagre?
-            </p>
-            <p
-              id="pdd-leave-desc"
-              className="text-sm leading-relaxed text-muted-foreground"
-            >
-              Du har ulagrede endringer i prosessdesignet (inkludert diagram). Lagre før du
-              går videre, eller forlat uten å lagre.
-            </p>
+        <DialogContent
+          size="sm"
+          className="max-h-[min(90dvh,42rem)] overflow-y-auto sm:max-w-md"
+          titleId="pdd-leave-title"
+          descriptionId="pdd-leave-desc"
+        >
+          <DialogHeader className="border-border/40 space-y-0 border-b px-4 py-4 sm:px-6 sm:py-5">
+            <div className="flex gap-3.5 sm:gap-4">
+              <div
+                className="bg-primary/12 text-primary flex size-11 shrink-0 items-center justify-center rounded-2xl sm:size-12"
+                aria-hidden
+              >
+                <Save className="size-5 sm:size-[1.35rem]" strokeWidth={2} />
+              </div>
+              <div className="min-w-0 flex-1 space-y-2 pt-0.5">
+                <p
+                  id="pdd-leave-title"
+                  className="font-heading text-base font-semibold leading-snug tracking-tight sm:text-lg"
+                >
+                  Vil du lagre?
+                </p>
+                <p
+                  id="pdd-leave-desc"
+                  className="text-muted-foreground text-sm leading-relaxed"
+                >
+                  Du har ulagrede endringer i prosessdesignet (inkludert diagram). Lagre før du
+                  går videre, eller forlat uten å lagre.
+                </p>
+              </div>
+            </div>
           </DialogHeader>
-          <DialogFooter className="flex-col gap-2 sm:flex-row sm:justify-end">
-            <Button
-              type="button"
-              variant="outline"
-              className="w-full sm:w-auto"
-              disabled={leaveBusy}
-              onClick={() => {
-                setLeavePromptOpen(false);
-                pendingNavHrefRef.current = null;
-              }}
-            >
-              Avbryt
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              className="w-full sm:w-auto"
-              disabled={leaveBusy}
-              onClick={handleLeaveDiscard}
-            >
-              Forlat uten å lagre
-            </Button>
+          <DialogFooter className="border-border/40 bg-muted/20 !flex-col !items-stretch gap-3 border-t px-4 py-4 sm:px-6 sm:py-5">
             {canEdit ? (
               <Button
                 type="button"
-                className="w-full sm:w-auto"
+                size="lg"
+                className="h-12 w-full shrink-0 justify-center gap-2 text-[0.9375rem] shadow-sm sm:h-11 sm:text-sm"
                 disabled={leaveBusy || saving}
                 onClick={() => void handleLeaveSave()}
               >
                 {leaveBusy || saving ? (
-                  <Loader2 className="size-4 animate-spin" />
+                  <Loader2 className="size-4 animate-spin" aria-hidden />
                 ) : (
                   <>
-                    <Save className="mr-1.5 size-3.5" aria-hidden />
+                    <Save className="size-4 opacity-90" aria-hidden />
                     Lagre og fortsett
                   </>
                 )}
               </Button>
             ) : null}
+            <div className="flex w-full shrink-0 flex-col gap-2.5 sm:flex-row sm:gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="lg"
+                className="h-12 w-full shrink-0 justify-center sm:h-11 sm:flex-1"
+                disabled={leaveBusy}
+                onClick={() => {
+                  setLeavePromptOpen(false);
+                  pendingNavHrefRef.current = null;
+                }}
+              >
+                Avbryt
+              </Button>
+              <Button
+                type="button"
+                variant="destructive"
+                size="lg"
+                className="h-12 w-full shrink-0 justify-center gap-2 whitespace-normal px-3 text-center leading-snug sm:h-11 sm:flex-1 sm:px-4"
+                disabled={leaveBusy}
+                onClick={handleLeaveDiscard}
+              >
+                <FileX className="size-4 shrink-0 opacity-90" aria-hidden />
+                Forlat uten å lagre
+              </Button>
+            </div>
           </DialogFooter>
         </DialogContent>
       </Dialog>
