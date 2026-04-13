@@ -1,5 +1,7 @@
 "use client";
 
+import "@/lib/polyfills/map-getOrInsertComputed";
+
 import "react-pdf/dist/Page/AnnotationLayer.css";
 import "react-pdf/dist/Page/TextLayer.css";
 
@@ -42,9 +44,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 const ResizablePdfPreview = dynamic(
   () =>
-    import("@/components/pdf/resizable-pdf-preview").then(
-      (m) => m.ResizablePdfPreview,
-    ),
+    import("@/lib/polyfills/map-getOrInsertComputed")
+      .then(() => import("@/components/pdf/resizable-pdf-preview"))
+      .then((m) => m.ResizablePdfPreview),
   {
     ssr: false,
     loading: () => (
