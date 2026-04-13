@@ -51,6 +51,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useMemo, useState } from "react";
+import { useStickyState } from "@/lib/use-sticky-state";
 
 type TaskRow = DashboardTaskRow;
 
@@ -268,7 +269,7 @@ export function TasksBoard() {
   const updateTask = useMutation(api.assessmentTasks.update);
   const removeTask = useMutation(api.assessmentTasks.remove);
 
-  const [view, setView] = useState<"list" | "kanban">("kanban");
+  const [view, setView] = useStickyState<"list" | "kanban">("tasks-board:view", "kanban");
   const [activeDrag, setActiveDrag] = useState<TaskRow | null>(null);
   const [editTask, setEditTask] = useState<TaskRow | null>(null);
   const [editTitle, setEditTitle] = useState("");

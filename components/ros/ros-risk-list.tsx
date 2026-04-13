@@ -42,6 +42,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
+import { useStickyState } from "@/lib/use-sticky-state";
 
 export type FlatRisk = {
   id: string;
@@ -167,7 +168,7 @@ export function RosRiskList({
   rosTasks,
   onGoToTasks,
 }: Props) {
-  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [expandedId, setExpandedId] = useStickyState<string | null>(`ros-risk-list:${workspaceId}:expanded`, null);
   const [libraryOpen, setLibraryOpen] = useState(false);
   const [saveLibraryOpen, setSaveLibraryOpen] = useState(false);
   const [saveRiskTitle, setSaveRiskTitle] = useState("");

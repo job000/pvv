@@ -88,7 +88,7 @@ function formatTs(d: Date) {
 }
 
 /** A4-PDF med samme bedriftslayout som ROS-eksport. */
-export function downloadAssessmentPdf(data: AssessmentPdfInput): void {
+export function buildAssessmentPdfDocument(data: AssessmentPdfInput): jsPDF {
   const doc = new jsPDF({ unit: "mm", format: "a4" });
   const margin = 16;
   let y = margin;
@@ -562,6 +562,15 @@ export function downloadAssessmentPdf(data: AssessmentPdfInput): void {
     docTypeLabel: "PVV-vurdering",
   });
 
+  return doc;
+}
+
+export function buildAssessmentPdfBlob(data: AssessmentPdfInput): Blob {
+  return buildAssessmentPdfDocument(data).output("blob");
+}
+
+export function downloadAssessmentPdf(data: AssessmentPdfInput): void {
+  const doc = buildAssessmentPdfDocument(data);
   const safe = data.title
     .replace(/[^\wæøåÆØÅ\- ]/gi, "")
     .trim()

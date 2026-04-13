@@ -62,7 +62,8 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useStickyState } from "@/lib/use-sticky-state";
 
 function formatRelative(ts: number | undefined): string {
   if (!ts) return "—";
@@ -182,6 +183,7 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
     useRosWorkspaceUiPrefs(workspaceId);
   const rawFane = searchParams.get("fane");
   const rawNewTemplate = searchParams.get("nyMal");
+  const rawOrgUnit = searchParams.get("orgUnit") as Id<"orgUnits"> | null;
   const tab: Tab = useMemo(() => {
     if (
       rawFane === "analyser" ||
@@ -240,10 +242,16 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
   const [anaOrgUnitId, setAnaOrgUnitId] = useState<Id<"orgUnits"> | "">("");
   const [templateDialogOpen, setTemplateDialogOpen] = useState(false);
   const [analysisSearch, setAnalysisSearch] = useState("");
-  const [analysisOrgFilter, setAnalysisOrgFilter] = useState<"" | Id<"orgUnits">>(
-    "",
-  );
-  const [analysisSort, setAnalysisSort] = useState<AnalysisSort>("updated");
+  const [analysisOrgFilter, setAnalysisOrgFilter] = useStickyState<"" | Id<"orgUnits">>(`ros-ws:${workspaceId}:orgFilter`, rawOrgUnit ?? "");
+  const [analysisSort, setAnalysisSort] = useStickyState<AnalysisSort>(`ros-ws:${workspaceId}:sort`, "updated");
+
+  const appliedOrgUnitRef = useRef(false);
+  useEffect(() => {
+    if (rawOrgUnit && !appliedOrgUnitRef.current) {
+      appliedOrgUnitRef.current = true;
+      setAnalysisOrgFilter(rawOrgUnit);
+    }
+  }, [rawOrgUnit, setAnalysisOrgFilter]);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [anaSectorPackId, setAnaSectorPackId] =
     useState<RosSectorPackId>("general");

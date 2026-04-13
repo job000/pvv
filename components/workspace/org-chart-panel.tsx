@@ -15,7 +15,6 @@ import { Textarea } from "@/components/ui/textarea";
 import { api } from "@/convex/_generated/api";
 import type { Doc, Id } from "@/convex/_generated/dataModel";
 import { ORG_UNIT_KIND_LABELS } from "@/lib/helsesector-labels";
-import { COMPLIANCE_STATUS_LABELS } from "@/lib/helsesector-labels";
 import { OrgUnitRosKpiStrip, type OrgRosRollup } from "@/components/workspace/org-unit-ros-kpi-strip";
 import { OrgUnitTreeOverviewStrip } from "@/components/workspace/org-unit-tree-overview-strip";
 import { ProcessCoverageOverview } from "@/components/workspace/process-coverage-overview";
@@ -24,12 +23,12 @@ import { formatUserFacingError } from "@/lib/user-facing-error";
 import { cn } from "@/lib/utils";
 import { useMutation, useQuery } from "convex/react";
 import {
+  AlertTriangle,
   ArrowRightLeft,
   Building2,
   ChevronDown,
   ChevronRight,
   Hand,
-  Layers,
   Maximize2,
   Minimize2,
   Minus,
@@ -38,9 +37,7 @@ import {
   Shield,
   Trash2,
   Users,
-  Workflow,
 } from "lucide-react";
-import Link from "next/link";
 import {
   createContext,
   useCallback,
@@ -604,7 +601,6 @@ function OrgBranch({
     rollup.candidateCount > 0 || rollup.analysisCount > 0;
   const assessmentCount = rollup.assessmentCount ?? 0;
   const pddCount = rollup.pddCount ?? 0;
-  const pddCompletedCount = rollup.pddCompletedCount ?? 0;
   const hasLegacyUnit =
     !!(unit.merkantilContactName ||
       unit.merkantilContactEmail ||
@@ -816,84 +812,30 @@ function OrgBranch({
             compact
             workspaceId={workspaceId}
             stats={rollup}
+            orgUnitId={unit._id}
           />
         </div>
 
         {cardExpanded ? (
           <>
-            <div className="border-t border-border/35 px-4 py-3 sm:px-5">
-              <div className="rounded-xl border border-border/40 bg-muted/10 p-3">
-                <div className="flex items-start gap-2.5">
-                  <div className="bg-blue-500/10 text-blue-700 dark:text-blue-300 flex size-8 shrink-0 items-center justify-center rounded-lg">
-                    <Workflow className="size-4" aria-hidden />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <div>
-                        <p className="text-sm font-medium text-foreground">
-                          Prosessdesign (RPA)
-                        </p>
-                        <p className="mt-0.5 text-xs text-muted-foreground">
-                          {pddCount > 0
-                            ? `${pddCount} vurdering${pddCount === 1 ? "" : "er"} med påbegynt prosessdesign i denne grenen`
-                            : "Ingen påbegynte prosessdesign i denne grenen ennå"}
-                        </p>
-                      </div>
-                      <Link
-                        href={`/w/${workspaceId}/prosessdesign`}
-                        className="text-primary text-[11px] font-medium hover:underline"
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        Åpne prosessdesign
-                      </Link>
-                    </div>
-                    {assessmentCount > 0 ? (
-                      <div className="mt-2 flex flex-wrap gap-1.5">
-                        <span className="inline-flex items-center rounded-full border border-border/50 bg-background/80 px-2 py-1 text-[10px] font-medium text-muted-foreground">
-                          {pddCompletedCount} ferdig dokumentert
-                        </span>
-                        <span className="inline-flex items-center rounded-full border border-border/50 bg-background/80 px-2 py-1 text-[10px] font-medium text-muted-foreground">
-                          {Math.max(
-                            assessmentCount - pddCompletedCount,
-                            0,
-                          )} gjenstår / pågår
-                        </span>
-                      </div>
-                    ) : null}
-                  </div>
-                </div>
-              </div>
-            </div>
-
             <details
-              className="group border-t border-border/35"
+              className="group border-t border-border/30"
               open={rosPanelOpen}
               onToggle={(e) => setRosPanelOpen(e.currentTarget.open)}
             >
-              <summary className="hover:bg-muted/30 flex cursor-pointer list-none items-center gap-2.5 px-4 py-2.5 text-left text-sm transition-colors sm:px-5 [&::-webkit-details-marker]:hidden">
-                <div className="bg-muted/50 text-muted-foreground flex size-8 shrink-0 items-center justify-center rounded-lg">
-                  <Shield className="size-3.5" aria-hidden />
-                </div>
-                <span className="min-w-0 flex-1 font-medium leading-tight">
-                  <span className="text-foreground">ROS</span>
-                  <span className="text-muted-foreground ml-1.5 block text-xs font-normal sm:inline sm:ml-1.5">
-                    {hasRosActivity
-                      ? `${rollup.analysisCount} analyse${rollup.analysisCount === 1 ? "" : "r"} · ${rollup.candidateCount} prosess${rollup.candidateCount === 1 ? "" : "er"}`
-                      : "Ingen data i treet"}
-                  </span>
+              <summary className="hover:bg-muted/25 flex cursor-pointer list-none items-center gap-2 px-3 py-2 text-left text-xs transition-colors sm:px-4 [&::-webkit-details-marker]:hidden">
+                <Shield className="text-muted-foreground size-3.5 shrink-0" aria-hidden />
+                <span className="text-foreground min-w-0 flex-1 font-medium">
+                  ROS
+                  {hasRosActivity ? (
+                    <span className="text-muted-foreground ml-1 font-normal">
+                      {rollup.analysisCount} · {rollup.candidateCount} pr.
+                    </span>
+                  ) : null}
                 </span>
-                <span className="flex shrink-0 items-center gap-2">
-                  <Link
-                    href={`/w/${workspaceId}/ros`}
-                    className="text-primary text-[11px] font-medium hover:underline"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    Åpne ROS
-                  </Link>
-                  <ChevronRight className="text-muted-foreground size-4 transition-transform group-open:rotate-90" />
-                </span>
+                <ChevronRight className="text-muted-foreground size-3.5 transition-transform group-open:rotate-90" />
               </summary>
-              <div className="border-border/25 bg-muted/5 border-t px-4 pb-3 pt-2 sm:px-5">
+              <div className="border-border/25 border-t px-3 pb-2.5 pt-1.5 sm:px-4">
                 <OrgUnitRosKpiStrip
                   embedded
                   workspaceId={workspaceId}
@@ -904,27 +846,23 @@ function OrgBranch({
             </details>
 
             <details
-              className="group border-t border-border/35"
+              className="group border-t border-border/30"
               open={contactsPanelOpen}
               onToggle={(e) => setContactsPanelOpen(e.currentTarget.open)}
             >
-              <summary className="hover:bg-muted/30 flex cursor-pointer list-none items-center gap-2.5 px-4 py-2.5 text-left text-sm transition-colors sm:px-5 [&::-webkit-details-marker]:hidden">
-                <div className="bg-muted/50 text-muted-foreground flex size-8 shrink-0 items-center justify-center rounded-lg">
-                  <Users className="size-3.5" aria-hidden />
-                </div>
-                <span className="min-w-0 flex-1 font-medium leading-tight">
-                  <span className="text-foreground">Kontaktpersoner</span>
-                  <span className="text-muted-foreground ml-1.5 block text-xs font-normal sm:inline sm:ml-1.5">
-                    {contactsForUnit.length > 0
-                      ? `${contactsForUnit.length} registrert${contactsForUnit.length === 1 ? "" : "e"}`
-                      : hasLegacyUnit
-                        ? "Eldre registrering"
-                        : "Ingen ennå"}
-                  </span>
+              <summary className="hover:bg-muted/25 flex cursor-pointer list-none items-center gap-2 px-3 py-2 text-left text-xs transition-colors sm:px-4 [&::-webkit-details-marker]:hidden">
+                <Users className="text-muted-foreground size-3.5 shrink-0" aria-hidden />
+                <span className="text-foreground min-w-0 flex-1 font-medium">
+                  Kontakter
+                  {contactsForUnit.length > 0 ? (
+                    <span className="text-muted-foreground ml-1 font-normal">
+                      {contactsForUnit.length}
+                    </span>
+                  ) : null}
                 </span>
-                <ChevronRight className="text-muted-foreground size-4 shrink-0 transition-transform group-open:rotate-90" />
+                <ChevronRight className="text-muted-foreground size-3.5 shrink-0 transition-transform group-open:rotate-90" />
               </summary>
-              <div className="border-border/35 border-t px-4 pb-3 pt-2 sm:px-5">
+              <div className="border-border/25 border-t px-3 pb-2.5 pt-1.5 sm:px-4">
                 <MerkantilContactsBlock
                   embedded
                   unit={unit}
@@ -934,15 +872,7 @@ function OrgBranch({
               </div>
             </details>
           </>
-        ) : (
-          <button
-            type="button"
-            className="text-muted-foreground hover:text-foreground hover:bg-muted/25 w-full border-t border-border/25 px-4 py-2.5 text-left text-xs font-medium transition-colors sm:px-5"
-            onClick={() => setCardExpanded(true)}
-          >
-            Vis ROS, kontakter og mer …
-          </button>
-        )}
+        ) : null}
 
         {canEdit ? (
           <div className="border-border/25 flex items-center justify-end gap-0.5 rounded-b-2xl border-t bg-muted/[0.03] px-2 py-1.5 sm:px-3">
@@ -2167,58 +2097,7 @@ export function OrgChartPanel({
   }
 
   return (
-    <div className="mx-auto max-w-7xl space-y-8">
-      <details className="group border-border/50 bg-muted/25 open:bg-muted/35 rounded-2xl border px-4 py-3 shadow-sm ring-1 ring-black/[0.04] transition-colors dark:ring-white/[0.05]">
-        <summary className="cursor-pointer list-none leading-snug [&::-webkit-details-marker]:hidden">
-          <span className="inline-flex items-center gap-2.5">
-            <span className="bg-background/80 text-muted-foreground flex size-8 shrink-0 items-center justify-center rounded-lg border border-border/60 shadow-sm">
-              <Layers className="size-4" aria-hidden />
-            </span>
-            <span className="text-foreground font-medium">
-              Slik fungerer organisasjonskartet
-            </span>
-            <ChevronRight className="text-muted-foreground ml-auto size-4 shrink-0 transition-transform duration-200 group-open:rotate-90" />
-          </span>
-        </summary>
-        <div className="text-muted-foreground mt-4 space-y-3 border-t border-border/50 pt-4 text-sm leading-relaxed">
-          <p>
-            Strukturen starter med <strong className="text-foreground font-medium">selskap eller konsern</strong>,
-            deretter avdeling eller forretningsenhet, så team eller seksjon — og du kan legge til{" "}
-            <strong className="text-foreground font-medium">flere team-nivåer</strong> under en seksjon
-            etter behov. Navn tilpasses deres modell.
-          </p>
-          <p>
-            Hvert nivå kan ha{" "}
-            <strong className="text-foreground font-medium">kontaktpersoner</strong>{" "}
-            (utvid kortet). Bruk knappen «Vis detaljer» eller snarveien under
-            oversiktsraden for å vise eller skjule ROS, kontakter og mer tekst.
-            Underenheter vises i trestruktur med tydelige linjer mellom nivåene (tilpasset lys og mørk modus).
-          </p>
-          <p>
-            <strong className="text-foreground font-medium">Zoom</strong> med knappene over kartet,{" "}
-            <kbd className="bg-muted rounded px-1 py-0.5 font-mono text-[10px]">Ctrl</kbd>{" "}
-            (Mac: <kbd className="bg-muted rounded px-1 py-0.5 font-mono text-[10px]">⌘</kbd>
-            ) + musehjul eller to fingre på styreflate, eller knip i Safari.{" "}
-            <strong className="text-foreground font-medium">Flytt utsnitt:</strong> aktiver «Dra kart» og dra i
-            området utenfor kortene, eller hold{" "}
-            <kbd className="bg-muted rounded px-1 py-0.5 font-mono text-[10px]">Alt</kbd>{" "}
-            (Mac: Valg) og dra med mus; midtknapp fungerer også.
-          </p>
-          <p>
-            <strong className="text-foreground font-medium">+</strong> til venstre eller høyre
-            på kortet (ved peker over kortet på større skjerm) oppretter en søskenenhet;{" "}
-            <strong className="text-foreground font-medium">+</strong> under kortet legger til
-            ett nivå under (f.eks. team under seksjon, eller team under team). Flytt og slett finner du nederst i
-            kortet.
-          </p>
-          <p>
-            Under enhetsnavnet vises en <strong className="text-foreground font-medium">firfeltet oversikt</strong>{" "}
-            (prosess, ROS, PDD, vurdering, inntak): tallene omfatter underenheter og er snarveier til
-            arbeidsflatene.
-          </p>
-        </div>
-      </details>
-
+    <div className="mx-auto max-w-7xl space-y-6">
       {canEdit ? (
         <AddRootOrganizationForm
           workspaceId={workspaceId}
@@ -2232,56 +2111,21 @@ export function OrgChartPanel({
         (rosRollup.unassigned.assessmentCount ?? 0) > 0 ||
         (rosRollup.unassigned.intakeSubmissionCount ?? 0) > 0 ||
         (rosRollup.unassigned.intakeFormCount ?? 0) > 0) ? (
-        <div className="border-border/50 bg-amber-500/[0.07] rounded-2xl border px-4 py-3 ring-1 ring-amber-500/20">
-          <p className="text-foreground text-sm font-medium">
-            Elementer uten plass i organisasjonstreet
-          </p>
-          <p className="text-muted-foreground mt-1 text-xs leading-relaxed">
+        <div className="flex items-center gap-3 rounded-xl border border-amber-500/20 bg-amber-500/[0.06] px-3 py-2.5">
+          <AlertTriangle className="text-amber-600 dark:text-amber-400 size-4 shrink-0" aria-hidden />
+          <p className="text-muted-foreground min-w-0 text-xs">
             {(() => {
               const u = rosRollup.unassigned;
               const bits: string[] = [];
-              if (u.candidateCount > 0) {
-                bits.push(
-                  `${u.candidateCount} prosess${u.candidateCount === 1 ? "" : "er"} uten enhet`,
-                );
-              }
-              if (u.analysisCount > 0) {
-                bits.push(
-                  `${u.analysisCount} ROS-analyse${u.analysisCount === 1 ? "" : "r"} (via prosess uten enhet)`,
-                );
-              }
+              if (u.candidateCount > 0) bits.push(`${u.candidateCount} prosess${u.candidateCount === 1 ? "" : "er"}`);
+              if (u.analysisCount > 0) bits.push(`${u.analysisCount} ROS`);
               const ac = u.assessmentCount ?? 0;
-              if (ac > 0) {
-                bits.push(
-                  `${ac} PVV-vurdering${ac === 1 ? "" : "er"} uten org.-enhet`,
-                );
-              }
-              const ic = u.intakeSubmissionCount ?? 0;
-              if (ic > 0) {
-                bits.push(
-                  `${ic} inntak (godkjent eller mangler enhet på vurdering)`,
-                );
-              }
+              if (ac > 0) bits.push(`${ac} vurdering${ac === 1 ? "" : "er"}`);
               const fc = u.intakeFormCount ?? 0;
-              if (fc > 0) {
-                bits.push(
-                  `${fc} inntaksskjema uten org.-enhet`,
-                );
-              }
-              return (
-                <>
-                  {bits.join(" · ")}. Knytt til enhet der det er mulig for riktig trevisning.
-                </>
-              );
+              if (fc > 0) bits.push(`${fc} skjema`);
+              return <><span className="text-foreground font-medium">{bits.join(", ")}</span> mangler plassering i organisasjonskartet</>;
             })()}
           </p>
-          <div className="mt-3">
-            <OrgUnitRosKpiStrip
-              workspaceId={workspaceId}
-              stats={rosRollup.unassigned}
-              variant="full"
-            />
-          </div>
         </div>
       ) : null}
 
@@ -2442,27 +2286,8 @@ export function OrgChartPanel({
                 </div>
               </div>
             ) : (
-              <div className="flex flex-col gap-4">
-                <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between lg:gap-6">
-                  <div className="min-w-0 flex-1 space-y-1.5">
-                    <p className="text-muted-foreground text-[0.65rem] font-semibold uppercase tracking-[0.12em]">
-                      Organisasjonskart
-                    </p>
-                    <p className="text-muted-foreground max-w-2xl text-xs leading-relaxed">
-                      <strong className="text-foreground font-medium">Trykk på et kort</strong> for å
-                      zoome til minst 100 % og sentrere enheten.{" "}
-                      <strong className="text-foreground font-medium">Zoom:</strong> knapper, eller hold{" "}
-                      <kbd className="bg-muted rounded px-1 py-0.5 font-mono text-[10px]">Ctrl</kbd>
-                      /{" "}
-                      <kbd className="bg-muted rounded px-1 py-0.5 font-mono text-[10px]">⌘</kbd>
-                      {" "}og rull (mus eller styreflate). <strong className="text-foreground font-medium">Flytt kart:</strong>{" "}
-                      «Dra kart» + dra i bakgrunnen,{" "}
-                      <kbd className="bg-muted rounded px-1 py-0.5 font-mono text-[10px]">Alt</kbd>{" "}
-                      + dra, eller midtknapp. <strong className="text-foreground font-medium">Rull:</strong> to fingre;{" "}
-                      <kbd className="bg-muted rounded px-1 py-0.5 font-mono text-[10px]">Shift</kbd>{" "}
-                      + scroll for horisontalt.
-                    </p>
-                  </div>
+              <div className="flex flex-col gap-3">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
                   <div
                     ref={orgSearchWrapRef}
                     className="relative w-full min-w-0 shrink-0 lg:max-w-[min(100%,22rem)]"

@@ -1062,6 +1062,30 @@ export function RosMatrix({
                             Følg med
                           </button>
                         </div>
+                        {currentPhase === "after" ? (
+                          <div className="border-border/40 space-y-1 border-t pt-2">
+                            <Label
+                              htmlFor={`ros-after-change-${it.id}`}
+                              className="text-foreground text-xs font-semibold"
+                            >
+                              Begrunnelse for endring
+                            </Label>
+                            <Textarea
+                              id={`ros-after-change-${it.id}`}
+                              value={it.afterChangeNote ?? ""}
+                              onChange={(e) => {
+                                const v = e.target.value;
+                                patchItem(picker.row, picker.col, it.id, {
+                                  afterChangeNote:
+                                    v.length === 0 ? undefined : v,
+                                });
+                              }}
+                              placeholder="Hvilke tiltak reduserer risikoen? F.eks. kryptering, backup, opplæring …"
+                              rows={2}
+                              className="min-h-[2.75rem] resize-y text-sm"
+                            />
+                          </div>
+                        ) : null}
                       </div>
 
                       {canPlaceAfter ? (

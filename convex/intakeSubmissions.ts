@@ -1,5 +1,4 @@
 import { v } from "convex/values";
-import { api } from "./_generated/api";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import {
@@ -36,6 +35,10 @@ import {
   PUBLIC_INTAKE_SUBMITS_PER_LINK_PER_MINUTE,
 } from "./lib/intakePublicSecurity";
 import { placeIntakeRisksOnRosMatrix } from "./lib/rosIntakePlacement";
+import {
+  createRosAnalysisWithUser,
+  createRosTemplateWithUser,
+} from "./ros";
 import {
   DEFAULT_ROS_COL_LABELS,
   isRpaIntakeRosTemplate,
@@ -613,7 +616,7 @@ export const approve = mutation({
         templateId = firstTemplate[0]?._id;
       }
       if (!templateId) {
-        templateId = await ctx.runMutation(api.ros.createTemplate, {
+        templateId = await createRosTemplateWithUser(ctx, userId, {
           workspaceId: submission.workspaceId,
           name: RPA_INTAKE_ROS_TEMPLATE_NAME,
           description: RPA_INTAKE_ROS_TEMPLATE_DESCRIPTION,
@@ -624,8 +627,9 @@ export const approve = mutation({
           rowDescriptions: [...RPA_INTAKE_ROS_ROW_DESCRIPTIONS],
         });
       }
-      const analysisId: Id<"rosAnalyses"> = await ctx.runMutation(
-        api.ros.createAnalysis,
+      const analysisId: Id<"rosAnalyses"> = await createRosAnalysisWithUser(
+        ctx,
+        userId,
         {
           workspaceId: submission.workspaceId,
           templateId,

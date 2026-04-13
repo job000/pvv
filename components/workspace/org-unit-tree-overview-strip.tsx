@@ -23,49 +23,54 @@ export function OrgUnitTreeOverviewStrip({
   stats,
   className,
   compact = false,
+  orgUnitId,
 }: {
   workspaceId: Id<"workspaces">;
   stats: OrgRosRollup;
   className?: string;
   /** Kompakt variant for organisasjonskart (mindre kort). */
   compact?: boolean;
+  /** When set, appends ?orgUnit= to links for deep-filtering. */
+  orgUnitId?: Id<"orgUnits">;
 }) {
   const assessmentCount = stats.assessmentCount ?? 0;
   const pddCount = stats.pddCount ?? 0;
   const intakeSubmissionCount = stats.intakeSubmissionCount ?? 0;
   const { candidateCount, analysisCount } = stats;
 
+  const orgSuffix = orgUnitId ? `&orgUnit=${orgUnitId}` : "";
+
   const items: Item[] = [
     {
-      href: `/w/${workspaceId}/vurderinger?fane=prosesser`,
+      href: `/w/${workspaceId}/vurderinger?fane=prosesser${orgSuffix}`,
       label: "Prosess",
       short: "Pr",
       value: candidateCount,
       icon: Layers,
     },
     {
-      href: `/w/${workspaceId}/ros`,
+      href: `/w/${workspaceId}/ros?${orgUnitId ? `orgUnit=${orgUnitId}` : ""}`,
       label: "ROS",
       short: "ROS",
       value: analysisCount,
       icon: FileText,
     },
     {
-      href: `/w/${workspaceId}/prosessdesign`,
+      href: `/w/${workspaceId}/prosessdesign${orgUnitId ? `?orgUnit=${orgUnitId}` : ""}`,
       label: "PDD",
       short: "PDD",
       value: pddCount,
       icon: Workflow,
     },
     {
-      href: `/w/${workspaceId}/vurderinger`,
+      href: `/w/${workspaceId}/vurderinger${orgUnitId ? `?orgUnit=${orgUnitId}` : ""}`,
       label: "Vurdering",
       short: "V",
       value: assessmentCount,
       icon: ClipboardList,
     },
     {
-      href: `/w/${workspaceId}/skjemaer`,
+      href: `/w/${workspaceId}/skjemaer${orgUnitId ? `?orgUnit=${orgUnitId}` : ""}`,
       label: "Inntak",
       short: "Inn",
       value: intakeSubmissionCount,

@@ -9,7 +9,7 @@ import type { Doc, Id } from "@/convex/_generated/dataModel";
 import type { AssessmentPayload } from "@/lib/assessment-types";
 import { cn } from "@/lib/utils";
 import { Bot, Sparkles } from "lucide-react";
-import { useState } from "react";
+import { useStickyState } from "@/lib/use-sticky-state";
 
 type Sub = "grunnlag" | "beskrivelse" | "krav";
 
@@ -51,7 +51,7 @@ export function AssessmentProcessSlide({
   candidatePickerKey,
   bumpCandidatePickerKey,
 }: Props) {
-  const [sub, setSub] = useState<Sub>("grunnlag");
+  const [sub, setSub] = useStickyState<Sub>("assessment-process:sub", "grunnlag");
 
   return (
     <div className="space-y-5">

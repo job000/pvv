@@ -82,6 +82,7 @@ import {
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useStickyState } from "@/lib/use-sticky-state";
 function tsToDatetimeLocal(ms: number): string {
   const d = new Date(ms);
   const pad = (n: number) => String(n).padStart(2, "0");
@@ -103,6 +104,148 @@ function formatRiskPoolLinesForPdf(pool: RosPoolItem[]): string[] {
     const body = it.text.trim() || "(ingen tekst)";
     return bands ? `${zone}: ${body} — ${bands}` : `${zone}: ${body}`;
   });
+}
+
+function cloneCellItemsMatrix(m: RosCellItemMatrix): RosCellItemMatrix {
+  return m.map((r) => r.map((c) => [...c]));
+}
+
+/** Synk innhold fra før-tiltak-punkt til tilhørende kopi(er) i etter-matrisen (kilde-id eller samme id). */
+function syncAfterMatrixFromBeforeCellItem(
+  prev: RosCellItemMatrix,
+  beforeItem: RosCellItem,
+  beforeRow: number,
+  beforeCol: number,
+  br: number,
+  bc: number,
+): RosCellItemMatrix {
+  const ar =
+    beforeItem.afterRow !== undefined ? beforeItem.afterRow : beforeRow;
+  const ac =
+    beforeItem.afterCol !== undefined ? beforeItem.afterCol : beforeCol;
+  const copy = cloneCellItemsMatrix(prev);
+  let found = false;
+  for (let r = 0; r < br; r++) {
+    for (let c = 0; c < bc; c++) {
+      const cell = copy[r]?.[c];
+      if (!cell) continue;
+      for (let i = 0; i < cell.length; i++) {
+        const a = cell[i]!;
+        if (a.sourceItemId === beforeItem.id || a.id === beforeItem.id) {
+          found = true;
+          cell[i] = {
+            ...a,
+            text: beforeItem.text,
+            flags: beforeItem.flags,
+            economicBand: beforeItem.economicBand,
+            frequencyBand: beforeItem.frequencyBand,
+            afterChangeNote: beforeItem.afterChangeNote,
+          };
+        }
+      }
+    }
+  }
+  if (!found && ar >= 0 && ac >= 0 && ar < br && ac < bc) {
+    const row = copy[ar];
+    if (!row) return copy;
+    row[ac] = [
+      ...(row[ac] ?? []),
+      {
+        id: newRosCellItemId(),
+        text: beforeItem.text,
+        flags: beforeItem.flags,
+        sourceItemId: beforeItem.id,
+        afterChangeNote: beforeItem.afterChangeNote,
+        economicBand: beforeItem.economicBand,
+        frequencyBand: beforeItem.frequencyBand,
+      },
+    ];
+  }
+  return copy;
+}
+
+/** Etter redigering i etter-matrise: oppdater tilsvarende punkt i før-matrisen. */
+function patchBeforeMatrixFromAfterCellItems(
+  prev: RosCellItemMatrix,
+  afterItems: RosCellItem[],
+): RosCellItemMatrix {
+  const copy = prev.map((r) => r.map((c) => c.map((it) => ({ ...it }))));
+  for (const a of afterItems) {
+    const targetId = a.sourceItemId ?? a.id;
+    let found = false;
+    for (let r = 0; r < copy.length && !found; r++) {
+      for (let c = 0; c < (copy[r]?.length ?? 0); c++) {
+        const idx = copy[r][c].findIndex((it) => it.id === targetId);
+        if (idx >= 0) {
+          copy[r][c][idx] = {
+            ...copy[r][c][idx],
+            text: a.text,
+            flags: a.flags,
+            economicBand: a.economicBand,
+            frequencyBand: a.frequencyBand,
+            afterChangeNote: a.afterChangeNote,
+          };
+          found = true;
+          break;
+        }
+      }
+    }
+  }
+  return copy;
+}
+
+/** Én skygge-rad per identifisert risiko i etter-matrisen (også når målcelle = før-celle). */
+function upsertAfterShadowForFlatRisk(
+  prev: RosCellItemMatrix,
+  risk: {
+    id: string;
+    text: string;
+    flags?: string[];
+    afterRow: number;
+    afterCol: number;
+    afterChangeNote?: string;
+  },
+  br: number,
+  bc: number,
+): RosCellItemMatrix {
+  const prevRows = prev.length;
+  const prevCols = prev[0]?.length ?? 0;
+  const sized = resizeCellItemsMatrix(prev, prevRows, prevCols, br, bc);
+  let reuseId: string | null = null;
+  outer: for (const row of sized) {
+    for (const cell of row) {
+      for (const it of cell) {
+        if (it.sourceItemId === risk.id) {
+          reuseId = it.id;
+          break outer;
+        }
+      }
+    }
+  }
+  const copy = sized.map((r) =>
+    r.map((c) => c.filter((it) => it.sourceItemId !== risk.id)),
+  );
+  if (
+    risk.afterRow < 0 ||
+    risk.afterCol < 0 ||
+    risk.afterRow >= br ||
+    risk.afterCol >= bc
+  ) {
+    return copy;
+  }
+  const destRow = copy[risk.afterRow];
+  if (!destRow) return copy;
+  destRow[risk.afterCol] = [
+    ...(destRow[risk.afterCol] ?? []),
+    {
+      id: reuseId ?? newRosCellItemId(),
+      text: risk.text,
+      flags: risk.flags,
+      sourceItemId: risk.id,
+      afterChangeNote: risk.afterChangeNote,
+    },
+  ];
+  return copy;
 }
 
 const ROS_EDITOR_SECTIONS = [
@@ -260,6 +403,7 @@ function RiskSummaryBar({
 }
 
 const ROS_MATRISE_SECTION_INDEX = 0;
+
 const ROS_INNSTILLINGER_SECTION_INDEX = ROS_EDITOR_SECTIONS.findIndex(
   (s) => s.id === "innstillinger",
 );
@@ -442,7 +586,7 @@ export function RosAnalysisEditor({
   const [matrixAfter, setMatrixAfter] = useState<number[][]>([]);
   const [cellItemsAfterMatrix, setCellItemsAfterMatrix] =
     useState<RosCellItemMatrix>([]);
-  const [matrixView, setMatrixView] = useState<"before" | "after">("before");
+  const [matrixView, setMatrixView] = useStickyState<"before" | "after">(`ros:${analysisId}:matrixView`, "before");
   const [matrixScaleHelpOpen, setMatrixScaleHelpOpen] = useState(false);
   const [jumpRequest, setJumpRequest] = useState<{
     row: number;
@@ -464,7 +608,7 @@ export function RosAnalysisEditor({
   const canAutosaveRef = useRef(false);
   dirtyRef.current = dirty;
 
-  const [rosSection, setRosSection] = useState(ROS_MATRISE_SECTION_INDEX);
+  const [rosSection, setRosSection] = useStickyState(`ros:${analysisId}:section`, ROS_MATRISE_SECTION_INDEX);
 
   const [taskTitle, setTaskTitle] = useState("");
   const [taskDesc, setTaskDesc] = useState("");
@@ -777,6 +921,9 @@ export function RosAnalysisEditor({
 
   const onCellItemsChange = useCallback(
     (row: number, col: number, items: RosCellItem[]) => {
+      const br = effectiveAfterRowLabels.length;
+      const bc = effectiveAfterColLabels.length;
+
       if (matrixView === "after") {
         setCellItemsAfterMatrix((prev) => {
           const copy = prev.map((r) => r.map((c) => [...c]));
@@ -784,17 +931,80 @@ export function RosAnalysisEditor({
           copy[row][col] = items;
           return copy;
         });
+        setCellItemsMatrix((prev) =>
+          patchBeforeMatrixFromAfterCellItems(prev, items),
+        );
       } else {
+        const prevCell = cellItemsMatrix[row]?.[col] ?? [];
+        const removedIds = prevCell
+          .filter((p) => !items.some((i) => i.id === p.id))
+          .map((p) => p.id);
+
         setCellItemsMatrix((prev) => {
           const copy = prev.map((r) => r.map((c) => [...c]));
           if (!copy[row]) return prev;
           copy[row][col] = items;
           return copy;
         });
+
+        if (br >= 1 && bc >= 1) {
+          setCellItemsAfterMatrix((prev) => {
+            const prevRows = prev.length;
+            const prevCols = prev[0]?.length ?? 0;
+            const filtered = prev.map((r) =>
+              r.map((c) =>
+                c.filter(
+                  (it) =>
+                    !removedIds.includes(it.id) &&
+                    !(it.sourceItemId &&
+                      removedIds.includes(it.sourceItemId)),
+                ),
+              ),
+            );
+            let copy = resizeCellItemsMatrix(
+              filtered,
+              prevRows,
+              prevCols,
+              br,
+              bc,
+            );
+            for (const it of items) {
+              copy = syncAfterMatrixFromBeforeCellItem(
+                copy,
+                it,
+                row,
+                col,
+                br,
+                bc,
+              );
+            }
+            return copy;
+          });
+        }
+
+        setMatrixAfter((prev) => {
+          if (br < 1 || bc < 1) return prev;
+          const copy = resizeNumberMatrix(prev, br, bc);
+          for (const it of items) {
+            const ar = it.afterRow !== undefined ? it.afterRow : row;
+            const ac = it.afterCol !== undefined ? it.afterCol : col;
+            if (ar < 0 || ac < 0 || ar >= br || ac >= bc) continue;
+            const cur = copy[ar][ac] ?? 0;
+            if (cur <= 0) {
+              copy[ar][ac] = positionRiskLevel(ar, ac, br, bc);
+            }
+          }
+          return copy;
+        });
       }
       setDirty(true);
     },
-    [matrixView],
+    [
+      matrixView,
+      cellItemsMatrix,
+      effectiveAfterColLabels.length,
+      effectiveAfterRowLabels.length,
+    ],
   );
 
   const moveMatrixCellContents = useCallback(
@@ -1093,9 +1303,40 @@ export function RosAnalysisEditor({
         }
         return copy;
       });
+      const br = effectiveAfterRowLabels.length;
+      const bc = effectiveAfterColLabels.length;
+      if (br >= 1 && bc >= 1) {
+        setCellItemsAfterMatrix((prev) =>
+          upsertAfterShadowForFlatRisk(prev, risk, br, bc),
+        );
+        setMatrixAfter((prev) => {
+          const copy = resizeNumberMatrix(prev, br, bc);
+          if (
+            risk.afterRow >= 0 &&
+            risk.afterCol >= 0 &&
+            risk.afterRow < br &&
+            risk.afterCol < bc
+          ) {
+            const cur = copy[risk.afterRow][risk.afterCol] ?? 0;
+            if (cur <= 0) {
+              copy[risk.afterRow][risk.afterCol] = positionRiskLevel(
+                risk.afterRow,
+                risk.afterCol,
+                br,
+                bc,
+              );
+            }
+          }
+          return copy;
+        });
+      }
       setDirty(true);
     },
-    [data],
+    [
+      data,
+      effectiveAfterColLabels.length,
+      effectiveAfterRowLabels.length,
+    ],
   );
 
   const onUpdateRisk = useCallback(
@@ -1159,69 +1400,34 @@ export function RosAnalysisEditor({
       /**
        * Ikke bruk `removeAfterCopyEverywhere` her — den nullstiller `afterRow`/`afterCol`
        * på kilden og overskriver nettopp lagrede målceller (dropdown + matrise «etter tiltak»).
-       * Fjern kun spøkelseskopier i etter-matrisen og legg inn ny kopi ved behov.
+       * Én skygge-kopi i etter-matrisen per risiko (også når målcelle = før-celle).
        */
       const br = effectiveAfterRowLabels.length;
       const bc = effectiveAfterColLabels.length;
 
-      setCellItemsAfterMatrix((prev) => {
-        if (br < 1 || bc < 1) return prev;
-        const sized = resizeCellItemsMatrix(
-          prev,
-          prev.length,
-          prev[0]?.length ?? 0,
-          br,
-          bc,
+      if (br >= 1 && bc >= 1) {
+        setCellItemsAfterMatrix((prev) =>
+          upsertAfterShadowForFlatRisk(prev, risk, br, bc),
         );
-        const copy = sized.map((r) =>
-          r.map((c) => c.filter((it) => it.sourceItemId !== risk.id)),
-        );
-        if (
-          risk.afterRow !== risk.beforeRow ||
-          risk.afterCol !== risk.beforeCol
-        ) {
-          if (
-            risk.afterRow < 0 ||
-            risk.afterCol < 0 ||
-            risk.afterRow >= br ||
-            risk.afterCol >= bc
-          ) {
-            return copy;
-          }
-          if (!copy[risk.afterRow][risk.afterCol])
-            copy[risk.afterRow][risk.afterCol] = [];
-          copy[risk.afterRow][risk.afterCol].push({
-            id: newRosCellItemId(),
-            text: risk.text,
-            flags: risk.flags,
-            sourceItemId: risk.id,
-          });
-        }
-        return copy;
-      });
+      }
 
       setMatrixAfter((prev) => {
         if (br < 1 || bc < 1) return prev;
         const copy = resizeNumberMatrix(prev, br, bc);
         if (
-          risk.afterRow !== risk.beforeRow ||
-          risk.afterCol !== risk.beforeCol
+          risk.afterRow >= 0 &&
+          risk.afterCol >= 0 &&
+          risk.afterRow < br &&
+          risk.afterCol < bc
         ) {
-          if (
-            risk.afterRow >= 0 &&
-            risk.afterCol >= 0 &&
-            risk.afterRow < br &&
-            risk.afterCol < bc
-          ) {
-            const cur = copy[risk.afterRow][risk.afterCol] ?? 0;
-            if (cur <= 0) {
-              copy[risk.afterRow][risk.afterCol] = positionRiskLevel(
-                risk.afterRow,
-                risk.afterCol,
-                br,
-                bc,
-              );
-            }
+          const cur = copy[risk.afterRow][risk.afterCol] ?? 0;
+          if (cur <= 0) {
+            copy[risk.afterRow][risk.afterCol] = positionRiskLevel(
+              risk.afterRow,
+              risk.afterCol,
+              br,
+              bc,
+            );
           }
         }
         return copy;

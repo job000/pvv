@@ -1119,6 +1119,59 @@ export const listAssessmentsForWorkspace = query({
   },
 });
 
+/**
+ * Opprett ROS-mal med kjent bruker (f.eks. fra annen mutasjon som allerede har verifisert innlogging).
+ * Ikke bruk `runMutation(api.ros.createTemplate)` internt — da mangler auth-kontekst.
+ */
+export async function createRosTemplateWithUser(
+  ctx: MutationCtx,
+  userId: Id<"users">,
+  args: {
+    workspaceId: Id<"workspaces">;
+    name: string;
+    description?: string;
+    rowAxisTitle?: string;
+    colAxisTitle?: string;
+    rowLabels?: string[];
+    colLabels?: string[];
+    rowDescriptions?: string[];
+    colDescriptions?: string[];
+    defaultMatrixValues?: number[][];
+  },
+): Promise<Id<"rosTemplates">> {
+  await requireWorkspaceMember(ctx, args.workspaceId, userId, "member");
+  const name = args.name.trim();
+  if (!name) {
+    throw new Error("Navn på mal er påkrevd.");
+  }
+  const rowLabels = trimLabels(
+    args.rowLabels ?? [...DEFAULT_ROS_ROW_LABELS],
+  );
+  const colLabels = trimLabels(
+    args.colLabels ?? [...DEFAULT_ROS_COL_LABELS],
+  );
+  validateLabelArrays(rowLabels, colLabels);
+  if (args.defaultMatrixValues) {
+    assertMatrixShape(args.defaultMatrixValues, rowLabels.length, colLabels.length);
+  }
+  const now = Date.now();
+  return await ctx.db.insert("rosTemplates", {
+    workspaceId: args.workspaceId,
+    name,
+    description: args.description?.trim() || undefined,
+    rowAxisTitle: (args.rowAxisTitle ?? DEFAULT_ROS_ROW_AXIS).trim(),
+    colAxisTitle: (args.colAxisTitle ?? DEFAULT_ROS_COL_AXIS).trim(),
+    rowLabels,
+    colLabels,
+    rowDescriptions: args.rowDescriptions?.map((d) => d.trim()),
+    colDescriptions: args.colDescriptions?.map((d) => d.trim()),
+    defaultMatrixValues: args.defaultMatrixValues,
+    createdByUserId: userId,
+    createdAt: now,
+    updatedAt: now,
+  });
+}
+
 export const createTemplate = mutation({
   args: {
     workspaceId: v.id("workspaces"),
@@ -1134,37 +1187,7 @@ export const createTemplate = mutation({
   },
   handler: async (ctx, args) => {
     const userId = await requireUserId(ctx);
-    await requireWorkspaceMember(ctx, args.workspaceId, userId, "member");
-    const name = args.name.trim();
-    if (!name) {
-      throw new Error("Navn på mal er påkrevd.");
-    }
-    const rowLabels = trimLabels(
-      args.rowLabels ?? [...DEFAULT_ROS_ROW_LABELS],
-    );
-    const colLabels = trimLabels(
-      args.colLabels ?? [...DEFAULT_ROS_COL_LABELS],
-    );
-    validateLabelArrays(rowLabels, colLabels);
-    if (args.defaultMatrixValues) {
-      assertMatrixShape(args.defaultMatrixValues, rowLabels.length, colLabels.length);
-    }
-    const now = Date.now();
-    return await ctx.db.insert("rosTemplates", {
-      workspaceId: args.workspaceId,
-      name,
-      description: args.description?.trim() || undefined,
-      rowAxisTitle: (args.rowAxisTitle ?? DEFAULT_ROS_ROW_AXIS).trim(),
-      colAxisTitle: (args.colAxisTitle ?? DEFAULT_ROS_COL_AXIS).trim(),
-      rowLabels,
-      colLabels,
-      rowDescriptions: args.rowDescriptions?.map((d) => d.trim()),
-      colDescriptions: args.colDescriptions?.map((d) => d.trim()),
-      defaultMatrixValues: args.defaultMatrixValues,
-      createdByUserId: userId,
-      createdAt: now,
-      updatedAt: now,
-    });
+    return await createRosTemplateWithUser(ctx, userId, args);
   },
 });
 
@@ -1250,6 +1273,155 @@ export const removeTemplate = mutation({
   },
 });
 
+/**
+ * Opprett ROS-analyse med kjent bruker (samme som createRosTemplateWithUser).
+ */
+export async function createRosAnalysisWithUser(
+  ctx: MutationCtx,
+  userId: Id<"users">,
+  args: {
+    workspaceId: Id<"workspaces">;
+    templateId: Id<"rosTemplates">;
+    candidateId?: Id<"candidates">;
+    orgUnitId?: Id<"orgUnits">;
+    title: string;
+    assessmentId?: Id<"assessments">;
+    assessmentIds?: Id<"assessments">[];
+    notes?: string;
+    sectorPackId?: string;
+  },
+): Promise<Id<"rosAnalyses">> {
+  await requireWorkspaceMember(ctx, args.workspaceId, userId, "member");
+  if (args.candidateId) {
+    const cand = await ctx.db.get(args.candidateId);
+    if (!cand || cand.workspaceId !== args.workspaceId) {
+      throw new Error("Ugyldig kandidat.");
+    }
+  }
+  if (args.orgUnitId) {
+    const unit = await ctx.db.get(args.orgUnitId);
+    if (!unit || unit.workspaceId !== args.workspaceId) {
+      throw new Error("Ugyldig organisasjonsenhet.");
+    }
+  }
+  const tpl = await ctx.db.get(args.templateId);
+  if (!tpl || tpl.workspaceId !== args.workspaceId) {
+    throw new Error("Ugyldig mal.");
+  }
+  const title = args.title.trim();
+  if (!title) {
+    throw new Error("Tittel er påkrevd.");
+  }
+  const idSet = new Set<string>();
+  const addIds = [...(args.assessmentIds ?? [])];
+  if (args.assessmentId) {
+    addIds.push(args.assessmentId);
+  }
+  for (const aid of addIds) {
+    idSet.add(aid);
+  }
+  for (const aid of idSet) {
+    const a = await ctx.db.get(aid as Id<"assessments">);
+    if (!a || a.workspaceId !== args.workspaceId) {
+      throw new Error("Ugyldig vurdering.");
+    }
+    if (!(await canReadAssessment(ctx, a, userId))) {
+      throw new Error("Ingen tilgang til vurderingen.");
+    }
+  }
+  const matrixValues = tpl.defaultMatrixValues
+    ? tpl.defaultMatrixValues.map((r) => [...r])
+    : emptyMatrix(tpl.rowLabels.length, tpl.colLabels.length);
+  const cellNotes = emptyStringMatrix(
+    tpl.rowLabels.length,
+    tpl.colLabels.length,
+  );
+  const now = Date.now();
+  const matrixValuesAfter = emptyMatrix(
+    tpl.rowLabels.length,
+    tpl.colLabels.length,
+  );
+  const cellNotesAfter = emptyStringMatrix(
+    tpl.rowLabels.length,
+    tpl.colLabels.length,
+  );
+  const ws = await ctx.db.get(args.workspaceId);
+  const packIdArg = args.sectorPackId?.trim();
+  const effectivePackId =
+    packIdArg && isValidRosSectorPackId(packIdArg)
+      ? packIdArg
+      : workspaceDefaultSectorPackId(ws ?? null);
+  const pack = effectivePackId ? getRosSectorPack(effectivePackId) : null;
+  const packFields = pack ? sectorPackInitialAnalysisFields(pack) : null;
+  const analysisId = await ctx.db.insert("rosAnalyses", {
+    workspaceId: args.workspaceId,
+    templateId: args.templateId,
+    title,
+    rowAxisTitle: tpl.rowAxisTitle,
+    colAxisTitle: tpl.colAxisTitle,
+    rowLabels: [...tpl.rowLabels],
+    colLabels: [...tpl.colLabels],
+    matrixValues,
+    cellNotes,
+    matrixValuesAfter,
+    cellNotesAfter,
+    candidateId: args.candidateId ?? undefined,
+    orgUnitId: args.orgUnitId ?? undefined,
+    assessmentId: undefined,
+    notes: args.notes?.trim() || undefined,
+    createdByUserId: userId,
+    createdAt: now,
+    updatedAt: now,
+    revision: 1,
+    ...(packFields && pack
+      ? {
+          methodologyStatement: packFields.methodologyStatement,
+          scopeAndCriteria: packFields.scopeAndCriteria,
+          axisScaleNotes: packFields.axisScaleNotes,
+          complianceScopeTags: packFields.complianceScopeTags,
+          requirementRefs: packFields.requirementRefs,
+          rosSectorPackId: pack.id,
+        }
+      : {}),
+  });
+  if (args.candidateId) {
+    const existingCandidateLink = await ctx.db
+      .query("candidateRosAnalysisLinks")
+      .withIndex("by_candidate_and_ros_analysis", (q) =>
+        q.eq("candidateId", args.candidateId!).eq("rosAnalysisId", analysisId),
+      )
+      .unique();
+    if (!existingCandidateLink) {
+      await ctx.db.insert("candidateRosAnalysisLinks", {
+        workspaceId: args.workspaceId,
+        candidateId: args.candidateId,
+        rosAnalysisId: analysisId,
+        createdByUserId: userId,
+        createdAt: now,
+      });
+    }
+  }
+  for (const aid of idSet) {
+    const existing = await ctx.db
+      .query("rosAnalysisAssessments")
+      .withIndex("by_ros_and_assessment", (q) =>
+        q.eq("rosAnalysisId", analysisId).eq("assessmentId", aid as Id<"assessments">),
+      )
+      .unique();
+    if (existing) {
+      continue;
+    }
+    await ctx.db.insert("rosAnalysisAssessments", {
+      workspaceId: args.workspaceId,
+      rosAnalysisId: analysisId,
+      assessmentId: aid as Id<"assessments">,
+      createdByUserId: userId,
+      createdAt: now,
+    });
+  }
+  return analysisId;
+}
+
 export const createAnalysis = mutation({
   args: {
     workspaceId: v.id("workspaces"),
@@ -1267,135 +1439,7 @@ export const createAnalysis = mutation({
   },
   handler: async (ctx, args) => {
     const userId = await requireUserId(ctx);
-    await requireWorkspaceMember(ctx, args.workspaceId, userId, "member");
-    if (args.candidateId) {
-      const cand = await ctx.db.get(args.candidateId);
-      if (!cand || cand.workspaceId !== args.workspaceId) {
-        throw new Error("Ugyldig kandidat.");
-      }
-    }
-    if (args.orgUnitId) {
-      const unit = await ctx.db.get(args.orgUnitId);
-      if (!unit || unit.workspaceId !== args.workspaceId) {
-        throw new Error("Ugyldig organisasjonsenhet.");
-      }
-    }
-    const tpl = await ctx.db.get(args.templateId);
-    if (!tpl || tpl.workspaceId !== args.workspaceId) {
-      throw new Error("Ugyldig mal.");
-    }
-    const title = args.title.trim();
-    if (!title) {
-      throw new Error("Tittel er påkrevd.");
-    }
-    const idSet = new Set<string>();
-    const addIds = [...(args.assessmentIds ?? [])];
-    if (args.assessmentId) {
-      addIds.push(args.assessmentId);
-    }
-    for (const aid of addIds) {
-      idSet.add(aid);
-    }
-    for (const aid of idSet) {
-      const a = await ctx.db.get(aid as Id<"assessments">);
-      if (!a || a.workspaceId !== args.workspaceId) {
-        throw new Error("Ugyldig vurdering.");
-      }
-      if (!(await canReadAssessment(ctx, a, userId))) {
-        throw new Error("Ingen tilgang til vurderingen.");
-      }
-    }
-    const matrixValues = tpl.defaultMatrixValues
-      ? tpl.defaultMatrixValues.map((r) => [...r])
-      : emptyMatrix(tpl.rowLabels.length, tpl.colLabels.length);
-    const cellNotes = emptyStringMatrix(
-      tpl.rowLabels.length,
-      tpl.colLabels.length,
-    );
-    const now = Date.now();
-    const matrixValuesAfter = emptyMatrix(
-      tpl.rowLabels.length,
-      tpl.colLabels.length,
-    );
-    const cellNotesAfter = emptyStringMatrix(
-      tpl.rowLabels.length,
-      tpl.colLabels.length,
-    );
-    const ws = await ctx.db.get(args.workspaceId);
-    const packIdArg = args.sectorPackId?.trim();
-    const effectivePackId =
-      packIdArg && isValidRosSectorPackId(packIdArg)
-        ? packIdArg
-        : workspaceDefaultSectorPackId(ws ?? null);
-    const pack = effectivePackId ? getRosSectorPack(effectivePackId) : null;
-    const packFields = pack ? sectorPackInitialAnalysisFields(pack) : null;
-    const analysisId = await ctx.db.insert("rosAnalyses", {
-      workspaceId: args.workspaceId,
-      templateId: args.templateId,
-      title,
-      rowAxisTitle: tpl.rowAxisTitle,
-      colAxisTitle: tpl.colAxisTitle,
-      rowLabels: [...tpl.rowLabels],
-      colLabels: [...tpl.colLabels],
-      matrixValues,
-      cellNotes,
-      matrixValuesAfter,
-      cellNotesAfter,
-      candidateId: args.candidateId ?? undefined,
-      orgUnitId: args.orgUnitId ?? undefined,
-      assessmentId: undefined,
-      notes: args.notes?.trim() || undefined,
-      createdByUserId: userId,
-      createdAt: now,
-      updatedAt: now,
-      revision: 1,
-      ...(packFields && pack
-        ? {
-            methodologyStatement: packFields.methodologyStatement,
-            scopeAndCriteria: packFields.scopeAndCriteria,
-            axisScaleNotes: packFields.axisScaleNotes,
-            complianceScopeTags: packFields.complianceScopeTags,
-            requirementRefs: packFields.requirementRefs,
-            rosSectorPackId: pack.id,
-          }
-        : {}),
-    });
-    if (args.candidateId) {
-      const existingCandidateLink = await ctx.db
-        .query("candidateRosAnalysisLinks")
-        .withIndex("by_candidate_and_ros_analysis", (q) =>
-          q.eq("candidateId", args.candidateId!).eq("rosAnalysisId", analysisId),
-        )
-        .unique();
-      if (!existingCandidateLink) {
-        await ctx.db.insert("candidateRosAnalysisLinks", {
-          workspaceId: args.workspaceId,
-          candidateId: args.candidateId,
-          rosAnalysisId: analysisId,
-          createdByUserId: userId,
-          createdAt: now,
-        });
-      }
-    }
-    for (const aid of idSet) {
-      const existing = await ctx.db
-        .query("rosAnalysisAssessments")
-        .withIndex("by_ros_and_assessment", (q) =>
-          q.eq("rosAnalysisId", analysisId).eq("assessmentId", aid as Id<"assessments">),
-        )
-        .unique();
-      if (existing) {
-        continue;
-      }
-      await ctx.db.insert("rosAnalysisAssessments", {
-        workspaceId: args.workspaceId,
-        rosAnalysisId: analysisId,
-        assessmentId: aid as Id<"assessments">,
-        createdByUserId: userId,
-        createdAt: now,
-      });
-    }
-    return analysisId;
+    return await createRosAnalysisWithUser(ctx, userId, args);
   },
 });
 

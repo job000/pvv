@@ -23,6 +23,7 @@ import type { Doc, Id } from "@/convex/_generated/dataModel";
 import { useAction, useMutation, useQuery } from "convex/react";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useStickyState } from "@/lib/use-sticky-state";
 
 import { InviteEmailSuggestInput } from "@/components/user/invite-email-suggest-input";
 import { PipelineStatusSelect } from "@/components/assessment/pipeline-status-select";
@@ -3476,6 +3477,7 @@ export function WorkspaceAssessmentsPanel({
   workspaceId,
   hubMode = false,
   approvedIntakeForProcessregister,
+  initialOrgUnit,
 }: {
   workspaceId: Id<"workspaces">;
   hubMode?: boolean;
@@ -3483,6 +3485,8 @@ export function WorkspaceAssessmentsPanel({
   approvedIntakeForProcessregister?:
     | undefined
     | ApprovedIntakeProcessregisterRow[];
+  /** Pre-select org unit filter from URL deep-link. */
+  initialOrgUnit?: Id<"orgUnits"> | null;
 }) {
   const workspace = useQuery(api.workspaces.get, { workspaceId });
   const membership = useQuery(api.workspaces.getMyMembership, { workspaceId });
@@ -3503,13 +3507,19 @@ export function WorkspaceAssessmentsPanel({
     membership.role !== "viewer";
 
   const [search, setSearch] = useState("");
-  const [orgUnitFilter, setOrgUnitFilter] = useState<"" | Id<"orgUnits">>("");
-  const [statusFilter, setStatusFilter] = useState<PipelineStatus | "all">(
-    "all",
-  );
-  const [sortBy, setSortBy] = useState<
+  const [orgUnitFilter, setOrgUnitFilter] = useStickyState<"" | Id<"orgUnits">>(`ws:${workspaceId}:assessments:orgFilter`, initialOrgUnit ?? "");
+  const [statusFilter, setStatusFilter] = useStickyState<PipelineStatus | "all">(`ws:${workspaceId}:assessments:statusFilter`, "all");
+  const [sortBy, setSortBy] = useStickyState<
     "priority" | "updated" | "ap" | "criticality" | "ease"
-  >("priority");
+  >(`ws:${workspaceId}:assessments:sortBy`, "priority");
+
+  const appliedOrgUnitRef = useRef(false);
+  useEffect(() => {
+    if (initialOrgUnit && !appliedOrgUnitRef.current) {
+      appliedOrgUnitRef.current = true;
+      setOrgUnitFilter(initialOrgUnit);
+    }
+  }, [initialOrgUnit, setOrgUnitFilter]);
 
   const filteredAssessments = useMemo(() => {
     let rows = assessments ?? [];

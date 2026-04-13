@@ -165,8 +165,8 @@ export function formatRosRequirementRefLine(r: {
 
 const JOURNAL_PDF_MAX = 100;
 
-/** Laster ned A4-PDF med ROS-analyse (tekst + matrise + logg). */
-export function downloadRosAnalysisPdf(data: RosPdfInput): void {
+/** Bygger A4-PDF med ROS-analyse (tekst + matrise + logg). */
+export function buildRosAnalysisPdfDocument(data: RosPdfInput): jsPDF {
   const doc = new jsPDF({ unit: "mm", format: "a4" });
   const margin = 16;
   let y = margin;
@@ -1379,6 +1379,16 @@ export function downloadRosAnalysisPdf(data: RosPdfInput): void {
     docTypeLabel: "ROS-analyse",
   });
 
+  return doc;
+}
+
+export function buildRosAnalysisPdfBlob(data: RosPdfInput): Blob {
+  return buildRosAnalysisPdfDocument(data).output("blob");
+}
+
+/** Laster ned A4-PDF med ROS-analyse (tekst + matrise + logg). */
+export function downloadRosAnalysisPdf(data: RosPdfInput): void {
+  const doc = buildRosAnalysisPdfDocument(data);
   const safe = data.title
     .replace(/[^\wæøåÆØÅ\- ]/gi, "")
     .trim()

@@ -6,6 +6,7 @@ import type { Id } from "@/convex/_generated/dataModel";
 import {
   Building2,
   ClipboardList,
+  Eye,
   FileText,
   LayoutDashboard,
   ScrollText,
@@ -72,6 +73,13 @@ function navSections(wid: string): { heading: string; items: NavItem[] }[] {
           icon: ScrollText,
           exact: false,
           kind: "prosessdesign",
+        },
+        {
+          href: `/w/${wid}/pdf-forhandsvisning`,
+          label: "PDF-forhåndsvisning",
+          icon: Eye,
+          exact: false,
+          kind: "default",
         },
       ],
     },

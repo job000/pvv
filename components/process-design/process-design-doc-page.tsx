@@ -68,6 +68,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import dynamic from "next/dynamic";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 
 const PddTldrawCanvas = dynamic(
@@ -1020,6 +1021,7 @@ export function ProcessDesignDocPage({
   );
   const workspace = useQuery(api.workspaces.get, { workspaceId });
 
+  const router = useRouter();
   const ensureDoc = useMutation(api.processDesignDocs.ensureDocument);
   const saveDraft = useMutation(api.processDesignDocs.saveDraft);
   const snapVersion = useMutation(api.processDesignDocs.createVersionSnapshot);
@@ -1039,6 +1041,10 @@ export function ProcessDesignDocPage({
   const [conflictOpen, setConflictOpen] = useState(false);
   const [conflictHint, setConflictHint] = useState<string | null>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [leavePromptOpen, setLeavePromptOpen] = useState(false);
+  const [leaveBusy, setLeaveBusy] = useState(false);
+  const pendingNavHrefRef = useRef<string | null>(null);
+  const leavePromptOpenRef = useRef(false);
   const [openSections, setOpenSections] = useState<string[]>([
     "overview",
     "asis",
@@ -1069,6 +1075,10 @@ export function ProcessDesignDocPage({
   useEffect(() => {
     dirtyRef.current = dirty;
   }, [dirty]);
+
+  useEffect(() => {
+    leavePromptOpenRef.current = leavePromptOpen;
+  }, [leavePromptOpen]);
 
   const syncFromServer = useCallback(() => {
     if (!docState?.document) return;
@@ -1145,12 +1155,12 @@ export function ProcessDesignDocPage({
   ]);
 
   const persistDraft = useCallback(
-    async (options?: { silent?: boolean }) => {
-      if (!canEditRef.current || !hasDocRef.current) return;
-      if (!dirtyRef.current && options?.silent) return;
+    async (options?: { silent?: boolean }): Promise<boolean> => {
+      if (!canEditRef.current || !hasDocRef.current) return true;
+      if (!dirtyRef.current && options?.silent) return true;
       if (saveInFlightRef.current) {
         saveQueuedRef.current = true;
-        return;
+        return true;
       }
 
       const payloadToSave = payloadRef.current;
@@ -1166,6 +1176,7 @@ export function ProcessDesignDocPage({
       setSaving(true);
       setConflictHint(null);
 
+      let ok = true;
       try {
         const res = await saveDraft({
           assessmentId,
@@ -1188,6 +1199,7 @@ export function ProcessDesignDocPage({
             saveQueuedRef.current = true;
           }
         } else {
+          ok = false;
           setConflictHint(
             res.conflict.updatedByName
               ? `Noen andre (${res.conflict.updatedByName}) lagret mens du redigerte.`
@@ -1203,6 +1215,7 @@ export function ProcessDesignDocPage({
           void persistDraft({ silent: true });
         }
       }
+      return ok;
     },
     [assessmentId, saveDraft],
   );
@@ -1235,34 +1248,86 @@ export function ProcessDesignDocPage({
     await persistDraft();
   };
 
-  useEffect(() => {
-    if (!canEdit || !hasDoc || !dirty) return;
-    const timeout = window.setTimeout(() => {
-      void persistDraft({ silent: true });
-    }, 1200);
-    return () => window.clearTimeout(timeout);
-  }, [canEdit, hasDoc, dirty, payload, organizationLine, persistDraft]);
+  const completePendingNavigation = useCallback(() => {
+    const href = pendingNavHrefRef.current;
+    pendingNavHrefRef.current = null;
+    setLeavePromptOpen(false);
+    if (href) {
+      router.push(href);
+    }
+  }, [router]);
+
+  const handleLeaveSave = async () => {
+    if (!canEdit) {
+      completePendingNavigation();
+      return;
+    }
+    setLeaveBusy(true);
+    try {
+      const saved = await persistDraft();
+      if (saved) {
+        completePendingNavigation();
+      }
+    } finally {
+      setLeaveBusy(false);
+    }
+  };
+
+  const handleLeaveDiscard = () => {
+    completePendingNavigation();
+  };
 
   useEffect(() => {
-    const onVisibility = () => {
-      if (document.visibilityState !== "hidden") return;
-      if (!dirtyRef.current || !canEditRef.current || !hasDocRef.current) return;
-      void persistDraft({ silent: true });
+    if (!hasDoc || !dirty) return;
+
+    const onClickCapture = (e: MouseEvent) => {
+      if (e.defaultPrevented) return;
+      if (e.button !== 0) return;
+      if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+      if (leavePromptOpenRef.current) return;
+
+      const t = e.target;
+      if (!(t instanceof Element)) return;
+      const a = t.closest("a[href]");
+      if (!a || !(a instanceof HTMLAnchorElement)) return;
+      if (a.target === "_blank" || a.download) return;
+
+      const hrefAttr = a.getAttribute("href");
+      if (!hrefAttr || hrefAttr.startsWith("#")) return;
+
+      let url: URL;
+      try {
+        url = new URL(hrefAttr, window.location.origin);
+      } catch {
+        return;
+      }
+      if (!url.protocol.startsWith("http")) return;
+      if (url.origin !== window.location.origin) return;
+
+      const nextPath = `${url.pathname}${url.search}${url.hash}`;
+      const herePath = `${window.location.pathname}${window.location.search}`;
+      const nextPathNoHash = `${url.pathname}${url.search}`;
+      if (nextPathNoHash === herePath) return;
+
+      e.preventDefault();
+      pendingNavHrefRef.current = nextPath;
+      setLeavePromptOpen(true);
     };
 
+    document.addEventListener("click", onClickCapture, true);
+    return () => document.removeEventListener("click", onClickCapture, true);
+  }, [hasDoc, dirty]);
+
+  useEffect(() => {
     const onBeforeUnload = (e: BeforeUnloadEvent) => {
       if (!dirtyRef.current && !saveInFlightRef.current) return;
       e.preventDefault();
       e.returnValue = "";
     };
 
-    document.addEventListener("visibilitychange", onVisibility);
     window.addEventListener("beforeunload", onBeforeUnload);
-    return () => {
-      document.removeEventListener("visibilitychange", onVisibility);
-      window.removeEventListener("beforeunload", onBeforeUnload);
-    };
-  }, [persistDraft]);
+    return () => window.removeEventListener("beforeunload", onBeforeUnload);
+  }, []);
 
   useEffect(() => {
     if (!hasDoc || !canEdit || !autofillSuggestion) return;
@@ -1540,7 +1605,7 @@ export function ProcessDesignDocPage({
                   {payload.processTitle?.trim() || assessmentTitle}
                 </p>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  Lagre underveis. Eksport og historikk er sekundært.
+                  Endringer lagres ikke automatisk — trykk «Lagre» før du forlater siden.
                 </p>
               </div>
 
@@ -2515,6 +2580,76 @@ export function ProcessDesignDocPage({
               ) : null}
               Lagre snapshot
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Forlat PDD med ulagrede endringer */}
+      <Dialog
+        open={leavePromptOpen}
+        onOpenChange={(open) => {
+          if (!open) {
+            setLeavePromptOpen(false);
+            pendingNavHrefRef.current = null;
+            setLeaveBusy(false);
+          }
+        }}
+      >
+        <DialogContent size="md" titleId="pdd-leave-title" descriptionId="pdd-leave-desc">
+          <DialogHeader>
+            <p
+              id="pdd-leave-title"
+              className="font-heading text-lg font-semibold"
+            >
+              Vil du lagre?
+            </p>
+            <p
+              id="pdd-leave-desc"
+              className="text-sm leading-relaxed text-muted-foreground"
+            >
+              Du har ulagrede endringer i prosessdesignet (inkludert diagram). Lagre før du
+              går videre, eller forlat uten å lagre.
+            </p>
+          </DialogHeader>
+          <DialogFooter className="flex-col gap-2 sm:flex-row sm:justify-end">
+            <Button
+              type="button"
+              variant="outline"
+              className="w-full sm:w-auto"
+              disabled={leaveBusy}
+              onClick={() => {
+                setLeavePromptOpen(false);
+                pendingNavHrefRef.current = null;
+              }}
+            >
+              Avbryt
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              className="w-full sm:w-auto"
+              disabled={leaveBusy}
+              onClick={handleLeaveDiscard}
+            >
+              Forlat uten å lagre
+            </Button>
+            {canEdit ? (
+              <Button
+                type="button"
+                className="w-full sm:w-auto"
+                disabled={leaveBusy || saving}
+                onClick={() => void handleLeaveSave()}
+              >
+                {leaveBusy || saving ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : (
+                  <>
+                    <Save className="mr-1.5 size-3.5" aria-hidden />
+                    Lagre og fortsett
+                  </>
+                )}
+              </Button>
+            ) : null}
           </DialogFooter>
         </DialogContent>
       </Dialog>

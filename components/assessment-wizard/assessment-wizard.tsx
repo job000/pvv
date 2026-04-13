@@ -66,6 +66,7 @@ import { ChevronLeft, ChevronRight, Share2, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useStickyState } from "@/lib/use-sticky-state";
 
 /** Én kilde til utkast-form — brukes ved første lasting og etter gjenoppretting fra versjon. */
 function normalizeDraftPayload(raw: AssessmentPayload): AssessmentPayload {
@@ -382,7 +383,7 @@ export function AssessmentWizard({ assessmentId }: Props) {
     /** Mer horisontal bevegelse før klikk undertrykkes etter drag (mindre uhell). */
     dragThreshold: 22,
   });
-  const [slide, setSlide] = useState(0);
+  const [slide, setSlide] = useStickyState(`wizard:${assessmentId}:slide`, 0);
   /** Forespørsel fra metaraden: åpne forhåndsvisning av en lagret milepæl. */
   const [versionPreviewRequest, setVersionPreviewRequest] = useState<
     number | null
@@ -755,7 +756,9 @@ export function AssessmentWizard({ assessmentId }: Props) {
 
   useEffect(() => {
     if (!emblaApi) return;
+    if (slide > 0) emblaApi.scrollTo(slide, true);
     emblaApi.on("select", () => setSlide(emblaApi.selectedScrollSnap()));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [emblaApi]);
 
   /** Horisontalt hjul / trackpad (Shift+hjul vertikalt) — tregere og med cooldown. */

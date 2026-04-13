@@ -44,9 +44,10 @@ export type PvvHubTab = "vurderinger" | "prosesser";
 type Props = {
   workspaceId: Id<"workspaces">;
   activeTab: PvvHubTab;
+  initialOrgUnit?: Id<"orgUnits"> | null;
 };
 
-export function WorkspacePvvHub({ workspaceId, activeTab }: Props) {
+export function WorkspacePvvHub({ workspaceId, activeTab, initialOrgUnit }: Props) {
   const router = useRouter();
 
   /** Alltid abonnert — ikke bare når Prosessregister-fanen er aktiv (unngår tom liste ved bytte av fane). */
@@ -120,6 +121,7 @@ export function WorkspacePvvHub({ workspaceId, activeTab }: Props) {
             workspaceId={workspaceId}
             hubMode
             approvedIntakeForProcessregister={approvedIntakeForProcessregister}
+            initialOrgUnit={initialOrgUnit}
           />
         ) : (
           <WorkspaceCandidatesPanel

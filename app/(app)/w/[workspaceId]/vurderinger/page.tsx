@@ -27,8 +27,9 @@ function VurderingerHubBody() {
   const workspaceId = params.workspaceId as Id<"workspaces">;
   const activeTab: PvvHubTab =
     searchParams.get("fane") === "prosesser" ? "prosesser" : "vurderinger";
+  const orgUnit = searchParams.get("orgUnit") as Id<"orgUnits"> | null;
 
-  return <WorkspacePvvHub workspaceId={workspaceId} activeTab={activeTab} />;
+  return <WorkspacePvvHub workspaceId={workspaceId} activeTab={activeTab} initialOrgUnit={orgUnit} />;
 }
 
 export default function WorkspaceAssessmentsPage() {
