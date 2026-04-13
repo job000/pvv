@@ -119,14 +119,14 @@ const PDD_SOURCE_MAPPING_GROUPS = [
     fields:
       "Prosesstittel, kort beskrivelse, sammendrag, formål, mål, forutsetninger og virksomhetskontekst.",
     sources:
-      "Primært fra vurdering. Prosessregister bidrar med prosessnavn, org-tilhørighet og compliance-hint. Inntak kan supplere med lokal kontekst.",
+      "Primært fra denne PVV-vurderingen. Ekstra registerfelter (org., compliance-hint m.m.) brukes bare når prosessen er eksplisitt koblet til vurderingen i prosessregisteret. Inntak kan supplere med lokal kontekst når et godkjent inntak er knyttet til samme vurdering.",
   },
   {
     title: "As-Is",
     fields:
       "Nåsituasjon, roller, volum, tid, ressursbruk, systemer, trinn, input/output og prosessområde.",
     sources:
-      "Primært fra vurdering og prosessregister. Inntak kan gi ekstra detaljinformasjon om hvordan prosessen faktisk utføres lokalt.",
+      "Primært fra denne vurderingen. Registerdetaljer kun ved eksplisitt kobling vurdering ↔ prosess. Inntak (godkjent mot denne vurderingen) kan gi ekstra lokale detaljer.",
   },
   {
     title: "To-Be",
@@ -296,6 +296,8 @@ function CollapsibleSection({
 /*  Diagram + text block                                               */
 /* ------------------------------------------------------------------ */
 
+const stickyTabChoices = new Map<string, "beskrivelse" | "diagram">();
+
 function ProcessTextDiagramBlock({
   sectionLabel,
   diagramHint,
@@ -319,7 +321,17 @@ function ProcessTextDiagramBlock({
   instanceKey: string;
   sourceHints?: string[];
 }) {
-  const [mode, setMode] = useState<"beskrivelse" | "diagram">("beskrivelse");
+  const tabKey = `${instanceKey}:${sectionLabel}`;
+  const [mode, setModeRaw] = useState<"beskrivelse" | "diagram">(
+    () => stickyTabChoices.get(tabKey) ?? "beskrivelse",
+  );
+  const setMode = useCallback(
+    (next: "beskrivelse" | "diagram") => {
+      stickyTabChoices.set(tabKey, next);
+      setModeRaw(next);
+    },
+    [tabKey],
+  );
   const [diagramFullscreen, setDiagramFullscreen] = useState(false);
   const isMobileViewport = useSyncExternalStore(
     subscribeMobileViewport,
@@ -1002,7 +1014,7 @@ export function ProcessDesignDocPage({
     api.intakeSubmissions.getApprovedSubmissionForAssessment,
     { assessmentId },
   );
-  const linkedCandidate = useQuery(
+  const registryLinksForAssessment = useQuery(
     api.candidates.getLinkedCandidateForAssessment,
     { assessmentId },
   );
@@ -1111,8 +1123,8 @@ export function ProcessDesignDocPage({
         pddDigest: r.pddDigest,
       })),
       candidate:
-        linkedCandidate && linkedCandidate.linked === true
-          ? linkedCandidate
+        registryLinksForAssessment?.explicitRegistryLink?.linked === true
+          ? registryLinksForAssessment.explicitRegistryLink
           : { linked: false as const },
       intake: intake
         ? {
@@ -1127,7 +1139,7 @@ export function ProcessDesignDocPage({
     assessmentTitle,
     draftBundle?.draft?.payload,
     intake,
-    linkedCandidate,
+    registryLinksForAssessment,
     rosCtx,
     workspace?.name,
   ]);
@@ -1377,7 +1389,7 @@ export function ProcessDesignDocPage({
     draftBundle === undefined ||
     rosCtx === undefined ||
     intake === undefined ||
-    linkedCandidate === undefined ||
+    registryLinksForAssessment === undefined ||
     workspace === undefined
   ) {
     return (
@@ -1397,16 +1409,29 @@ export function ProcessDesignDocPage({
   }
 
   /* ---- Derived data from linked sources (no duplicate entry) ---- */
-  const processFromRegistry =
-    linkedCandidate?.linked === true ? linkedCandidate : null;
+  const registryLinksResolved = registryLinksForAssessment ?? {
+    explicitRegistryLink: { linked: false as const },
+    draftRegistryMatch: { linked: false as const },
+  };
+
+  const explicitRegistry =
+    registryLinksResolved.explicitRegistryLink.linked === true
+      ? registryLinksResolved.explicitRegistryLink
+      : null;
+  const draftRegistryOnly =
+    !explicitRegistry &&
+    registryLinksResolved.draftRegistryMatch.linked === true
+      ? registryLinksResolved.draftRegistryMatch
+      : null;
+  const processForKoblingerRow = explicitRegistry ?? draftRegistryOnly;
   const rosAnalyses = rosCtx ?? [];
   const connectedSources = [
-    "PVV-vurdering",
-    processFromRegistry ? "Prosessregister" : null,
+    "PVV-vurdering (denne)",
+    explicitRegistry ? "Prosessregister (koblet)" : null,
     rosAnalyses.length > 0
-      ? `${rosAnalyses.length} ${rosAnalyses.length === 1 ? "ROS-analyse" : "ROS-analyser"}`
+      ? `${rosAnalyses.length} ${rosAnalyses.length === 1 ? "ROS-analyse koblet til vurdering" : "ROS-analyser koblet til vurdering"}`
       : null,
-    intake ? "Inntak" : null,
+    intake ? "Inntak (godkjent mot vurdering)" : null,
   ].filter(Boolean) as string[];
   const orgCoverageValue =
     payload.orgOperatingUnits?.trim() || payload.orgRolloutNotes?.trim() || "";
@@ -1432,8 +1457,10 @@ export function ProcessDesignDocPage({
               {versionCount > 0 ? (
                 <StatusBadge>{versionCount} versjoner</StatusBadge>
               ) : null}
-              {processFromRegistry ? (
-                <StatusBadge>Prosess koblet</StatusBadge>
+              {explicitRegistry ? (
+                <StatusBadge>Register koblet til vurdering</StatusBadge>
+              ) : draftRegistryOnly ? (
+                <StatusBadge tone="warning">Prosess i utkast (ikke koblet)</StatusBadge>
               ) : null}
             </div>
             <ProductPageHeader
@@ -1458,7 +1485,7 @@ export function ProcessDesignDocPage({
               <p className="mt-1 text-sm text-foreground">
                 {[
                   "PVV",
-                  processFromRegistry ? "Prosessregister" : null,
+                  explicitRegistry ? "Register (koblet)" : null,
                   rosAnalyses.length > 0 ? `${rosAnalyses.length} ROS` : null,
                 ]
                   .filter(Boolean)
@@ -1481,7 +1508,7 @@ export function ProcessDesignDocPage({
         <ProductEmptyState
           icon={FileText}
           title="Ingen prosessdesign ennå"
-          description="Opprett et dokument for å dokumentere prosess, trinn og automatiseringskrav for denne vurderingen. Data fra PVV-vurdering, ROS og prosessregisteret hentes automatisk."
+          description="Opprett et dokument for denne vurderingen. Autofill bruker denne PVV-vurderingen, ROS som er koblet til vurderingen, godkjent inntak mot vurderingen, og prosessregisterfelter bare når prosessen er eksplisitt koblet til vurderingen."
           action={
             canEdit ? (
               <Button
@@ -1584,7 +1611,7 @@ export function ProcessDesignDocPage({
                 className="gap-1.5 rounded-xl"
                 onClick={applyAutofill}
                 disabled={!autofillSuggestion || !canEdit}
-                title="Fyller inn tomme PDD-felt fra koblet vurdering, ROS, prosessregister og inntak"
+                title="Tomme felt fylles fra denne vurderingen, ROS koblet til vurderingen, godkjent inntak for vurderingen, og prosessregister kun ved eksplisitt kobling vurdering ↔ prosess"
               >
                 <Sparkles className="size-3.5" aria-hidden />
                 Fyll inn manglende felt
@@ -1664,8 +1691,11 @@ export function ProcessDesignDocPage({
                   PDD er koblet til kilder som kan fylle ut dokumentet
                 </p>
                 <p className="text-sm leading-6 text-muted-foreground">
-                  Tomme felt kan hentes inn automatisk fra vurdering, prosessregister, ROS og
-                  inntak. Du kan justere innholdet fritt etterpå.
+                  Tomme felt fylles fra denne PVV-vurderingen, ROS-analyser som er koblet til
+                  akkurat denne vurderingen, og inntak som er godkjent inn i denne vurderingen.
+                  Ekstra data fra prosessregister (org., hint-felt m.m.) brukes bare når
+                  prosessen er eksplisitt koblet til vurderingen. Du kan redigere alt fritt
+                  etterpå.
                 </p>
               </div>
               <div className="flex flex-wrap gap-2">
@@ -1686,20 +1716,29 @@ export function ProcessDesignDocPage({
                 href={`/w/${wid}/a/${assessmentId}`}
                 text={assessmentTitle}
               />
-              <LinkRow
-                label="Prosess (register)"
-                href={
-                  processFromRegistry
-                    ? `/w/${wid}/vurderinger?fane=prosesser`
-                    : undefined
-                }
-                text={
-                  processFromRegistry
-                    ? `${processFromRegistry.code} ${processFromRegistry.name}`
-                    : undefined
-                }
-                emptyText="Ingen prosess koblet — koble via vurderingen"
-              />
+              <div>
+                <LinkRow
+                  label="Prosess (register)"
+                  href={
+                    processForKoblingerRow
+                      ? `/w/${wid}/vurderinger?fane=prosesser`
+                      : undefined
+                  }
+                  text={
+                    processForKoblingerRow
+                      ? `${processForKoblingerRow.code} ${processForKoblingerRow.name}`
+                      : undefined
+                  }
+                  emptyText="Ingen prosess funnet i utkast eller kobling — velg prosess på vurderingen"
+                />
+                {draftRegistryOnly && !explicitRegistry ? (
+                  <p className="mt-1.5 text-xs leading-5 text-amber-800 dark:text-amber-200/90">
+                    Prosessen er valgt i vurderingens utkast, men ikke eksplisitt koblet.
+                    Koble vurderingen til prosessen under Prosessregister for å ta med
+                    registerfelter i «Fyll inn manglende felt».
+                  </p>
+                ) : null}
+              </div>
               <div>
                 <span className="text-xs font-medium text-muted-foreground">
                   ROS-analyser
@@ -1785,17 +1824,21 @@ export function ProcessDesignDocPage({
                   placeholder="Navnet på prosessen som skal automatiseres"
                   description="Bruk et tydelig navn som matcher vurderingen eller prosessen i registeret."
                   sourceHint={
-                    processFromRegistry ? "Koblet til prosessregister" : "Kan hentes fra vurdering"
+                    explicitRegistry
+                      ? "Eksplisitt koblet til prosessregister"
+                      : draftRegistryOnly
+                        ? "Prosess i utkast — koble for register i autofill"
+                        : "Kan hentes fra vurdering"
                   }
                 />
-                {processFromRegistry && (
-                  <ReadOnlyBlock label="Fra prosessregisteret">
+                {explicitRegistry && (
+                  <ReadOnlyBlock label="Fra prosessregisteret (koblet til denne vurderingen)">
                     <p className="font-medium">
-                      {processFromRegistry.code} {processFromRegistry.name}
+                      {explicitRegistry.code} {explicitRegistry.name}
                     </p>
-                    {processFromRegistry.notes && (
+                    {explicitRegistry.notes && (
                       <p className="mt-1 text-xs text-muted-foreground">
-                        {processFromRegistry.notes}
+                        {explicitRegistry.notes}
                       </p>
                     )}
                   </ReadOnlyBlock>

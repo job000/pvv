@@ -106,8 +106,12 @@ function formatExistingAutomation(
 }
 
 /**
- * Forslagsinnhold til RPA prosessdesign-dokument fra vurdering, ROS og inntak.
- * Slås sammen i UI (f.eks. bare inn i tomme felt).
+ * Forslagsinnhold til RPA prosessdesign-dokument.
+ * Kilder i UI er alltid den konkrete PVV-vurderingen PDD-en tilhører, ROS som er
+ * koblet til den vurderingen (`rosAnalysisAssessments`), godkjent inntak med
+ * `approvedAssessmentId` lik vurderingen, og prosessregister — men `candidate` skal
+ * kun sendes inn når prosessen er eksplisitt koblet via `candidateAssessmentLinks`
+ * (ikke bare `candidateId` i utkast). Slås sammen i UI bare inn i tomme felt.
  */
 export function buildProcessDesignAutofill(args: {
   workspaceName: string | null;

@@ -468,7 +468,7 @@ export function RosAnalysisEditor({
 
   const [taskTitle, setTaskTitle] = useState("");
   const [taskDesc, setTaskDesc] = useState("");
-  const [taskAssignee, setTaskAssignee] = useState<Id<"users"> | "">("");
+  const [taskAssignees, setTaskAssignees] = useState<Id<"users">[]>([]);
   const [taskPriority, setTaskPriority] = useState(3);
   const [taskRiskLink, setTaskRiskLink] = useState("");
   const [taskRiskTreatment, setTaskRiskTreatment] = useState<
@@ -1811,8 +1811,8 @@ export function RosAnalysisEditor({
         analysisId,
         title: t,
         description: taskDesc.trim() || undefined,
-        assigneeUserId:
-          taskAssignee === "" ? undefined : taskAssignee,
+        assigneeUserIds:
+          taskAssignees.length > 0 ? taskAssignees : undefined,
         priority: taskPriority,
         dueAt: dueMs,
         linkedCellItemId: risk?.linkedCellItemId,
@@ -1826,7 +1826,7 @@ export function RosAnalysisEditor({
       });
       setTaskTitle("");
       setTaskDesc("");
-      setTaskAssignee("");
+      setTaskAssignees([]);
       setTaskPriority(3);
       setTaskRiskLink("");
       setTaskRiskTreatment("");
@@ -2444,20 +2444,40 @@ export function RosAnalysisEditor({
                   placeholder="Grunnlag for aksept …"
                 />
               )}
-              <select
-                className="border-input bg-background flex h-9 w-full rounded-xl border px-2 text-xs"
-                value={taskAssignee}
-                onChange={(e) =>
-                  setTaskAssignee(e.target.value === "" ? "" : (e.target.value as Id<"users">))
-                }
-              >
-                <option value="">— Tildel ansvarlig —</option>
-                {(members ?? []).map((m) => (
-                  <option key={m.userId} value={m.userId}>
-                    {m.name ?? m.email ?? m.userId}
-                  </option>
-                ))}
-              </select>
+              <div className="space-y-1.5 sm:col-span-2">
+                {taskAssignees.length > 0 ? (
+                  <div className="flex flex-wrap gap-1">
+                    {taskAssignees.map((uid) => {
+                      const m = (members ?? []).find((wm) => wm.userId === uid);
+                      return (
+                        <span key={uid} className="bg-card inline-flex items-center gap-1 rounded-full border py-0.5 pr-1 pl-2 text-[11px] shadow-xs">
+                          {m?.name ?? m?.email ?? uid}
+                          <button type="button" className="text-muted-foreground hover:text-destructive p-0.5" onClick={() => setTaskAssignees((ids) => ids.filter((id) => id !== uid))}>×</button>
+                        </span>
+                      );
+                    })}
+                  </div>
+                ) : null}
+                <select
+                  className="border-input bg-background flex h-9 w-full rounded-xl border px-2 text-xs"
+                  value=""
+                  onChange={(e) => {
+                    const uid = e.target.value as Id<"users">;
+                    if (uid && !taskAssignees.includes(uid)) {
+                      setTaskAssignees((ids) => [...ids, uid]);
+                    }
+                  }}
+                >
+                  <option value="">— Legg til ansvarlig —</option>
+                  {(members ?? [])
+                    .filter((m) => !taskAssignees.includes(m.userId))
+                    .map((m) => (
+                      <option key={m.userId} value={m.userId}>
+                        {m.name ?? m.email ?? m.userId}
+                      </option>
+                    ))}
+                </select>
+              </div>
               <div className="flex gap-2">
                 <Input
                   type="number"
@@ -2895,6 +2915,7 @@ function TaskEditForm({
     title: string;
     description?: string;
     assigneeUserId?: Id<"users">;
+    assigneeUserIds?: Id<"users">[];
     priority?: number;
     dueAt?: number;
     linkedCellItemId?: string;
@@ -2912,7 +2933,7 @@ function TaskEditForm({
   onSave: (patch: {
     title: string;
     description: string | null;
-    assigneeUserId: Id<"users"> | null;
+    assigneeUserIds: Id<"users">[] | null;
     priority: number;
     dueAt: number | null;
     linkedCellItemId: string | null;
@@ -2927,9 +2948,13 @@ function TaskEditForm({
       : "";
   const [title, setTitle] = useState(task.title);
   const [description, setDescription] = useState(task.description ?? "");
-  const [assigneeUserId, setAssigneeUserId] = useState<
-    Id<"users"> | ""
-  >(task.assigneeUserId ?? "");
+  const initialAssignees =
+    task.assigneeUserIds && task.assigneeUserIds.length > 0
+      ? task.assigneeUserIds
+      : task.assigneeUserId
+        ? [task.assigneeUserId]
+        : [];
+  const [assigneeIds, setAssigneeIds] = useState<Id<"users">[]>(initialAssignees);
   const [priority, setPriority] = useState(task.priority ?? 3);
   const [dueAt, setDueAt] = useState(
     task.dueAt
@@ -2993,17 +3018,39 @@ function TaskEditForm({
           placeholder="Grunnlag for aksept …"
         />
       )}
-      <div className="grid gap-2 sm:grid-cols-3">
+      <div className="space-y-1.5">
+        {assigneeIds.length > 0 ? (
+          <div className="flex flex-wrap gap-1">
+            {assigneeIds.map((uid) => {
+              const m = members.find((wm) => wm.userId === uid);
+              return (
+                <span key={uid} className="bg-card inline-flex items-center gap-1 rounded-full border py-0.5 pr-1 pl-2 text-[11px] shadow-xs">
+                  {m?.name ?? m?.email ?? uid}
+                  <button type="button" className="text-muted-foreground hover:text-destructive p-0.5" onClick={() => setAssigneeIds((ids) => ids.filter((id) => id !== uid))}>×</button>
+                </span>
+              );
+            })}
+          </div>
+        ) : null}
         <select
           className="border-input bg-background flex h-9 w-full rounded-xl border px-2 text-xs"
-          value={assigneeUserId}
-          onChange={(e) => setAssigneeUserId(e.target.value === "" ? "" : (e.target.value as Id<"users">))}
+          value=""
+          onChange={(e) => {
+            const uid = e.target.value as Id<"users">;
+            if (uid && !assigneeIds.includes(uid)) {
+              setAssigneeIds((ids) => [...ids, uid]);
+            }
+          }}
         >
-          <option value="">— Tildel —</option>
-          {members.map((m) => (
-            <option key={m.userId} value={m.userId}>{m.name ?? m.email ?? m.userId}</option>
-          ))}
+          <option value="">— Legg til ansvarlig —</option>
+          {members
+            .filter((m) => !assigneeIds.includes(m.userId))
+            .map((m) => (
+              <option key={m.userId} value={m.userId}>{m.name ?? m.email ?? m.userId}</option>
+            ))}
         </select>
+      </div>
+      <div className="grid gap-2 sm:grid-cols-2">
         <Input
           type="number"
           min={1}
@@ -3033,7 +3080,7 @@ function TaskEditForm({
             void onSave({
               title: title.trim(),
               description: description.trim() || null,
-              assigneeUserId: assigneeUserId === "" ? null : assigneeUserId,
+              assigneeUserIds: assigneeIds.length > 0 ? assigneeIds : null,
               priority,
               dueAt: dueMs,
               linkedCellItemId: risk ? risk.linkedCellItemId : null,

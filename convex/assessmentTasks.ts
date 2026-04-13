@@ -9,16 +9,30 @@ import {
   requireAssessmentRead,
   requireUserId,
 } from "./lib/access";
+import { insertUserInAppNotification } from "./userInAppNotifications";
 
 function clampPriority(p: number | undefined): number {
   if (p === undefined) return 3;
   return Math.min(5, Math.max(1, Math.round(p)));
 }
 
+function resolveAssigneeIds(row: Doc<"assessmentTasks">): Id<"users">[] {
+  if (row.assigneeUserIds && row.assigneeUserIds.length > 0) {
+    return row.assigneeUserIds;
+  }
+  if (row.assigneeUserId) {
+    return [row.assigneeUserId];
+  }
+  return [];
+}
+
 async function enrichTask(ctx: QueryCtx, row: Doc<"assessmentTasks">) {
-  const assignee = row.assigneeUserId
-    ? await ctx.db.get(row.assigneeUserId)
-    : null;
+  const ids = resolveAssigneeIds(row);
+  const assignees: { userId: Id<"users">; name: string }[] = [];
+  for (const uid of ids) {
+    const u = await ctx.db.get(uid);
+    if (u) assignees.push({ userId: uid, name: u.name ?? u.email ?? String(uid) });
+  }
   const creator = await ctx.db.get(row.createdByUserId);
   const githubIssueUrl =
     row.githubRepoFullName !== undefined && row.githubIssueNumber != null
@@ -26,7 +40,8 @@ async function enrichTask(ctx: QueryCtx, row: Doc<"assessmentTasks">) {
       : null;
   return {
     ...row,
-    assigneeName: assignee?.name ?? assignee?.email ?? null,
+    assigneeName: assignees.length > 0 ? assignees.map((a) => a.name).join(", ") : null,
+    assignees,
     creatorName: creator?.name ?? creator?.email ?? null,
     githubIssueUrl,
   };
@@ -77,6 +92,7 @@ export const listMineAcrossWorkspaces = query({
         assessmentTitle: string;
         workspaceName: string;
         assigneeName: string | null;
+        assignees: { userId: Id<"users">; name: string }[];
         githubIssueUrl: string | null;
       }
     > = [];
@@ -93,9 +109,12 @@ export const listMineAcrossWorkspaces = query({
         const assessment = await ctx.db.get(t.assessmentId);
         if (!assessment) continue;
         if (!(await canReadAssessment(ctx, assessment, userId))) continue;
-        const assignee = t.assigneeUserId
-          ? await ctx.db.get(t.assigneeUserId)
-          : null;
+        const ids = resolveAssigneeIds(t);
+        const assignees: { userId: Id<"users">; name: string }[] = [];
+        for (const uid of ids) {
+          const u = await ctx.db.get(uid);
+          if (u) assignees.push({ userId: uid, name: u.name ?? u.email ?? String(uid) });
+        }
         const githubIssueUrl =
           t.githubRepoFullName !== undefined && t.githubIssueNumber != null
             ? `https://github.com/${t.githubRepoFullName}/issues/${t.githubIssueNumber}`
@@ -104,9 +123,8 @@ export const listMineAcrossWorkspaces = query({
           ...t,
           assessmentTitle: assessment.title,
           workspaceName: ws?.name ?? "",
-          assigneeName: assignee
-            ? assignee.name ?? assignee.email ?? null
-            : null,
+          assigneeName: assignees.length > 0 ? assignees.map((a) => a.name).join(", ") : null,
+          assignees,
           githubIssueUrl,
         });
       }
@@ -134,6 +152,7 @@ export const create = mutation({
     title: v.string(),
     description: v.optional(v.string()),
     assigneeUserId: v.optional(v.id("users")),
+    assigneeUserIds: v.optional(v.array(v.id("users"))),
     priority: v.optional(v.number()),
     dueAt: v.optional(v.number()),
   },
@@ -148,12 +167,20 @@ export const create = mutation({
     }
     const now = Date.now();
     const priority = clampPriority(args.priority);
-    return await ctx.db.insert("assessmentTasks", {
+    const allIds =
+      args.assigneeUserIds && args.assigneeUserIds.length > 0
+        ? args.assigneeUserIds
+        : args.assigneeUserId
+          ? [args.assigneeUserId]
+          : [];
+    const uniqueIds = [...new Set(allIds)];
+    const taskId = await ctx.db.insert("assessmentTasks", {
       workspaceId: assessment.workspaceId,
       assessmentId: args.assessmentId,
       title,
       description: args.description?.trim() || undefined,
-      assigneeUserId: args.assigneeUserId,
+      assigneeUserId: uniqueIds[0],
+      assigneeUserIds: uniqueIds.length > 0 ? uniqueIds : undefined,
       createdByUserId: userId,
       status: "open",
       priority,
@@ -161,6 +188,18 @@ export const create = mutation({
       dashboardRank: now,
       createdAt: now,
     });
+    const atitle = assessment.title.trim() || "vurdering";
+    for (const uid of uniqueIds) {
+      if (uid !== userId) {
+        await insertUserInAppNotification(ctx, {
+          userId: uid,
+          title: `Du er tildelt oppgaven «${title}»`,
+          body: `På vurderingen «${atitle}».`,
+          href: `/w/${assessment.workspaceId}/a/${args.assessmentId}`,
+        });
+      }
+    }
+    return taskId;
   },
 });
 
@@ -170,6 +209,7 @@ export const update = mutation({
     title: v.optional(v.string()),
     description: v.optional(v.union(v.string(), v.null())),
     assigneeUserId: v.optional(v.union(v.id("users"), v.null())),
+    assigneeUserIds: v.optional(v.union(v.array(v.id("users")), v.null())),
     priority: v.optional(v.number()),
     dueAt: v.optional(v.union(v.number(), v.null())),
     status: v.optional(v.union(v.literal("open"), v.literal("done"))),
@@ -179,7 +219,7 @@ export const update = mutation({
     if (!row) {
       throw new Error("Fant ikke oppgaven.");
     }
-    await requireAssessmentEdit(ctx, row.assessmentId);
+    const { assessment, userId } = await requireAssessmentEdit(ctx, row.assessmentId);
     const patch: Record<string, unknown> = {};
     if (args.title !== undefined) {
       const t = args.title.trim();
@@ -190,9 +230,32 @@ export const update = mutation({
       patch.description =
         args.description === null ? undefined : args.description.trim() || undefined;
     }
-    if (args.assigneeUserId !== undefined) {
+    if (args.assigneeUserIds !== undefined) {
+      const newIds =
+        args.assigneeUserIds === null ? [] : [...new Set(args.assigneeUserIds)];
+      patch.assigneeUserIds = newIds.length > 0 ? newIds : undefined;
+      patch.assigneeUserId = newIds[0] ?? undefined;
+      const oldIds = new Set(resolveAssigneeIds(row));
+      const added = newIds.filter((id) => !oldIds.has(id));
+      const atitle = assessment.title.trim() || "vurdering";
+      for (const uid of added) {
+        if (uid !== userId) {
+          await insertUserInAppNotification(ctx, {
+            userId: uid,
+            title: `Du er tildelt oppgaven «${row.title}»`,
+            body: `På vurderingen «${atitle}».`,
+            href: `/w/${assessment.workspaceId}/a/${row.assessmentId}`,
+          });
+        }
+      }
+    } else if (args.assigneeUserId !== undefined) {
       patch.assigneeUserId =
         args.assigneeUserId === null ? undefined : args.assigneeUserId;
+      if (args.assigneeUserId) {
+        patch.assigneeUserIds = [args.assigneeUserId];
+      } else {
+        patch.assigneeUserIds = undefined;
+      }
     }
     if (args.priority !== undefined) {
       patch.priority = clampPriority(args.priority);

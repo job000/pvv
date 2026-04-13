@@ -12,6 +12,7 @@ import {
   requireUserId,
   requireWorkspaceMember,
 } from "./lib/access";
+import { insertUserInAppNotification } from "./userInAppNotifications";
 import { loadIntakeApprovedDerivedIds } from "./lib/intakeDerivedIds";
 import { cascadeDeleteRosAnalysisData } from "./lib/cascadeDeletePvv";
 import {
@@ -335,13 +336,26 @@ async function requireRosAnalysisEdit(
   return row;
 }
 
+function resolveRosTaskAssigneeIds(row: Doc<"rosTasks">): Id<"users">[] {
+  if (row.assigneeUserIds && row.assigneeUserIds.length > 0) {
+    return row.assigneeUserIds;
+  }
+  if (row.assigneeUserId) {
+    return [row.assigneeUserId];
+  }
+  return [];
+}
+
 async function enrichRosTask(
   ctx: QueryCtx,
   row: Doc<"rosTasks">,
 ) {
-  const assignee = row.assigneeUserId
-    ? await ctx.db.get(row.assigneeUserId)
-    : null;
+  const ids = resolveRosTaskAssigneeIds(row);
+  const assignees: { userId: Id<"users">; name: string }[] = [];
+  for (const uid of ids) {
+    const u = await ctx.db.get(uid);
+    if (u) assignees.push({ userId: uid, name: u.name ?? u.email ?? String(uid) });
+  }
   const creator = await ctx.db.get(row.createdByUserId);
   const analysis = await ctx.db.get(row.rosAnalysisId);
   let linkedRiskSummary: string | null = null;
@@ -393,7 +407,8 @@ async function enrichRosTask(
   }
   return {
     ...row,
-    assigneeName: assignee?.name ?? assignee?.email ?? null,
+    assigneeName: assignees.length > 0 ? assignees.map((a) => a.name).join(", ") : null,
+    assignees,
     creatorName: creator?.name ?? creator?.email ?? null,
     linkedRiskSummary,
   };
@@ -2427,6 +2442,7 @@ export const createRosTask = mutation({
     title: v.string(),
     description: v.optional(v.string()),
     assigneeUserId: v.optional(v.id("users")),
+    assigneeUserIds: v.optional(v.array(v.id("users"))),
     priority: v.optional(v.number()),
     dueAt: v.optional(v.number()),
     /** Kobling til risiko-/tiltakspunkt (anbefalt) */
@@ -2503,12 +2519,20 @@ export const createRosTask = mutation({
       }
     }
     const now = Date.now();
-    return await ctx.db.insert("rosTasks", {
+    const allIds =
+      args.assigneeUserIds && args.assigneeUserIds.length > 0
+        ? args.assigneeUserIds
+        : args.assigneeUserId
+          ? [args.assigneeUserId]
+          : [];
+    const uniqueIds = [...new Set(allIds)];
+    const taskId = await ctx.db.insert("rosTasks", {
       workspaceId: analysis.workspaceId,
       rosAnalysisId: args.analysisId,
       title,
       description: args.description?.trim() || undefined,
-      assigneeUserId: args.assigneeUserId,
+      assigneeUserId: uniqueIds[0],
+      assigneeUserIds: uniqueIds.length > 0 ? uniqueIds : undefined,
       createdByUserId: userId,
       status: "open",
       priority: clampRosPriority(args.priority),
@@ -2531,6 +2555,18 @@ export const createRosTask = mutation({
       createdAt: now,
       updatedAt: now,
     });
+    const rosTitle = analysis.title?.trim() || "ROS-analyse";
+    for (const uid of uniqueIds) {
+      if (uid !== userId) {
+        await insertUserInAppNotification(ctx, {
+          userId: uid,
+          title: `Du er tildelt ROS-oppgaven «${title}»`,
+          body: `På ROS-analysen «${rosTitle}».`,
+          href: `/w/${analysis.workspaceId}/ros/${args.analysisId}`,
+        });
+      }
+    }
+    return taskId;
   },
 });
 
@@ -2540,6 +2576,7 @@ export const updateRosTask = mutation({
     title: v.optional(v.string()),
     description: v.optional(v.union(v.string(), v.null())),
     assigneeUserId: v.optional(v.union(v.id("users"), v.null())),
+    assigneeUserIds: v.optional(v.union(v.array(v.id("users")), v.null())),
     priority: v.optional(v.number()),
     dueAt: v.optional(v.union(v.number(), v.null())),
     status: v.optional(v.union(v.literal("open"), v.literal("done"))),
@@ -2581,9 +2618,32 @@ export const updateRosTask = mutation({
       patch.description =
         args.description === null ? undefined : args.description.trim() || undefined;
     }
-    if (args.assigneeUserId !== undefined) {
+    if (args.assigneeUserIds !== undefined) {
+      const newIds =
+        args.assigneeUserIds === null ? [] : [...new Set(args.assigneeUserIds)];
+      patch.assigneeUserIds = newIds.length > 0 ? newIds : undefined;
+      patch.assigneeUserId = newIds[0] ?? undefined;
+      const oldIds = new Set(resolveRosTaskAssigneeIds(row));
+      const added = newIds.filter((id) => !oldIds.has(id));
+      const rosTitle = analysis.title?.trim() || "ROS-analyse";
+      for (const uid of added) {
+        if (uid !== userId) {
+          await insertUserInAppNotification(ctx, {
+            userId: uid,
+            title: `Du er tildelt ROS-oppgaven «${row.title}»`,
+            body: `På ROS-analysen «${rosTitle}».`,
+            href: `/w/${analysis.workspaceId}/ros/${row.rosAnalysisId}`,
+          });
+        }
+      }
+    } else if (args.assigneeUserId !== undefined) {
       patch.assigneeUserId =
         args.assigneeUserId === null ? undefined : args.assigneeUserId;
+      if (args.assigneeUserId) {
+        patch.assigneeUserIds = [args.assigneeUserId];
+      } else {
+        patch.assigneeUserIds = undefined;
+      }
     }
     if (args.priority !== undefined) {
       patch.priority = clampRosPriority(args.priority);

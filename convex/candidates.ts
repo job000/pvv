@@ -5,6 +5,7 @@ import {
   mutation,
   query,
   type MutationCtx,
+  type QueryCtx,
 } from "./_generated/server";
 import { getAuthUserId } from "@convex-dev/auth/server";
 import type { Doc, Id } from "./_generated/dataModel";
@@ -14,6 +15,7 @@ import {
   requireUserId,
   requireWorkspaceMember,
 } from "./lib/access";
+import { insertUserInAppNotification } from "./userInAppNotifications";
 import {
   extractPvvSyncedFieldsFromGithubIssueBody,
   hasPvvSyncMarkersInBody,
@@ -29,6 +31,80 @@ import { computeAllResults } from "./lib/rpaScoring";
 
 function normalizeProcessCode(raw: string): string {
   return raw.trim().toUpperCase();
+}
+
+type RegistryCandidatePayload =
+  | {
+      linked: true;
+      candidateId: Id<"candidates">;
+      code: string;
+      name: string;
+      notes?: string;
+      linkHintBusinessOwner?: string;
+      linkHintSystems?: string;
+      linkHintComplianceNotes?: string;
+      orgUnitName?: string;
+    }
+  | { linked: false };
+
+async function registryPayloadForCandidate(
+  ctx: QueryCtx,
+  cand: Doc<"candidates"> | null,
+): Promise<RegistryCandidatePayload> {
+  if (!cand) {
+    return { linked: false as const };
+  }
+  let orgUnitName: string | undefined;
+  if (cand.orgUnitId) {
+    const ou = await ctx.db.get(cand.orgUnitId);
+    orgUnitName = ou?.name ?? undefined;
+  }
+  return {
+    linked: true as const,
+    candidateId: cand._id,
+    code: cand.code,
+    name: cand.name,
+    notes: cand.notes,
+    linkHintBusinessOwner: cand.linkHintBusinessOwner,
+    linkHintSystems: cand.linkHintSystems,
+    linkHintComplianceNotes: cand.linkHintComplianceNotes,
+    orgUnitName,
+  };
+}
+
+/** Løser prosess fra utkastets `candidateId` (kode eller Convex-id), uten å bruke koblingstabellen. */
+async function resolveCandidateFromAssessmentDraft(
+  ctx: QueryCtx,
+  assessment: Doc<"assessments">,
+): Promise<Doc<"candidates"> | null> {
+  const draft = await ctx.db
+    .query("assessmentDrafts")
+    .withIndex("by_assessment", (q) => q.eq("assessmentId", assessment._id))
+    .unique();
+  const payload = draft?.payload as { candidateId?: string } | undefined;
+  const raw = (payload?.candidateId ?? "").trim();
+  if (!raw) {
+    return null;
+  }
+  let cand: Doc<"candidates"> | null = null;
+  try {
+    const byId = await ctx.db.get(raw as Id<"candidates">);
+    if (byId && byId.workspaceId === assessment.workspaceId) {
+      cand = byId;
+    }
+  } catch {
+    // Utkastet kan lagre prosesskode i candidateId; db.get kaster på ugyldig ID-lengde/format.
+  }
+  if (!cand) {
+    const code = normalizeProcessCode(raw);
+    cand = await ctx.db
+      .query("candidates")
+      .withIndex("by_workspace_code", (q) =>
+        q.eq("workspaceId", assessment.workspaceId).eq("code", code),
+      )
+      .unique();
+  }
+  return cand;
 }
 
 /** Utkast kan lagre enten prosesskode (P-XXX) eller Convex kandidat-ID. */
@@ -533,7 +609,10 @@ export const listByWorkspace = query({
   },
 });
 
-/** Prosess i registeret som vurderingens utkast peker på (kode eller kandidat-ID). */
+/**
+ * Prosess i registeret for en vurdering: eksplisitt kobling (tabell) og/eller det utkastet peker på.
+ * PDD-autofill skal kun bruke `explicitRegistryLink` — ikke utkast-match alene.
+ */
 export const getLinkedCandidateForAssessment = query({
   args: { assessmentId: v.id("assessments") },
   handler: async (ctx, args) => {
@@ -546,63 +625,18 @@ export const getLinkedCandidateForAssessment = query({
       .query("candidateAssessmentLinks")
       .withIndex("by_assessment", (q) => q.eq("assessmentId", args.assessmentId))
       .collect();
-    let cand: Doc<"candidates"> | null = null;
+    let explicitCand: Doc<"candidates"> | null = null;
     for (const link of explicitLinks) {
       const linkedCandidate = await ctx.db.get(link.candidateId);
       if (linkedCandidate && linkedCandidate.workspaceId === assessment.workspaceId) {
-        cand = linkedCandidate;
+        explicitCand = linkedCandidate;
         break;
       }
     }
-    if (!cand) {
-      const draft = await ctx.db
-        .query("assessmentDrafts")
-        .withIndex("by_assessment", (q) => q.eq("assessmentId", args.assessmentId))
-        .unique();
-      const payload = draft?.payload as { candidateId?: string } | undefined;
-      const raw = (payload?.candidateId ?? "").trim();
-      if (!raw) {
-        return { linked: false as const };
-      }
-
-      try {
-        const byId = await ctx.db.get(raw as Id<"candidates">);
-        if (byId && byId.workspaceId === assessment.workspaceId) {
-          cand = byId;
-        }
-      } catch {
-        // Utkastet kan lagre prosesskode i candidateId; db.get kaster på ugyldig ID-lengde/format.
-      }
-      if (!cand) {
-        const code = normalizeProcessCode(raw);
-        cand = await ctx.db
-          .query("candidates")
-          .withIndex("by_workspace_code", (q) =>
-            q.eq("workspaceId", assessment.workspaceId).eq("code", code),
-          )
-          .unique();
-      }
-    }
-    if (!cand) {
-      return { linked: false as const };
-    }
-
-    let orgUnitName: string | undefined;
-    if (cand.orgUnitId) {
-      const ou = await ctx.db.get(cand.orgUnitId);
-      orgUnitName = ou?.name ?? undefined;
-    }
-
+    const draftCand = await resolveCandidateFromAssessmentDraft(ctx, assessment);
     return {
-      linked: true as const,
-      candidateId: cand._id,
-      code: cand.code,
-      name: cand.name,
-      notes: cand.notes,
-      linkHintBusinessOwner: cand.linkHintBusinessOwner,
-      linkHintSystems: cand.linkHintSystems,
-      linkHintComplianceNotes: cand.linkHintComplianceNotes,
-      orgUnitName,
+      explicitRegistryLink: await registryPayloadForCandidate(ctx, explicitCand),
+      draftRegistryMatch: await registryPayloadForCandidate(ctx, draftCand),
     };
   },
 });
@@ -1319,7 +1353,106 @@ export const remove = mutation({
       });
     }
 
+    const candidateAssignees = await ctx.db
+      .query("candidateAssignees")
+      .withIndex("by_candidate", (q) => q.eq("candidateId", args.candidateId))
+      .collect();
+    for (const a of candidateAssignees) {
+      await ctx.db.delete(a._id);
+    }
+
     await ctx.db.delete(args.candidateId);
+    return null;
+  },
+});
+
+const CANDIDATE_ROLE_LABEL: Record<string, string> = {
+  utforende: "Utførende",
+  vurdering: "Vurdering (PVV)",
+  ros: "ROS-analyse",
+  pdd: "Prosessdesign (PDD)",
+};
+
+export const listAssignees = query({
+  args: { candidateId: v.id("candidates") },
+  handler: async (ctx, args) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) return [];
+    const candidate = await ctx.db.get(args.candidateId);
+    if (!candidate) return [];
+    await requireWorkspaceMember(ctx, candidate.workspaceId, userId, "viewer");
+    const rows = await ctx.db
+      .query("candidateAssignees")
+      .withIndex("by_candidate", (q) => q.eq("candidateId", args.candidateId))
+      .collect();
+    const enriched = [];
+    for (const r of rows) {
+      const user = await ctx.db.get(r.userId);
+      enriched.push({
+        ...r,
+        userName: user?.name ?? user?.email ?? null,
+        userEmail: user?.email ?? null,
+      });
+    }
+    return enriched;
+  },
+});
+
+export const addAssignee = mutation({
+  args: {
+    candidateId: v.id("candidates"),
+    userId: v.id("users"),
+    role: v.union(
+      v.literal("utforende"),
+      v.literal("vurdering"),
+      v.literal("ros"),
+      v.literal("pdd"),
+    ),
+  },
+  handler: async (ctx, args) => {
+    const currentUserId = await requireUserId(ctx);
+    const candidate = await ctx.db.get(args.candidateId);
+    if (!candidate) throw new Error("Prosessen finnes ikke.");
+    await requireWorkspaceMember(ctx, candidate.workspaceId, currentUserId, "member");
+    const existing = await ctx.db
+      .query("candidateAssignees")
+      .withIndex("by_candidate", (q) => q.eq("candidateId", args.candidateId))
+      .collect();
+    const alreadyAssigned = existing.find(
+      (e) => e.userId === args.userId && e.role === args.role,
+    );
+    if (alreadyAssigned) return alreadyAssigned._id;
+
+    const id = await ctx.db.insert("candidateAssignees", {
+      workspaceId: candidate.workspaceId,
+      candidateId: args.candidateId,
+      userId: args.userId,
+      role: args.role,
+      assignedByUserId: currentUserId,
+      assignedAt: Date.now(),
+    });
+
+    if (args.userId !== currentUserId) {
+      const roleLabel = CANDIDATE_ROLE_LABEL[args.role] ?? args.role;
+      await insertUserInAppNotification(ctx, {
+        userId: args.userId,
+        title: `Du er tildelt som ${roleLabel} på prosessen «${candidate.name}»`,
+        body: `Prosess ${candidate.code} — ${candidate.name}`,
+        href: `/w/${candidate.workspaceId}/prosessregister`,
+      });
+    }
+    return id;
+  },
+});
+
+export const removeAssignee = mutation({
+  args: { assigneeId: v.id("candidateAssignees") },
+  handler: async (ctx, args) => {
+    const userId = await requireUserId(ctx);
+    const row = await ctx.db.get(args.assigneeId);
+    if (!row) throw new Error("Tildelingen finnes ikke.");
+    await requireWorkspaceMember(ctx, row.workspaceId, userId, "member");
+    await ctx.db.delete(args.assigneeId);
     return null;
   },
 });

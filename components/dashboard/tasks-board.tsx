@@ -16,6 +16,7 @@ export type DashboardTaskRow = Doc<"assessmentTasks"> & {
   assessmentTitle: string;
   workspaceName: string;
   assigneeName: string | null;
+  assignees: { userId: string; name: string }[];
   githubIssueUrl: string | null;
 };
 import {
@@ -109,10 +110,12 @@ function DraggableTaskCard({
           <Badge variant="secondary" className="font-normal">
             P{clampP(task.priority)}
           </Badge>
-          {task.assigneeName ? (
+          {(task.assignees ?? []).length > 0 ? (
             <span className="text-muted-foreground inline-flex items-center gap-0.5">
               <User className="size-3" aria-hidden />
-              {task.assigneeName}
+              {task.assignees.length <= 2
+                ? task.assignees.map((a) => a.name).join(", ")
+                : `${task.assignees[0].name} +${task.assignees.length - 1}`}
             </span>
           ) : null}
           {task.dueAt ? (

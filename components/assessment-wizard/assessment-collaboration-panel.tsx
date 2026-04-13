@@ -110,7 +110,7 @@ export function AssessmentCollaborationPanel({
   >("reviewer");
   const [taskTitle, setTaskTitle] = useState("");
   const [taskDescription, setTaskDescription] = useState("");
-  const [taskAssignee, setTaskAssignee] = useState<Id<"users"> | "">("");
+  const [taskAssignees, setTaskAssignees] = useState<Id<"users">[]>([]);
   const [taskPriority, setTaskPriority] = useState(3);
   const [taskDue, setTaskDue] = useState(""); // yyyy-mm-dd for input
   const [noteBody, setNoteBody] = useState("");
@@ -461,10 +461,20 @@ export function AssessmentCollaborationPanel({
                   >
                     <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                     <div className="flex min-w-0 flex-1 gap-3">
-                      <UserAvatar
-                        name={t.assigneeName ?? "Ikke tildelt"}
-                        className={cn(!t.assigneeName && "opacity-60")}
-                      />
+                      <div className="flex -space-x-1.5 pt-0.5">
+                        {(t.assignees ?? []).length > 0 ? (
+                          (t.assignees ?? []).slice(0, 3).map((a) => (
+                            <UserAvatar key={a.userId} name={a.name} className="ring-background size-7 ring-2" />
+                          ))
+                        ) : (
+                          <UserAvatar name="Ikke tildelt" className="opacity-60" />
+                        )}
+                        {(t.assignees ?? []).length > 3 ? (
+                          <span className="bg-muted text-muted-foreground flex size-7 items-center justify-center rounded-full text-[10px] font-medium ring-2 ring-background">
+                            +{(t.assignees ?? []).length - 3}
+                          </span>
+                        ) : null}
+                      </div>
                       <div className="min-w-0 flex-1 space-y-1">
                         <div className="flex flex-wrap items-center gap-2">
                           <p
@@ -593,28 +603,58 @@ export function AssessmentCollaborationPanel({
                   className="min-h-[72px]"
                 />
               </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="new-task-assignee">Ansvarlig</Label>
-                <select
-                  id="new-task-assignee"
-                  className="border-input bg-background flex h-9 w-full rounded-lg border px-2 text-sm"
-                  value={taskAssignee}
-                  onChange={(e) =>
-                    setTaskAssignee(
-                      e.target.value === ""
-                        ? ""
-                        : (e.target.value as Id<"users">),
-                    )
-                  }
-                  disabled={!canEdit}
-                >
-                  <option value="">Velg hvem som eier steget</option>
-                  {(workspaceMembers ?? []).map((m) => (
-                    <option key={m.userId} value={m.userId}>
-                      {m.name ?? m.email ?? m.userId}
-                    </option>
-                  ))}
-                </select>
+              <div className="space-y-1.5 sm:col-span-2">
+                <Label htmlFor="new-task-assignees">Ansvarlig(e)</Label>
+                <div className="space-y-2">
+                  {taskAssignees.length > 0 ? (
+                    <div className="flex flex-wrap gap-1.5">
+                      {taskAssignees.map((uid) => {
+                        const m = (workspaceMembers ?? []).find((wm) => wm.userId === uid);
+                        const label = m?.name ?? m?.email ?? String(uid);
+                        return (
+                          <span
+                            key={uid}
+                            className="bg-card inline-flex items-center gap-1 rounded-full border py-0.5 pr-1 pl-2 text-xs shadow-xs"
+                          >
+                            {label}
+                            <button
+                              type="button"
+                              className="text-muted-foreground hover:text-destructive rounded-full p-0.5"
+                              onClick={() =>
+                                setTaskAssignees((ids) =>
+                                  ids.filter((id) => id !== uid),
+                                )
+                              }
+                            >
+                              ×
+                            </button>
+                          </span>
+                        );
+                      })}
+                    </div>
+                  ) : null}
+                  <select
+                    id="new-task-assignees"
+                    className="border-input bg-background flex h-9 w-full rounded-lg border px-2 text-sm"
+                    value=""
+                    onChange={(e) => {
+                      const uid = e.target.value as Id<"users">;
+                      if (uid && !taskAssignees.includes(uid)) {
+                        setTaskAssignees((ids) => [...ids, uid]);
+                      }
+                    }}
+                    disabled={!canEdit}
+                  >
+                    <option value="">Legg til person …</option>
+                    {(workspaceMembers ?? [])
+                      .filter((m) => !taskAssignees.includes(m.userId))
+                      .map((m) => (
+                        <option key={m.userId} value={m.userId}>
+                          {m.name ?? m.email ?? m.userId}
+                        </option>
+                      ))}
+                  </select>
+                </div>
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="new-task-prio">Hvor haster det?</Label>
@@ -659,14 +699,14 @@ export function AssessmentCollaborationPanel({
                   assessmentId,
                   title,
                   description: taskDescription.trim() || undefined,
-                  assigneeUserId:
-                    taskAssignee === "" ? undefined : taskAssignee,
+                  assigneeUserIds:
+                    taskAssignees.length > 0 ? taskAssignees : undefined,
                   priority: taskPriority,
                   dueAt: taskDueMs,
                 }).then(() => {
                   setTaskTitle("");
                   setTaskDescription("");
-                  setTaskAssignee("");
+                  setTaskAssignees([]);
                   setTaskPriority(3);
                   setTaskDue("");
                 });

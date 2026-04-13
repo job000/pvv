@@ -806,6 +806,25 @@ export default defineSchema({
     .index("by_workspace_code", ["workspaceId", "code"])
     .index("by_github_issue", ["githubRepoFullName", "githubIssueNumber"]),
 
+  /** Rollebaserte tildelinger på prosesser (utførende, vurdering, ROS, PDD). */
+  candidateAssignees: defineTable({
+    workspaceId: v.id("workspaces"),
+    candidateId: v.id("candidates"),
+    userId: v.id("users"),
+    role: v.union(
+      v.literal("utforende"),
+      v.literal("vurdering"),
+      v.literal("ros"),
+      v.literal("pdd"),
+    ),
+    assignedByUserId: v.id("users"),
+    assignedAt: v.number(),
+  })
+    .index("by_candidate", ["candidateId"])
+    .index("by_candidate_and_role", ["candidateId", "role"])
+    .index("by_user", ["userId"])
+    .index("by_workspace", ["workspaceId"]),
+
   /**
    * Mange-til-mange: prosess i registeret ↔ PVV-vurdering.
    * Eldre data kan fortsatt være koblet via `assessmentDrafts.payload.candidateId`.
@@ -957,7 +976,10 @@ export default defineSchema({
     assessmentId: v.id("assessments"),
     title: v.string(),
     description: v.optional(v.string()),
+    /** @deprecated Bruk assigneeUserIds for flere ansvarlige */
     assigneeUserId: v.optional(v.id("users")),
+    /** Alle ansvarlige brukere (erstatter assigneeUserId) */
+    assigneeUserIds: v.optional(v.array(v.id("users"))),
     createdByUserId: v.id("users"),
     status: v.union(v.literal("open"), v.literal("done")),
     /** 1 = høyest … 5 = lavest (dashboard-kolonner) */
@@ -1363,7 +1385,10 @@ export default defineSchema({
     rosAnalysisId: v.id("rosAnalyses"),
     title: v.string(),
     description: v.optional(v.string()),
+    /** @deprecated Bruk assigneeUserIds for flere ansvarlige */
     assigneeUserId: v.optional(v.id("users")),
+    /** Alle ansvarlige brukere (erstatter assigneeUserId) */
+    assigneeUserIds: v.optional(v.array(v.id("users"))),
     createdByUserId: v.id("users"),
     status: v.union(v.literal("open"), v.literal("done")),
     priority: v.optional(v.number()),

@@ -4,9 +4,12 @@ import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { UserAvatar } from "@/components/user-avatar";
+import { api } from "@/convex/_generated/api";
 import type { Doc, Id } from "@/convex/_generated/dataModel";
 import { toast } from "@/lib/app-toast";
 import { cn } from "@/lib/utils";
+import { useMutation, useQuery } from "convex/react";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ORG_UNIT_KIND_LABELS } from "@/lib/helsesector-labels";
@@ -22,7 +25,16 @@ import {
   Settings2,
   StickyNote,
   Upload,
+  UserPlus,
+  X,
 } from "lucide-react";
+
+const CANDIDATE_ROLE_OPTIONS = [
+  { value: "utforende" as const, label: "Utførende" },
+  { value: "vurdering" as const, label: "Vurdering (PVV)" },
+  { value: "ros" as const, label: "ROS-analyse" },
+  { value: "pdd" as const, label: "Prosessdesign (PDD)" },
+];
 
 export function WorkspaceCandidateRow({
   workspaceId,
@@ -433,6 +445,12 @@ export function WorkspaceCandidateRow({
           />
         </div>
       </div>
+
+      <CandidateAssigneesSection
+        candidateId={c._id}
+        workspaceId={workspaceId}
+        canEdit={canEdit}
+      />
 
       {githubProject?.enabled ? (
         <div className="mt-5 space-y-3 rounded-xl border border-border/60 bg-muted/15 p-4">
@@ -951,5 +969,168 @@ export function WorkspaceCandidateRow({
         </div>
       ) : null}
     </Wrapper>
+  );
+}
+
+function CandidateAssigneesSection({
+  candidateId,
+  workspaceId,
+  canEdit,
+}: {
+  candidateId: Id<"candidates">;
+  workspaceId: Id<"workspaces">;
+  canEdit: boolean;
+}) {
+  const assignees = useQuery(api.candidates.listAssignees, { candidateId });
+  const members = useQuery(api.workspaces.listMembers, { workspaceId });
+  const addAssignee = useMutation(api.candidates.addAssignee);
+  const removeAssignee = useMutation(api.candidates.removeAssignee);
+
+  const [addUserId, setAddUserId] = useState<Id<"users"> | "">("");
+  const [addRole, setAddRole] = useState<
+    "utforende" | "vurdering" | "ros" | "pdd"
+  >("utforende");
+
+  const assigneesByRole = useMemo(() => {
+    const grouped: Record<string, typeof assignees> = {};
+    for (const r of CANDIDATE_ROLE_OPTIONS) {
+      grouped[r.value] = [];
+    }
+    for (const a of assignees ?? []) {
+      if (!grouped[a.role]) grouped[a.role] = [];
+      grouped[a.role]!.push(a);
+    }
+    return grouped;
+  }, [assignees]);
+
+  return (
+    <div className="mt-5 space-y-3 rounded-xl border border-border/60 bg-muted/15 p-4">
+      <div className="flex items-center gap-2">
+        <UserPlus className="text-muted-foreground size-4" aria-hidden />
+        <p className="text-foreground text-sm font-medium">
+          Ansvarlige på prosessen
+        </p>
+      </div>
+      <p className="text-muted-foreground text-xs leading-relaxed">
+        Tildel hvem som utfører prosessen og hvem som har ansvar for vurdering,
+        ROS-analyse og prosessdesign. Ansvarlige får varsel.
+      </p>
+
+      {(assignees ?? []).length === 0 ? (
+        <p className="text-muted-foreground rounded-lg border border-dashed px-3 py-4 text-center text-xs">
+          Ingen er tildelt ennå.
+        </p>
+      ) : (
+        <div className="space-y-2">
+          {CANDIDATE_ROLE_OPTIONS.map((role) => {
+            const list = assigneesByRole[role.value] ?? [];
+            if (list.length === 0) return null;
+            return (
+              <div key={role.value} className="space-y-1">
+                <p className="text-muted-foreground text-[11px] font-medium uppercase tracking-wide">
+                  {role.label}
+                </p>
+                <div className="flex flex-wrap gap-1.5">
+                  {list.map((a) => (
+                    <span
+                      key={a._id}
+                      className="bg-card inline-flex items-center gap-1.5 rounded-full border py-0.5 pr-1 pl-1 text-xs shadow-xs"
+                    >
+                      <UserAvatar
+                        name={a.userName ?? "?"}
+                        className="size-5"
+                      />
+                      <span className="max-w-[140px] truncate font-medium">
+                        {a.userName ?? a.userEmail ?? "Bruker"}
+                      </span>
+                      {canEdit ? (
+                        <button
+                          type="button"
+                          className="text-muted-foreground hover:text-destructive rounded-full p-0.5"
+                          aria-label={`Fjern ${a.userName}`}
+                          onClick={() =>
+                            void removeAssignee({ assigneeId: a._id })
+                          }
+                        >
+                          <X className="size-3" />
+                        </button>
+                      ) : null}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {canEdit && members ? (
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+          <div className="min-w-0 flex-1 space-y-1">
+            <Label className="text-xs">Person</Label>
+            <select
+              className="border-input bg-background flex h-9 w-full rounded-lg border px-2 text-sm"
+              value={addUserId}
+              onChange={(e) =>
+                setAddUserId(
+                  e.target.value === ""
+                    ? ""
+                    : (e.target.value as Id<"users">),
+                )
+              }
+            >
+              <option value="">Velg person …</option>
+              {members.map((m) => (
+                <option key={m.userId} value={m.userId}>
+                  {m.name ?? m.email ?? m.userId}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="space-y-1 sm:w-44">
+            <Label className="text-xs">Rolle</Label>
+            <select
+              className="border-input bg-background flex h-9 w-full rounded-lg border px-2 text-sm"
+              value={addRole}
+              onChange={(e) =>
+                setAddRole(
+                  e.target.value as "utforende" | "vurdering" | "ros" | "pdd",
+                )
+              }
+            >
+              {CANDIDATE_ROLE_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <Button
+            type="button"
+            size="sm"
+            disabled={addUserId === ""}
+            onClick={() => {
+              if (addUserId === "") return;
+              void addAssignee({
+                candidateId,
+                userId: addUserId,
+                role: addRole,
+              })
+                .then(() => {
+                  setAddUserId("");
+                  toast.success("Person tildelt.");
+                })
+                .catch((e) =>
+                  toast.error(
+                    e instanceof Error ? e.message : "Kunne ikke tildele.",
+                  ),
+                );
+            }}
+          >
+            Tildel
+          </Button>
+        </div>
+      ) : null}
+    </div>
   );
 }
