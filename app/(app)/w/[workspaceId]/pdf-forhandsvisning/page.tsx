@@ -1,10 +1,5 @@
 "use client";
 
-import "@/lib/polyfills/map-getOrInsertComputed";
-
-import "react-pdf/dist/Page/AnnotationLayer.css";
-import "react-pdf/dist/Page/TextLayer.css";
-
 import {
   ProductEmptyState,
   ProductPageHeader,
@@ -38,25 +33,8 @@ import {
   Search,
   X,
 } from "lucide-react";
-import dynamic from "next/dynamic";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-
-const ResizablePdfPreview = dynamic(
-  () =>
-    import("@/lib/polyfills/map-getOrInsertComputed")
-      .then(() => import("@/components/pdf/resizable-pdf-preview"))
-      .then((m) => m.ResizablePdfPreview),
-  {
-    ssr: false,
-    loading: () => (
-      <div className="text-muted-foreground flex min-h-[12rem] flex-1 flex-col items-center justify-center gap-2 text-sm">
-        <Loader2 className="size-7 animate-spin opacity-70" aria-hidden />
-        Laster PDF-visning …
-      </div>
-    ),
-  },
-);
 
 type DocTab = "vurdering" | "ros" | "pdd";
 
@@ -457,13 +435,13 @@ export default function PdfForhandsvisningPage() {
           ? pddState.assessment.title
           : "PDF";
 
-  /** Rom til sticky kontroller (~toppstripe + faner + kort); PDF fyller resten av viewport */
+  /** Rom til sticky kontroller; iframe med nettleserens PDF (samme blob som «Ny fane») */
   const viewerHeightClass =
     "h-[min(56rem,calc(100dvh-15.5rem))] sm:h-[min(56rem,calc(100dvh-14rem))]";
 
   return (
     <div className="mx-auto max-w-5xl px-4 pb-8 pt-1 sm:px-6 lg:px-0">
-      {/* Sticky: faner, valg og handlinger — rull primært inne i PDF-iframe */}
+      {/* Sticky: faner, valg og handlinger */}
       <div
         className={cn(
           "sticky top-0 z-20 -mx-4 mb-4 space-y-4 border-b border-border/50 bg-background/90 px-4 pb-4 pt-1 shadow-[0_8px_24px_-12px_rgba(0,0,0,0.15)] backdrop-blur-md dark:bg-background/88 dark:shadow-[0_8px_28px_-12px_rgba(0,0,0,0.45)] sm:-mx-6 sm:px-6 lg:mx-0 lg:px-0",
@@ -479,8 +457,8 @@ export default function PdfForhandsvisningPage() {
           title="PDF-forhåndsvisning"
           description={
             <span className="text-pretty text-sm leading-relaxed">
-              Zoom og sider styres i PDF-visningen under. Kontrollene her forblir
-              synlige når du ruller.
+              Forhåndsvisningen bruker nettleserens innebygde PDF-visning — samme innhold som når du
+              åpner i ny fane. Kontrollene over forblir synlige når du ruller.
             </span>
           }
           actions={
@@ -737,11 +715,11 @@ export default function PdfForhandsvisningPage() {
             </div>
           ) : null}
           {pdfUrl && !error ? (
-            <ResizablePdfPreview
+            <iframe
               key={pdfUrl}
-              file={pdfUrl}
-              documentTitle={previewTitle}
-              className="min-h-0 flex-1"
+              title={`PDF: ${previewTitle}`}
+              src={pdfUrl}
+              className="block h-full min-h-0 w-full flex-1 border-0 bg-neutral-950 dark:bg-neutral-950"
             />
           ) : !error && !busy ? (
             <div className="text-muted-foreground flex h-full min-h-[12rem] w-full flex-1 items-center justify-center px-6 text-center text-sm">

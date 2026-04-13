@@ -12,7 +12,6 @@ const nextConfig: NextConfig = {
     "tldraw",
     "@tldraw/editor",
     "@tldraw/store",
-    "react-pdf",
   ],
   /** Reduser XSS-/clickjacking-risiko på offentlige skjemasider (/f/…). */
   async headers() {
@@ -55,11 +54,6 @@ const nextConfig: NextConfig = {
        */
       /** Én `convex`-instans — hindrer duplikat React-kontekst og «Could not find Convex client». */
       convex: path.join(nodeModules, "convex"),
-      /**
-       * `pdf.mjs` er allerede en Webpack-bundle fra Mozilla — å parse den på nytt i Next
-       * gir «Object.defineProperty called on non-object». `pdf.min.mjs` er én flat ESM-fil.
-       */
-      "pdfjs-dist": path.join(nodeModules, "pdfjs-dist/build/pdf.min.mjs"),
       tailwindcss: path.join(nodeModules, "tailwindcss"),
       "tw-animate-css": path.join(nodeModules, "tw-animate-css"),
       shadcn: path.join(nodeModules, "shadcn"),

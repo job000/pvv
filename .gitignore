@@ -17,9 +17,6 @@
 /.next/
 /out/
 
-# Generert av scripts/copy-pdfjs-worker.cjs (etter npm install)
-public/pdfjs/pdf.worker.min.mjs
-
 # production
 /build
 
