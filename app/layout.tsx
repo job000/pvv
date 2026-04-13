@@ -6,6 +6,7 @@ import { PwaClient } from "@/components/pwa-client";
 import { ConvexAuthNextjsServerProvider } from "@convex-dev/auth/nextjs/server";
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import Script from "next/script";
 import "./globals.css";
 
 const appUrl =
@@ -70,6 +71,11 @@ export default async function RootLayout({
         className="flex min-h-dvh flex-col touch-manipulation"
         suppressHydrationWarning
       >
+        <Script
+          id="map-getorinsert-polyfill"
+          src="/polyfills/map-getOrInsertComputed.js"
+          strategy="beforeInteractive"
+        />
         <ConvexAuthNextjsServerProvider verbose={process.env.NODE_ENV === "development"}>
           <ConvexClientProvider>
             <ThemeProvider>
