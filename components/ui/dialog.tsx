@@ -37,6 +37,11 @@ export function DialogContent({
   descriptionId,
   /** Legg f.eks. `z-[210]` når dialogen skal over en annen modal (bekreftelse). */
   portalClassName,
+  /**
+   * Fyll hele visningsporten (100dvh × 100%), uten ytre padding og uten klikk-til-lukk-backdrop.
+   * Passer diagram-/editor-fullskjerm (draw.io-lignende). Lukk med Esc eller eksplisitt knapp.
+   */
+  fillViewport = false,
 }: {
   className?: string;
   children: React.ReactNode;
@@ -44,6 +49,7 @@ export function DialogContent({
   titleId?: string;
   descriptionId?: string;
   portalClassName?: string;
+  fillViewport?: boolean;
 }) {
   const ctx = React.useContext(DialogContext);
   if (!ctx) {
@@ -106,24 +112,34 @@ export function DialogContent({
   return createPortal(
     <div
       className={cn(
-        "fixed inset-0 z-[200] flex items-end justify-center p-3 sm:items-center sm:p-6",
+        "fixed inset-0 z-[200] flex",
+        fillViewport
+          ? "items-stretch justify-stretch p-0"
+          : "items-end justify-center p-3 sm:items-center sm:p-6",
         portalClassName,
       )}
     >
-      <button
-        type="button"
-        aria-label="Lukk"
-        className="absolute inset-0 bg-black/50 backdrop-blur-[1px]"
-        onClick={() => onOpenChange(false)}
-      />
+      {!fillViewport ? (
+        <button
+          type="button"
+          aria-label="Lukk"
+          className="absolute inset-0 bg-black/50 backdrop-blur-[1px]"
+          onClick={() => onOpenChange(false)}
+        />
+      ) : null}
       <div
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
         aria-describedby={descriptionId}
         className={cn(
-          "border-border/80 bg-background relative z-10 flex max-h-[min(92vh,56rem)] w-full flex-col overflow-hidden rounded-2xl border shadow-2xl sm:rounded-3xl",
-          maxW,
+          "bg-background relative z-10 flex w-full flex-col overflow-hidden border shadow-2xl",
+          fillViewport
+            ? "min-h-0 h-dvh max-h-dvh max-w-none rounded-none border-border/60 shadow-none sm:rounded-none"
+            : cn(
+                "border-border/80 max-h-[min(92vh,56rem)] rounded-2xl sm:rounded-3xl",
+                maxW,
+              ),
           className,
         )}
       >

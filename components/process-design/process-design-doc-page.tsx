@@ -437,13 +437,24 @@ function ProcessTextDiagramBlock({
             </div>
           </div>
           <div>
-            <PddTldrawCanvas
-              snapshotJson={diagramValue}
-              onSnapshotChange={onDiagramJson}
-              readOnly={!canEdit}
-              instanceKey={instanceKey}
-              layoutVariant="embed"
-            />
+            {diagramDialogOpen ? (
+              <div
+                className={cn(
+                  "flex h-[clamp(22rem,68svh,34rem)] min-h-[22rem] flex-col items-center justify-center gap-2 rounded-2xl border border-border/60 bg-muted/10 px-4 text-center text-sm text-muted-foreground sm:h-[min(34rem,70vh)] sm:min-h-[24rem]",
+                )}
+              >
+                <p>Diagrammet redigeres i fullskjerm.</p>
+                <p className="text-xs">Lukk fullskjerm for å fortsette i rammen under.</p>
+              </div>
+            ) : (
+              <PddTldrawCanvas
+                snapshotJson={diagramValue}
+                onSnapshotChange={onDiagramJson}
+                readOnly={!canEdit}
+                instanceKey={instanceKey}
+                layoutVariant="embed"
+              />
+            )}
           </div>
         </div>
       ) : (
@@ -464,26 +475,57 @@ function ProcessTextDiagramBlock({
         <DialogContent
           size="7xl"
           titleId={`${instanceKey}-diagram-title`}
-          className="h-[96vh] max-w-[min(96vw,96rem)] p-0"
+          fillViewport={diagramFullscreen}
+          className={
+            diagramFullscreen
+              ? "p-0"
+              : "h-[92dvh] max-w-[min(96vw,96rem)] p-0"
+          }
         >
-          <div className="flex h-full min-h-0 flex-col">
-            <DialogHeader className="space-y-3">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                <div className="space-y-1">
-                  <p id={`${instanceKey}-diagram-title`} className="font-heading text-lg font-semibold">
+          <div className="flex min-h-0 flex-1 flex-col">
+            <DialogHeader
+              className={cn(
+                diagramFullscreen
+                  ? "space-y-0 border-b px-3 py-2.5 sm:px-4 sm:py-3"
+                  : "space-y-3",
+              )}
+            >
+              <div
+                className={cn(
+                  "flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between",
+                  diagramFullscreen && "gap-2 sm:items-center",
+                )}
+              >
+                <div className={cn("space-y-1", diagramFullscreen && "min-w-0 flex-1")}>
+                  <p
+                    id={`${instanceKey}-diagram-title`}
+                    className={cn(
+                      "font-heading font-semibold",
+                      diagramFullscreen ? "truncate text-base sm:text-lg" : "text-lg",
+                    )}
+                  >
                     {sectionLabel}
                   </p>
-                  <p className="text-sm leading-relaxed text-muted-foreground">
-                    Bruk to fingre for zoom og én finger for å tegne eller flytte objekter.
-                  </p>
+                  {!diagramFullscreen ? (
+                    <p className="text-sm leading-relaxed text-muted-foreground">
+                      Bruk to fingre for zoom og én finger for å tegne eller flytte objekter.
+                    </p>
+                  ) : (
+                    <p className="sr-only">
+                      Bruk to fingre for zoom og én finger for å tegne eller flytte objekter.
+                    </p>
+                  )}
                 </div>
-                <div className="flex flex-col gap-2 sm:flex-row">
+                <div className="flex shrink-0 flex-col gap-2 sm:flex-row sm:items-center">
                   {canEdit && diagramValue?.trim() ? (
                     <Button
                       type="button"
                       size="sm"
                       variant="ghost"
-                      className="h-10 justify-center sm:h-9"
+                      className={cn(
+                        "justify-center",
+                        diagramFullscreen ? "h-9 sm:h-8" : "h-10 sm:h-9",
+                      )}
                       onClick={() => {
                         if (confirm("Slette alt i diagrammet?")) onDiagramJson("");
                       }}
@@ -495,7 +537,10 @@ function ProcessTextDiagramBlock({
                     type="button"
                     size="sm"
                     variant="outline"
-                    className="h-10 justify-center sm:h-9"
+                    className={cn(
+                      "touch-manipulation justify-center",
+                      diagramFullscreen ? "h-9 sm:h-8" : "h-10 sm:h-9",
+                    )}
                     onClick={() => {
                       if (isMobileViewport) {
                         setMode("beskrivelse");
@@ -514,14 +559,26 @@ function ProcessTextDiagramBlock({
                 </div>
               </div>
             </DialogHeader>
-            <DialogBody className="min-h-0 flex-1 p-3 sm:p-4">
+            <DialogBody
+              className={cn(
+                "min-h-0 flex-1",
+                diagramFullscreen
+                  ? "overflow-hidden p-0 sm:p-0"
+                  : "p-3 sm:p-4",
+              )}
+            >
               <PddTldrawCanvas
                 snapshotJson={diagramValue}
                 onSnapshotChange={onDiagramJson}
                 readOnly={!canEdit}
-                instanceKey={`${instanceKey}:${isMobileViewport ? "mobile" : "fullscreen"}`}
+                instanceKey={instanceKey}
                 layoutVariant="fullscreen"
-                className="min-h-0 flex-1 rounded-[1.25rem] sm:rounded-[1.5rem]"
+                className={cn(
+                  "min-h-0 flex-1",
+                  diagramFullscreen
+                    ? "rounded-none border-0 border-t-0 shadow-none sm:rounded-none"
+                    : "rounded-[1.25rem] sm:rounded-[1.5rem]",
+                )}
               />
             </DialogBody>
           </div>

@@ -8,8 +8,15 @@ import {
   defaultShapeUtils,
 } from "@tldraw/tldraw";
 import type { ArrowShapeUtil, Editor, TLEditorSnapshot } from "@tldraw/tldraw";
+import { cn } from "@/lib/utils";
 import type { KeyboardEvent as ReactKeyboardEvent } from "react";
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+} from "react";
 
 /**
  * Pil mot bundne former: større snap-radier + pnpm-patch (BOUND_ARROW_OFFSET, kantsnapping for arc-piler).
@@ -105,7 +112,7 @@ export function PddTldrawCanvas({
     onSnapshotChange(json);
   }, [onSnapshotChange, readOnly]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (readOnly || !onSnapshotChange) return;
     const unsub = store.listen(
       () => {
@@ -132,7 +139,7 @@ export function PddTldrawCanvas({
         }
       }
     };
-  }, [store, readOnly, onSnapshotChange]);
+  }, [store, readOnly, onSnapshotChange, flushToParent]);
 
   useEffect(() => {
     const ed = editorRef.current;
@@ -252,13 +259,11 @@ export function PddTldrawCanvas({
   if (showLicenseFallback) {
     return (
       <div
-        className={[
+        className={cn(
           "relative w-full overflow-hidden rounded-2xl border border-border/60 bg-muted/10 p-4 shadow-sm",
           heightClass,
-          className ?? "",
-        ]
-          .filter(Boolean)
-          .join(" ")}
+          className,
+        )}
       >
         <div className="flex h-full items-center justify-center">
           <Alert className="max-w-xl border-amber-500/30 bg-amber-500/[0.06]">
@@ -278,13 +283,11 @@ export function PddTldrawCanvas({
     <div
       ref={containerRef}
       onKeyDown={trapScrollKeys}
-      className={[
+      className={cn(
         "relative w-full overflow-hidden rounded-2xl border border-border/60 bg-muted/10 touch-manipulation shadow-sm [overscroll-behavior:contain] [overflow-anchor:none]",
         heightClass,
-        className ?? "",
-      ]
-        .filter(Boolean)
-        .join(" ")}
+        className,
+      )}
     >
       <Tldraw
         licenseKey={licenseKey}
