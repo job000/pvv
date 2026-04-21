@@ -157,6 +157,103 @@ function githubColumnContentKindLabel(
   }
 }
 
+const GITHUB_COLUMN_IMPORT_CACHE_VERSION = 1 as const;
+
+type GithubColumnImportCacheV1 = {
+  v: typeof GITHUB_COLUMN_IMPORT_CACHE_VERSION;
+  projectNodeId: string;
+  statusOptionId: string;
+  fieldName: string;
+  optionName: string;
+  items: GithubColumnItemRow[];
+  fetchedAt: number;
+};
+
+function githubColumnImportStorageKey(workspaceId: string) {
+  return `pvv:githubColumnImport:v1:${workspaceId}`;
+}
+
+function isGithubColumnItemRow(x: unknown): x is GithubColumnItemRow {
+  if (!x || typeof x !== "object") return false;
+  const o = x as Record<string, unknown>;
+  const kind = o.contentKind;
+  return (
+    typeof o.projectItemId === "string" &&
+    typeof kind === "string" &&
+    (kind === "draft_issue" ||
+      kind === "issue" ||
+      kind === "pull_request" ||
+      kind === "unknown") &&
+    typeof o.title === "string"
+  );
+}
+
+function readGithubColumnImportCache(
+  workspaceId: string,
+): GithubColumnImportCacheV1 | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(
+      githubColumnImportStorageKey(workspaceId),
+    );
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as unknown;
+    if (!parsed || typeof parsed !== "object") return null;
+    const o = parsed as Record<string, unknown>;
+    if (o.v !== GITHUB_COLUMN_IMPORT_CACHE_VERSION) return null;
+    if (typeof o.projectNodeId !== "string" || !o.projectNodeId.trim()) {
+      return null;
+    }
+    if (typeof o.statusOptionId !== "string" || !o.statusOptionId.trim()) {
+      return null;
+    }
+    if (typeof o.fieldName !== "string" || typeof o.optionName !== "string") {
+      return null;
+    }
+    if (typeof o.fetchedAt !== "number" || !Number.isFinite(o.fetchedAt)) {
+      return null;
+    }
+    if (!Array.isArray(o.items) || !o.items.every(isGithubColumnItemRow)) {
+      return null;
+    }
+    return {
+      v: GITHUB_COLUMN_IMPORT_CACHE_VERSION,
+      projectNodeId: o.projectNodeId.trim(),
+      statusOptionId: o.statusOptionId.trim(),
+      fieldName: o.fieldName,
+      optionName: o.optionName,
+      items: o.items as GithubColumnItemRow[],
+      fetchedAt: o.fetchedAt,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function writeGithubColumnImportCache(
+  workspaceId: string,
+  data: GithubColumnImportCacheV1,
+) {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(
+      githubColumnImportStorageKey(workspaceId),
+      JSON.stringify(data),
+    );
+  } catch {
+    // lagringskvote / privat modus
+  }
+}
+
+function clearGithubColumnImportCache(workspaceId: string) {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.removeItem(githubColumnImportStorageKey(workspaceId));
+  } catch {
+    /* ignore */
+  }
+}
+
 function candidateOrgUnitLabel(
   c: Doc<"candidates">,
   orgUnits: Doc<"orgUnits">[],
@@ -1086,6 +1183,76 @@ export function WorkspaceCandidatesPanel({
     };
   }, [workspaceId, workspace?.githubProjectNodeId]);
 
+  /** Gjenopprett sist hentede kolonnekort fra nettleser (samme arbeidsområde / prosjekt). */
+  useEffect(() => {
+    if (workspace === undefined || workspace === null) {
+      return;
+    }
+    if (columnItemsResult !== null) {
+      return;
+    }
+    const projectId = workspace.githubProjectNodeId?.trim();
+    if (!projectId || githubProjectStatus.loading) {
+      return;
+    }
+    const opts = githubProjectStatus.options;
+    if (!opts?.length) {
+      return;
+    }
+    const cached = readGithubColumnImportCache(workspaceId);
+    if (!cached || cached.projectNodeId !== projectId) {
+      return;
+    }
+    if (!opts.some((o) => o.id === cached.statusOptionId)) {
+      return;
+    }
+    setColumnPickId((prev) => (prev.trim() ? prev : cached.statusOptionId));
+    setColumnItemsResult({
+      fieldName: cached.fieldName,
+      optionName: cached.optionName,
+      items: cached.items,
+    });
+    setColumnItemsFetchedAt(cached.fetchedAt);
+    setCreateTab("github");
+    setGithubImportTab("column");
+  }, [
+    workspace,
+    workspaceId,
+    columnItemsResult,
+    githubProjectStatus.loading,
+    githubProjectStatus.options,
+  ]);
+
+  /** Lagre kolonnekort lokalt slik at visningen overlever navigasjon og sidelast. */
+  useEffect(() => {
+    if (workspace === undefined || workspace === null) {
+      return;
+    }
+    const projectId = workspace.githubProjectNodeId?.trim();
+    if (!projectId || !columnItemsResult || columnItemsFetchedAt == null) {
+      return;
+    }
+    const statusOptionId = columnPickId.trim();
+    if (!statusOptionId) {
+      return;
+    }
+    writeGithubColumnImportCache(workspaceId, {
+      v: GITHUB_COLUMN_IMPORT_CACHE_VERSION,
+      projectNodeId: projectId,
+      statusOptionId,
+      fieldName: columnItemsResult.fieldName,
+      optionName: columnItemsResult.optionName,
+      items: columnItemsResult.items,
+      fetchedAt: columnItemsFetchedAt,
+    });
+  }, [
+    workspace,
+    workspaceId,
+    columnPickId,
+    columnItemsResult,
+    columnItemsFetchedAt,
+  ]);
+
   useEffect(() => {
     if (workspace === undefined || workspace === null) {
       return;
@@ -1412,6 +1579,7 @@ export function WorkspaceCandidatesPanel({
     } catch (e) {
       setColumnItemsResult(null);
       setColumnItemsFetchedAt(null);
+      clearGithubColumnImportCache(workspaceId);
       setColumnItemsError(
         formatUserFacingError(e, "Kunne ikke hente kort fra GitHub."),
       );
@@ -2134,17 +2302,22 @@ export function WorkspaceCandidatesPanel({
                     <p className="text-foreground text-sm font-medium">
                       {columnItemsResult.optionName}
                     </p>
-                    {columnItemsFetchedAt != null ? (
-                      <p className="text-muted-foreground mt-0.5 text-[11px]">
-                        Sist hentet fra GitHub{" "}
-                        {new Date(columnItemsFetchedAt).toLocaleString("nb-NO", {
-                          day: "numeric",
-                          month: "short",
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        })}
-                      </p>
-                    ) : null}
+                    <p className="text-muted-foreground mt-0.5 text-[11px] leading-snug">
+                      {`Kolonne i GitHub-prosjekt: felt «${columnItemsResult.fieldName}», verdi «${columnItemsResult.optionName}».`}
+                      {columnItemsFetchedAt != null ? (
+                        <>
+                          {" "}
+                          Sist hentet{" "}
+                          {new Date(columnItemsFetchedAt).toLocaleString("nb-NO", {
+                            day: "numeric",
+                            month: "short",
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })}
+                          . Vises igjen uten ny henting (Oppdater synkroniserer mot GitHub).
+                        </>
+                      ) : null}
+                    </p>
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="text-muted-foreground rounded-full bg-muted/50 px-2 py-0.5 text-[11px] font-medium tabular-nums">
