@@ -11,6 +11,13 @@ import { RosRiskList, type FlatRisk } from "@/components/ros/ros-risk-list";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogBody,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+} from "@/components/ui/dialog";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -34,11 +41,19 @@ import {
   DEFAULT_ROS_COL_LABELS,
   DEFAULT_ROS_ROW_LABELS,
   positionRiskLevel,
+  RISK_LEVEL_HINTS,
 } from "@/lib/ros-defaults";
 import {
   parseLabelLines,
   resizeNumberMatrix,
 } from "@/lib/ros-matrix-resize";
+import {
+  advanceRosReviewDate,
+  parseRosReviewRecurrenceKind,
+  ROS_REVIEW_RECURRENCE_OPTIONS,
+  type RosReviewRecurrenceKind,
+} from "@/lib/ros-review-schedule";
+import { buildRosReviewIcs, downloadTextFile } from "@/lib/ros-review-ics";
 import {
   COMPLIANCE_STATUS_LABELS,
   type ComplianceStatusKey,
@@ -59,18 +74,25 @@ import {
   buildRosTaskRiskLinkOptions,
   parseRosTaskRiskLink,
   riskTreatmentLabel,
+  rosTaskRiskLinkValue,
   ROS_RISK_TREATMENT_OPTIONS,
+  ROS_TASK_RISK_LINK_GROUP_LABELS,
+  type RosTaskRiskLinkOption,
 } from "@/lib/ros-task-ui";
 import {
   AlertTriangle,
   ArrowRight,
+  BookmarkPlus,
   Building2,
+  Calendar,
   ChevronLeft,
   ChevronRight,
   CircleHelp,
   FileDown,
   Link2,
   ListTodo,
+  Loader2,
+  Pencil,
   Plus,
   Shield,
   ShieldAlert,
@@ -321,83 +343,45 @@ function RiskSummaryBar({
   const improved = stats.highBefore > stats.highAfter;
 
   return (
-    <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-      <div className="flex items-center gap-3 rounded-2xl bg-muted/20 px-4 py-3 ring-1 ring-black/[0.04] dark:ring-white/[0.06]">
-        <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10">
-          <Shield className="size-5 text-primary" />
-        </div>
-        <div>
-          <p className="text-2xl font-bold tabular-nums leading-none">{stats.total}</p>
-          <p className="text-muted-foreground mt-0.5 text-[11px]">Risikoer</p>
-        </div>
-      </div>
-
-      <div className={cn(
-        "flex items-center gap-3 rounded-2xl px-4 py-3 ring-1",
-        stats.highBefore > 0
-          ? "bg-red-500/[0.06] ring-red-500/15"
-          : "bg-emerald-500/[0.06] ring-emerald-500/15",
-      )}>
-        <div className={cn(
-          "flex size-10 shrink-0 items-center justify-center rounded-xl",
-          stats.highBefore > 0 ? "bg-red-500/15" : "bg-emerald-500/15",
-        )}>
-          {stats.highBefore > 0
-            ? <ShieldAlert className="size-5 text-red-600 dark:text-red-400" />
-            : <ShieldCheck className="size-5 text-emerald-600 dark:text-emerald-400" />
-          }
-        </div>
-        <div>
-          <p className="text-2xl font-bold tabular-nums leading-none">{stats.highBefore}</p>
-          <p className="text-muted-foreground mt-0.5 text-[11px]">Høy/kritisk</p>
-        </div>
-      </div>
-
-      <div className={cn(
-        "flex items-center gap-3 rounded-2xl px-4 py-3 ring-1",
-        stats.needsAction > 0
-          ? "bg-amber-500/[0.06] ring-amber-500/15"
-          : "bg-muted/20 ring-black/[0.04] dark:ring-white/[0.06]",
-      )}>
-        <div className={cn(
-          "flex size-10 shrink-0 items-center justify-center rounded-xl",
-          stats.needsAction > 0 ? "bg-amber-500/15" : "bg-muted/30",
-        )}>
-          <AlertTriangle className={cn(
-            "size-5",
-            stats.needsAction > 0 ? "text-amber-600 dark:text-amber-400" : "text-muted-foreground",
-          )} />
-        </div>
-        <div>
-          <p className="text-2xl font-bold tabular-nums leading-none">{stats.needsAction}</p>
-          <p className="text-muted-foreground mt-0.5 text-[11px]">Trenger tiltak</p>
-        </div>
-      </div>
-
-      <div className={cn(
-        "flex items-center gap-3 rounded-2xl px-4 py-3 ring-1 ring-black/[0.04] dark:ring-white/[0.06]",
-        improved ? "bg-emerald-500/[0.06]" : "bg-muted/20",
-      )}>
-        <div className={cn(
-          "flex size-10 shrink-0 items-center justify-center rounded-xl text-sm font-bold tabular-nums",
+    <div className="bg-card/60 ring-border/40 flex flex-wrap items-center gap-2 rounded-2xl px-3 py-2 ring-1 backdrop-blur-sm sm:gap-3 sm:px-4">
+      <span
+        className={cn(
+          "inline-flex size-8 shrink-0 items-center justify-center rounded-full text-sm font-bold tabular-nums shadow-sm",
           cellRiskClass(stats.maxBefore),
-        )}>
-          {stats.maxBefore > 0 ? stats.maxBefore : "—"}
-        </div>
-        <div>
-          <p className={cn("text-sm font-bold leading-tight", stats.overallColor)}>
-            {stats.overallLevel}
-          </p>
-          {improved ? (
-            <p className="mt-0.5 flex items-center gap-1 text-[11px] font-medium text-emerald-600 dark:text-emerald-400">
-              <ArrowRight className="size-3" />
-              Max {stats.maxAfter} etter
-            </p>
-          ) : (
-            <p className="text-muted-foreground mt-0.5 text-[11px]">Risikonivå</p>
-          )}
-        </div>
-      </div>
+        )}
+        aria-hidden
+      >
+        {stats.maxBefore > 0 ? stats.maxBefore : "—"}
+      </span>
+      <span className={cn("text-sm font-semibold", stats.overallColor)}>
+        {stats.overallLevel}
+      </span>
+      <span className="text-border" aria-hidden>
+        ·
+      </span>
+      <span className="text-foreground/90 inline-flex items-center gap-1.5 text-xs">
+        <Shield className="text-muted-foreground size-3.5" aria-hidden />
+        <span className="tabular-nums font-semibold">{stats.total}</span>
+        <span className="text-muted-foreground">risikoer</span>
+      </span>
+      {stats.highBefore > 0 && (
+        <span className="inline-flex items-center gap-1 rounded-full bg-red-500/10 px-2 py-0.5 text-xs text-red-700 ring-1 ring-red-500/15 dark:text-red-300">
+          <ShieldAlert className="size-3" aria-hidden />
+          <span className="tabular-nums font-semibold">{stats.highBefore}</span> høy/kritisk
+        </span>
+      )}
+      {stats.needsAction > 0 && (
+        <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/10 px-2 py-0.5 text-xs text-amber-700 ring-1 ring-amber-500/15 dark:text-amber-300">
+          <AlertTriangle className="size-3" aria-hidden />
+          <span className="tabular-nums font-semibold">{stats.needsAction}</span> trenger tiltak
+        </span>
+      )}
+      {improved && (
+        <span className="ml-auto inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-xs font-medium text-emerald-700 ring-1 ring-emerald-500/15 dark:text-emerald-300">
+          <ArrowRight className="size-3" aria-hidden />
+          Max {stats.maxAfter} etter tiltak
+        </span>
+      )}
     </div>
   );
 }
@@ -561,11 +545,21 @@ export function RosAnalysisEditor({
   const updateRosTask = useMutation(api.ros.updateRosTask);
   const removeRosTask = useMutation(api.ros.removeRosTask);
   const setRosTaskStatus = useMutation(api.ros.setRosTaskStatus);
+  const createLibraryItem = useMutation(api.rosLibrary.createLibraryItem);
+  const libraryCategories = useQuery(api.rosLibrary.listLibraryCategories, {
+    workspaceId,
+  });
 
   const [title, setTitle] = useState("");
   const [notes, setNotes] = useState("");
   const [nextReviewLocal, setNextReviewLocal] = useState("");
   const [reviewRoutineNotes, setReviewRoutineNotes] = useState("");
+  const [reviewEmailRemindersEnabled, setReviewEmailRemindersEnabled] =
+    useState(true);
+  const [reviewScheduleActive, setReviewScheduleActive] = useState(true);
+  const [reviewRecurrenceKind, setReviewRecurrenceKind] =
+    useState<RosReviewRecurrenceKind>("none");
+  const [reviewMetaSaving, setReviewMetaSaving] = useState(false);
   const [methodologyStatement, setMethodologyStatement] = useState("");
   const [contextSummary, setContextSummary] = useState("");
   const [scopeAndCriteria, setScopeAndCriteria] = useState("");
@@ -596,6 +590,7 @@ export function RosAnalysisEditor({
   const [highlightCell, setHighlightCell] = useState<[number, number] | null>(null);
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [lastSavedAt, setLastSavedAt] = useState<number | null>(null);
 
   const [addPvId, setAddPvId] = useState<Id<"assessments"> | "">("");
 
@@ -625,6 +620,24 @@ export function RosAnalysisEditor({
   const [editingTaskId, setEditingTaskId] = useState<Id<"rosTasks"> | null>(
     null,
   );
+
+  const [savingTaskToLibrary, setSavingTaskToLibrary] = useState<{
+    taskId: Id<"rosTasks">;
+    title: string;
+    description?: string;
+    riskText: string;
+    riskFlags?: string[];
+    riskLocation?: string;
+  } | null>(null);
+  const [saveLibTitle, setSaveLibTitle] = useState("");
+  const [saveLibTiltak, setSaveLibTiltak] = useState("");
+  const [saveLibCategoryId, setSaveLibCategoryId] = useState<
+    Id<"rosLibraryCategories"> | ""
+  >("");
+  const [saveLibVisibility, setSaveLibVisibility] = useState<
+    "workspace" | "shared"
+  >("workspace");
+  const [saveLibBusy, setSaveLibBusy] = useState(false);
 
   const [useSeparateAfterAxes, setUseSeparateAfterAxes] = useState(false);
   const [rowAxisTitleAfter, setRowAxisTitleAfter] = useState("");
@@ -710,6 +723,11 @@ export function RosAnalysisEditor({
       data.nextReviewAt != null ? tsToDatetimeLocal(data.nextReviewAt) : "",
     );
     setReviewRoutineNotes(data.reviewRoutineNotes ?? "");
+    setReviewEmailRemindersEnabled(data.reviewEmailRemindersEnabled !== false);
+    setReviewScheduleActive(data.reviewScheduleActive !== false);
+    setReviewRecurrenceKind(
+      parseRosReviewRecurrenceKind(data.reviewRecurrenceKind),
+    );
     setMethodologyStatement(data.methodologyStatement ?? "");
     setContextSummary(data.contextSummary ?? "");
     setScopeAndCriteria(data.scopeAndCriteria ?? "");
@@ -772,6 +790,145 @@ export function RosAnalysisEditor({
     effectiveAfterRowLabels,
     effectiveAfterColLabels,
   ]);
+
+  /**
+   * Oppslag fra «phase:id» til den underliggende risiko-/celleteksten,
+   * brukt både til visning (chip på tiltak) og «lagre i bibliotek»
+   * der vi trenger fullstendig risikotekst og posisjon.
+   */
+  const linkedRiskLookup = useMemo(() => {
+    const map = new Map<
+      string,
+      {
+        text: string;
+        flags?: string[];
+        rowLabel: string;
+        colLabel: string;
+        phase: "before" | "after";
+        level: number;
+      }
+    >();
+    if (!data) return map;
+    const before = cellItemsMatrix;
+    const after = cellItemsAfterMatrix;
+    for (let r = 0; r < before.length; r++) {
+      const row = before[r];
+      if (!row) continue;
+      for (let c = 0; c < row.length; c++) {
+        const cell = row[c];
+        if (!cell) continue;
+        for (const it of cell) {
+          map.set(`before:${it.id}`, {
+            text: it.text,
+            flags: it.flags,
+            rowLabel: data.rowLabels[r] ?? `R${r + 1}`,
+            colLabel: data.colLabels[c] ?? `K${c + 1}`,
+            phase: "before",
+            level: matrix[r]?.[c] ?? 0,
+          });
+        }
+      }
+    }
+    for (let r = 0; r < after.length; r++) {
+      const row = after[r];
+      if (!row) continue;
+      for (let c = 0; c < row.length; c++) {
+        const cell = row[c];
+        if (!cell) continue;
+        for (const it of cell) {
+          map.set(`after:${it.id}`, {
+            text: it.text,
+            flags: it.flags,
+            rowLabel: effectiveAfterRowLabels[r] ?? `R${r + 1}`,
+            colLabel: effectiveAfterColLabels[c] ?? `K${c + 1}`,
+            phase: "after",
+            level: matrixAfter[r]?.[c] ?? 0,
+          });
+        }
+      }
+    }
+    return map;
+  }, [
+    data,
+    cellItemsMatrix,
+    cellItemsAfterMatrix,
+    effectiveAfterRowLabels,
+    effectiveAfterColLabels,
+    matrix,
+    matrixAfter,
+  ]);
+
+  /** Revisjonspåminnelse på e-post går til `createdByUserId` (Convex `reminderInternal`). */
+  const rosReviewReminderRecipientLine = useMemo(() => {
+    if (!data) return null;
+    const creatorId = data.createdByUserId;
+    const m = members?.find((row) => row.userId === creatorId);
+    const name = m?.name?.trim() || null;
+    const email = m?.email?.trim() || null;
+    if (name && email) return `${name} (${email})`;
+    if (email) return email;
+    if (name) {
+      return `${name} — ingen e-post registrert på kontoen (ingen e-post sendes).`;
+    }
+    return null;
+  }, [data, members]);
+
+  /**
+   * Identifiserer risikopunkter i før-matrisen som ikke har et tiltak knyttet
+   * til seg. Følger NS 5814 / ISO 31000: alle høye/kritiske risikoer skal
+   * enten behandles eller formelt aksepteres. Liste sorteres på risikonivå
+   * (høyest først) og brukes til varsel-banner i Tiltak-fanen.
+   */
+  type UncoveredRisk = {
+    id: string;
+    text: string;
+    rowLabel: string;
+    colLabel: string;
+    level: number;
+  };
+  const uncoveredBeforeRisks = useMemo<UncoveredRisk[]>(() => {
+    if (!data || !tasks) return [];
+    const covered = new Set<string>();
+    for (const t of tasks) {
+      if (t.linkedCellItemId && t.linkedCellItemPhase === "before") {
+        covered.add(t.linkedCellItemId);
+      }
+    }
+    const out: UncoveredRisk[] = [];
+    for (let r = 0; r < cellItemsMatrix.length; r++) {
+      const row = cellItemsMatrix[r];
+      if (!row) continue;
+      for (let c = 0; c < row.length; c++) {
+        const cell = row[c];
+        if (!cell) continue;
+        const lvl = matrix[r]?.[c] ?? 0;
+        for (const it of cell) {
+          if (covered.has(it.id)) continue;
+          out.push({
+            id: it.id,
+            text: it.text,
+            rowLabel: data.rowLabels[r] ?? `R${r + 1}`,
+            colLabel: data.colLabels[c] ?? `K${c + 1}`,
+            level: lvl,
+          });
+        }
+      }
+    }
+    out.sort((a, b) => b.level - a.level);
+    return out;
+  }, [data, tasks, cellItemsMatrix, matrix]);
+
+  function startAddTaskForRisk(riskId: string) {
+    setTaskRiskLink(`before:${riskId}`);
+    if (!taskRiskTreatment) setTaskRiskTreatment("mitigate");
+    requestAnimationFrame(() => {
+      const el = document.getElementById(
+        "ros-quick-task-title",
+      ) as HTMLInputElement | null;
+      el?.scrollIntoView({ behavior: "smooth", block: "start" });
+      el?.focus();
+    });
+  }
 
   /** Auto-lagring: ikke forsøk hvis skjema ville avvist manuell lagring (unngå støy). */
   const canAutosave = useMemo(() => {
@@ -1561,12 +1718,50 @@ export function RosAnalysisEditor({
     }
   }
 
-  async function flushReviewSchedule() {
+  async function patchRosReviewFields(patch: {
+    reviewEmailRemindersEnabled?: boolean | null;
+    reviewScheduleActive?: boolean | null;
+    reviewRecurrenceKind?: RosReviewRecurrenceKind | null;
+    lastFormalReviewCompletedAt?: number | null;
+    nextReviewAt?: number | null;
+    reviewRoutineNotes?: string | null;
+  }): Promise<boolean> {
+    if (!data) return false;
+    const rev = analysisRevisionRef.current ?? data.revision ?? 0;
+    setReviewMetaSaving(true);
+    try {
+      const result = await updateAnalysis({
+        analysisId,
+        expectedRevision: rev,
+        ...patch,
+      });
+      if (result.ok) {
+        analysisRevisionRef.current = result.revision;
+        return true;
+      }
+      toast.error(
+        "ROS-analysen er allerede oppdatert på serveren. Last siden på nytt og prøv igjen.",
+      );
+      return false;
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Kunne ikke lagre.");
+      return false;
+    } finally {
+      setReviewMetaSaving(false);
+    }
+  }
+
+  async function flushReviewSchedule(nextReviewOverride?: number | null) {
     if (!data) return;
     const rev = analysisRevisionRef.current ?? data.revision ?? 0;
-    const raw = nextReviewLocal.trim();
-    const nextMs = raw === "" ? null : new Date(raw).getTime();
-    if (raw !== "" && !Number.isFinite(nextMs)) return;
+    let nextMs: number | null;
+    if (nextReviewOverride !== undefined) {
+      nextMs = nextReviewOverride;
+    } else {
+      const raw = nextReviewLocal.trim();
+      nextMs = raw === "" ? null : new Date(raw).getTime();
+      if (raw !== "" && !Number.isFinite(nextMs)) return;
+    }
     try {
       const result = await updateAnalysis({
         analysisId,
@@ -1645,6 +1840,10 @@ export function RosAnalysisEditor({
           notes: notes.trim() || null,
           nextReviewAt: parsedNextMs === null ? null : parsedNextMs,
           reviewRoutineNotes: reviewRoutineNotes.trim() || null,
+          reviewEmailRemindersEnabled,
+          reviewScheduleActive,
+          reviewRecurrenceKind:
+            reviewRecurrenceKind === "none" ? null : reviewRecurrenceKind,
           methodologyStatement: methodologyStatement.trim() || null,
           contextSummary: contextSummary.trim() || null,
           scopeAndCriteria: scopeAndCriteria.trim() || null,
@@ -1678,6 +1877,7 @@ export function RosAnalysisEditor({
         if (result.ok) {
           analysisRevisionRef.current = result.revision;
           setDirty(false);
+          setLastSavedAt(Date.now());
           if (!opts?.silent) {
             const sv = result.snapshotVersion;
             toast.success(
@@ -1708,6 +1908,61 @@ export function RosAnalysisEditor({
 
   saveRef.current = save;
 
+  function downloadRosReviewCalendarFile() {
+    const raw = nextReviewLocal.trim();
+    const nextMs = raw === "" ? null : new Date(raw).getTime();
+    if (nextMs === null || !Number.isFinite(nextMs)) {
+      toast.error("Sett en gyldig dato for neste revisjon først.");
+      return;
+    }
+    const origin =
+      typeof window !== "undefined" ? window.location.origin : "";
+    const safeTitle = data?.title?.trim() || "ROS";
+    const ics = buildRosReviewIcs({
+      uid: `ros-${String(analysisId)}-${nextMs}@pvv.local`,
+      title: `ROS-revisjon: ${safeTitle}`,
+      startMs: nextMs,
+      description: reviewRoutineNotes.trim() || undefined,
+      url: `${origin}/w/${workspaceId}/ros/a/${analysisId}`,
+    });
+    downloadTextFile(
+      `ros-revisjon-${String(analysisId).slice(0, 8)}.ics`,
+      ics,
+      "text/calendar;charset=utf-8",
+    );
+    toast.success(
+      "Kalenderfil lastet ned — importer i Outlook, Google eller Apple Kalender.",
+    );
+  }
+
+  async function markFormalReviewDone() {
+    const kind = reviewRecurrenceKind;
+    const patch: {
+      lastFormalReviewCompletedAt: number;
+      nextReviewAt?: number | null;
+    } = { lastFormalReviewCompletedAt: Date.now() };
+    if (kind !== "none") {
+      patch.nextReviewAt = advanceRosReviewDate(Date.now(), kind);
+    }
+    const ok = await patchRosReviewFields(patch);
+    if (ok) {
+      if (kind !== "none" && patch.nextReviewAt != null) {
+        setNextReviewLocal(tsToDatetimeLocal(patch.nextReviewAt));
+      }
+      toast.success("Revisjon merket som gjennomført.");
+    }
+  }
+
+  async function applyNextReviewFromToday() {
+    if (reviewRecurrenceKind === "none") {
+      toast.error("Velg et intervall (uke, måned, …) først.");
+      return;
+    }
+    const next = advanceRosReviewDate(Date.now(), reviewRecurrenceKind);
+    setNextReviewLocal(tsToDatetimeLocal(next));
+    await flushReviewSchedule(next);
+  }
+
   /** Auto-lagre ulagret arbeid så matrise/risiko ikke tapes ved navigasjon. */
   useEffect(() => {
     if (!dirty || !data || !canAutosave) return;
@@ -1727,6 +1982,9 @@ export function RosAnalysisEditor({
     notes,
     nextReviewLocal,
     reviewRoutineNotes,
+    reviewEmailRemindersEnabled,
+    reviewScheduleActive,
+    reviewRecurrenceKind,
     methodologyStatement,
     contextSummary,
     scopeAndCriteria,
@@ -1998,6 +2256,78 @@ export function RosAnalysisEditor({
     }
   }
 
+  /**
+   * Lagre tiltak (med tilknyttet risikotekst) i ROS-biblioteket for gjenbruk
+   * på tvers av analyser. Følger ISO 31000-tankegangen om at tiltak alltid
+   * relateres til en konkret risiko.
+   */
+  function openSaveTaskToLibrary(task: {
+    _id: Id<"rosTasks">;
+    title: string;
+    description?: string;
+    linkedCellItemId?: string;
+    linkedCellItemPhase?: "before" | "after";
+  }) {
+    if (!task.linkedCellItemId || !task.linkedCellItemPhase) {
+      toast.error(
+        "Koble tiltaket til en risiko først for å lagre det i biblioteket.",
+      );
+      return;
+    }
+    const key = `${task.linkedCellItemPhase}:${task.linkedCellItemId}`;
+    const found = linkedRiskLookup.get(key);
+    if (!found || !found.text.trim()) {
+      toast.error("Risikoteksten er tom — kan ikke lagres i biblioteket.");
+      return;
+    }
+    const tiltakText = [task.title.trim(), task.description?.trim()]
+      .filter(Boolean)
+      .join("\n\n");
+    setSavingTaskToLibrary({
+      taskId: task._id,
+      title: task.title,
+      description: task.description,
+      riskText: found.text,
+      riskFlags: found.flags,
+      riskLocation: `${found.phase === "before" ? "Før" : "Etter"} · ${found.rowLabel} × ${found.colLabel}`,
+    });
+    setSaveLibTitle(task.title.trim());
+    setSaveLibTiltak(tiltakText);
+    setSaveLibCategoryId("");
+    setSaveLibVisibility("workspace");
+  }
+
+  async function confirmSaveTaskToLibrary() {
+    if (!savingTaskToLibrary) return;
+    const t = saveLibTitle.trim();
+    const r = savingTaskToLibrary.riskText.trim();
+    if (!t || !r) {
+      toast.error("Tittel og risikotekst er påkrevd.");
+      return;
+    }
+    setSaveLibBusy(true);
+    try {
+      await createLibraryItem({
+        workspaceId,
+        title: t,
+        riskText: r,
+        tiltakText: saveLibTiltak.trim() || undefined,
+        flags: savingTaskToLibrary.riskFlags,
+        visibility: saveLibVisibility,
+        categoryId:
+          saveLibCategoryId === "" ? undefined : saveLibCategoryId,
+      });
+      toast.success(
+        "Lagret i biblioteket — tiltaket kan nå gjenbrukes på andre analyser.",
+      );
+      setSavingTaskToLibrary(null);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Kunne ikke lagre.");
+    } finally {
+      setSaveLibBusy(false);
+    }
+  }
+
   async function onCreateTask(e: React.FormEvent) {
     e.preventDefault();
     const t = taskTitle.trim();
@@ -2038,10 +2368,10 @@ export function RosAnalysisEditor({
       setTaskRiskTreatment("");
       setTaskResidualNote("");
       setTaskDueAt("");
-      toast.success("Oppgave opprettet.");
+      toast.success("Tiltak opprettet.");
     } catch (e) {
       toast.error(
-        e instanceof Error ? e.message : "Kunne ikke opprette oppgave.",
+        e instanceof Error ? e.message : "Kunne ikke opprette tiltak.",
       );
     } finally {
       setTaskBusy(false);
@@ -2064,28 +2394,30 @@ export function RosAnalysisEditor({
 
   return (
     <div className="space-y-5 pb-24">
-      {/* Sticky header */}
-      <div className="sticky top-0 z-20 -mx-1 bg-background/95 px-1 pb-2 pt-2 backdrop-blur-md supports-[backdrop-filter]:bg-background/85">
-        <div className="flex items-center gap-3">
+      {/* Sticky header — slim, modern, action-pills */}
+      <div className="bg-background/95 supports-[backdrop-filter]:bg-background/80 sticky top-0 z-20 -mx-1 px-1 pb-3 pt-2 backdrop-blur-md">
+        <div className="flex items-center gap-2 sm:gap-3">
           <Link
             href={`/w/${workspaceId}/ros`}
-            className="text-muted-foreground hover:text-foreground flex size-9 shrink-0 items-center justify-center rounded-xl transition-colors hover:bg-muted/60"
+            className="text-muted-foreground hover:bg-muted/60 hover:text-foreground flex size-9 shrink-0 items-center justify-center rounded-full ring-1 ring-border/40 transition-colors"
             title="Tilbake til ROS"
           >
-            <ChevronLeft className="size-5" aria-hidden />
+            <ChevronLeft className="size-4" aria-hidden />
           </Link>
           <div className="min-w-0 flex-1">
-            <h1 className="font-heading truncate text-base font-semibold tracking-tight text-foreground sm:text-lg">
+            <h1 className="font-heading text-foreground truncate text-base font-semibold leading-tight tracking-tight sm:text-lg">
               {data.title}
             </h1>
-            <div className="text-muted-foreground flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px]">
+            <div className="text-muted-foreground mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px]">
               {data.candidateName ? (
-                <span>
+                <span className="truncate">
                   {data.candidateName}{" "}
-                  <span className="font-mono text-[10px]">({data.candidateCode})</span>
+                  <span className="text-muted-foreground/80 font-mono text-[10px]">
+                    ({data.candidateCode})
+                  </span>
                 </span>
               ) : (
-                <span className="italic">Frittstående analyse</span>
+                <span className="italic">Frittstående</span>
               )}
               {data.linkedAssessments.length > 0 && (
                 <>
@@ -2095,7 +2427,10 @@ export function RosAnalysisEditor({
                     {data.linkedAssessments.map((l, li) => (
                       <span key={l.linkId}>
                         {li > 0 ? ", " : ""}
-                        <Link href={`/w/${workspaceId}/a/${l.assessmentId}`} className="text-primary hover:underline">
+                        <Link
+                          href={`/w/${workspaceId}/a/${l.assessmentId}`}
+                          className="text-primary hover:underline"
+                        >
                           {l.title}
                         </Link>
                       </span>
@@ -2105,24 +2440,31 @@ export function RosAnalysisEditor({
               )}
             </div>
           </div>
-          <div className="flex shrink-0 items-center gap-1">
+          <div className="flex shrink-0 items-center gap-1.5">
             <Button
               type="button"
               size="sm"
               onClick={() => void save()}
               disabled={saving}
-              className="gap-1.5 rounded-xl font-semibold shadow-sm"
+              className="h-9 gap-1.5 rounded-full px-4 text-sm font-semibold shadow-sm"
             >
               {saving ? "Lagrer …" : dirty ? "Lagre" : "Versjon"}
             </Button>
-            <Button type="button" variant="ghost" size="icon" className="size-8 rounded-xl" title="Eksporter PDF" onClick={exportPdf}>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="hover:bg-muted/60 size-9 rounded-full ring-1 ring-border/40"
+              title="Eksporter PDF"
+              onClick={exportPdf}
+            >
               <FileDown className="size-4" aria-hidden />
             </Button>
             <Button
               type="button"
               variant="ghost"
               size="icon"
-              className="size-8 rounded-xl text-muted-foreground hover:text-destructive"
+              className="text-muted-foreground hover:bg-destructive/10 hover:text-destructive size-9 rounded-full ring-1 ring-border/40"
               title="Slett analyse"
               disabled={isDeleting}
               onClick={() => {
@@ -2144,33 +2486,32 @@ export function RosAnalysisEditor({
           </div>
         </div>
 
-        {/* Section tabs */}
+        {/* Section chips — rounded-full, samme språk som vurderingsveiviseren */}
         <nav
-          className="mt-3 flex gap-0 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+          className="mt-3 flex gap-1.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
           aria-label="ROS-seksjoner"
         >
-          <div className="flex w-full gap-1 rounded-2xl bg-muted/25 p-1">
-            {ROS_EDITOR_SECTIONS.map((sec, i) => {
-              const active = rosSection === i;
-              const Icon = sec.icon;
-              return (
-                <button
-                  key={sec.id}
-                  type="button"
-                  onClick={() => setRosSection(i)}
-                  className={cn(
-                    "relative flex flex-1 shrink-0 items-center justify-center gap-1.5 rounded-xl px-3 py-2.5 text-[13px] font-medium transition-all duration-200",
-                    active
-                      ? "bg-card text-foreground shadow-md ring-1 ring-black/[0.06] dark:ring-white/[0.08]"
-                      : "text-muted-foreground hover:text-foreground hover:bg-card/40",
-                  )}
-                >
-                  <Icon className={cn("size-4 shrink-0", active ? "text-primary" : "")} aria-hidden />
-                  <span className="hidden sm:inline">{sec.label}</span>
-                </button>
-              );
-            })}
-          </div>
+          {ROS_EDITOR_SECTIONS.map((sec, i) => {
+            const active = rosSection === i;
+            const Icon = sec.icon;
+            return (
+              <button
+                key={sec.id}
+                type="button"
+                onClick={() => setRosSection(i)}
+                aria-current={active ? "page" : undefined}
+                className={cn(
+                  "inline-flex shrink-0 items-center gap-1.5 rounded-full px-3.5 py-1.5 text-[13px] font-medium transition-all",
+                  active
+                    ? "bg-primary text-primary-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground bg-card/60 ring-1 ring-border/40 backdrop-blur-sm hover:bg-card",
+                )}
+              >
+                <Icon className="size-3.5 shrink-0" aria-hidden />
+                <span>{sec.label}</span>
+              </button>
+            );
+          })}
         </nav>
       </div>
 
@@ -2179,6 +2520,58 @@ export function RosAnalysisEditor({
         matrisen er de reservert til matrisen. Bruk knappene under eller Forrige /
         Neste nederst.
       </p>
+
+      {(() => {
+        const scheduleOn = data.reviewScheduleActive !== false;
+        const nextAt = data.nextReviewAt;
+        const now = Date.now();
+        const overdue =
+          scheduleOn &&
+          nextAt != null &&
+          Number.isFinite(nextAt) &&
+          nextAt < now;
+        const stale =
+          data.lastFormalReviewCompletedAt != null &&
+          data.updatedAt > data.lastFormalReviewCompletedAt + 60_000;
+        if (!overdue && !stale) return null;
+        return (
+          <div className="space-y-2">
+            {stale ? (
+              <div className="ring-border/40 flex items-start gap-2.5 rounded-2xl bg-sky-500/[0.07] px-3.5 py-2.5 ring-1 sm:px-4">
+                <AlertTriangle
+                  className="mt-0.5 size-4 shrink-0 text-sky-700 dark:text-sky-400"
+                  aria-hidden
+                />
+                <p className="text-foreground/90 text-xs leading-relaxed">
+                  <span className="font-semibold">Analysen er endret</span> etter
+                  siste merkede revisjon. Vurder om ROS bør gjennomgås på nytt, eller
+                  merk revisjon som gjennomført igjen etter at endringene er
+                  kvalitetssikret.
+                </p>
+              </div>
+            ) : null}
+            {overdue ? (
+              <div className="ring-border/40 flex items-start gap-2.5 rounded-2xl bg-amber-500/[0.08] px-3.5 py-2.5 ring-1 sm:px-4">
+                <AlertTriangle
+                  className="mt-0.5 size-4 shrink-0 text-amber-700 dark:text-amber-400"
+                  aria-hidden
+                />
+                <p className="text-foreground/90 text-xs leading-relaxed">
+                  <span className="font-semibold">Planlagt revisjon er passert.</span>{" "}
+                  Oppdater neste frist under Innstillinger, eller marker revisjon som
+                  gjennomført.
+                  {data.reviewEmailRemindersEnabled === false ? (
+                    <span className="text-muted-foreground">
+                      {" "}
+                      (E-postvarsler er av — du ser dette kun her i appen.)
+                    </span>
+                  ) : null}
+                </p>
+              </div>
+            ) : null}
+          </div>
+        );
+      })()}
 
       {/* === Section 0: Risikovurdering — punkter først, matrise som visning === */}
       {rosSection === 0 && (
@@ -2214,6 +2607,7 @@ export function RosAnalysisEditor({
                 highlightCell={highlightCell}
                 rosTasks={tasks ?? undefined}
                 onGoToTasks={() => setRosSection(1)}
+                saveStatus={{ saving, dirty, lastSavedAt }}
               />
             </div>
           </div>
@@ -2221,94 +2615,60 @@ export function RosAnalysisEditor({
           {matrix.length > 0 ? (
             <>
             <div className="rounded-2xl bg-card shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.06]">
-              <div className="flex flex-col gap-3 p-5 pb-3 sm:flex-row sm:items-center sm:justify-between sm:p-6 sm:pb-4">
-                <div>
-                  <h3 className="text-base font-semibold tracking-tight">
+              <div className="flex flex-col gap-3 p-4 pb-2 sm:flex-row sm:items-center sm:justify-between sm:p-5 sm:pb-3">
+                <div className="min-w-0">
+                  <h3 className="text-foreground text-sm font-semibold tracking-tight">
                     Risikomatrise
                   </h3>
-                  <p className="text-muted-foreground mt-0.5 text-[13px]">
-                    {data.rowAxisTitle} × {data.colAxisTitle} — klikk celler for å redigere
+                  <p className="text-muted-foreground mt-0.5 text-xs">
+                    {data.rowAxisTitle} × {data.colAxisTitle} · klikk celler for å redigere
                   </p>
                 </div>
                 <div
-                  className="flex flex-col items-stretch gap-1 sm:items-end"
-                  title="Høyeste nivå kun i celler med risikotekst eller «Må håndteres» / «Følg med» (ikke bare farge i rutenettet)."
-                >
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span
-                      className={cn(
-                        "inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-semibold",
-                        cellRiskClass(beforeStats.max),
-                      )}
-                    >
-                      Før: {beforeStats.max > 0 ? beforeStats.max : "—"}
-                    </span>
-                    <ArrowRight className="text-muted-foreground size-3" />
-                    <span
-                      className={cn(
-                        "inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-semibold",
-                        cellRiskClass(afterStats.max),
-                      )}
-                    >
-                      Etter: {afterStats.max > 0 ? afterStats.max : "—"}
-                    </span>
-                    {beforeStats.max > afterStats.max && (
-                      <span className="text-[11px] font-medium text-emerald-600 dark:text-emerald-400">
-                        ↓ Redusert
-                      </span>
-                    )}
-                  </div>
-                  <span className="text-muted-foreground text-[10px] leading-tight sm:text-right">
-                    Kun celler med dokumentert risiko
-                  </span>
-                </div>
-              </div>
-              <div className="flex flex-col gap-3 px-5 pb-4 sm:flex-row sm:flex-wrap sm:items-center sm:gap-2 sm:px-6">
-                <div
-                  className="flex w-full min-w-0 rounded-xl bg-muted/30 p-1 sm:inline-flex sm:w-auto"
+                  className="bg-card/80 ring-border/40 inline-flex shrink-0 items-center gap-1 rounded-full p-1 ring-1"
                   role="tablist"
                   aria-label="Vis matrise før eller etter tiltak"
                 >
-                    <button
-                      type="button"
-                      role="tab"
-                      aria-selected={matrixView === "before"}
-                      className={cn(
-                        "flex-1 rounded-lg px-4 py-2 text-[13px] font-semibold transition-all sm:flex-initial",
-                        matrixView === "before"
-                          ? "bg-card text-foreground shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.06]"
-                          : "text-muted-foreground hover:text-foreground",
-                      )}
-                      onClick={() => setMatrixView("before")}
-                    >
-                      Før tiltak
-                    </button>
-                    <button
-                      type="button"
-                      role="tab"
-                      aria-selected={matrixView === "after"}
-                      className={cn(
-                        "flex-1 rounded-lg px-4 py-2 text-[13px] font-semibold transition-all sm:flex-initial",
-                        matrixView === "after"
-                          ? "bg-card text-foreground shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.06]"
-                          : "text-muted-foreground hover:text-foreground",
-                      )}
-                      onClick={() => setMatrixView("after")}
-                    >
-                      Etter tiltak
-                    </button>
-                  </div>
                   <button
                     type="button"
-                    className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[13px] font-medium text-primary transition-colors hover:bg-primary/10"
+                    role="tab"
+                    aria-selected={matrixView === "before"}
+                    className={cn(
+                      "rounded-full px-3 py-1 text-xs font-semibold transition-all",
+                      matrixView === "before"
+                        ? "bg-primary text-primary-foreground shadow-sm"
+                        : "text-muted-foreground hover:text-foreground",
+                    )}
+                    onClick={() => setMatrixView("before")}
+                  >
+                    Før
+                  </button>
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={matrixView === "after"}
+                    className={cn(
+                      "rounded-full px-3 py-1 text-xs font-semibold transition-all",
+                      matrixView === "after"
+                        ? "bg-primary text-primary-foreground shadow-sm"
+                        : "text-muted-foreground hover:text-foreground",
+                    )}
+                    onClick={() => setMatrixView("after")}
+                  >
+                    Etter
+                  </button>
+                  <button
+                    type="button"
+                    className="text-muted-foreground hover:text-primary inline-flex items-center justify-center rounded-full px-2 py-1 transition-colors"
                     onClick={() => setMatrixScaleHelpOpen(true)}
                     aria-expanded={matrixScaleHelpOpen}
                     aria-controls="ros-matrix-scale-help"
+                    title="Skala 1–5"
                   >
-                    <CircleHelp className="size-4 shrink-0" aria-hidden />
-                    Skala
+                    <CircleHelp className="size-3.5 shrink-0" aria-hidden />
                   </button>
                 </div>
+              </div>
               <div className="min-w-0 px-5 pb-5 sm:px-6 sm:pb-6">
                 {afterMatrixInvalid ? (
                   <Alert>
@@ -2402,68 +2762,563 @@ export function RosAnalysisEditor({
         </div>
       )}
 
-      {/* === Section 1: Oppgaver === */}
+      {/* === Section 1: Tiltak === */}
       {rosSection === 1 && (
       <div className="space-y-5">
-        {/* Task stats */}
-        {tasks && tasks.length > 0 && (() => {
-          const open = tasks.filter(t => t.status !== "done").length;
-          const done = tasks.filter(t => t.status === "done").length;
-          const overdue = tasks.filter(t => t.status !== "done" && t.dueAt && t.dueAt < Date.now()).length;
+        {/* Varsel: risikoer i før-matrisen uten tiltak.
+            NS 5814 / ISO 31000: alle høye/kritiske risikoer skal enten
+            behandles eller formelt aksepteres. Vi viser de mest alvorlige
+            øverst og lar brukeren raskt opprette tiltak for dem. */}
+        {uncoveredBeforeRisks.length > 0 && (() => {
+          const critical = uncoveredBeforeRisks.filter((r) => r.level >= 5);
+          const high = uncoveredBeforeRisks.filter((r) => r.level === 4);
+          const moderate = uncoveredBeforeRisks.filter((r) => r.level === 3);
+          const lower = uncoveredBeforeRisks.filter(
+            (r) => r.level > 0 && r.level <= 2,
+          );
+          const unrated = uncoveredBeforeRisks.filter((r) => r.level === 0);
+          const needAttention = critical.length + high.length;
+          const tone =
+            critical.length > 0
+              ? ("critical" as const)
+              : high.length > 0
+                ? ("high" as const)
+                : ("info" as const);
+          const toneClasses =
+            tone === "critical"
+              ? "bg-red-500/[0.07] ring-red-500/20"
+              : tone === "high"
+                ? "bg-amber-500/[0.07] ring-amber-500/20"
+                : "bg-muted/30 ring-border/40";
+          const iconClass =
+            tone === "critical"
+              ? "text-red-600 dark:text-red-400"
+              : tone === "high"
+                ? "text-amber-600 dark:text-amber-400"
+                : "text-muted-foreground";
           return (
-            <div className="grid grid-cols-3 gap-2 sm:gap-3">
-              <div className="flex items-center gap-3 rounded-2xl bg-muted/20 px-4 py-3.5 ring-1 ring-black/[0.04] dark:ring-white/[0.06]">
-                <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-blue-500/10">
-                  <ListTodo className="size-5 text-blue-600 dark:text-blue-400" />
+            <details
+              className={cn(
+                "group/uncovered rounded-2xl ring-1 transition-all",
+                toneClasses,
+              )}
+              open={tone === "critical" || tone === "high"}
+            >
+              <summary className="flex cursor-pointer list-none items-start gap-3 rounded-2xl px-4 py-3 [&::-webkit-details-marker]:hidden sm:px-5">
+                <AlertTriangle
+                  className={cn("mt-0.5 size-5 shrink-0", iconClass)}
+                  aria-hidden
+                />
+                <div className="min-w-0 flex-1 space-y-1">
+                  <p className="text-foreground text-sm font-semibold">
+                    {needAttention > 0 ? (
+                      <>
+                        {needAttention}{" "}
+                        {needAttention === 1
+                          ? "risiko trenger oppmerksomhet"
+                          : "risikoer trenger oppmerksomhet"}
+                      </>
+                    ) : (
+                      <>
+                        {uncoveredBeforeRisks.length}{" "}
+                        {uncoveredBeforeRisks.length === 1
+                          ? "risiko mangler tiltak"
+                          : "risikoer mangler tiltak"}
+                      </>
+                    )}
+                  </p>
+                  <p className="text-muted-foreground text-xs leading-relaxed">
+                    {needAttention > 0 ? (
+                      <>
+                        I tråd med ISO 31000 / NS 5814 bør høye og kritiske
+                        risikoer behandles, overføres, unngås eller{" "}
+                        <span className="font-medium">formelt aksepteres</span>.
+                      </>
+                    ) : (
+                      <>
+                        Lavere risikoer kan ofte aksepteres uten tiltak — men
+                        det bør være en bevisst beslutning.
+                      </>
+                    )}
+                  </p>
+                  <div className="mt-1.5 flex flex-wrap gap-1.5">
+                    {critical.length > 0 && (
+                      <span className="inline-flex items-center rounded-full bg-red-500/15 px-2 py-0.5 text-[11px] font-semibold text-red-700 ring-1 ring-red-500/20 dark:text-red-300">
+                        {critical.length} kritisk{critical.length > 1 && "e"}
+                      </span>
+                    )}
+                    {high.length > 0 && (
+                      <span className="inline-flex items-center rounded-full bg-amber-500/15 px-2 py-0.5 text-[11px] font-semibold text-amber-700 ring-1 ring-amber-500/20 dark:text-amber-300">
+                        {high.length} høy{high.length > 1 && "e"}
+                      </span>
+                    )}
+                    {moderate.length > 0 && (
+                      <span className="bg-muted/60 ring-border/40 text-foreground/80 inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold ring-1">
+                        {moderate.length} middels
+                      </span>
+                    )}
+                    {(lower.length > 0 || unrated.length > 0) && (
+                      <span className="bg-muted/60 ring-border/40 text-muted-foreground inline-flex items-center rounded-full px-2 py-0.5 text-[11px] ring-1">
+                        {lower.length + unrated.length} lav/uvurdert
+                      </span>
+                    )}
+                  </div>
                 </div>
-                <div>
-                  <p className="text-2xl font-bold tabular-nums leading-none">{open}</p>
-                  <p className="text-muted-foreground mt-0.5 text-[11px]">Åpne</p>
+                <ChevronRight
+                  className="text-muted-foreground mt-1 size-4 shrink-0 transition-transform group-open/uncovered:rotate-90"
+                  aria-hidden
+                />
+              </summary>
+              <ul className="border-border/30 max-h-96 divide-y divide-border/30 overflow-y-auto border-t">
+                {uncoveredBeforeRisks.slice(0, 30).map((r) => {
+                  const sev =
+                    r.level >= 5
+                      ? "critical"
+                      : r.level >= 4
+                        ? "high"
+                        : r.level >= 3
+                          ? "moderate"
+                          : r.level >= 1
+                            ? "low"
+                            : "unrated";
+                  const dotClass =
+                    sev === "critical"
+                      ? "bg-red-500"
+                      : sev === "high"
+                        ? "bg-amber-500"
+                        : sev === "moderate"
+                          ? "bg-yellow-500"
+                          : sev === "low"
+                            ? "bg-emerald-500"
+                            : "bg-muted-foreground/40";
+                  return (
+                    <li
+                      key={r.id}
+                      className="flex items-start gap-3 px-4 py-2.5 sm:px-5"
+                    >
+                      <span
+                        className={cn(
+                          "mt-1.5 size-2 shrink-0 rounded-full",
+                          dotClass,
+                        )}
+                        aria-hidden
+                      />
+                      <div className="min-w-0 flex-1">
+                        <p className="text-foreground/90 text-xs font-medium leading-snug">
+                          {r.text.trim() || "(uten tekst)"}
+                        </p>
+                        <p className="text-muted-foreground mt-0.5 text-[10px]">
+                          {r.rowLabel} × {r.colLabel}
+                          {r.level > 0 && (
+                            <>
+                              {" "}
+                              · nivå <span className="tabular-nums">{r.level}</span>
+                            </>
+                          )}
+                        </p>
+                      </div>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="h-7 shrink-0 gap-1 rounded-full px-2.5 text-[11px]"
+                        onClick={() => startAddTaskForRisk(r.id)}
+                      >
+                        <Plus className="size-3" aria-hidden />
+                        Tiltak
+                      </Button>
+                    </li>
+                  );
+                })}
+                {uncoveredBeforeRisks.length > 30 && (
+                  <li className="text-muted-foreground px-4 py-2 text-center text-[11px] sm:px-5">
+                    … og {uncoveredBeforeRisks.length - 30} til.
+                  </li>
+                )}
+              </ul>
+            </details>
+          );
+        })()}
+
+        {/* Quick-add — risikokobling er førsteklasses (ISO 31000:
+            tiltak skal alltid være knyttet til en identifisert risiko). */}
+        <form
+          onSubmit={(e) => void onCreateTask(e)}
+          className="bg-card ring-border/40 space-y-3 rounded-2xl p-4 shadow-sm ring-1 sm:p-5"
+        >
+          <div className="space-y-1">
+            <p className="text-foreground text-sm font-semibold">
+              Nytt tiltak
+            </p>
+            <p className="text-muted-foreground text-xs leading-relaxed">
+              Beskriv hva som settes i verk og hvilken risiko det
+              behandler. Tiltak kan lagres i biblioteket for gjenbruk
+              senere.
+            </p>
+          </div>
+
+          {/* Tittel + Legg til */}
+          <div className="flex gap-2">
+            <Input
+              id="ros-quick-task-title"
+              value={taskTitle}
+              onChange={(e) => setTaskTitle(e.target.value)}
+              placeholder="F.eks. «Kryptere personopplysninger ved overføring»"
+              className="h-10 flex-1 rounded-xl"
+              aria-label="Tittel på tiltaket"
+            />
+            <Button
+              type="submit"
+              disabled={taskBusy || !taskTitle.trim()}
+              className="h-10 shrink-0 gap-1.5 rounded-full px-4 font-semibold"
+            >
+              <Plus className="size-4" />
+              <span className="hidden sm:inline">Legg til</span>
+            </Button>
+          </div>
+
+          {/* Synlig bekreftelse av valgt risiko — gir brukeren tydelig
+              tilbakemelding om HVILKEN risiko tiltaket faktisk knyttes til,
+              spesielt etter at de klikket «+ Tiltak» fra varselbanneret. */}
+          {(() => {
+            if (!taskRiskLink) return null;
+            const linked = linkedRiskLookup.get(taskRiskLink);
+            if (!linked) return null;
+            const phaseLabel =
+              linked.phase === "after"
+                ? "Restrisiko etter tiltak"
+                : "Risiko før tiltak (iboende)";
+            return (
+              <div
+                className={cn(
+                  "ring-primary/20 bg-primary/[0.04] flex items-start gap-3 rounded-2xl px-3.5 py-3 ring-1 sm:px-4",
+                )}
+                role="status"
+                aria-live="polite"
+              >
+                <span
+                  className={cn(
+                    "inline-flex size-9 shrink-0 items-center justify-center rounded-xl text-sm font-bold tabular-nums shadow-sm",
+                    cellRiskClass(linked.level),
+                  )}
+                  aria-hidden
+                >
+                  {linked.level || "–"}
+                </span>
+                <div className="min-w-0 flex-1 space-y-0.5">
+                  <p className="text-muted-foreground flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider">
+                    <Link2 className="size-3" aria-hidden />
+                    Tiltak for denne risikoen
+                  </p>
+                  <p className="text-foreground line-clamp-2 text-sm font-semibold leading-snug">
+                    {linked.text.trim() || "(uten tekst)"}
+                  </p>
+                  <p className="text-muted-foreground text-[11px] leading-relaxed">
+                    {phaseLabel} ·{" "}
+                    <span className="tabular-nums">
+                      {linked.rowLabel} × {linked.colLabel}
+                    </span>
+                    {linked.level > 0 && (
+                      <>
+                        {" · "}
+                        <span className="font-medium">
+                          {RISK_LEVEL_HINTS[linked.level] ?? `nivå ${linked.level}`}
+                        </span>
+                      </>
+                    )}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  className="text-muted-foreground hover:text-destructive shrink-0 rounded-full p-1 transition-colors"
+                  onClick={() => {
+                    setTaskRiskLink("");
+                    setTaskRiskTreatment("");
+                  }}
+                  title="Fjern kobling til risiko"
+                  aria-label="Fjern kobling til risiko"
+                >
+                  <X className="size-4" aria-hidden />
+                </button>
+              </div>
+            );
+          })()}
+
+          {/* Risikokobling — alltid synlig som primært felt */}
+          <div className="space-y-1.5">
+            <Label
+              htmlFor="ros-quick-task-risk-link"
+              className="text-muted-foreground flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wider"
+            >
+              <Link2 className="size-3" aria-hidden />
+              {taskRiskLink ? "Bytt risiko" : "Hvilken risiko reduseres?"}
+            </Label>
+            <RiskLinkSelect
+              id="ros-quick-task-risk-link"
+              value={taskRiskLink}
+              onChange={(v) => {
+                setTaskRiskLink(v);
+                if (v && !taskRiskTreatment) {
+                  setTaskRiskTreatment("mitigate");
+                }
+              }}
+              options={taskRiskLinkOptions}
+              className="border-input bg-background h-10 w-full rounded-xl border px-3 text-sm"
+              ariaLabel="Koble til risiko"
+              disabled={taskRiskLinkOptions.length <= 1}
+            />
+            <p className="text-muted-foreground text-[11px] leading-relaxed">
+              {taskRiskLinkOptions.length <= 1 ? (
+                <>
+                  Legg inn risikoer i{" "}
+                  <span className="font-medium">Risikoer</span>-fanen først,
+                  så kan tiltakene kobles til konkrete punkter.
+                </>
+              ) : (
+                <>
+                  Koble normalt til <span className="font-medium">risiko før tiltak</span>{" "}
+                  (iboende). Velg <span className="font-medium">restrisiko</span> kun hvis
+                  tiltaket håndterer det som er igjen etter andre kontroller.
+                </>
+              )}
+            </p>
+          </div>
+
+          {/* Behandlingstype — segmented pill-control. Profesjonell ROS
+              krever at tiltak klassifiseres etter strategi. */}
+          {taskRiskLink && (
+            <div className="space-y-1.5">
+              <Label className="text-muted-foreground text-[11px] font-medium uppercase tracking-wider">
+                Behandlingsstrategi
+              </Label>
+              <div className="bg-muted/30 ring-border/40 flex flex-wrap gap-1 rounded-full p-1 ring-1">
+                {ROS_RISK_TREATMENT_OPTIONS.filter((o) => o.value !== "").map(
+                  (o) => (
+                    <button
+                      key={o.value}
+                      type="button"
+                      title={o.description}
+                      onClick={() =>
+                        setTaskRiskTreatment(
+                          taskRiskTreatment === o.value
+                            ? ""
+                            : (o.value as
+                                | "mitigate"
+                                | "accept"
+                                | "transfer"
+                                | "avoid"),
+                        )
+                      }
+                      className={cn(
+                        "h-7 rounded-full px-3 text-[11px] font-medium transition-colors",
+                        taskRiskTreatment === o.value
+                          ? "bg-primary text-primary-foreground shadow-sm"
+                          : "text-muted-foreground hover:text-foreground",
+                      )}
+                    >
+                      {o.label}
+                    </button>
+                  ),
+                )}
+              </div>
+              {taskRiskTreatment === "accept" && (
+                <Textarea
+                  value={taskResidualNote}
+                  onChange={(e) => setTaskResidualNote(e.target.value)}
+                  rows={2}
+                  className="min-h-0 rounded-xl text-sm"
+                  placeholder="Grunnlag for aksept (f.eks. styrebeslutning, kost/nytte) …"
+                  aria-label="Grunnlag for aksept"
+                />
+              )}
+            </div>
+          )}
+
+          {/* Avanserte felt */}
+          {taskTitle.trim() && (
+            <details className="group/adv border-border/40 rounded-xl border">
+              <summary className="text-muted-foreground hover:text-foreground flex cursor-pointer list-none items-center justify-between gap-2 px-3 py-2 text-xs font-medium transition-colors [&::-webkit-details-marker]:hidden">
+                <span>Flere detaljer · ansvarlig, frist, prioritet</span>
+                <ChevronRight
+                  className="size-3.5 transition-transform group-open/adv:rotate-90"
+                  aria-hidden
+                />
+              </summary>
+              <div className="border-border/40 space-y-3 border-t p-3">
+                <Textarea
+                  value={taskDesc}
+                  onChange={(e) => setTaskDesc(e.target.value)}
+                  rows={2}
+                  className="min-h-0 rounded-xl text-sm"
+                  placeholder="Utdypende beskrivelse (valgfritt)"
+                />
+                <div className="space-y-1.5">
+                  {taskAssignees.length > 0 ? (
+                    <div className="flex flex-wrap gap-1">
+                      {taskAssignees.map((uid) => {
+                        const m = (members ?? []).find(
+                          (wm) => wm.userId === uid,
+                        );
+                        return (
+                          <span
+                            key={uid}
+                            className="bg-card shadow-xs inline-flex items-center gap-1 rounded-full border py-0.5 pl-2 pr-1 text-[11px]"
+                          >
+                            {m?.name ?? m?.email ?? uid}
+                            <button
+                              type="button"
+                              className="text-muted-foreground hover:text-destructive p-0.5"
+                              onClick={() =>
+                                setTaskAssignees((ids) =>
+                                  ids.filter((id) => id !== uid),
+                                )
+                              }
+                            >
+                              ×
+                            </button>
+                          </span>
+                        );
+                      })}
+                    </div>
+                  ) : null}
+                  <select
+                    className="border-input bg-background flex h-9 w-full rounded-xl border px-3 text-xs"
+                    value=""
+                    onChange={(e) => {
+                      const uid = e.target.value as Id<"users">;
+                      if (uid && !taskAssignees.includes(uid)) {
+                        setTaskAssignees((ids) => [...ids, uid]);
+                      }
+                    }}
+                    aria-label="Legg til ansvarlig"
+                  >
+                    <option value="">— Legg til ansvarlig —</option>
+                    {(members ?? [])
+                      .filter((m) => !taskAssignees.includes(m.userId))
+                      .map((m) => (
+                        <option key={m.userId} value={m.userId}>
+                          {m.name ?? m.email ?? m.userId}
+                        </option>
+                      ))}
+                  </select>
+                </div>
+                <div className="grid gap-2 sm:grid-cols-[7rem_1fr]">
+                  <div className="space-y-1">
+                    <Label className="text-muted-foreground text-[11px]">
+                      Prioritet 1–5
+                    </Label>
+                    <Input
+                      type="number"
+                      min={1}
+                      max={5}
+                      value={taskPriority}
+                      onChange={(e) =>
+                        setTaskPriority(
+                          Math.min(
+                            5,
+                            Math.max(1, Number(e.target.value) || 3),
+                          ),
+                        )
+                      }
+                      className="h-9 rounded-xl text-xs"
+                      aria-label="Prioritet 1–5"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-muted-foreground text-[11px]">
+                      Frist
+                    </Label>
+                    <Input
+                      type="datetime-local"
+                      value={taskDueAt}
+                      onChange={(e) => setTaskDueAt(e.target.value)}
+                      className="h-9 rounded-xl text-xs"
+                      aria-label="Frist"
+                    />
+                  </div>
                 </div>
               </div>
-              <div className={cn(
-                "flex items-center gap-3 rounded-2xl px-4 py-3.5 ring-1",
-                done > 0 ? "bg-emerald-500/[0.06] ring-emerald-500/15" : "bg-muted/20 ring-black/[0.04] dark:ring-white/[0.06]",
-              )}>
-                <div className={cn("flex size-10 shrink-0 items-center justify-center rounded-xl", done > 0 ? "bg-emerald-500/15" : "bg-muted/30")}>
-                  <ShieldCheck className={cn("size-5", done > 0 ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground")} />
-                </div>
-                <div>
-                  <p className="text-2xl font-bold tabular-nums leading-none">{done}</p>
-                  <p className="text-muted-foreground mt-0.5 text-[11px]">Fullført</p>
-                </div>
-              </div>
-              <div className={cn(
-                "flex items-center gap-3 rounded-2xl px-4 py-3.5 ring-1",
-                overdue > 0 ? "bg-red-500/[0.06] ring-red-500/15" : "bg-muted/20 ring-black/[0.04] dark:ring-white/[0.06]",
-              )}>
-                <div className={cn("flex size-10 shrink-0 items-center justify-center rounded-xl", overdue > 0 ? "bg-red-500/15" : "bg-muted/30")}>
-                  <AlertTriangle className={cn("size-5", overdue > 0 ? "text-red-600 dark:text-red-400" : "text-muted-foreground")} />
-                </div>
-                <div>
-                  <p className="text-2xl font-bold tabular-nums leading-none">{overdue}</p>
-                  <p className="text-muted-foreground mt-0.5 text-[11px]">Forfalt</p>
-                </div>
-              </div>
+            </details>
+          )}
+
+          {/* Tydelig handling-bar nederst i skjemaet. Brukere som scroller
+              gjennom detaljer trenger en åpenbar «Lagre»-knapp i bunn — ikke
+              bare den lille øverst ved tittelen. */}
+          {(taskTitle.trim() ||
+            taskRiskLink ||
+            taskRiskTreatment ||
+            taskDesc.trim() ||
+            taskAssignees.length > 0 ||
+            taskDueAt) && (
+            <div className="border-border/40 flex flex-wrap items-center justify-between gap-2 border-t pt-3">
+              <button
+                type="button"
+                className="text-muted-foreground hover:text-foreground rounded-full px-3 py-1.5 text-xs transition-colors"
+                onClick={() => {
+                  setTaskTitle("");
+                  setTaskDesc("");
+                  setTaskAssignees([]);
+                  setTaskPriority(3);
+                  setTaskRiskLink("");
+                  setTaskRiskTreatment("");
+                  setTaskResidualNote("");
+                  setTaskDueAt("");
+                }}
+              >
+                Tøm skjema
+              </button>
+              <Button
+                type="submit"
+                disabled={taskBusy || !taskTitle.trim()}
+                className="h-10 gap-1.5 rounded-full px-5 font-semibold shadow-sm"
+              >
+                {taskBusy ? (
+                  <Loader2 className="size-4 animate-spin" aria-hidden />
+                ) : (
+                  <Plus className="size-4" aria-hidden />
+                )}
+                {taskBusy ? "Lagrer …" : "Lagre tiltak"}
+              </Button>
+            </div>
+          )}
+        </form>
+
+        {/* Task stats — kun når det finnes tiltak */}
+        {tasks && tasks.length > 0 && (() => {
+          const open = tasks.filter((t) => t.status !== "done").length;
+          const done = tasks.filter((t) => t.status === "done").length;
+          const overdue = tasks.filter(
+            (t) => t.status !== "done" && t.dueAt && t.dueAt < Date.now(),
+          ).length;
+          return (
+            <div className="bg-card/60 ring-border/40 flex flex-wrap items-center gap-2 rounded-2xl px-3 py-2 ring-1 backdrop-blur-sm sm:gap-3 sm:px-4">
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-blue-500/10 px-2.5 py-0.5 text-xs text-blue-700 ring-1 ring-blue-500/15 dark:text-blue-300">
+                <ListTodo className="size-3" aria-hidden />
+                <span className="tabular-nums font-semibold">{open}</span> åpne
+              </span>
+              {done > 0 && (
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/10 px-2.5 py-0.5 text-xs text-emerald-700 ring-1 ring-emerald-500/15 dark:text-emerald-300">
+                  <ShieldCheck className="size-3" aria-hidden />
+                  <span className="tabular-nums font-semibold">{done}</span> fullført
+                </span>
+              )}
+              {overdue > 0 && (
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-red-500/10 px-2.5 py-0.5 text-xs text-red-700 ring-1 ring-red-500/15 dark:text-red-300">
+                  <AlertTriangle className="size-3" aria-hidden />
+                  <span className="tabular-nums font-semibold">{overdue}</span> forfalt
+                </span>
+              )}
             </div>
           );
         })()}
 
-        {/* Task list */}
+        {/* Task list — eller diskret tom-tekst */}
         {tasks === undefined ? (
-          <p className="text-muted-foreground text-sm">Henter oppgaver …</p>
+          <p className="text-muted-foreground text-sm">Henter tiltak …</p>
         ) : tasks.length === 0 ? (
-          <div className="flex flex-col items-center gap-3 rounded-2xl bg-muted/10 px-6 py-12 text-center ring-1 ring-black/[0.04] dark:ring-white/[0.06]">
-            <div className="flex size-14 items-center justify-center rounded-2xl bg-primary/10">
-              <ListTodo className="size-7 text-primary" />
-            </div>
-            <div>
-              <p className="text-sm font-semibold">Ingen oppgaver ennå</p>
-              <p className="text-muted-foreground mt-1 max-w-xs text-xs">
-                Opprett en oppgave for å holde oversikt over tiltak, ansvar og frister.
-              </p>
-            </div>
-          </div>
+          <p className="text-muted-foreground py-2 text-center text-xs">
+            Ingen tiltak lagt til ennå.
+          </p>
         ) : (
           <ul className="space-y-2">
             {tasks.map((t) => (
@@ -2489,7 +3344,6 @@ export function RosAnalysisEditor({
                   </div>
                 ) : (
                   <div className="flex items-start gap-3 px-4 py-3.5 sm:gap-4">
-                    {/* Status toggle */}
                     <button
                       type="button"
                       className={cn(
@@ -2506,73 +3360,145 @@ export function RosAnalysisEditor({
                       }
                       aria-label={t.status === "done" ? "Gjenåpne" : "Fullfør"}
                     >
-                      {t.status === "done" && <ShieldCheck className="size-3.5" />}
+                      {t.status === "done" && (
+                        <ShieldCheck className="size-3.5" />
+                      )}
                     </button>
 
-                    {/* Content */}
-                    <div className="min-w-0 flex-1 space-y-1.5">
-                      <p className={cn(
-                        "text-sm font-medium leading-snug",
-                        t.status === "done" && "line-through",
-                      )}>{t.title}</p>
+                    <div className="min-w-0 flex-1 space-y-2">
+                      <p
+                        className={cn(
+                          "text-sm font-medium leading-snug",
+                          t.status === "done" && "line-through",
+                        )}
+                      >
+                        {t.title}
+                      </p>
+
+                      {(t as { linkedRiskSummary?: string | null })
+                        .linkedRiskSummary ? (
+                        <div
+                          className="bg-primary/5 ring-primary/15 text-primary/90 inline-flex max-w-full items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] ring-1"
+                          title={
+                            t.linkedCellItemPhase === "after"
+                              ? "Restrisiko etter tiltak"
+                              : "Risiko før tiltak (iboende)"
+                          }
+                        >
+                          <Link2 className="size-3 shrink-0" aria-hidden />
+                          <span className="text-primary truncate font-semibold">
+                            {t.linkedCellItemPhase === "after"
+                              ? "Restrisiko"
+                              : "Risiko"}
+                          </span>
+                          <span className="text-primary/60">·</span>
+                          <span className="truncate">
+                            {(
+                              (t as { linkedRiskSummary?: string | null })
+                                .linkedRiskSummary ?? ""
+                            ).replace(/^(Før|Etter)\s·\s/, "")}
+                          </span>
+                        </div>
+                      ) : (
+                        <span className="text-muted-foreground/80 inline-flex items-center gap-1 text-[11px] italic">
+                          <Link2 className="size-3 shrink-0" aria-hidden />
+                          Ikke koblet til en konkret risiko
+                        </span>
+                      )}
 
                       <div className="flex flex-wrap items-center gap-1.5">
                         {riskTreatmentLabel(t.riskTreatmentKind) ? (
-                          <span className="inline-flex items-center rounded-md bg-primary/10 px-1.5 py-0.5 text-[10px] font-semibold text-primary">
+                          <span
+                            className={cn(
+                              "inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ring-1",
+                              t.riskTreatmentKind === "mitigate" &&
+                                "bg-blue-500/10 text-blue-700 ring-blue-500/15 dark:text-blue-300",
+                              t.riskTreatmentKind === "accept" &&
+                                "bg-amber-500/10 text-amber-700 ring-amber-500/15 dark:text-amber-300",
+                              t.riskTreatmentKind === "transfer" &&
+                                "bg-violet-500/10 text-violet-700 ring-violet-500/15 dark:text-violet-300",
+                              t.riskTreatmentKind === "avoid" &&
+                                "bg-red-500/10 text-red-700 ring-red-500/15 dark:text-red-300",
+                            )}
+                          >
                             {riskTreatmentLabel(t.riskTreatmentKind)}
                           </span>
                         ) : null}
-                        <span className={cn(
-                          "inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-semibold",
-                          (t.priority ?? 3) <= 2 ? "bg-blue-500/10 text-blue-600 dark:text-blue-400"
-                            : (t.priority ?? 3) >= 4 ? "bg-red-500/10 text-red-600 dark:text-red-400"
-                            : "bg-muted text-muted-foreground",
-                        )}>
+                        <span
+                          className={cn(
+                            "inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ring-1",
+                            (t.priority ?? 3) <= 2
+                              ? "bg-blue-500/10 text-blue-700 ring-blue-500/15 dark:text-blue-300"
+                              : (t.priority ?? 3) >= 4
+                                ? "bg-red-500/10 text-red-700 ring-red-500/15 dark:text-red-300"
+                                : "bg-muted/60 text-muted-foreground ring-border/40",
+                          )}
+                        >
                           P{t.priority ?? 3}
                         </span>
-                        {(t as { linkedRiskSummary?: string | null }).linkedRiskSummary && (
-                          <span className="text-muted-foreground flex items-center gap-1 text-[10px]">
-                            <Link2 className="size-2.5" />
-                            {(t as { linkedRiskSummary?: string | null }).linkedRiskSummary}
-                          </span>
-                        )}
                       </div>
 
                       {t.description && (
-                        <p className="text-muted-foreground text-xs leading-relaxed">{t.description}</p>
+                        <p className="text-muted-foreground text-xs leading-relaxed">
+                          {t.description}
+                        </p>
                       )}
 
                       <div className="text-muted-foreground flex flex-wrap items-center gap-2 text-[10px]">
                         {t.assigneeName && <span>{t.assigneeName}</span>}
                         {t.dueAt && (
-                          <span className={cn(
-                            t.status !== "done" && t.dueAt < Date.now() && "font-semibold text-red-600 dark:text-red-400",
-                          )}>
+                          <span
+                            className={cn(
+                              t.status !== "done" &&
+                                t.dueAt < Date.now() &&
+                                "font-semibold text-red-600 dark:text-red-400",
+                            )}
+                          >
                             Frist {formatTs(t.dueAt)}
                           </span>
                         )}
                       </div>
                     </div>
 
-                    {/* Actions */}
-                    <div className="flex shrink-0 gap-1 opacity-0 transition-opacity group-hover/task:opacity-100">
+                    <div className="flex shrink-0 gap-0.5 opacity-0 transition-opacity group-hover/task:opacity-100 focus-within:opacity-100">
+                      {t.linkedCellItemId && t.linkedCellItemPhase && (
+                        <button
+                          type="button"
+                          className="text-muted-foreground hover:bg-emerald-500/10 hover:text-emerald-600 rounded-lg p-1.5 transition-colors"
+                          onClick={() =>
+                            openSaveTaskToLibrary({
+                              _id: t._id,
+                              title: t.title,
+                              description: t.description,
+                              linkedCellItemId: t.linkedCellItemId,
+                              linkedCellItemPhase: t.linkedCellItemPhase,
+                            })
+                          }
+                          aria-label="Lagre i biblioteket for gjenbruk"
+                          title="Lagre i biblioteket for gjenbruk"
+                        >
+                          <BookmarkPlus className="size-3.5" />
+                        </button>
+                      )}
                       <button
                         type="button"
-                        className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                        className="text-muted-foreground hover:bg-muted hover:text-foreground rounded-lg p-1.5 transition-colors"
                         onClick={() => setEditingTaskId(t._id)}
                         aria-label="Rediger"
+                        title="Rediger"
                       >
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="size-3.5"><path d="M13.488 2.513a1.75 1.75 0 0 0-2.475 0L3.22 10.306a1 1 0 0 0-.26.443l-.884 3.182a.25.25 0 0 0 .306.306l3.182-.884a1 1 0 0 0 .443-.26l7.793-7.793a1.75 1.75 0 0 0 0-2.475l-.312-.312Z" /></svg>
+                        <Pencil className="size-3.5" />
                       </button>
                       <button
                         type="button"
-                        className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-red-500/10 hover:text-red-600"
+                        className="text-muted-foreground hover:bg-red-500/10 hover:text-red-600 rounded-lg p-1.5 transition-colors"
                         onClick={() => {
-                          if (window.confirm("Slette denne oppgaven?")) {
+                          if (window.confirm("Slette dette tiltaket?")) {
                             void removeRosTask({ taskId: t._id });
                           }
                         }}
                         aria-label="Slett"
+                        title="Slett"
                       >
                         <Trash2 className="size-3.5" />
                       </button>
@@ -2583,137 +3509,46 @@ export function RosAnalysisEditor({
             ))}
           </ul>
         )}
-
-        {/* Quick-add form */}
-        <form
-          onSubmit={(e) => void onCreateTask(e)}
-          className="space-y-4 rounded-2xl bg-card p-4 shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.06] sm:p-5"
-        >
-          <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Ny oppgave</p>
-          <div className="flex gap-2">
-            <Input
-              value={taskTitle}
-              onChange={(e) => setTaskTitle(e.target.value)}
-              placeholder="Hva må gjøres?"
-              className="flex-1 rounded-xl"
-            />
-            <Button type="submit" disabled={taskBusy || !taskTitle.trim()} className="shrink-0 rounded-xl">
-              <Plus className="size-4" />
-              <span className="hidden sm:inline">Opprett</span>
-            </Button>
-          </div>
-
-          {/* Collapsed advanced fields */}
-          {taskTitle.trim() && (
-            <div className="grid gap-3 sm:grid-cols-2">
-              <Textarea
-                value={taskDesc}
-                onChange={(e) => setTaskDesc(e.target.value)}
-                rows={2}
-                className="min-h-0 rounded-xl text-sm sm:col-span-2"
-                placeholder="Beskrivelse (valgfritt)"
-              />
-              <select
-                className="border-input bg-background flex h-9 w-full rounded-xl border px-2 text-xs"
-                value={taskRiskLink}
-                onChange={(e) => setTaskRiskLink(e.target.value)}
-              >
-                {taskRiskLinkOptions.map((o) => (
-                  <option key={o.value || "opt-none"} value={o.value}>
-                    {o.label}
-                  </option>
-                ))}
-              </select>
-              <select
-                className="border-input bg-background flex h-9 w-full rounded-xl border px-2 text-xs"
-                value={taskRiskTreatment}
-                onChange={(e) =>
-                  setTaskRiskTreatment(
-                    e.target.value === ""
-                      ? ""
-                      : (e.target.value as "mitigate" | "accept" | "transfer" | "avoid"),
-                  )
-                }
-              >
-                {ROS_RISK_TREATMENT_OPTIONS.map((o) => (
-                  <option key={o.value || "none"} value={o.value}>
-                    {o.label}
-                  </option>
-                ))}
-              </select>
-              {taskRiskTreatment === "accept" && (
-                <Textarea
-                  value={taskResidualNote}
-                  onChange={(e) => setTaskResidualNote(e.target.value)}
-                  rows={2}
-                  className="min-h-0 rounded-xl text-sm sm:col-span-2"
-                  placeholder="Grunnlag for aksept …"
-                />
-              )}
-              <div className="space-y-1.5 sm:col-span-2">
-                {taskAssignees.length > 0 ? (
-                  <div className="flex flex-wrap gap-1">
-                    {taskAssignees.map((uid) => {
-                      const m = (members ?? []).find((wm) => wm.userId === uid);
-                      return (
-                        <span key={uid} className="bg-card inline-flex items-center gap-1 rounded-full border py-0.5 pr-1 pl-2 text-[11px] shadow-xs">
-                          {m?.name ?? m?.email ?? uid}
-                          <button type="button" className="text-muted-foreground hover:text-destructive p-0.5" onClick={() => setTaskAssignees((ids) => ids.filter((id) => id !== uid))}>×</button>
-                        </span>
-                      );
-                    })}
-                  </div>
-                ) : null}
-                <select
-                  className="border-input bg-background flex h-9 w-full rounded-xl border px-2 text-xs"
-                  value=""
-                  onChange={(e) => {
-                    const uid = e.target.value as Id<"users">;
-                    if (uid && !taskAssignees.includes(uid)) {
-                      setTaskAssignees((ids) => [...ids, uid]);
-                    }
-                  }}
-                >
-                  <option value="">— Legg til ansvarlig —</option>
-                  {(members ?? [])
-                    .filter((m) => !taskAssignees.includes(m.userId))
-                    .map((m) => (
-                      <option key={m.userId} value={m.userId}>
-                        {m.name ?? m.email ?? m.userId}
-                      </option>
-                    ))}
-                </select>
-              </div>
-              <div className="flex gap-2">
-                <Input
-                  type="number"
-                  min={1}
-                  max={5}
-                  value={taskPriority}
-                  onChange={(e) =>
-                    setTaskPriority(Math.min(5, Math.max(1, Number(e.target.value) || 3)))
-                  }
-                  className="w-20 rounded-xl text-xs"
-                  placeholder="Prio"
-                />
-                <Input
-                  type="datetime-local"
-                  value={taskDueAt}
-                  onChange={(e) => setTaskDueAt(e.target.value)}
-                  className="flex-1 rounded-xl text-xs"
-                />
-              </div>
-            </div>
-          )}
-        </form>
       </div>
       )}
 
-      {/* === Section 2: Oppsummering === */}
+      {/* === Section 2: Oversikt === */}
       {rosSection === 2 && (
       <div className="space-y-5">
+        <div className="space-y-1">
+          <h2 className="text-foreground text-base font-semibold tracking-tight">
+            Oversikt over risikoene
+          </h2>
+          <p className="text-muted-foreground text-xs leading-relaxed">
+            Hele risikoregisteret samlet — før og etter tiltak side om side.
+            Bruk dette som dokumentasjon ved eksport eller revisjon.
+          </p>
+        </div>
+
+        {data.rosSummary.suggestedLinkFlags.length > 0 && (
+          <div className="ring-amber-500/15 flex items-start gap-2 rounded-2xl bg-amber-500/[0.06] px-4 py-3 ring-1">
+            <Sparkles className="mt-0.5 size-4 shrink-0 text-amber-600 dark:text-amber-400" />
+            <p className="text-foreground/90 text-xs leading-relaxed">
+              <span className="font-semibold">Foreslåtte PVV-flagg:</span>{" "}
+              <span className="text-muted-foreground">
+                {data.rosSummary.suggestedLinkFlags.join(", ")}
+              </span>
+            </p>
+          </div>
+        )}
+
+        {(() => {
+          const hasAnyRisk =
+            !!riskRegisterSnapshot &&
+            (riskRegisterSnapshot.before.cellItems.some((row) =>
+              row.some((cell) => cell.length > 0),
+            ) ||
+              riskRegisterSnapshot.after.cellItems.some((row) =>
+                row.some((cell) => cell.length > 0),
+              ));
+          return (
         <div id="ros-risk-register" className="scroll-mt-24">
-          {riskRegisterSnapshot ? (
+          {riskRegisterSnapshot && hasAnyRisk ? (
             <RosRiskRegisterTable
               sameLayout={data.rosSummary.sameLayout}
               rowAxisTitle={data.rowAxisTitle}
@@ -2721,46 +3556,121 @@ export function RosAnalysisEditor({
               before={riskRegisterSnapshot.before}
               after={riskRegisterSnapshot.after}
             />
-          ) : null}
+          ) : (
+            <div className="from-primary/[0.06] via-card to-card border-border/40 flex flex-col items-center gap-3 rounded-3xl border bg-gradient-to-br px-6 py-10 text-center shadow-sm">
+              <div className="bg-primary/15 ring-primary/20 flex size-12 items-center justify-center rounded-2xl ring-1">
+                <Shield className="text-primary size-6" />
+              </div>
+              <div className="space-y-1">
+                <p className="text-foreground text-sm font-semibold">
+                  Ingen risikoer registrert ennå
+                </p>
+                <p className="text-muted-foreground mx-auto max-w-xs text-xs leading-relaxed">
+                  Gå til <span className="font-medium">Risikoer</span> og legg
+                  inn punkter — så bygges oversikten her automatisk.
+                </p>
+              </div>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="mt-1 rounded-full"
+                onClick={() => setRosSection(0)}
+              >
+                Gå til risikoer
+                <ChevronRight className="ml-1 size-3.5" aria-hidden />
+              </Button>
+            </div>
+          )}
         </div>
-
-        {data.rosSummary.suggestedLinkFlags.length > 0 && (
-          <div className="flex items-center gap-2 rounded-xl bg-amber-500/[0.06] px-4 py-3 ring-1 ring-amber-500/15">
-            <Sparkles className="size-4 shrink-0 text-amber-600 dark:text-amber-400" />
-            <p className="text-xs text-muted-foreground">
-              <span className="font-semibold text-foreground">Foreslåtte PVV-flagg:</span>{" "}
-              {data.rosSummary.suggestedLinkFlags.join(", ")}
-            </p>
-          </div>
-        )}
+          );
+        })()}
       </div>
       )}
 
       {/* === Section 3: PVV === */}
       {rosSection === 3 && (
       <div className="space-y-5">
+        <div className="space-y-1">
+          <h2 className="text-foreground text-base font-semibold tracking-tight">
+            Koble PVV-vurderinger
+          </h2>
+          <p className="text-muted-foreground text-xs leading-relaxed">
+            Koble personvernvurderinger til denne ROS-analysen for å spore
+            samsvar mellom risiko, vurdering og prosessdesign.
+          </p>
+        </div>
+
         {pddAlignmentHint && (
-          <div className="flex items-start gap-3 rounded-2xl bg-amber-500/[0.06] px-4 py-3.5 ring-1 ring-amber-500/15">
-            <ShieldAlert className="mt-0.5 size-5 shrink-0 text-amber-600 dark:text-amber-400" />
-            <div>
-              <p className="text-sm font-semibold">Samsvar ROS og PDD</p>
-              <p className="text-muted-foreground mt-0.5 text-xs leading-relaxed">
+          <div className="ring-amber-500/15 flex items-start gap-2 rounded-2xl bg-amber-500/[0.06] px-3 py-2.5 ring-1">
+            <ShieldAlert className="mt-0.5 size-4 shrink-0 text-amber-600 dark:text-amber-400" />
+            <p className="text-foreground/90 text-xs leading-relaxed">
+              <span className="font-semibold">Samsvar ROS og PDD:</span>{" "}
+              <span className="text-muted-foreground">
                 {ROS_PDD_ALIGNMENT_HINT_NB}
-              </p>
-            </div>
+              </span>
+            </p>
+          </div>
+        )}
+
+        {/* Koble ny PVV-vurdering — øverst, kompakt chip-form */}
+        {addableAssessments.length > 0 && (
+          <div className="bg-card ring-border/40 flex gap-2 rounded-2xl p-3 shadow-sm ring-1">
+            <select
+              className="border-input bg-background h-9 min-w-0 flex-1 rounded-full border px-3 text-xs"
+              value={addPvId}
+              onChange={(e) =>
+                setAddPvId(
+                  e.target.value === ""
+                    ? ""
+                    : (e.target.value as Id<"assessments">),
+                )
+              }
+              aria-label="Velg PVV-vurdering å koble"
+            >
+              <option value="">— Velg PVV-vurdering å koble —</option>
+              {addableAssessments.map((a) => (
+                <option key={a._id} value={a._id}>
+                  {a.title}
+                </option>
+              ))}
+            </select>
+            <Button
+              type="button"
+              disabled={addPvId === ""}
+              onClick={() => void onAddPv()}
+              className="h-9 shrink-0 gap-1.5 rounded-full px-4 font-semibold"
+            >
+              <Plus className="size-4" />
+              <span className="hidden sm:inline">Koble</span>
+            </Button>
           </div>
         )}
 
         {data.legacyAssessmentId && (
-          <div className="flex flex-col gap-3 rounded-2xl bg-muted/20 px-4 py-4 ring-1 ring-black/[0.04] dark:ring-white/[0.06] sm:flex-row sm:items-center sm:justify-between">
-            <p className="text-sm">
-              Denne analysen har en <strong>eldre enkeltkobling</strong>. Migrer eller fjern den.
+          <div className="bg-muted/20 ring-border/40 flex flex-col gap-3 rounded-2xl px-4 py-3 ring-1 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-foreground/90 text-xs">
+              Denne analysen har en <strong>eldre enkeltkobling</strong>.
+              Migrer eller fjern den.
             </p>
             <div className="flex flex-wrap gap-2">
-              <Button type="button" size="sm" className="rounded-xl" onClick={() => void migrateLegacyAssessmentToLinks({ analysisId })}>
+              <Button
+                type="button"
+                size="sm"
+                className="h-8 rounded-full"
+                onClick={() =>
+                  void migrateLegacyAssessmentToLinks({ analysisId })
+                }
+              >
                 Flytt til koblinger
               </Button>
-              <Button type="button" size="sm" variant="outline" className="rounded-xl" onClick={() => void clearLegacyAssessment({ analysisId })}>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="h-8 rounded-full"
+                onClick={() => void clearLegacyAssessment({ analysisId })}
+              >
                 Fjern
               </Button>
             </div>
@@ -2768,149 +3678,398 @@ export function RosAnalysisEditor({
         )}
 
         {data.linkedAssessments.length === 0 ? (
-          <div className="flex flex-col items-center gap-3 rounded-2xl bg-muted/10 px-6 py-12 text-center ring-1 ring-black/[0.04] dark:ring-white/[0.06]">
-            <div className="flex size-14 items-center justify-center rounded-2xl bg-primary/10">
-              <Link2 className="size-7 text-primary" />
+          <div className="from-primary/[0.06] via-card to-card border-border/40 flex flex-col items-center gap-3 rounded-3xl border bg-gradient-to-br px-6 py-10 text-center shadow-sm">
+            <div className="bg-primary/15 ring-primary/20 flex size-12 items-center justify-center rounded-2xl ring-1">
+              <Link2 className="text-primary size-6" />
             </div>
-            <div>
-              <p className="text-sm font-semibold">Ingen PVV-vurderinger koblet</p>
-              <p className="text-muted-foreground mt-1 max-w-xs text-xs">
-                Koble personvernvurderinger for å spore samsvar mellom risikoanalyse og PDD.
+            <div className="space-y-1">
+              <p className="text-foreground text-sm font-semibold">
+                Ingen PVV-vurderinger koblet
+              </p>
+              <p className="text-muted-foreground mx-auto max-w-xs text-xs leading-relaxed">
+                {addableAssessments.length > 0
+                  ? "Velg en vurdering i feltet over for å koble den."
+                  : "Opprett en personvernvurdering først, så kan du koble den hit."}
               </p>
             </div>
           </div>
         ) : (
-          <ul className="space-y-2">
-            {data.linkedAssessments.map((l) => (
-              <li
-                key={l.linkId}
-                className="group/pvv overflow-hidden rounded-2xl bg-card shadow-sm ring-1 ring-black/[0.04] transition-all duration-200 hover:shadow-md dark:ring-white/[0.06]"
-              >
-                <div className="flex items-start gap-3 px-4 py-3.5 sm:gap-4">
-                  <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10">
-                    <Link2 className="size-5 text-primary" />
-                  </div>
-                  <div className="min-w-0 flex-1 space-y-1">
-                    <div className="flex flex-col gap-1 sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-3 sm:gap-y-1">
-                      <Link
-                        href={`/w/${workspaceId}/a/${l.assessmentId}`}
-                        className="text-sm font-medium text-primary hover:underline"
-                      >
-                        {l.title}
-                      </Link>
-                      <Link
-                        href={`/w/${workspaceId}/a/${l.assessmentId}/prosessdesign`}
-                        className="text-muted-foreground text-xs font-medium underline-offset-4 hover:text-primary hover:underline"
-                      >
-                        RPA prosessdesign (PDD)
-                      </Link>
-                    </div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className={cn(
-                        "inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-semibold",
-                        (l.pddStatus ?? "not_started") === "completed" ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
-                          : (l.pddStatus ?? "not_started") === "in_progress" ? "bg-blue-500/10 text-blue-700 dark:text-blue-300"
-                          : "bg-muted text-muted-foreground",
-                      )}>
-                        PDD: {COMPLIANCE_STATUS_LABELS[(l.pddStatus ?? "not_started") as ComplianceStatusKey]}
-                      </span>
-                      {l.highlightForPvv && (
-                        <span className="inline-flex items-center rounded-md bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700 dark:text-amber-300">
-                          Viktig for PVV
+          <ul className="bg-card/80 ring-border/40 divide-y divide-border/40 overflow-hidden rounded-2xl shadow-sm ring-1">
+            {data.linkedAssessments.map((l) => {
+              const status = (l.pddStatus ?? "not_started") as ComplianceStatusKey;
+              return (
+                <li key={l.linkId} className="group/pvv">
+                  <div className="flex items-start gap-3 px-4 py-3 sm:px-5">
+                    <Link2
+                      className="text-primary mt-1 size-4 shrink-0"
+                      aria-hidden
+                    />
+                    <div className="min-w-0 flex-1 space-y-1.5">
+                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                        <Link
+                          href={`/w/${workspaceId}/a/${l.assessmentId}`}
+                          className="text-primary truncate text-sm font-semibold hover:underline"
+                        >
+                          {l.title}
+                        </Link>
+                        <Link
+                          href={`/w/${workspaceId}/a/${l.assessmentId}/prosessdesign`}
+                          className="text-muted-foreground hover:text-primary text-[11px] font-medium underline-offset-4 hover:underline"
+                        >
+                          Åpne PDD
+                        </Link>
+                        {l.pddUrl && (
+                          <a
+                            href={l.pddUrl}
+                            className="text-muted-foreground hover:text-primary text-[11px] underline-offset-4 hover:underline"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                          >
+                            Ekstern lenke
+                          </a>
+                        )}
+                      </div>
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span
+                          className={cn(
+                            "inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold",
+                            status === "completed"
+                              ? "bg-emerald-500/10 text-emerald-700 ring-1 ring-emerald-500/15 dark:text-emerald-300"
+                              : status === "in_progress"
+                                ? "bg-blue-500/10 text-blue-700 ring-1 ring-blue-500/15 dark:text-blue-300"
+                                : "bg-muted/60 text-muted-foreground ring-1 ring-border/40",
+                          )}
+                        >
+                          PDD: {COMPLIANCE_STATUS_LABELS[status]}
                         </span>
-                      )}
-                      {l.pddUrl && (
-                        <a href={l.pddUrl} className="text-primary text-[10px] underline-offset-4 hover:underline" target="_blank" rel="noopener noreferrer">
-                          PDD-lenke
-                        </a>
-                      )}
+                        {l.highlightForPvv && (
+                          <span className="inline-flex items-center rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold text-amber-700 ring-1 ring-amber-500/15 dark:text-amber-300">
+                            Viktig for PVV
+                          </span>
+                        )}
+                      </div>
                     </div>
+                    <button
+                      type="button"
+                      className="text-muted-foreground hover:bg-destructive/10 hover:text-destructive size-8 shrink-0 rounded-full p-0 opacity-0 transition-all group-hover/pvv:opacity-100"
+                      onClick={() => void onUnlink(l.linkId)}
+                      aria-label="Fjern kobling"
+                    >
+                      <Trash2 className="mx-auto size-3.5" />
+                    </button>
                   </div>
-                  <button
-                    type="button"
-                    className="rounded-lg p-1.5 text-muted-foreground opacity-0 transition-all hover:bg-red-500/10 hover:text-red-600 group-hover/pvv:opacity-100"
-                    onClick={() => void onUnlink(l.linkId)}
-                    aria-label="Fjern kobling"
-                  >
-                    <Trash2 className="size-3.5" />
-                  </button>
-                </div>
-                <div className="border-t border-border/30 px-4 py-3">
-                  <RosPvvLinkFields
-                    linkId={l.linkId}
-                    flags={l.flags}
-                    highlightForPvv={l.highlightForPvv}
-                    pvvLinkNote={l.pvvLinkNote}
-                    suggestedFlags={data.rosSummary.suggestedLinkFlags}
-                    onSave={async (patch) => {
-                      await updateRosAssessmentLink({
-                        linkId: l.linkId,
-                        ...patch,
-                      });
-                    }}
-                  />
-                </div>
-              </li>
-            ))}
+                  <details className="group/pvv-fields border-border/30 border-t">
+                    <summary className="text-muted-foreground hover:text-foreground flex cursor-pointer list-none items-center justify-between gap-2 px-4 py-2 text-[11px] font-medium transition-colors [&::-webkit-details-marker]:hidden sm:px-5">
+                      <span>Flagg, notater og vekting</span>
+                      <ChevronRight
+                        className="size-3.5 transition-transform group-open/pvv-fields:rotate-90"
+                        aria-hidden
+                      />
+                    </summary>
+                    <div className="px-4 pb-3 pt-1 sm:px-5">
+                      <RosPvvLinkFields
+                        linkId={l.linkId}
+                        flags={l.flags}
+                        highlightForPvv={l.highlightForPvv}
+                        pvvLinkNote={l.pvvLinkNote}
+                        suggestedFlags={data.rosSummary.suggestedLinkFlags}
+                        onSave={async (patch) => {
+                          await updateRosAssessmentLink({
+                            linkId: l.linkId,
+                            ...patch,
+                          });
+                        }}
+                      />
+                    </div>
+                  </details>
+                </li>
+              );
+            })}
           </ul>
         )}
-
-        {/* Add link */}
-        <div className="flex gap-2 rounded-2xl bg-card p-4 shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.06]">
-          <select
-            className="border-input bg-background flex h-9 min-w-0 flex-1 rounded-xl border px-2 text-xs"
-            value={addPvId}
-            onChange={(e) =>
-              setAddPvId(e.target.value === "" ? "" : (e.target.value as Id<"assessments">))
-            }
-          >
-            <option value="">— Koble ny PVV-vurdering —</option>
-            {addableAssessments.map((a) => (
-              <option key={a._id} value={a._id}>{a.title}</option>
-            ))}
-          </select>
-          <Button type="button" disabled={addPvId === ""} onClick={() => void onAddPv()} className="shrink-0 rounded-xl">
-            <Plus className="size-4" />
-            Koble
-          </Button>
-        </div>
       </div>
       )}
 
-      {/* === Section 4: Innstillinger (consolidated) === */}
+      {/* === Section 4: Innstillinger === */}
       {rosSection === 4 && (
       <div className="space-y-5">
-        {/* Detaljer */}
-        <div className="space-y-4 rounded-2xl bg-card p-5 shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.06] sm:p-6">
-          <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Detaljer</p>
-          <div className="grid gap-4 sm:grid-cols-2">
+        <div className="space-y-1">
+          <h2 className="text-foreground text-base font-semibold tracking-tight">
+            Innstillinger
+          </h2>
+          <p className="text-muted-foreground text-xs leading-relaxed">
+            Tittel, notater og avansert oppsett. Revisjon og varsling ligger øverst;
+            «Detaljer» under — resten er valgfritt.
+          </p>
+        </div>
+
+        {/* Revisjon og varsling — planlagt oppfølging etter ROS (ISO 31000 / NS 5814) */}
+        <div className="from-primary/[0.04] via-card to-card ring-border/40 space-y-4 rounded-2xl bg-gradient-to-br p-4 shadow-sm ring-1 sm:p-5">
+          <div className="flex items-start gap-2.5">
+            <Calendar
+              className="text-primary mt-0.5 size-4 shrink-0"
+              aria-hidden
+            />
+            <div className="min-w-0 flex-1 space-y-1">
+              <p className="text-foreground text-sm font-semibold tracking-tight">
+                Revisjon og varsling
+              </p>
+              <p className="text-muted-foreground text-[11px] leading-relaxed">
+                Sett når ROS skal gjennomgås på nytt etter at arbeidet er utført.
+                Du kan legge hendelsen i kalender (.ics), velge gjentakelse, og slå
+                av e-postvarsler uten å fjerne selve fristen.
+              </p>
+            </div>
+          </div>
+
+          <div className="border-border/40 space-y-3 rounded-xl border bg-card/70 px-3 py-3 sm:px-4">
+            <label className="flex cursor-pointer items-start gap-3">
+              <Checkbox
+                checked={reviewScheduleActive}
+                disabled={reviewMetaSaving}
+                onCheckedChange={(c) => {
+                  const checked = Boolean(c);
+                  void (async () => {
+                    const prev = reviewScheduleActive;
+                    setReviewScheduleActive(checked);
+                    const ok = await patchRosReviewFields({
+                      reviewScheduleActive: checked,
+                    });
+                    if (!ok) {
+                      setReviewScheduleActive(prev);
+                      return;
+                    }
+                    toast.success(
+                      checked
+                        ? "Planlagt revisjon er aktiv."
+                        : "Planlagt revisjon er pauset (ingen liste/e-post for denne analysen).",
+                    );
+                  })();
+                }}
+                className="mt-0.5"
+              />
+              <span>
+                <span className="text-sm font-medium">Planlagt revisjon</span>
+                <span className="text-muted-foreground block text-[11px] leading-snug">
+                  Neste frist vises i arbeidsområdets revisjonsoversikt når dette er
+                  på.
+                </span>
+              </span>
+            </label>
+
+            <label className="flex cursor-pointer items-start gap-3">
+              <Checkbox
+                checked={reviewEmailRemindersEnabled}
+                disabled={reviewMetaSaving || !reviewScheduleActive}
+                onCheckedChange={(c) => {
+                  const checked = Boolean(c);
+                  void (async () => {
+                    const prev = reviewEmailRemindersEnabled;
+                    setReviewEmailRemindersEnabled(checked);
+                    const ok = await patchRosReviewFields({
+                      reviewEmailRemindersEnabled: checked,
+                    });
+                    if (!ok) {
+                      setReviewEmailRemindersEnabled(prev);
+                      return;
+                    }
+                    toast.success(
+                      checked
+                        ? "E-post påminnelse ved forfalt frist er på."
+                        : "E-post påminnelse er av (fristen vises fortsatt i appen).",
+                    );
+                  })();
+                }}
+                className="mt-0.5"
+              />
+              <span>
+                <span className="text-sm font-medium">E-postvarsling</span>
+                <span className="text-muted-foreground block text-[11px] leading-snug">
+                  Sendes når fristen er passert (maks. én gang i uken per analyse).
+                  Krever e-post konfigurert i drift.
+                </span>
+                <span className="text-foreground/90 mt-1.5 block text-[11px] leading-snug">
+                  <span className="font-semibold">Mottaker:</span>{" "}
+                  {rosReviewReminderRecipientLine ??
+                    "Den som opprettet denne ROS-analysen — samme e-postadresse som på brukerkontoen (ikke valgfritt mottaker i dag)."}
+                </span>
+              </span>
+            </label>
+          </div>
+
+          {!reviewScheduleActive ? (
+            <p className="text-muted-foreground text-[11px] leading-relaxed">
+              Skru på «Planlagt revisjon» over for å sette dato, intervall og
+              kalenderfil.
+            </p>
+          ) : (
+            <div className="space-y-3">
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="space-y-1.5 sm:col-span-2">
+                  <Label htmlFor="ros-next-review" className="text-xs">
+                    Neste revisjon (dato og klokkeslett)
+                  </Label>
+                  <Input
+                    id="ros-next-review"
+                    type="datetime-local"
+                    value={nextReviewLocal}
+                    disabled={reviewMetaSaving}
+                    onChange={(e) => {
+                      setNextReviewLocal(e.target.value);
+                      setDirty(true);
+                    }}
+                    onBlur={() => void flushReviewSchedule()}
+                    className="h-10 rounded-xl"
+                  />
+                </div>
+                <div className="space-y-1.5 sm:col-span-2">
+                  <Label htmlFor="ros-review-recurrence" className="text-xs">
+                    Intervall etter «revisjon gjennomført»
+                  </Label>
+                  <select
+                    id="ros-review-recurrence"
+                    className="border-input bg-background flex h-10 w-full rounded-xl border px-3 text-sm disabled:opacity-50"
+                    value={reviewRecurrenceKind}
+                    disabled={reviewMetaSaving}
+                    onChange={(e) => {
+                      const nextKind = parseRosReviewRecurrenceKind(
+                        e.target.value,
+                      );
+                      const prevKind = reviewRecurrenceKind;
+                      setReviewRecurrenceKind(nextKind);
+                      void (async () => {
+                        const ok = await patchRosReviewFields({
+                          reviewRecurrenceKind:
+                            nextKind === "none" ? null : nextKind,
+                        });
+                        if (!ok) setReviewRecurrenceKind(prevKind);
+                      })();
+                    }}
+                  >
+                    {ROS_REVIEW_RECURRENCE_OPTIONS.map((o) => (
+                      <option key={o.value} value={o.value}>
+                        {o.label}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-muted-foreground text-[11px] leading-relaxed">
+                    Med intervall annet enn «Kun manuell frist» oppdateres neste
+                    revisjonsdato automatisk når du trykker «Merk revisjon
+                    gjennomført».
+                  </p>
+                </div>
+                <div className="space-y-1.5 sm:col-span-2">
+                  <Label htmlFor="ros-review-routine" className="text-xs">
+                    Rutine / huskeliste
+                  </Label>
+                  <Textarea
+                    id="ros-review-routine"
+                    value={reviewRoutineNotes}
+                    disabled={reviewMetaSaving}
+                    onChange={(e) => {
+                      setReviewRoutineNotes(e.target.value);
+                      setDirty(true);
+                    }}
+                    onBlur={() => void flushReviewSchedule()}
+                    rows={2}
+                    className="min-h-[2.5rem] rounded-xl"
+                    placeholder="F.eks. årlig gjennomgang i sikkerhetsforum, eier bytter …"
+                  />
+                </div>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={reviewMetaSaving}
+                  className="h-9 gap-1.5 rounded-full px-4 text-xs font-semibold"
+                  onClick={() => void applyNextReviewFromToday()}
+                >
+                  Sett neste frist fra i dag
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={reviewMetaSaving}
+                  className="h-9 gap-1.5 rounded-full px-4 text-xs font-semibold"
+                  onClick={downloadRosReviewCalendarFile}
+                >
+                  <Calendar className="size-3.5" aria-hidden />
+                  Last ned .ics
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  disabled={reviewMetaSaving}
+                  className="h-9 gap-1.5 rounded-full px-4 text-xs font-semibold"
+                  onClick={() => void markFormalReviewDone()}
+                >
+                  Merk revisjon gjennomført
+                </Button>
+              </div>
+              {data.lastFormalReviewCompletedAt != null ? (
+                <p className="text-muted-foreground text-[11px]">
+                  Sist merket gjennomført:{" "}
+                  {new Date(data.lastFormalReviewCompletedAt).toLocaleString(
+                    "nb-NO",
+                    { dateStyle: "short", timeStyle: "short" },
+                  )}
+                </p>
+              ) : null}
+            </div>
+          )}
+        </div>
+
+        {/* Detaljer — alltid synlig */}
+        <div className="bg-card ring-border/40 space-y-4 rounded-2xl p-4 shadow-sm ring-1 sm:p-5">
+          <p className="text-foreground text-sm font-semibold">Detaljer</p>
+          <div className="grid gap-3 sm:grid-cols-2">
             <div className="space-y-1.5 sm:col-span-2">
-              <Label htmlFor="ros-title" className="text-xs">Tittel</Label>
+              <Label htmlFor="ros-title" className="text-xs">
+                Tittel
+              </Label>
               <Input
                 id="ros-title"
                 value={title}
-                onChange={(e) => { setTitle(e.target.value); setDirty(true); }}
-                className="rounded-xl"
+                onChange={(e) => {
+                  setTitle(e.target.value);
+                  setDirty(true);
+                }}
+                className="h-10 rounded-xl"
               />
             </div>
             <div className="space-y-1.5 sm:col-span-2">
-              <Label htmlFor="ros-notes" className="text-xs">Notat</Label>
+              <Label htmlFor="ros-notes" className="text-xs">
+                Notat
+              </Label>
               <Textarea
                 id="ros-notes"
                 value={notes}
-                onChange={(e) => { setNotes(e.target.value); setDirty(true); }}
+                onChange={(e) => {
+                  setNotes(e.target.value);
+                  setDirty(true);
+                }}
                 rows={3}
                 className="min-h-[4rem] rounded-xl"
+                placeholder="Frittekst om kontekst, beslutninger eller forutsetninger …"
               />
             </div>
             <div className="space-y-1.5 sm:col-span-2">
-              <Label htmlFor="ros-org-unit" className="flex items-center gap-1.5 text-xs">
-                <Building2 className="size-3.5 text-muted-foreground" aria-hidden />
+              <Label
+                htmlFor="ros-org-unit"
+                className="flex items-center gap-1.5 text-xs"
+              >
+                <Building2
+                  className="text-muted-foreground size-3.5"
+                  aria-hidden
+                />
                 Organisasjonsenhet
               </Label>
               <select
                 id="ros-org-unit"
-                className="border-input bg-background flex h-10 w-full rounded-xl border px-2 text-sm"
+                className="border-input bg-background flex h-10 w-full rounded-xl border px-3 text-sm"
                 value={orgUnitLocal}
                 onChange={(e) => {
                   const v = e.target.value;
@@ -2918,147 +4077,251 @@ export function RosAnalysisEditor({
                 }}
                 onBlur={() => void flushOrgUnit()}
               >
-                <option value="">— Ikke satt —</option>
+                <option value="">— Ikke satt (bruker prosessens enhet) —</option>
                 {(orgUnits ?? []).map((u) => (
                   <option key={u._id} value={u._id}>
                     {u.name}
                   </option>
                 ))}
               </select>
-              <p className="text-muted-foreground text-xs leading-relaxed">
-                I org.-tre og oversikter brukes prosessens enhet når den er satt. Sett enhet her
-                når analysen ikke har prosess med enhet, eller for eksplisitt plassering.
-              </p>
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="ros-next-review" className="text-xs">Neste revisjon</Label>
-              <Input
-                id="ros-next-review"
-                type="datetime-local"
-                value={nextReviewLocal}
-                onChange={(e) => { setNextReviewLocal(e.target.value); setDirty(true); }}
-                onBlur={() => void flushReviewSchedule()}
-                className="rounded-xl"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="ros-review-routine" className="text-xs">Rutine</Label>
-              <Textarea
-                id="ros-review-routine"
-                value={reviewRoutineNotes}
-                onChange={(e) => { setReviewRoutineNotes(e.target.value); setDirty(true); }}
-                onBlur={() => void flushReviewSchedule()}
-                rows={2}
-                className="min-h-[3rem] rounded-xl"
-                placeholder="F.eks. årlig gjennomgang …"
-              />
             </div>
           </div>
         </div>
 
-        {/* Livssyklus og krav */}
-        <RosLifecycleCompliancePanel
-          methodologyStatement={methodologyStatement}
-          contextSummary={contextSummary}
-          scopeAndCriteria={scopeAndCriteria}
-          riskCriteriaVersion={riskCriteriaVersion}
-          axisScaleNotes={axisScaleNotes}
-          complianceScopeTags={complianceScopeTags}
-          requirementRefs={requirementRefs}
-          sectorPackLabel={
-            data.rosSectorPackId
-              ? getRosSectorPack(data.rosSectorPackId)?.name ?? null
-              : null
-          }
-          onChange={(patch) => {
-            if (patch.methodologyStatement !== undefined) setMethodologyStatement(patch.methodologyStatement);
-            if (patch.contextSummary !== undefined) setContextSummary(patch.contextSummary);
-            if (patch.scopeAndCriteria !== undefined) setScopeAndCriteria(patch.scopeAndCriteria);
-            if (patch.riskCriteriaVersion !== undefined) setRiskCriteriaVersion(patch.riskCriteriaVersion);
-            if (patch.axisScaleNotes !== undefined) setAxisScaleNotes(patch.axisScaleNotes);
-            if (patch.complianceScopeTags !== undefined) setComplianceScopeTags(patch.complianceScopeTags);
-            if (patch.requirementRefs !== undefined) setRequirementRefs(patch.requirementRefs);
-            setDirty(true);
-          }}
-        />
-
-        {/* Etter tiltak — egne akser */}
-        <div className="space-y-4 rounded-2xl bg-card p-5 shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.06] sm:p-6">
-          <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Etter tiltak — egne akser</p>
-          <div className="flex items-start gap-3">
-            <Checkbox
-              id="ros-separate-after"
-              checked={useSeparateAfterAxes}
-              onCheckedChange={(c) => {
-                const checked = Boolean(c);
-                if (checked && data) {
-                  setRowLabelsAfterText(data.rowLabels.join("\n"));
-                  setColLabelsAfterText(data.colLabels.join("\n"));
-                  setRowAxisTitleAfter(data.rowAxisTitle);
-                  setColAxisTitleAfter(data.colAxisTitle);
-                  setMatrixAfter(matrix.map((r) => [...r]));
-                  setCellItemsAfterMatrix(cellItemsMatrix.map((r) => r.map((c2) => c2.map((it) => ({ ...it })))));
-                }
-                setUseSeparateAfterAxes(checked);
+        {/* Avansert: livssyklus og krav */}
+        <details className="group/sec bg-card ring-border/40 rounded-2xl shadow-sm ring-1">
+          <summary className="hover:bg-muted/30 flex cursor-pointer list-none items-center justify-between gap-2 rounded-2xl px-4 py-3 text-sm font-semibold transition-colors [&::-webkit-details-marker]:hidden sm:px-5">
+            <span className="flex items-center gap-2">
+              <span>Livssyklus og krav</span>
+              <span className="text-muted-foreground text-[11px] font-normal">
+                · metode, kontekst, regelverk
+              </span>
+            </span>
+            <ChevronRight
+              className="text-muted-foreground size-4 transition-transform group-open/sec:rotate-90"
+              aria-hidden
+            />
+          </summary>
+          <div className="border-border/30 border-t px-4 py-4 sm:px-5">
+            <RosLifecycleCompliancePanel
+              methodologyStatement={methodologyStatement}
+              contextSummary={contextSummary}
+              scopeAndCriteria={scopeAndCriteria}
+              riskCriteriaVersion={riskCriteriaVersion}
+              axisScaleNotes={axisScaleNotes}
+              complianceScopeTags={complianceScopeTags}
+              requirementRefs={requirementRefs}
+              sectorPackLabel={
+                data.rosSectorPackId
+                  ? getRosSectorPack(data.rosSectorPackId)?.name ?? null
+                  : null
+              }
+              onChange={(patch) => {
+                if (patch.methodologyStatement !== undefined)
+                  setMethodologyStatement(patch.methodologyStatement);
+                if (patch.contextSummary !== undefined)
+                  setContextSummary(patch.contextSummary);
+                if (patch.scopeAndCriteria !== undefined)
+                  setScopeAndCriteria(patch.scopeAndCriteria);
+                if (patch.riskCriteriaVersion !== undefined)
+                  setRiskCriteriaVersion(patch.riskCriteriaVersion);
+                if (patch.axisScaleNotes !== undefined)
+                  setAxisScaleNotes(patch.axisScaleNotes);
+                if (patch.complianceScopeTags !== undefined)
+                  setComplianceScopeTags(patch.complianceScopeTags);
+                if (patch.requirementRefs !== undefined)
+                  setRequirementRefs(patch.requirementRefs);
                 setDirty(true);
               }}
             />
-            <Label htmlFor="ros-separate-after" className="cursor-pointer text-sm">
-              Bruk eget rutenett for etter tiltak
-            </Label>
           </div>
-          {useSeparateAfterAxes && (
-            <div className="space-y-5 border-t border-border/30 pt-4">
-              <div className="grid gap-3 sm:grid-cols-2">
-                <div className="space-y-1.5">
-                  <Label htmlFor="ros-after-row-axis" className="text-xs">Radakse</Label>
-                  <Input id="ros-after-row-axis" value={rowAxisTitleAfter} onChange={(e) => { setRowAxisTitleAfter(e.target.value); setDirty(true); }} className="rounded-xl" />
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="ros-after-col-axis" className="text-xs">Kolonneakse</Label>
-                  <Input id="ros-after-col-axis" value={colAxisTitleAfter} onChange={(e) => { setColAxisTitleAfter(e.target.value); setDirty(true); }} className="rounded-xl" />
-                </div>
-              </div>
-              <Button type="button" variant="secondary" size="sm" className="rounded-xl" onClick={() => copyBeforeAxesToAfter()}>
-                Kopier fra før-matrise
-              </Button>
-              <RosLabelLevelsEditor variant="matrixAxes" id="ros-after-rows" title="Rader" intro="Hvert nummer er ett nivå." value={rowLabelsAfterText} onChange={onRowLabelsAfterChange} defaultLabels={DEFAULT_ROS_ROW_LABELS} lowEndHint="lav" highEndHint="høy" />
-              <RosLabelLevelsEditor variant="matrixAxes" id="ros-after-cols" title="Kolonner" intro="Hvert nummer er ett nivå." value={colLabelsAfterText} onChange={onColLabelsAfterChange} defaultLabels={DEFAULT_ROS_COL_LABELS} lowEndHint="lav" highEndHint="høy" />
+        </details>
+
+        {/* Avansert: etter tiltak — egne akser */}
+        <details
+          className="group/sec bg-card ring-border/40 rounded-2xl shadow-sm ring-1"
+          open={useSeparateAfterAxes}
+        >
+          <summary className="hover:bg-muted/30 flex cursor-pointer list-none items-center justify-between gap-2 rounded-2xl px-4 py-3 text-sm font-semibold transition-colors [&::-webkit-details-marker]:hidden sm:px-5">
+            <span className="flex items-center gap-2">
+              <span>Etter tiltak — egne akser</span>
+              <span className="text-muted-foreground text-[11px] font-normal">
+                · sjelden brukt
+              </span>
+            </span>
+            <ChevronRight
+              className="text-muted-foreground size-4 transition-transform group-open/sec:rotate-90"
+              aria-hidden
+            />
+          </summary>
+          <div className="border-border/30 space-y-4 border-t px-4 py-4 sm:px-5">
+            <div className="flex items-start gap-3">
+              <Checkbox
+                id="ros-separate-after"
+                checked={useSeparateAfterAxes}
+                onCheckedChange={(c) => {
+                  const checked = Boolean(c);
+                  if (checked && data) {
+                    setRowLabelsAfterText(data.rowLabels.join("\n"));
+                    setColLabelsAfterText(data.colLabels.join("\n"));
+                    setRowAxisTitleAfter(data.rowAxisTitle);
+                    setColAxisTitleAfter(data.colAxisTitle);
+                    setMatrixAfter(matrix.map((r) => [...r]));
+                    setCellItemsAfterMatrix(
+                      cellItemsMatrix.map((r) =>
+                        r.map((c2) => c2.map((it) => ({ ...it }))),
+                      ),
+                    );
+                  }
+                  setUseSeparateAfterAxes(checked);
+                  setDirty(true);
+                }}
+              />
+              <Label
+                htmlFor="ros-separate-after"
+                className="cursor-pointer text-sm"
+              >
+                Bruk eget rutenett for etter tiltak
+                <span className="text-muted-foreground mt-0.5 block text-[11px] font-normal">
+                  Skru på dersom akser eller skala skal være ulike før/etter.
+                </span>
+              </Label>
             </div>
-          )}
-        </div>
+            {useSeparateAfterAxes && (
+              <div className="border-border/30 space-y-4 border-t pt-4">
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="ros-after-row-axis" className="text-xs">
+                      Radakse
+                    </Label>
+                    <Input
+                      id="ros-after-row-axis"
+                      value={rowAxisTitleAfter}
+                      onChange={(e) => {
+                        setRowAxisTitleAfter(e.target.value);
+                        setDirty(true);
+                      }}
+                      className="h-10 rounded-xl"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="ros-after-col-axis" className="text-xs">
+                      Kolonneakse
+                    </Label>
+                    <Input
+                      id="ros-after-col-axis"
+                      value={colAxisTitleAfter}
+                      onChange={(e) => {
+                        setColAxisTitleAfter(e.target.value);
+                        setDirty(true);
+                      }}
+                      className="h-10 rounded-xl"
+                    />
+                  </div>
+                </div>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  className="rounded-full"
+                  onClick={() => copyBeforeAxesToAfter()}
+                >
+                  Kopier fra før-matrise
+                </Button>
+                <RosLabelLevelsEditor
+                  variant="matrixAxes"
+                  id="ros-after-rows"
+                  title="Rader"
+                  intro="Hvert nummer er ett nivå."
+                  value={rowLabelsAfterText}
+                  onChange={onRowLabelsAfterChange}
+                  defaultLabels={DEFAULT_ROS_ROW_LABELS}
+                  lowEndHint="lav"
+                  highEndHint="høy"
+                />
+                <RosLabelLevelsEditor
+                  variant="matrixAxes"
+                  id="ros-after-cols"
+                  title="Kolonner"
+                  intro="Hvert nummer er ett nivå."
+                  value={colLabelsAfterText}
+                  onChange={onColLabelsAfterChange}
+                  defaultLabels={DEFAULT_ROS_COL_LABELS}
+                  lowEndHint="lav"
+                  highEndHint="høy"
+                />
+              </div>
+            )}
+          </div>
+        </details>
 
-        <RosVersionsPanel
-          analysisId={analysisId}
-          versions={versions}
-          onRestored={() => setDirty(false)}
-        />
+        {/* Avansert: versjoner */}
+        <details className="group/sec bg-card ring-border/40 rounded-2xl shadow-sm ring-1">
+          <summary className="hover:bg-muted/30 flex cursor-pointer list-none items-center justify-between gap-2 rounded-2xl px-4 py-3 text-sm font-semibold transition-colors [&::-webkit-details-marker]:hidden sm:px-5">
+            <span className="flex items-center gap-2">
+              <span>Versjoner</span>
+              {versions && versions.length > 0 && (
+                <span className="text-muted-foreground text-[11px] font-normal">
+                  · {versions.length} lagret
+                </span>
+              )}
+            </span>
+            <ChevronRight
+              className="text-muted-foreground size-4 transition-transform group-open/sec:rotate-90"
+              aria-hidden
+            />
+          </summary>
+          <div className="border-border/30 border-t px-4 py-4 sm:px-5">
+            <RosVersionsPanel
+              analysisId={analysisId}
+              versions={versions}
+              onRestored={() => setDirty(false)}
+            />
+          </div>
+        </details>
 
-        <RosJournalPanel
-          analysisId={analysisId}
-          expectedRevision={data.revision ?? 0}
-          rowLabels={data.rowLabels}
-          colLabels={data.colLabels}
-          afterRowLabels={effectiveAfterRowLabels}
-          afterColLabels={effectiveAfterColLabels}
-          afterSeparate={useSeparateAfterAxes}
-          onJumpToCell={handleJumpToCell}
-          onJournalConflict={() =>
-            toast.error(
-              "Journalen kunne ikke lagres: analysen har nyere revisjon på serveren. Oppdater siden og prøv igjen.",
-            )
-          }
-        />
+        {/* Avansert: journal */}
+        <details className="group/sec bg-card ring-border/40 rounded-2xl shadow-sm ring-1">
+          <summary className="hover:bg-muted/30 flex cursor-pointer list-none items-center justify-between gap-2 rounded-2xl px-4 py-3 text-sm font-semibold transition-colors [&::-webkit-details-marker]:hidden sm:px-5">
+            <span className="flex items-center gap-2">
+              <span>Journal</span>
+              <span className="text-muted-foreground text-[11px] font-normal">
+                · endringslogg
+              </span>
+            </span>
+            <ChevronRight
+              className="text-muted-foreground size-4 transition-transform group-open/sec:rotate-90"
+              aria-hidden
+            />
+          </summary>
+          <div className="border-border/30 border-t px-4 py-4 sm:px-5">
+            <RosJournalPanel
+              analysisId={analysisId}
+              expectedRevision={data.revision ?? 0}
+              rowLabels={data.rowLabels}
+              colLabels={data.colLabels}
+              afterRowLabels={effectiveAfterRowLabels}
+              afterColLabels={effectiveAfterColLabels}
+              afterSeparate={useSeparateAfterAxes}
+              onJumpToCell={handleJumpToCell}
+              onJournalConflict={() =>
+                toast.error(
+                  "Journalen kunne ikke lagres: analysen har nyere revisjon på serveren. Oppdater siden og prøv igjen.",
+                )
+              }
+            />
+          </div>
+        </details>
       </div>
       )}
 
-      {/* Bottom navigation */}
-      <div className="fixed bottom-0 left-0 right-0 z-30 bg-background/95 backdrop-blur-md supports-[backdrop-filter]:bg-background/85">
+      {/* Bottom navigation — slank pill-rad */}
+      <div className="bg-background/95 supports-[backdrop-filter]:bg-background/80 fixed bottom-0 left-0 right-0 z-30 backdrop-blur-md">
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:px-5">
           <Button
             type="button"
             variant="ghost"
-            className="h-10 gap-1.5 rounded-xl px-4 text-sm font-medium"
+            className="text-muted-foreground hover:text-foreground h-9 gap-1.5 rounded-full px-3 text-sm font-medium"
             onClick={() => setRosSection((s) => Math.max(0, s - 1))}
             disabled={rosSection <= 0}
           >
@@ -3073,7 +4336,9 @@ export function RosAnalysisEditor({
                 onClick={() => setRosSection(i)}
                 className={cn(
                   "size-2 rounded-full transition-all duration-200",
-                  rosSection === i ? "bg-primary scale-125" : "bg-border hover:bg-muted-foreground/50",
+                  rosSection === i
+                    ? "bg-primary scale-125"
+                    : "bg-border hover:bg-muted-foreground/50",
                 )}
                 aria-label={`Gå til del ${i + 1}`}
               />
@@ -3082,7 +4347,7 @@ export function RosAnalysisEditor({
           {rosSection >= ROS_EDITOR_SECTIONS.length - 1 ? (
             <Button
               type="button"
-              className="h-10 gap-1.5 rounded-xl px-5 text-sm font-semibold shadow-md"
+              className="h-9 gap-1.5 rounded-full px-5 text-sm font-semibold shadow-sm"
               disabled={saving}
               onClick={async () => {
                 const ok = await save();
@@ -3096,8 +4361,12 @@ export function RosAnalysisEditor({
           ) : (
             <Button
               type="button"
-              className="h-10 gap-1.5 rounded-xl px-5 text-sm font-semibold shadow-md"
-              onClick={() => setRosSection((s) => Math.min(ROS_EDITOR_SECTIONS.length - 1, s + 1))}
+              className="h-9 gap-1.5 rounded-full px-5 text-sm font-semibold shadow-sm"
+              onClick={() =>
+                setRosSection((s) =>
+                  Math.min(ROS_EDITOR_SECTIONS.length - 1, s + 1),
+                )
+              }
             >
               Neste
               <ChevronRight className="size-4" aria-hidden />
@@ -3105,7 +4374,201 @@ export function RosAnalysisEditor({
           )}
         </div>
       </div>
+
+      {/* === Lagre tiltak (med risiko) i bibliotek === */}
+      <Dialog
+        open={savingTaskToLibrary !== null}
+        onOpenChange={(open) => {
+          if (!open) setSavingTaskToLibrary(null);
+        }}
+      >
+        <DialogContent size="md" titleId="ros-task-save-lib-title">
+          <DialogHeader>
+            <h2
+              id="ros-task-save-lib-title"
+              className="font-heading text-lg font-semibold"
+            >
+              Lagre tiltak i bibliotek
+            </h2>
+            <p className="text-muted-foreground mt-1 text-xs leading-relaxed">
+              Tiltaket lagres sammen med risikoen det reduserer, slik at
+              du kan gjenbruke paret i andre ROS-analyser.
+            </p>
+          </DialogHeader>
+          <DialogBody>
+            <div className="space-y-3">
+              {savingTaskToLibrary?.riskLocation && (
+                <div className="bg-primary/[0.06] ring-primary/15 rounded-xl px-3 py-2 ring-1">
+                  <p className="text-muted-foreground text-[11px] font-medium uppercase tracking-wider">
+                    Tilknyttet risiko
+                  </p>
+                  <p className="text-primary mt-0.5 text-[11px] font-semibold">
+                    {savingTaskToLibrary.riskLocation}
+                  </p>
+                  <p className="text-foreground/90 mt-1 line-clamp-3 text-xs leading-relaxed">
+                    {savingTaskToLibrary.riskText}
+                  </p>
+                </div>
+              )}
+              <div className="space-y-1.5">
+                <Label htmlFor="ros-task-save-lib-name">Tittel</Label>
+                <Input
+                  id="ros-task-save-lib-name"
+                  value={saveLibTitle}
+                  onChange={(e) => setSaveLibTitle(e.target.value)}
+                  placeholder="Kort, gjenkjennelig navn"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="ros-task-save-lib-tiltak">
+                  Tiltakstekst
+                </Label>
+                <Textarea
+                  id="ros-task-save-lib-tiltak"
+                  value={saveLibTiltak}
+                  onChange={(e) => setSaveLibTiltak(e.target.value)}
+                  rows={3}
+                  className="min-h-0"
+                  placeholder="Hva må gjøres? (bruk gjerne flere linjer)"
+                />
+                <p className="text-muted-foreground text-[11px]">
+                  Vises sammen med risikoen når noen henter forslaget fra
+                  biblioteket.
+                </p>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="space-y-1.5">
+                  <Label htmlFor="ros-task-save-lib-cat">
+                    Kategori (valgfritt)
+                  </Label>
+                  <select
+                    id="ros-task-save-lib-cat"
+                    className="border-input bg-background flex h-10 w-full rounded-lg border px-2 text-sm"
+                    value={saveLibCategoryId}
+                    onChange={(e) =>
+                      setSaveLibCategoryId(
+                        (e.target.value || "") as
+                          | Id<"rosLibraryCategories">
+                          | "",
+                      )
+                    }
+                  >
+                    <option value="">— Ingen —</option>
+                    {(libraryCategories ?? []).map((c) => (
+                      <option key={c._id} value={c._id}>
+                        {c.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="ros-task-save-lib-vis">Synlighet</Label>
+                  <select
+                    id="ros-task-save-lib-vis"
+                    className="border-input bg-background flex h-10 w-full rounded-lg border px-2 text-sm"
+                    value={saveLibVisibility}
+                    onChange={(e) =>
+                      setSaveLibVisibility(
+                        e.target.value as "workspace" | "shared",
+                      )
+                    }
+                  >
+                    <option value="workspace">
+                      Kun dette arbeidsområdet
+                    </option>
+                    <option value="shared">
+                      Delt — alle mine arbeidsområder
+                    </option>
+                  </select>
+                </div>
+              </div>
+            </div>
+          </DialogBody>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              className="rounded-full"
+              onClick={() => setSavingTaskToLibrary(null)}
+            >
+              Avbryt
+            </Button>
+            <Button
+              type="button"
+              className="gap-1.5 rounded-full font-semibold"
+              disabled={
+                saveLibBusy ||
+                !saveLibTitle.trim() ||
+                !savingTaskToLibrary?.riskText.trim()
+              }
+              onClick={() => void confirmSaveTaskToLibrary()}
+            >
+              <BookmarkPlus className="size-4" aria-hidden />
+              {saveLibBusy ? "Lagrer …" : "Lagre i biblioteket"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
+  );
+}
+
+/**
+ * Risikokoblings-select: gruppert med <optgroup> slik at brukeren tydelig
+ * ser at «Før» = iboende risiko, og «Etter» = restrisiko etter tiltak.
+ * Tom verdi i topp = «Ikke koblet».
+ */
+function RiskLinkSelect({
+  id,
+  value,
+  onChange,
+  options,
+  className,
+  ariaLabel,
+  disabled,
+}: {
+  id?: string;
+  value: string;
+  onChange: (value: string) => void;
+  options: RosTaskRiskLinkOption[];
+  className?: string;
+  ariaLabel?: string;
+  disabled?: boolean;
+}) {
+  const beforeOptions = options.filter((o) => o.group === "before");
+  const afterOptions = options.filter((o) => o.group === "after");
+  const noneOption = options.find((o) => !o.group);
+  return (
+    <select
+      id={id}
+      className={className}
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      aria-label={ariaLabel}
+      disabled={disabled}
+    >
+      {noneOption && (
+        <option value={noneOption.value}>{noneOption.label}</option>
+      )}
+      {beforeOptions.length > 0 && (
+        <optgroup label={ROS_TASK_RISK_LINK_GROUP_LABELS.before}>
+          {beforeOptions.map((o) => (
+            <option key={o.value} value={o.value}>
+              {o.label}
+            </option>
+          ))}
+        </optgroup>
+      )}
+      {afterOptions.length > 0 && (
+        <optgroup label={ROS_TASK_RISK_LINK_GROUP_LABELS.after}>
+          {afterOptions.map((o) => (
+            <option key={o.value} value={o.value}>
+              {o.label}
+            </option>
+          ))}
+        </optgroup>
+      )}
+    </select>
   );
 }
 
@@ -3134,7 +4597,7 @@ function TaskEditForm({
     name?: string | null;
     email?: string | null;
   }>;
-  riskLinkOptions: { value: string; label: string }[];
+  riskLinkOptions: RosTaskRiskLinkOption[];
   onCancel: () => void;
   onSave: (patch: {
     title: string;
@@ -3148,10 +4611,10 @@ function TaskEditForm({
     residualRiskAcceptedNote: string | null;
   }) => Promise<void>;
 }) {
-  const initialRiskLink =
-    task.linkedCellItemId && task.linkedCellItemPhase
-      ? `${task.linkedCellItemPhase}:${task.linkedCellItemId}`
-      : "";
+  const initialRiskLink = rosTaskRiskLinkValue(
+    task.linkedCellItemId,
+    task.linkedCellItemPhase,
+  );
   const [title, setTitle] = useState(task.title);
   const [description, setDescription] = useState(task.description ?? "");
   const initialAssignees =
@@ -3192,15 +4655,13 @@ function TaskEditForm({
         placeholder="Beskrivelse (valgfritt)"
       />
       <div className="grid gap-2 sm:grid-cols-2">
-        <select
-          className="border-input bg-background flex h-9 w-full rounded-xl border px-2 text-xs"
+        <RiskLinkSelect
           value={riskLink}
-          onChange={(e) => setRiskLink(e.target.value)}
-        >
-          {riskLinkOptions.map((o) => (
-            <option key={o.value || "opt-none"} value={o.value}>{o.label}</option>
-          ))}
-        </select>
+          onChange={setRiskLink}
+          options={riskLinkOptions}
+          className="border-input bg-background flex h-9 w-full rounded-xl border px-2 text-xs"
+          ariaLabel="Hvilken risiko reduseres?"
+        />
         <select
           className="border-input bg-background flex h-9 w-full rounded-xl border px-2 text-xs"
           value={treatment}
@@ -3209,6 +4670,7 @@ function TaskEditForm({
               e.target.value === "" ? "" : (e.target.value as "mitigate" | "accept" | "transfer" | "avoid"),
             )
           }
+          aria-label="Behandlingsstrategi"
         >
           {ROS_RISK_TREATMENT_OPTIONS.map((o) => (
             <option key={o.value || "none"} value={o.value}>{o.label}</option>

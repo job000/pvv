@@ -1,7 +1,6 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Dialog,
@@ -22,26 +21,27 @@ import {
   newRosCellItemId,
   type RosCellItemMatrix,
 } from "@/lib/ros-cell-items";
-import { positionRiskLevel, RISK_LEVEL_HINTS } from "@/lib/ros-defaults";
+import { positionRiskLevel } from "@/lib/ros-defaults";
 import { cellRiskClass } from "@/lib/ros-risk-colors";
 import { cn } from "@/lib/utils";
 import { useMutation, useQuery } from "convex/react";
 import {
   AlertTriangle,
   ArrowDown,
-  ArrowRight,
   BookMarked,
+  Check,
   ChevronDown,
   Equal,
   Eye,
   FolderInput,
   Library,
   ListTodo,
+  Loader2,
   Plus,
   SquareArrowOutUpRight,
   Trash2,
 } from "lucide-react";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useStickyState } from "@/lib/use-sticky-state";
 
 export type FlatRisk = {
@@ -88,6 +88,12 @@ type Props = {
   }>;
   /** Hopp til Oppgaver-fanen (samme ROS-analyse) */
   onGoToTasks?: () => void;
+  /** Lagrings-status fra forelder, brukes til «Lagret»-indikator i utvidet kort. */
+  saveStatus?: {
+    saving: boolean;
+    dirty: boolean;
+    lastSavedAt: number | null;
+  };
 };
 
 function levelBadge(level: number, size: "sm" | "md" = "md") {
@@ -126,26 +132,56 @@ function riskBorderClass(level: number): string {
   }
 }
 
-function DeltaArrow({ before, after }: { before: number; after: number }) {
-  if (after < before)
+/**
+ * Liten lagrings-indikator: viser en pulserende «Lagrer …» under autosave,
+ * ellers «Lagret kl HH:MM» / «Ulagrede endringer …» avhengig av tilstand.
+ *
+ * Vi viser «Lagret nå» de første 4 sekundene etter en vellykket lagring for å
+ * gi tydelig visuell bekreftelse, og bytter så til klokkeslett.
+ */
+function SavedIndicator({
+  saving,
+  dirty,
+  lastSavedAt,
+}: {
+  saving: boolean;
+  dirty: boolean;
+  lastSavedAt: number | null;
+}) {
+  const [now, setNow] = useState<number>(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 30_000);
+    return () => clearInterval(id);
+  }, []);
+  if (saving) {
     return (
-      <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">
-        <ArrowDown className="size-3" />
-        {before - after}
+      <span className="text-muted-foreground inline-flex items-center gap-1 text-[11px]">
+        <Loader2 className="size-3 animate-spin" aria-hidden />
+        Lagrer …
       </span>
     );
-  if (after > before)
+  }
+  if (dirty) {
     return (
-      <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-red-600 dark:text-red-400">
-        <ArrowDown className="size-3 rotate-180" />
-        +{after - before}
+      <span className="inline-flex items-center gap-1 text-[11px] text-amber-700 dark:text-amber-400">
+        <span className="size-1.5 rounded-full bg-amber-500" aria-hidden />
+        Ulagrede endringer
       </span>
     );
-  return (
-    <span className="text-muted-foreground inline-flex items-center gap-0.5 text-[10px]">
-      <Equal className="size-3" />
-    </span>
-  );
+  }
+  if (lastSavedAt) {
+    const fresh = now - lastSavedAt < 4000;
+    const dt = new Date(lastSavedAt);
+    const hh = String(dt.getHours()).padStart(2, "0");
+    const mm = String(dt.getMinutes()).padStart(2, "0");
+    return (
+      <span className="inline-flex items-center gap-1 text-[11px] text-emerald-700 dark:text-emerald-400">
+        <Check className="size-3" aria-hidden />
+        {fresh ? "Lagret nå" : `Lagret kl ${hh}:${mm}`}
+      </span>
+    );
+  }
+  return null;
 }
 
 export function RosRiskList({
@@ -167,6 +203,7 @@ export function RosRiskList({
   workspaceId,
   rosTasks,
   onGoToTasks,
+  saveStatus,
 }: Props) {
   const [expandedId, setExpandedId] = useStickyState<string | null>(`ros-risk-list:${workspaceId}:expanded`, null);
   const [libraryOpen, setLibraryOpen] = useState(false);
@@ -484,18 +521,26 @@ export function RosRiskList({
                   />
                 </button>
 
-                {/* Expanded editor */}
+                {/* Expanded editor — kompakt, tabell-aktig layout som
+                    minimerer visuell støy og gjør «før → etter»-flyten
+                    tydeligere. Følger NS 5814 / ISO 31000-vokabular. */}
                 {expanded && !readOnly && (
                   <div
                     id={`ros-risk-expand-${risk.id}`}
                     role="region"
                     aria-labelledby={`ros-risk-trigger-${risk.id}`}
-                    className="space-y-5 border-t border-border/30 px-4 pb-5 pt-5 sm:px-5"
+                    className="border-border/30 space-y-4 border-t px-4 pb-4 pt-4 sm:px-5"
                   >
-                    {/* Description */}
+                    {/* Beskrivelse */}
                     <div className="space-y-1.5">
-                      <label className="text-xs font-semibold">Hva kan gå galt?</label>
+                      <label
+                        htmlFor={`ros-risk-text-${risk.id}`}
+                        className="text-xs font-semibold"
+                      >
+                        Hva kan gå galt?
+                      </label>
                       <Textarea
+                        id={`ros-risk-text-${risk.id}`}
                         value={risk.text}
                         onChange={(e) =>
                           onUpdateRisk({ ...risk, text: e.target.value })
@@ -507,192 +552,281 @@ export function RosRiskList({
                       />
                     </div>
 
-                    {/* Flags */}
-                    <div className="flex flex-wrap gap-2">
+                    {/* Flagg-chips — slankere */}
+                    <div className="flex flex-wrap gap-1.5">
                       <button
                         type="button"
                         className={cn(
-                          "inline-flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-medium transition-all",
+                          "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors",
                           risk.flags?.includes(ROS_CELL_FLAG_REQUIRES_ACTION)
-                            ? "border-red-500/40 bg-red-500/10 text-red-700 shadow-sm dark:text-red-300"
-                            : "text-muted-foreground hover:text-foreground border-border hover:bg-muted/50",
+                            ? "border-red-500/40 bg-red-500/10 text-red-700 dark:text-red-300"
+                            : "border-border/60 text-muted-foreground hover:bg-muted/50 hover:text-foreground",
                         )}
                         onClick={() => {
-                          const has = risk.flags?.includes(ROS_CELL_FLAG_REQUIRES_ACTION);
+                          const has = risk.flags?.includes(
+                            ROS_CELL_FLAG_REQUIRES_ACTION,
+                          );
                           const next = has
-                            ? (risk.flags ?? []).filter((f) => f !== ROS_CELL_FLAG_REQUIRES_ACTION)
-                            : [...(risk.flags ?? []), ROS_CELL_FLAG_REQUIRES_ACTION];
-                          onUpdateRisk({ ...risk, flags: next.length ? next : undefined });
+                            ? (risk.flags ?? []).filter(
+                                (f) => f !== ROS_CELL_FLAG_REQUIRES_ACTION,
+                              )
+                            : [
+                                ...(risk.flags ?? []),
+                                ROS_CELL_FLAG_REQUIRES_ACTION,
+                              ];
+                          onUpdateRisk({
+                            ...risk,
+                            flags: next.length ? next : undefined,
+                          });
                         }}
                       >
-                        <AlertTriangle className="size-3.5" />
+                        <AlertTriangle className="size-3" />
                         Må håndteres
                       </button>
                       <button
                         type="button"
                         className={cn(
-                          "inline-flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-medium transition-all",
+                          "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors",
                           risk.flags?.includes(ROS_CELL_FLAG_WATCH)
-                            ? "border-blue-500/40 bg-blue-500/10 text-blue-700 shadow-sm dark:text-blue-300"
-                            : "text-muted-foreground hover:text-foreground border-border hover:bg-muted/50",
+                            ? "border-blue-500/40 bg-blue-500/10 text-blue-700 dark:text-blue-300"
+                            : "border-border/60 text-muted-foreground hover:bg-muted/50 hover:text-foreground",
                         )}
                         onClick={() => {
                           const has = risk.flags?.includes(ROS_CELL_FLAG_WATCH);
                           const next = has
-                            ? (risk.flags ?? []).filter((f) => f !== ROS_CELL_FLAG_WATCH)
+                            ? (risk.flags ?? []).filter(
+                                (f) => f !== ROS_CELL_FLAG_WATCH,
+                              )
                             : [...(risk.flags ?? []), ROS_CELL_FLAG_WATCH];
-                          onUpdateRisk({ ...risk, flags: next.length ? next : undefined });
+                          onUpdateRisk({
+                            ...risk,
+                            flags: next.length ? next : undefined,
+                          });
                         }}
                       >
-                        <Eye className="size-3.5" />
+                        <Eye className="size-3" />
                         Følg med
                       </button>
                     </div>
 
-                    {/* Before → After side-by-side */}
-                    <div className="grid gap-3 sm:grid-cols-[1fr,auto,1fr]">
-                      {/* BEFORE */}
-                      <div className="space-y-3 rounded-xl bg-muted/15 p-3 ring-1 ring-black/[0.04] dark:ring-white/[0.06]">
+                    {/* Risikoplassering — tabell-aktig 2-rad-layout
+                        med Før og Etter, slik at brukeren ser endringen
+                        på en linje. Ingen tunge sub-kort.  */}
+                    <div className="bg-muted/15 ring-border/30 overflow-hidden rounded-xl ring-1">
+                      <div className="text-muted-foreground hidden border-b border-border/30 bg-muted/20 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider sm:grid sm:grid-cols-[8.5rem_1fr_1fr_5.5rem_2rem] sm:items-center sm:gap-3">
+                        <span>Fase</span>
+                        <span>{rowAxisTitle}</span>
+                        <span>{colAxisTitle}</span>
+                        <span>Nivå</span>
+                        <span aria-hidden />
+                      </div>
+                      {/* FØR */}
+                      <div className="grid items-center gap-2 px-3 py-2.5 sm:grid-cols-[8.5rem_1fr_1fr_5.5rem_2rem] sm:gap-3">
                         <div className="flex items-center gap-2">
-                          <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Før tiltak</span>
+                          <span className="text-foreground/90 text-[11px] font-semibold">
+                            Før tiltak
+                          </span>
+                          <span className="text-muted-foreground hidden text-[10px] sm:inline">
+                            iboende
+                          </span>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2 sm:contents">
+                          <select
+                            aria-label={`Før tiltak: ${rowAxisTitle}`}
+                            className="border-input bg-background flex h-8 w-full rounded-lg border px-2 text-xs"
+                            value={risk.beforeRow}
+                            onChange={(e) => {
+                              const newRow = Number(e.target.value);
+                              onUpdateRisk({
+                                ...risk,
+                                beforeRow: newRow,
+                                afterRow:
+                                  risk.afterRow === risk.beforeRow
+                                    ? newRow
+                                    : risk.afterRow,
+                                afterCol:
+                                  risk.afterCol === risk.beforeCol
+                                    ? risk.beforeCol
+                                    : risk.afterCol,
+                              });
+                            }}
+                          >
+                            {rowLabels.map((label, i) => (
+                              <option key={i} value={i}>
+                                {label}
+                              </option>
+                            ))}
+                          </select>
+                          <select
+                            aria-label={`Før tiltak: ${colAxisTitle}`}
+                            className="border-input bg-background flex h-8 w-full rounded-lg border px-2 text-xs"
+                            value={risk.beforeCol}
+                            onChange={(e) => {
+                              const newCol = Number(e.target.value);
+                              onUpdateRisk({
+                                ...risk,
+                                beforeCol: newCol,
+                                afterRow:
+                                  risk.afterRow === risk.beforeRow
+                                    ? risk.beforeRow
+                                    : risk.afterRow,
+                                afterCol:
+                                  risk.afterCol === risk.beforeCol
+                                    ? newCol
+                                    : risk.afterCol,
+                              });
+                            }}
+                          >
+                            {colLabels.map((label, i) => (
+                              <option key={i} value={i}>
+                                {label}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <div className="col-span-2 flex items-center gap-1.5 sm:col-span-1">
                           {levelBadge(bLvl, "sm")}
-                          <span className="text-muted-foreground text-[10px]">
+                          <span className="text-muted-foreground text-[11px]">
                             {riskLevelLabel(bLvl)}
                           </span>
                         </div>
-                        <div className="space-y-2">
-                          <div className="space-y-1">
-                            <label className="text-muted-foreground text-[10px] font-medium">{rowAxisTitle}</label>
-                            <select
-                              className="border-input bg-background flex h-9 w-full rounded-lg border px-2 text-xs"
-                              value={risk.beforeRow}
-                              onChange={(e) => {
-                                const newRow = Number(e.target.value);
-                                onUpdateRisk({
-                                  ...risk,
-                                  beforeRow: newRow,
-                                  afterRow: risk.afterRow === risk.beforeRow ? newRow : risk.afterRow,
-                                  afterCol: risk.afterCol === risk.beforeCol ? risk.beforeCol : risk.afterCol,
-                                });
-                              }}
-                            >
-                              {rowLabels.map((label, i) => (
-                                <option key={i} value={i}>{label}</option>
-                              ))}
-                            </select>
-                          </div>
-                          <div className="space-y-1">
-                            <label className="text-muted-foreground text-[10px] font-medium">{colAxisTitle}</label>
-                            <select
-                              className="border-input bg-background flex h-9 w-full rounded-lg border px-2 text-xs"
-                              value={risk.beforeCol}
-                              onChange={(e) => {
-                                const newCol = Number(e.target.value);
-                                onUpdateRisk({
-                                  ...risk,
-                                  beforeCol: newCol,
-                                  afterRow: risk.afterRow === risk.beforeRow ? risk.beforeRow : risk.afterRow,
-                                  afterCol: risk.afterCol === risk.beforeCol ? newCol : risk.afterCol,
-                                });
-                              }}
-                            >
-                              {colLabels.map((label, i) => (
-                                <option key={i} value={i}>{label}</option>
-                              ))}
-                            </select>
-                          </div>
-                        </div>
+                        <span className="hidden sm:block" aria-hidden />
                       </div>
 
-                      {/* Arrow */}
-                      <div className="hidden items-center justify-center sm:flex">
-                        <div className="flex flex-col items-center gap-1">
-                          <ArrowRight className={cn(
-                            "size-5",
-                            aLvl < bLvl ? "text-emerald-500" : aLvl > bLvl ? "text-red-500" : "text-muted-foreground/40",
-                          )} />
-                          {aLvl !== bLvl && (
-                            <DeltaArrow before={bLvl} after={aLvl} />
+                      {/* «Pil» mellom rader: viser endringen og blir
+                          fargesatt etter delta-retning. */}
+                      <div className="border-border/30 flex items-center gap-2 border-y border-dashed bg-background/40 px-3 py-1.5">
+                        {aLvl < bLvl ? (
+                          <ArrowDown
+                            className="size-3.5 text-emerald-500"
+                            aria-hidden
+                          />
+                        ) : aLvl > bLvl ? (
+                          <ArrowDown
+                            className="size-3.5 rotate-180 text-red-500"
+                            aria-hidden
+                          />
+                        ) : (
+                          <Equal
+                            className="text-muted-foreground/60 size-3.5"
+                            aria-hidden
+                          />
+                        )}
+                        <span
+                          className={cn(
+                            "text-[10px] font-semibold uppercase tracking-wider",
+                            aLvl < bLvl
+                              ? "text-emerald-600 dark:text-emerald-400"
+                              : aLvl > bLvl
+                                ? "text-red-600 dark:text-red-400"
+                                : "text-muted-foreground",
                           )}
-                        </div>
-                      </div>
-                      <div className="flex items-center justify-center sm:hidden">
-                        <ArrowDown className={cn(
-                          "size-5",
-                          aLvl < bLvl ? "text-emerald-500" : aLvl > bLvl ? "text-red-500" : "text-muted-foreground/40",
-                        )} />
+                        >
+                          {aLvl < bLvl
+                            ? `Reduseres med ${bLvl - aLvl}`
+                            : aLvl > bLvl
+                              ? `Øker med ${aLvl - bLvl}`
+                              : "Ingen endring ennå"}
+                        </span>
                       </div>
 
-                      {/* AFTER */}
-                      <div className={cn(
-                        "space-y-3 rounded-xl p-3 ring-1",
-                        aLvl < bLvl
-                          ? "bg-emerald-500/[0.06] ring-emerald-500/20"
-                          : aLvl > bLvl
-                            ? "bg-red-500/[0.06] ring-red-500/20"
-                            : "bg-blue-500/[0.04] ring-blue-500/15",
-                      )}>
+                      {/* ETTER */}
+                      <div
+                        className={cn(
+                          "grid items-center gap-2 px-3 py-2.5 sm:grid-cols-[8.5rem_1fr_1fr_5.5rem_2rem] sm:gap-3",
+                          aLvl < bLvl
+                            ? "bg-emerald-500/[0.05]"
+                            : aLvl > bLvl
+                              ? "bg-red-500/[0.05]"
+                              : undefined,
+                        )}
+                      >
                         <div className="flex items-center gap-2">
-                          <span className={cn(
-                            "text-[10px] font-bold uppercase tracking-wider",
-                            aLvl < bLvl ? "text-emerald-700 dark:text-emerald-400"
-                              : aLvl > bLvl ? "text-red-700 dark:text-red-400"
-                              : "text-blue-700 dark:text-blue-400",
-                          )}>Etter tiltak</span>
+                          <span
+                            className={cn(
+                              "text-[11px] font-semibold",
+                              aLvl < bLvl
+                                ? "text-emerald-700 dark:text-emerald-400"
+                                : aLvl > bLvl
+                                  ? "text-red-700 dark:text-red-400"
+                                  : "text-foreground/90",
+                            )}
+                          >
+                            Etter tiltak
+                          </span>
+                          <span className="text-muted-foreground hidden text-[10px] sm:inline">
+                            restrisiko
+                          </span>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2 sm:contents">
+                          <select
+                            aria-label={`Etter tiltak: ${rowAxisTitle}`}
+                            className="border-input bg-background flex h-8 w-full rounded-lg border px-2 text-xs"
+                            value={risk.afterRow}
+                            onChange={(e) =>
+                              onUpdateRisk({
+                                ...risk,
+                                afterRow: Number(e.target.value),
+                              })
+                            }
+                          >
+                            {afterRowLabels.map((label, i) => (
+                              <option key={i} value={i}>
+                                {label}
+                              </option>
+                            ))}
+                          </select>
+                          <select
+                            aria-label={`Etter tiltak: ${colAxisTitle}`}
+                            className="border-input bg-background flex h-8 w-full rounded-lg border px-2 text-xs"
+                            value={risk.afterCol}
+                            onChange={(e) =>
+                              onUpdateRisk({
+                                ...risk,
+                                afterCol: Number(e.target.value),
+                              })
+                            }
+                          >
+                            {afterColLabels.map((label, i) => (
+                              <option key={i} value={i}>
+                                {label}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <div className="col-span-2 flex items-center gap-1.5 sm:col-span-1">
                           {levelBadge(aLvl, "sm")}
-                          <span className={cn(
-                            "text-[10px] font-medium",
-                            aLvl < bLvl ? "text-emerald-600 dark:text-emerald-400"
-                              : aLvl > bLvl ? "text-red-600 dark:text-red-400"
-                              : "text-muted-foreground",
-                          )}>
+                          <span
+                            className={cn(
+                              "text-[11px]",
+                              aLvl < bLvl
+                                ? "text-emerald-600 dark:text-emerald-400"
+                                : aLvl > bLvl
+                                  ? "text-red-600 dark:text-red-400"
+                                  : "text-muted-foreground",
+                            )}
+                          >
                             {riskLevelLabel(aLvl)}
                           </span>
                         </div>
-                        <div className="space-y-2">
-                          <div className="space-y-1">
-                            <label className="text-muted-foreground text-[10px] font-medium">
-                              {rowAxisTitle} — mål etter tiltak
-                            </label>
-                            <select
-                              className="border-input bg-background flex h-9 w-full rounded-lg border px-2 text-xs shadow-sm"
-                              value={risk.afterRow}
-                              onChange={(e) => onUpdateRisk({ ...risk, afterRow: Number(e.target.value) })}
-                            >
-                              {afterRowLabels.map((label, i) => (
-                                <option key={i} value={i}>{label}</option>
-                              ))}
-                            </select>
-                          </div>
-                          <div className="space-y-1">
-                            <label className="text-muted-foreground text-[10px] font-medium">
-                              {colAxisTitle} — mål etter tiltak
-                            </label>
-                            <select
-                              className="border-input bg-background flex h-9 w-full rounded-lg border px-2 text-xs shadow-sm"
-                              value={risk.afterCol}
-                              onChange={(e) => onUpdateRisk({ ...risk, afterCol: Number(e.target.value) })}
-                            >
-                              {afterColLabels.map((label, i) => (
-                                <option key={i} value={i}>{label}</option>
-                              ))}
-                            </select>
-                          </div>
-                        </div>
-                        {aLvl === bLvl && (
-                          <p className="text-[10px] leading-relaxed text-blue-600 dark:text-blue-400">
-                            Endre verdiene over for å sette forventet nivå etter tiltak.
-                          </p>
-                        )}
+                        <span className="hidden sm:block" aria-hidden />
                       </div>
                     </div>
 
-                    {/* After change note */}
+                    {/* Hva reduserer risikoen — kort begrunnelse */}
                     <div className="space-y-1.5">
-                      <label className="text-xs font-semibold">
-                        Begrunnelse for endring
+                      <label
+                        htmlFor={`ros-risk-note-${risk.id}`}
+                        className="text-xs font-semibold"
+                      >
+                        Tiltak som reduserer risikoen
                       </label>
+                      <p className="text-muted-foreground -mt-0.5 text-[11px] leading-relaxed">
+                        Beskriv kort hva som settes i verk for å gå fra «før»
+                        til «etter»-nivået over.
+                      </p>
                       <Textarea
+                        id={`ros-risk-note-${risk.id}`}
                         value={risk.afterChangeNote ?? ""}
                         onChange={(e) => {
                           const v = e.target.value;
@@ -701,36 +835,36 @@ export function RosRiskList({
                             afterChangeNote: v.length === 0 ? undefined : v,
                           });
                         }}
-                        placeholder="Hvilke tiltak reduserer risikoen? F.eks. kryptering, backup, opplæring …"
+                        placeholder="F.eks. kryptering ved overføring, backup, opplæring av ansatte …"
                         rows={2}
                         className="min-h-0 rounded-xl text-sm"
                       />
                     </div>
 
                     {linkedRosTasksForRisk.length > 0 && onGoToTasks ? (
-                      <div className="space-y-2 rounded-lg border border-border/50 bg-muted/20 px-3 py-2.5">
+                      <div className="border-border/40 bg-muted/15 space-y-2 rounded-xl border px-3 py-2.5">
                         <div className="flex flex-wrap items-center justify-between gap-2">
                           <span className="text-xs font-semibold">
-                            Oppgaver knyttet til dette punktet
+                            Tiltak knyttet til dette punktet
                           </span>
                           <Button
                             type="button"
                             variant="outline"
                             size="sm"
-                            className="h-7 gap-1 text-[11px]"
+                            className="h-7 gap-1 rounded-full text-[11px]"
                             onClick={onGoToTasks}
                           >
                             <SquareArrowOutUpRight className="size-3" />
-                            Gå til oppgaver
+                            Gå til tiltak
                           </Button>
                         </div>
-                        <ul className="space-y-1.5">
+                        <ul className="space-y-1">
                           {linkedRosTasksForRisk.map((t) => (
                             <li
                               key={t._id}
                               className="text-muted-foreground flex items-start gap-2 text-[11px]"
                             >
-                              <ListTodo className="mt-0.5 size-3.5 shrink-0" />
+                              <ListTodo className="mt-0.5 size-3 shrink-0" />
                               <span className="min-w-0 flex-1">
                                 <span className="text-foreground font-medium">
                                   {t.title}
@@ -749,47 +883,59 @@ export function RosRiskList({
                       </div>
                     ) : null}
 
-                    {/* Save to library */}
-                    {workspaceId ? (
-                      <div className="flex flex-wrap gap-2 border-t border-border/40 pt-3">
+                    {/* Bunn-rad: lagrings-status + handlinger */}
+                    <div className="border-border/40 flex flex-wrap items-center justify-between gap-2 border-t pt-3">
+                      <div className="min-w-0">
+                        {saveStatus ? (
+                          <SavedIndicator
+                            saving={saveStatus.saving}
+                            dirty={saveStatus.dirty}
+                            lastSavedAt={saveStatus.lastSavedAt}
+                          />
+                        ) : null}
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        {workspaceId ? (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="text-muted-foreground hover:text-foreground h-8 gap-1.5 rounded-full text-[11px]"
+                            onClick={() => {
+                              setRiskToSave(risk);
+                              const firstLine =
+                                risk.text.trim().split("\n")[0] ?? "";
+                              setSaveRiskTitle(
+                                firstLine.slice(0, 80) ||
+                                  `Risiko ${risk.beforeRow + 1}×${risk.beforeCol + 1}`,
+                              );
+                              setSaveTiltak("");
+                              setSaveVisibility("workspace");
+                              setSaveCategoryId("");
+                              setSaveLibraryOpen(true);
+                            }}
+                          >
+                            <BookMarked className="size-3.5" />
+                            Lagre i biblioteket
+                          </Button>
+                        ) : null}
                         <Button
                           type="button"
-                          variant="secondary"
+                          variant="ghost"
                           size="sm"
-                          className="gap-1.5 text-xs"
-                          onClick={() => {
-                            setRiskToSave(risk);
-                            const firstLine = risk.text.trim().split("\n")[0] ?? "";
-                            setSaveRiskTitle(
-                              firstLine.slice(0, 80) ||
-                                `Risiko ${risk.beforeRow + 1}×${risk.beforeCol + 1}`,
-                            );
-                            setSaveTiltak("");
-                            setSaveVisibility("workspace");
-                            setSaveCategoryId("");
-                            setSaveLibraryOpen(true);
-                          }}
+                          className="text-muted-foreground hover:text-destructive h-8 gap-1.5 rounded-full text-[11px]"
+                          onClick={() =>
+                            onDeleteRisk(
+                              risk.id,
+                              risk.beforeRow,
+                              risk.beforeCol,
+                            )
+                          }
                         >
-                          <BookMarked className="size-3.5" />
-                          Lagre til bibliotek
+                          <Trash2 className="size-3.5" />
+                          Slett
                         </Button>
                       </div>
-                    ) : null}
-
-                    {/* Delete */}
-                    <div className="flex justify-end">
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className="text-muted-foreground hover:text-destructive gap-1.5 text-xs"
-                        onClick={() =>
-                          onDeleteRisk(risk.id, risk.beforeRow, risk.beforeCol)
-                        }
-                      >
-                        <Trash2 className="size-3.5" />
-                        Slett risiko
-                      </Button>
                     </div>
                   </div>
                 )}

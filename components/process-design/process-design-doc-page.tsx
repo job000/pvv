@@ -3,7 +3,6 @@
 import {
   ProductEmptyState,
   ProductLoadingBlock,
-  ProductPageHeader,
 } from "@/components/product";
 import {
   Accordion,
@@ -158,6 +157,10 @@ function Field({
   disabled,
   placeholder,
   description,
+  // sourceHint er bevisst ignorert — det er meta-info som la støy på hvert
+  // eneste felt. Brukere som vil hente fra kilder bruker «Fyll fra kilder»
+  // i toppmenyen, så hint per felt er ikke nødvendig.
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   sourceHint,
   className,
 }: {
@@ -172,18 +175,11 @@ function Field({
   className?: string;
 }) {
   return (
-    <div className="space-y-2.5">
-      <div className="space-y-1">
-        <div className="flex flex-wrap items-center gap-2">
-          <Label className="text-[0.76rem] font-semibold tracking-[0.01em] text-muted-foreground">
-            {label}
-          </Label>
-          {sourceHint ? <StatusBadge>{sourceHint}</StatusBadge> : null}
-        </div>
-        {description ? (
-          <p className="text-xs leading-5 text-muted-foreground">{description}</p>
-        ) : null}
-      </div>
+    <div className="space-y-1.5">
+      <Label className="text-sm font-medium text-foreground">{label}</Label>
+      {description ? (
+        <p className="text-xs leading-5 text-muted-foreground">{description}</p>
+      ) : null}
       <Textarea
         value={value}
         onChange={(e) => onChange(e.target.value)}
@@ -191,7 +187,7 @@ function Field({
         disabled={disabled}
         placeholder={placeholder}
         className={cn(
-          "resize-y rounded-2xl border-border/60 bg-background/80 px-3 py-2.5 text-sm leading-6 shadow-sm transition-colors",
+          "resize-y rounded-xl border-border/60 bg-background/80 px-3 py-2.5 text-sm leading-6 shadow-sm transition-colors",
           "focus-visible:ring-1 focus-visible:ring-ring",
           textareaHeightClass(rows),
           className,
@@ -944,6 +940,7 @@ function HukiEditor({
 function SecondaryActionsMenu({
   onAutofill,
   onSnapshot,
+  onHistory,
   onPreviewPdf,
   onExportPdf,
   canAutofill,
@@ -953,6 +950,7 @@ function SecondaryActionsMenu({
 }: {
   onAutofill: () => void;
   onSnapshot: () => void;
+  onHistory: () => void;
   onPreviewPdf: () => void;
   onExportPdf: () => void;
   canAutofill: boolean;
@@ -1002,6 +1000,17 @@ function SecondaryActionsMenu({
           </button>
           <button
             type="button"
+            className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-left text-sm transition-colors hover:bg-muted"
+            onClick={() => {
+              onHistory();
+              setOpen(false);
+            }}
+          >
+            <History className="size-4 shrink-0 text-muted-foreground" />
+            Versjonshistorikk
+          </button>
+          <button
+            type="button"
             disabled={!canEdit}
             className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-left text-sm transition-colors hover:bg-muted disabled:opacity-50"
             onClick={() => {
@@ -1009,8 +1018,8 @@ function SecondaryActionsMenu({
               setOpen(false);
             }}
           >
-            <History className="size-4 shrink-0 text-muted-foreground" />
-            Lagre versjon
+            <Save className="size-4 shrink-0 text-muted-foreground" />
+            Lagre som versjon
           </button>
           <button
             type="button"
@@ -1548,14 +1557,6 @@ export function ProcessDesignDocPage({
       : null;
   const processForKoblingerRow = explicitRegistry ?? draftRegistryOnly;
   const rosAnalyses = rosCtx ?? [];
-  const connectedSources = [
-    "PVV-vurdering (denne)",
-    explicitRegistry ? "Prosessregister (koblet)" : null,
-    rosAnalyses.length > 0
-      ? `${rosAnalyses.length} ${rosAnalyses.length === 1 ? "ROS-analyse koblet til vurdering" : "ROS-analyser koblet til vurdering"}`
-      : null,
-    intake ? "Inntak (godkjent mot vurdering)" : null,
-  ].filter(Boolean) as string[];
   const orgCoverageValue =
     payload.orgOperatingUnits?.trim() || payload.orgRolloutNotes?.trim() || "";
 
@@ -1570,68 +1571,32 @@ export function ProcessDesignDocPage({
         Til PDD-oversikt
       </Link>
 
-      <section className="overflow-hidden rounded-3xl border border-border/60 bg-gradient-to-b from-muted/40 to-background shadow-sm">
-        <div className="space-y-4 p-4 sm:p-6">
-          <div className="space-y-2">
-            <div className="flex flex-wrap items-center gap-2">
-              <StatusBadge tone={dirty ? "warning" : "success"}>
-                {dirty ? "Ulagrede endringer" : "Lagret utkast"}
-              </StatusBadge>
-              {versionCount > 0 ? (
-                <StatusBadge>{versionCount} versjoner</StatusBadge>
-              ) : null}
-              {explicitRegistry ? (
-                <StatusBadge>Register koblet til vurdering</StatusBadge>
-              ) : draftRegistryOnly ? (
-                <StatusBadge tone="warning">Prosess i utkast (ikke koblet)</StatusBadge>
-              ) : null}
-            </div>
-            <ProductPageHeader
-              title="Prosessdesign (PDD)"
-              description="Dokumenter prosessen enkelt: forstå dagens flyt, beskriv ønsket flyt og gjør den klar for drift."
-            />
-          </div>
-
-          <div className="grid gap-3 sm:grid-cols-3">
-            <div className="rounded-2xl border border-border/50 bg-background/70 p-3 shadow-sm">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
-                Dokument
-              </p>
-              <p className="mt-1 line-clamp-2 text-sm font-semibold text-foreground">
-                {payload.processTitle?.trim() || assessmentTitle}
-              </p>
-            </div>
-            <div className="rounded-2xl border border-border/50 bg-background/70 p-3 shadow-sm">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
-                Kilder
-              </p>
-              <p className="mt-1 text-sm text-foreground">
-                {[
-                  "PVV",
-                  explicitRegistry ? "Register (koblet)" : null,
-                  rosAnalyses.length > 0 ? `${rosAnalyses.length} ROS` : null,
-                ]
-                  .filter(Boolean)
-                  .join(" · ")}
-              </p>
-            </div>
-            <div className="rounded-2xl border border-border/50 bg-background/70 p-3 shadow-sm">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
-                Neste steg
-              </p>
-              <p className="mt-1 text-sm text-foreground">
-                Start med oversikt, deretter As-Is, To-Be og til slutt drift og risiko.
-              </p>
-            </div>
-          </div>
+      {/* Slim header — tittel + lagre-status. Tidligere visste også
+          DOKUMENT/KILDER/NESTE STEG-grid + duplisert tittel; det er fjernet
+          fordi lagre-status og kontekst allerede vises i toppmenyen og fanen. */}
+      <header className="space-y-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <h1 className="font-heading text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
+            Prosessdesign
+          </h1>
+          <StatusBadge tone={dirty ? "warning" : "success"}>
+            {dirty ? "Ulagret" : "Lagret"}
+          </StatusBadge>
+          {draftRegistryOnly && !explicitRegistry ? (
+            <StatusBadge tone="warning">Ikke koblet til prosess</StatusBadge>
+          ) : null}
         </div>
-      </section>
+        <p className="max-w-2xl text-sm leading-6 text-muted-foreground">
+          Beskriv prosessen seksjon for seksjon. Bruk «Fyll fra kilder» i menyen
+          for å foreslå tekst fra vurdering, register og ROS.
+        </p>
+      </header>
 
       {!hasDoc ? (
         <ProductEmptyState
           icon={FileText}
           title="Ingen prosessdesign ennå"
-          description="Opprett et dokument for denne vurderingen. Autofill bruker denne PVV-vurderingen, ROS som er koblet til vurderingen, godkjent inntak mot vurderingen, og prosessregisterfelter bare når prosessen er eksplisitt koblet til vurderingen."
+          description="Opprett et tomt dokument og fyll inn etter hvert. Du kan også foreslå tekst fra vurdering, register og ROS underveis."
           action={
             canEdit ? (
               <Button
@@ -1655,180 +1620,64 @@ export function ProcessDesignDocPage({
         />
       ) : (
         <>
-          {/* Top toolbar */}
-          <div className="rounded-2xl border border-border/60 bg-card/70 p-3 shadow-sm backdrop-blur-sm sm:p-4">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div className="min-w-0">
-                <p className="truncate text-base font-semibold text-foreground">
-                  {payload.processTitle?.trim() || assessmentTitle}
+          {/* Slim toolbar — primær Lagre + Forhåndsvis PDF + meny.
+              Tidligere hadde vi to rader knapper + dupliserte handlinger
+              i et eget «Versjoner og historikk»-panel + et «PDD er koblet
+              til kilder»-panel; alt det er fjernet og lagt i «...»-menyen
+              eller dialoger. */}
+          <div className="sticky top-2 z-20 flex flex-wrap items-center gap-2 rounded-2xl border border-border/60 bg-card/85 px-3 py-2 shadow-sm backdrop-blur sm:px-3.5">
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-medium text-foreground">
+                {payload.processTitle?.trim() || assessmentTitle}
+              </p>
+              {dirty ? (
+                <p className="text-[11px] text-amber-700 dark:text-amber-300">
+                  Husk å lagre før du forlater siden
                 </p>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  Endringer lagres ikke automatisk — trykk «Lagre» før du forlater siden.
-                </p>
-              </div>
-
-              <div className="hidden flex-wrap gap-2 sm:flex sm:justify-end">
-                {canEdit && (
-                  <Button
-                    type="button"
-                    size="sm"
-                    className="gap-1.5 rounded-xl"
-                    onClick={handleSave}
-                    disabled={saving || !dirty}
-                  >
-                    {saving ? (
-                      <Loader2 className="size-4 animate-spin" />
-                    ) : (
-                      <Save className="size-3.5" />
-                    )}
-                    Lagre
-                  </Button>
-                )}
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="gap-1.5 rounded-xl"
-                  onClick={() => setHistoryOpen(true)}
-                >
-                  <History className="size-3.5" aria-hidden />
-                  Versjonshistorikk
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="gap-1.5 rounded-xl"
-                  onClick={() => setSnapshotOpen(true)}
-                  disabled={!canEdit}
-                >
-                  <Save className="size-3.5" aria-hidden />
-                  Lagre versjon
-                </Button>
-              </div>
+              ) : null}
             </div>
-
-            <div className="mt-3 grid grid-cols-2 gap-2 sm:mt-4 sm:flex sm:flex-wrap">
+            {canEdit && (
               <Button
                 type="button"
-                variant="outline"
                 size="sm"
                 className="gap-1.5 rounded-xl"
-                onClick={() => void previewPdf()}
-                disabled={pdfPreviewing}
+                onClick={handleSave}
+                disabled={saving || !dirty}
               >
-                {pdfPreviewing ? (
-                  <Loader2
-                    className="size-3.5 animate-spin"
-                    aria-hidden
-                  />
+                {saving ? (
+                  <Loader2 className="size-4 animate-spin" />
                 ) : (
-                  <Eye className="size-3.5" aria-hidden />
+                  <Save className="size-3.5" />
                 )}
-                Forhåndsvis PDF
+                Lagre
               </Button>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="gap-1.5 rounded-xl"
-                onClick={applyAutofill}
-                disabled={!autofillSuggestion || !canEdit}
-                title="Tomme felt fylles fra denne vurderingen, ROS koblet til vurderingen, godkjent inntak for vurderingen, og prosessregister kun ved eksplisitt kobling vurdering ↔ prosess"
-              >
-                <Sparkles className="size-3.5" aria-hidden />
-                Fyll inn manglende felt
-              </Button>
-              <div className="sm:hidden">
-                <SecondaryActionsMenu
-                  onAutofill={applyAutofill}
-                  onSnapshot={() => setSnapshotOpen(true)}
-                  onPreviewPdf={() => void previewPdf()}
-                  onExportPdf={() => void exportPdf()}
-                  canAutofill={!!draftBundle?.draft && canEdit}
-                  canEdit={canEdit}
-                  pdfPreviewing={pdfPreviewing}
-                  pdfExporting={pdfExporting}
-                />
-              </div>
-              <div className="hidden sm:block">
-                <SecondaryActionsMenu
-                  onAutofill={applyAutofill}
-                  onSnapshot={() => setHistoryOpen(true)}
-                  onPreviewPdf={() => void previewPdf()}
-                  onExportPdf={() => void exportPdf()}
-                  canAutofill={!!draftBundle?.draft && canEdit}
-                  canEdit={canEdit}
-                  pdfPreviewing={pdfPreviewing}
-                  pdfExporting={pdfExporting}
-                />
-              </div>
-            </div>
-          </div>
-
-          <div className="rounded-2xl border border-border/60 bg-muted/15 p-3.5 shadow-sm sm:p-4">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-              <div className="space-y-1.5">
-                <p className="text-sm font-semibold text-foreground">Versjoner og historikk</p>
-                <p className="text-sm leading-6 text-muted-foreground">
-                  Du har {versionCount} lagrede {versionCount === 1 ? "versjon" : "versjoner"}.
-                  Åpne historikken for å se tidligere lagringer og gjenopprette en eldre versjon.
-                  Bruk "Lagre versjon" når du vil merke et bestemt punkt, for eksempel etter
-                  workshop eller godkjenning.
-                </p>
-                <p className="text-xs leading-5 text-muted-foreground">
-                  Sletting av enkeltversjoner er ikke tilgjengelig ennå. Eldre versjoner beholdes
-                  automatisk innenfor systemets historikkgrense.
-                </p>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="gap-1.5 rounded-xl"
-                  onClick={() => setHistoryOpen(true)}
-                >
-                  <History className="size-3.5" aria-hidden />
-                  Åpne historikk
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="gap-1.5 rounded-xl"
-                  onClick={() => setSnapshotOpen(true)}
-                  disabled={!canEdit}
-                >
-                  <Save className="size-3.5" aria-hidden />
-                  Lagre ny versjon
-                </Button>
-              </div>
-            </div>
-          </div>
-
-          <div className="rounded-2xl border border-emerald-500/15 bg-emerald-500/5 p-3.5 shadow-sm sm:p-4">
-            <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-              <div className="space-y-1.5">
-                <p className="text-sm font-semibold text-foreground">
-                  PDD er koblet til kilder som kan fylle ut dokumentet
-                </p>
-                <p className="text-sm leading-6 text-muted-foreground">
-                  Tomme felt fylles fra denne PVV-vurderingen, ROS-analyser som er koblet til
-                  akkurat denne vurderingen, og inntak som er godkjent inn i denne vurderingen.
-                  Ekstra data fra prosessregister (org., hint-felt m.m.) brukes bare når
-                  prosessen er eksplisitt koblet til vurderingen. Du kan redigere alt fritt
-                  etterpå.
-                </p>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {connectedSources.map((source) => (
-                  <StatusBadge key={source} tone="success">
-                    {source}
-                  </StatusBadge>
-                ))}
-              </div>
-            </div>
+            )}
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="hidden gap-1.5 rounded-xl sm:inline-flex"
+              onClick={() => void previewPdf()}
+              disabled={pdfPreviewing}
+            >
+              {pdfPreviewing ? (
+                <Loader2 className="size-3.5 animate-spin" aria-hidden />
+              ) : (
+                <Eye className="size-3.5" aria-hidden />
+              )}
+              PDF
+            </Button>
+            <SecondaryActionsMenu
+              onAutofill={applyAutofill}
+              onSnapshot={() => setSnapshotOpen(true)}
+              onHistory={() => setHistoryOpen(true)}
+              onPreviewPdf={() => void previewPdf()}
+              onExportPdf={() => void exportPdf()}
+              canAutofill={!!draftBundle?.draft && canEdit}
+              canEdit={canEdit}
+              pdfPreviewing={pdfPreviewing}
+              pdfExporting={pdfExporting}
+            />
           </div>
 
           {/* Koblinger — read-only data from linked sources */}

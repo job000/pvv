@@ -1068,8 +1068,11 @@ export function RosMatrix({
                               htmlFor={`ros-after-change-${it.id}`}
                               className="text-foreground text-xs font-semibold"
                             >
-                              Begrunnelse for endring
+                              Tiltak som reduserer risikoen
                             </Label>
+                            <p className="text-muted-foreground -mt-0.5 text-[11px] leading-relaxed">
+                              Hva settes i verk for å gå fra «før» til «etter»?
+                            </p>
                             <Textarea
                               id={`ros-after-change-${it.id}`}
                               value={it.afterChangeNote ?? ""}
@@ -1080,7 +1083,7 @@ export function RosMatrix({
                                     v.length === 0 ? undefined : v,
                                 });
                               }}
-                              placeholder="Hvilke tiltak reduserer risikoen? F.eks. kryptering, backup, opplæring …"
+                              placeholder="F.eks. kryptering ved overføring, backup, opplæring av ansatte …"
                               rows={2}
                               className="min-h-[2.75rem] resize-y text-sm"
                             />

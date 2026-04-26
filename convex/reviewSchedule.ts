@@ -59,6 +59,7 @@ export const listWorkspaceReviewItems = query({
     }> = [];
 
     for (const r of rosRows) {
+      if (r.reviewScheduleActive === false) continue;
       if (r.nextReviewAt == null) continue;
       const cand = r.candidateId ? candById.get(r.candidateId) : undefined;
       ros.push({

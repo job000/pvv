@@ -1,7 +1,6 @@
 "use client";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { FilterToolbar } from "@/components/ui/filter-toolbar";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -789,89 +788,33 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
         </div>
       ) : (
         <>
-          <section className="rounded-3xl border border-border/60 bg-gradient-to-br from-card via-card to-muted/20 p-4 shadow-sm sm:p-5">
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-              <div className="max-w-2xl space-y-2">
-                <div className="flex flex-wrap items-center gap-2">
-                  <Badge variant="secondary" className="rounded-full px-2.5 py-1 text-[11px] font-medium">
-                    {analysesList.length} analyse{analysesList.length === 1 ? "" : "r"}
-                  </Badge>
-                  <Badge variant="secondary" className="rounded-full px-2.5 py-1 text-[11px] font-medium">
-                    {templatesList.length} mal{templatesList.length === 1 ? "" : "er"}
-                  </Badge>
-                  {defaultTemplateLabel ? (
-                    <Badge variant="secondary" className="rounded-full px-2.5 py-1 text-[11px] font-medium">
-                      Standardmal: {defaultTemplateLabel}
-                    </Badge>
-                  ) : null}
-                </div>
-                <div className="space-y-1">
-                  <h2 className="font-heading text-xl font-semibold tracking-tight text-foreground sm:text-2xl">
-                    Start eller fortsett ROS
-                  </h2>
-                  <p className="max-w-xl text-sm leading-relaxed text-muted-foreground">
-                    Start en analyse, jobb ferdig og kom tilbake senere ved behov. Hold oppstarten enkel.
-                  </p>
-                </div>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  type="button"
-                  className="gap-2 rounded-2xl shadow-sm"
-                  onClick={() => setCreateDialogOpen(true)}
-                >
-                  <Plus className="size-4" aria-hidden />
-                  Ny analyse
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="rounded-2xl"
-                  onClick={() => setTab("maler")}
-                >
-                  Se maler
-                </Button>
-              </div>
-            </div>
-          </section>
+          {/* Ett startkort med tre tydelige veier:
+              Fra prosess · Fra GitHub · Fra scratch. Erstatter tidligere
+              dobbel-hero og duplikate «Ny analyse»-knapper. */}
+          <GithubIssueStartCard workspaceId={workspaceId} variant="ros" />
 
-          <div className="rounded-2xl border border-border/50 bg-card/55 p-4 shadow-sm">
-            <p className="text-sm font-medium text-foreground">Mest brukt flyt</p>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Start ny ROS fra prosess, GitHub eller tom analyse. Velg mal når du starter.
-            </p>
-            <div className="mt-4">
-              <GithubIssueStartCard
-                workspaceId={workspaceId}
-                variant="ros"
-              />
-            </div>
-          </div>
-
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
             <div>
               <h2 className="font-heading text-lg font-semibold tracking-tight">
-                Oversikt over analyser
+                Fortsett tidligere analyser
               </h2>
               {analysesList.length > 0 ? (
-                <p className="text-muted-foreground mt-0.5 text-sm tabular-nums">
-                  {filteredSortedAnalyses.length} av {analysesList.length} analyse
-                  {analysesList.length !== 1 ? "r" : ""} vises
+                <p className="text-muted-foreground mt-0.5 text-xs tabular-nums">
+                  {filteredSortedAnalyses.length === analysesList.length
+                    ? `${analysesList.length} analyse${analysesList.length === 1 ? "" : "r"}`
+                    : `${filteredSortedAnalyses.length} av ${analysesList.length} vises`}
+                  {defaultTemplateLabel ? (
+                    <span className="ml-2 text-muted-foreground/70">
+                      · standardmal: {defaultTemplateLabel}
+                    </span>
+                  ) : null}
                 </p>
               ) : null}
             </div>
-            <Button
-              type="button"
-              className="shrink-0 gap-2 rounded-2xl shadow-sm"
-              onClick={() => setCreateDialogOpen(true)}
-            >
-              <Plus className="size-4" aria-hidden />
-              Ny analyse
-            </Button>
           </div>
 
-          {analysesList.length > 0 ? (
-            <div className="rounded-2xl border border-border/50 bg-card/55 p-3 shadow-sm sm:p-4">
+          {analysesList.length > 5 ? (
+            <div className="rounded-2xl border border-border/40 bg-card/40 p-3 shadow-sm sm:p-4">
               <div className="flex flex-col gap-3">
                 <SearchInput
                   value={analysisSearch}
@@ -917,25 +860,23 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
           ) : null}
 
           {analysesList.length === 0 ? (
-            <div className="flex flex-col items-center gap-4 rounded-2xl border border-dashed bg-muted/5 py-14 text-center">
-              <div className="flex size-14 items-center justify-center rounded-full bg-primary/10">
-                <ClipboardList className="size-7 text-primary" />
+            <div className="from-primary/[0.06] via-card to-card border-border/40 flex flex-col items-center gap-3 rounded-3xl border bg-gradient-to-br px-6 py-10 text-center shadow-sm">
+              <div className="bg-primary/15 ring-primary/20 flex size-12 items-center justify-center rounded-2xl ring-1">
+                <ClipboardList className="text-primary size-6" />
               </div>
               <div className="max-w-md space-y-1">
-                <p className="text-foreground text-sm font-medium">Ingen analyser ennå</p>
+                <p className="text-foreground text-sm font-semibold">
+                  Ingen analyser ennå
+                </p>
                 <p className="text-muted-foreground text-xs leading-relaxed">
-                  Opprett en <strong className="text-foreground">mal</strong> under «Maler», deretter
-                  klikk «Ny analyse».
+                  Bruk startkortet over for å lage din første ROS — fra
+                  prosess, GitHub-issue eller helt fra scratch.
                 </p>
               </div>
-              <Button type="button" className="gap-2" onClick={() => setCreateDialogOpen(true)}>
-                <Plus className="size-4" aria-hidden />
-                Opprett første analyse
-              </Button>
             </div>
           ) : filteredSortedAnalyses.length === 0 ? (
-            <div className="flex flex-col items-center gap-3 rounded-2xl border border-dashed bg-muted/5 py-10 text-center">
-              <Search className="size-8 text-muted-foreground/50" />
+            <div className="border-border/40 bg-card/40 flex flex-col items-center gap-2 rounded-2xl border border-dashed px-6 py-8 text-center">
+              <Search className="text-muted-foreground/50 size-6" />
               <p className="text-muted-foreground text-sm">
                 Ingen analyser matcher søket.{" "}
                 <button
@@ -948,113 +889,120 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
               </p>
             </div>
           ) : (
-            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            <ul className="bg-card/80 ring-border/40 divide-y divide-border/40 overflow-hidden rounded-2xl shadow-sm ring-1 backdrop-blur-sm">
               {filteredSortedAnalyses.map((a) => {
                 const fromIntake = Boolean(
                   (a as { fromIntake?: boolean }).fromIntake,
                 );
-                const versionCount = (a as { versionCount?: number }).versionCount ?? 0;
-                const flat = a.matrixValues.flat().map((v) => Math.min(5, Math.max(0, Math.round(v))));
+                const versionCount =
+                  (a as { versionCount?: number }).versionCount ?? 0;
+                const flat = a.matrixValues
+                  .flat()
+                  .map((v) => Math.min(5, Math.max(0, Math.round(v))));
                 const maxLvl = Math.max(0, ...flat);
                 const highCount = flat.filter((v) => v >= 4).length;
-                const riskLabel = maxLvl >= 5 ? "Kritisk" : maxLvl >= 4 ? "Høy" : maxLvl >= 3 ? "Middels" : maxLvl >= 2 ? "Lav" : "Ingen";
+                const riskLabel =
+                  maxLvl >= 5
+                    ? "Kritisk"
+                    : maxLvl >= 4
+                      ? "Høy"
+                      : maxLvl >= 3
+                        ? "Middels"
+                        : maxLvl >= 2
+                          ? "Lav"
+                          : "Ingen";
+                const dotClass =
+                  maxLvl >= 4
+                    ? "bg-red-500"
+                    : maxLvl >= 3
+                      ? "bg-amber-500"
+                      : maxLvl >= 1
+                        ? "bg-emerald-500"
+                        : "bg-muted-foreground/40";
                 return (
-                  <Link
-                    key={a._id}
-                    href={`/w/${workspaceId}/ros/a/${a._id}`}
-                    className="group/card relative flex flex-col overflow-hidden rounded-3xl border border-border/50 bg-card/90 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md hover:border-primary/20 active:scale-[0.995]"
-                  >
-                    <div className="flex flex-1 gap-4 p-5">
-                      <div className="flex shrink-0 flex-col items-center gap-2">
-                        <span
-                          className={cn(
-                            "flex size-12 items-center justify-center rounded-2xl text-lg font-bold tabular-nums shadow-sm ring-1 ring-black/5 dark:ring-white/10",
-                            cellRiskClass(maxLvl),
-                          )}
-                        >
-                          {maxLvl}
-                        </span>
-                        <span className={cn(
-                          "text-[10px] font-semibold",
-                          maxLvl >= 4 ? "text-red-600 dark:text-red-400" : maxLvl >= 3 ? "text-amber-600 dark:text-amber-400" : "text-emerald-600 dark:text-emerald-400",
-                        )}>
-                          {riskLabel}
-                        </span>
-                      </div>
+                  <li key={a._id} className="group/row relative">
+                    <Link
+                      href={`/w/${workspaceId}/ros/a/${a._id}`}
+                      className="hover:bg-muted/30 flex items-center gap-3 px-4 py-3 transition-colors sm:gap-4 sm:px-5 sm:py-3.5"
+                    >
+                      <span
+                        className={cn(
+                          "size-2 shrink-0 rounded-full transition-transform group-hover/row:scale-125",
+                          dotClass,
+                        )}
+                        aria-hidden
+                      />
                       <div className="min-w-0 flex-1">
-                        <p className="truncate text-[15px] font-semibold text-foreground group-hover/card:text-primary">
-                          {a.title}
-                        </p>
-                        <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs">
-                          {fromIntake ? (
-                            <Badge
-                              variant="secondary"
-                              className="h-5 border-0 px-1.5 text-[10px] font-medium"
-                            >
-                              Fra skjema
-                            </Badge>
-                          ) : null}
-                          <p className="text-muted-foreground">
-                            {a.candidateName ? (
-                              <>
-                                {a.candidateName}{" "}
-                                <span className="font-mono text-[10px]">({a.candidateCode})</span>
-                              </>
-                            ) : fromIntake ? (
-                              <span className="text-muted-foreground">Koblet til PVV fra skjema</span>
-                            ) : (
-                              <span className="italic">Frittstående</span>
-                            )}
+                        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                          <p className="text-foreground group-hover/row:text-primary truncate text-sm font-semibold">
+                            {a.title}
                           </p>
-                        </div>
-
-                        <div className="mt-3.5 flex h-2 w-full overflow-hidden rounded-full bg-muted/40">
-                          {(() => {
-                            const counts = [0, 0, 0, 0, 0, 0];
-                            for (const v of flat) counts[v]++;
-                            const total = flat.length || 1;
-                            return [5, 4, 3, 2, 1, 0].map((lvl) =>
-                              counts[lvl] > 0 ? (
-                                <div
-                                  key={lvl}
-                                  className={cn("min-w-[3px] transition-all", cellRiskClass(lvl))}
-                                  style={{ width: `${(counts[lvl] / total) * 100}%` }}
-                                />
-                              ) : null,
-                            );
-                          })()}
-                        </div>
-
-                        <div className="text-muted-foreground mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px]">
-                          <span>{a.rowLabels.length}×{a.colLabels.length}</span>
-                          {highCount > 0 && (
-                            <span className="font-semibold text-red-600 dark:text-red-400">
-                              {highCount} høy/kritisk
+                          {fromIntake ? (
+                            <span className="bg-muted/50 text-muted-foreground inline-flex items-center rounded-full px-1.5 py-0.5 text-[10px] font-medium">
+                              Skjema
                             </span>
+                          ) : null}
+                        </div>
+                        <div className="text-muted-foreground mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs">
+                          {a.candidateName ? (
+                            <span className="truncate">
+                              {a.candidateName}{" "}
+                              <span className="text-muted-foreground/70 font-mono text-[10px]">
+                                ({a.candidateCode})
+                              </span>
+                            </span>
+                          ) : fromIntake ? (
+                            <span>PVV fra skjema</span>
+                          ) : (
+                            <span className="italic">Frittstående</span>
                           )}
+                          <span className="text-border" aria-hidden>
+                            ·
+                          </span>
                           <span>{formatRelative(a.updatedAt)}</span>
+                          {highCount > 0 && (
+                            <>
+                              <span className="text-border" aria-hidden>
+                                ·
+                              </span>
+                              <span className="font-medium text-red-600 dark:text-red-400">
+                                {highCount} høy/kritisk
+                              </span>
+                            </>
+                          )}
                         </div>
                       </div>
-                    </div>
-                    <div className="pointer-events-none flex items-center gap-1.5 border-t border-border/30 bg-muted/10 px-4 py-2.5">
+                      <span
+                        className={cn(
+                          "inline-flex shrink-0 items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold tabular-nums shadow-sm",
+                          cellRiskClass(maxLvl),
+                        )}
+                        title={`Maks risiko: ${riskLabel}`}
+                      >
+                        {maxLvl > 0 ? maxLvl : "—"}
+                        <span className="hidden sm:inline">· {riskLabel}</span>
+                      </span>
                       <button
                         type="button"
                         onClick={(e) => {
                           e.preventDefault();
                           e.stopPropagation();
-                          setVersionsQuickDialog({ analysisId: a._id, title: a.title });
+                          setVersionsQuickDialog({
+                            analysisId: a._id,
+                            title: a.title,
+                          });
                         }}
-                        className="pointer-events-auto inline-flex items-center gap-1 rounded-xl px-2.5 py-1 text-[11px] text-muted-foreground transition-colors hover:bg-background hover:text-foreground"
+                        className="text-muted-foreground hover:bg-background hover:text-foreground hidden shrink-0 items-center gap-1 rounded-full px-2 py-1 text-[11px] transition-colors sm:inline-flex"
+                        title={`${versionCount} versjon${versionCount === 1 ? "" : "er"}`}
                       >
                         <History className="size-3" aria-hidden />
-                        {versionCount} vers.
+                        <span className="tabular-nums">{versionCount}</span>
                       </button>
-                      <span className="flex-1" />
                       <Button
                         type="button"
                         variant="ghost"
                         size="icon"
-                        className="pointer-events-auto size-8 rounded-xl text-muted-foreground/50 opacity-0 transition-opacity group-hover/card:opacity-100 hover:bg-destructive/10 hover:text-destructive"
+                        className="text-muted-foreground/60 hover:bg-destructive/10 hover:text-destructive size-8 shrink-0 rounded-full opacity-0 transition-opacity group-hover/row:opacity-100"
                         title="Slett"
                         onClick={(e) => {
                           e.preventDefault();
@@ -1064,34 +1012,43 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
                       >
                         <Trash2 className="size-3.5" aria-hidden />
                       </Button>
-                    </div>
-                  </Link>
+                    </Link>
+                  </li>
                 );
               })}
-            </div>
+            </ul>
           )}
 
-          <div className="flex flex-wrap items-center gap-2">
-            <Button
+          {/* Diskret hjelpe-rad — flyttet ned så den ikke konkurrerer med
+              startkortet og analyselisten. */}
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 pt-1 text-xs text-muted-foreground">
+            <span className="inline-flex items-center gap-1.5">
+              <HelpCircle className="size-3.5" aria-hidden />
+              Trenger du hjelp?
+            </span>
+            <button
               type="button"
-              variant="outline"
-              size="sm"
-              className="h-8 gap-1.5 text-xs"
+              className="font-medium text-foreground/80 underline-offset-4 hover:text-primary hover:underline"
               onClick={() => setScaleRefOpen(true)}
             >
-              <Info className="size-3.5 text-primary" aria-hidden />
-              Skala
-            </Button>
-            <Button
+              Skalareferanse
+            </button>
+            <span aria-hidden>·</span>
+            <button
               type="button"
-              variant="outline"
-              size="sm"
-              className="h-8 gap-1.5 text-xs"
+              className="font-medium text-foreground/80 underline-offset-4 hover:text-primary hover:underline"
               onClick={() => setMethodHelpOpen(true)}
             >
-              <HelpCircle className="size-3.5" aria-hidden />
-              Metode
-            </Button>
+              Metode og veiledning
+            </button>
+            <span aria-hidden>·</span>
+            <button
+              type="button"
+              className="font-medium text-foreground/80 underline-offset-4 hover:text-primary hover:underline"
+              onClick={() => setCreateDialogOpen(true)}
+            >
+              Avansert: ny analyse med sektor og enhet
+            </button>
           </div>
 
           <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>

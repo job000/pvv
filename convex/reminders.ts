@@ -109,6 +109,10 @@ export const runReviewDueReminders = internalAction({
           ? "PVV-vurdering (ROS/PDD-rutine)"
           : "ROS-analyse";
       const safeTitle = escapeHtml(t.title);
+      const receiverExplain =
+        t.kind === "assessment"
+          ? "Du mottar denne e-posten fordi du er satt som eier av vurderingen (eller opprettet den når eier ikke er satt)."
+          : "Du mottar denne e-posten fordi du opprettet denne ROS-analysen — varsling går til oppretterens e-post på brukerkontoen.";
       const res = await fetch("https://api.resend.com/emails", {
         method: "POST",
         headers: {
@@ -122,7 +126,7 @@ export const runReviewDueReminders = internalAction({
           html: `<p>Hei,</p>
 <p>Planlagt tidspunkt for ny gjennomgang er passert for <strong>${kindLabel}</strong>: <strong>${safeTitle}</strong>.</p>
 <p><a href="${link}">Åpne i PVV</a></p>
-<p>Du mottar denne e-posten fordi du er satt som eier/opprettet innholdet. Påminnelser sendes maks. én gang per uke per sak når fristen fortsatt gjelder.</p>`,
+<p>${receiverExplain} Påminnelser sendes maks. én gang per uke per sak når fristen fortsatt gjelder.</p>`,
         }),
       });
       if (!res.ok) {

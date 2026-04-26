@@ -550,6 +550,16 @@ export const rosRequirementRefValidator = v.object({
   documentationUrl: v.optional(v.string()),
 });
 
+/** Planlagt oppfølging etter merket ROS-revisjon (brukes til å foreslå neste frist). */
+export const rosReviewRecurrenceKindValidator = v.union(
+  v.literal("none"),
+  v.literal("weekly"),
+  v.literal("monthly"),
+  v.literal("quarterly"),
+  v.literal("yearly"),
+  v.literal("biennial"),
+);
+
 /** RPA / CoE pipeline (iterativ, raskere enn klassisk utvikling) */
 export const pipelineStatusValidator = v.union(
   v.literal("not_assessed"),
@@ -1271,6 +1281,14 @@ export default defineSchema({
     nextReviewAt: v.optional(v.number()),
     /** Rutine, referanse eller huskeliste for neste revisjon */
     reviewRoutineNotes: v.optional(v.string()),
+    /** Når false: ingen e-post om forfalt revisjon (neste frist kan fortsatt vises i appen). */
+    reviewEmailRemindersEnabled: v.optional(v.boolean()),
+    /** Når false: revisjon skjules i arbeidsområdets oversikt og ingen e-post sendes. */
+    reviewScheduleActive: v.optional(v.boolean()),
+    /** Intervall brukt når bruker merker revisjon som utført (auto-neste frist). */
+    reviewRecurrenceKind: v.optional(rosReviewRecurrenceKindValidator),
+    /** Siste gang bruker merket formell ROS-revisjon som gjennomført (sporbarhet vs. senere endringer). */
+    lastFormalReviewCompletedAt: v.optional(v.number()),
     /** Siste e-post om forfalt planlagt ROS-revisjon */
     lastReviewDueReminderAt: v.optional(v.number()),
     /** ISO 31000-inspirert kontekst og metode (valgfritt) */

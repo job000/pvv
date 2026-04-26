@@ -23,8 +23,9 @@ import Link from "next/link";
 import { useParams, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 
-type SortMode = "updated_desc" | "updated_asc" | "title_asc" | "title_desc";
-type PageSizeOption = 5 | 10 | 50;
+const PAGE_SIZE = 20;
+/** Vis filter/søk først når listen er stor nok til å trenge det. */
+const FILTER_THRESHOLD = 6;
 
 function ProcessDesignHubBody() {
   const params = useParams();
@@ -39,8 +40,6 @@ function ProcessDesignHubBody() {
   const rawOrgUnit = searchParams.get("orgUnit") as Id<"orgUnits"> | null;
 
   const [q, setQ] = useState("");
-  const [sortMode, setSortMode] = useState<SortMode>("updated_desc");
-  const [pageSize, setPageSize] = useState<PageSizeOption>(10);
   const [page, setPage] = useState(1);
   const [orgUnitFilter, setOrgUnitFilter] = useState<"" | Id<"orgUnits">>(rawOrgUnit ?? "");
 
@@ -51,6 +50,14 @@ function ProcessDesignHubBody() {
       setOrgUnitFilter(rawOrgUnit);
     }
   }, [rawOrgUnit]);
+
+  const orgUnitNameById = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const u of orgUnits ?? []) {
+      map.set(String(u._id), u.name);
+    }
+    return map;
+  }, [orgUnits]);
 
   const filtered = useMemo(() => {
     if (!assessments) return [];
@@ -64,26 +71,14 @@ function ProcessDesignHubBody() {
     if (term) {
       list = list.filter((a) => a.title.toLowerCase().includes(term));
     }
-    return [...list].sort((a, b) => {
-      switch (sortMode) {
-        case "updated_desc":
-          return b.updatedAt - a.updatedAt;
-        case "updated_asc":
-          return a.updatedAt - b.updatedAt;
-        case "title_asc":
-          return a.title.localeCompare(b.title, "nb");
-        case "title_desc":
-          return b.title.localeCompare(a.title, "nb");
-        default:
-          return 0;
-      }
-    });
-  }, [assessments, orgUnits, orgUnitFilter, q, sortMode]);
+    // Alltid sortert etter sist oppdatert — det brukeren forventer her.
+    return [...list].sort((a, b) => b.updatedAt - a.updatedAt);
+  }, [assessments, orgUnits, orgUnitFilter, q]);
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const safePage = Math.max(1, Math.min(page, totalPages));
-  const pageStart = (safePage - 1) * pageSize;
-  const paginated = filtered.slice(pageStart, pageStart + pageSize);
+  const pageStart = (safePage - 1) * PAGE_SIZE;
+  const paginated = filtered.slice(pageStart, pageStart + PAGE_SIZE);
 
   if (assessments === undefined) {
     return (
@@ -94,63 +89,49 @@ function ProcessDesignHubBody() {
     );
   }
 
+  const showFilters = assessments.length >= FILTER_THRESHOLD;
+  const hasOrgUnits = (orgUnits ?? []).length > 0;
+
   return (
     <div className="mx-auto max-w-4xl space-y-6 px-4 pb-12 sm:px-6 lg:px-0">
-      <header className="space-y-3">
-        <div className="space-y-1.5">
-          <h1 className="font-heading text-2xl font-semibold tracking-tight sm:text-3xl">
-            Prosessdesign
-          </h1>
-          <p className="max-w-2xl text-sm leading-6 text-muted-foreground">
-            Prosessdesign (PDD) ligger på hver{" "}
-            <span className="font-medium text-foreground">PVV-vurdering</span>, ikke på
-            prosessregister-rader alene. Opprett eller åpne en vurdering under{" "}
-            <Link href={`/w/${wid}/vurderinger`} className="font-medium text-foreground underline-offset-2 hover:underline">
-              Vurderinger
-            </Link>
-            — en prosess du la inn under{" "}
-            <Link
-              href={`/w/${wid}/vurderinger?fane=prosesser`}
-              className="font-medium text-foreground underline-offset-2 hover:underline"
-            >
-              Prosesser
-            </Link>{" "}
-            vises her først når den er koblet til en vurdering.
-          </p>
-        </div>
-        {assessments.length > 0 && (
-          <div className="inline-flex rounded-full border border-border/60 bg-muted/20 px-3 py-1 text-xs font-medium text-muted-foreground">
-            {assessments.length}{" "}
-            {assessments.length === 1 ? "dokument" : "dokumenter"}
-          </div>
-        )}
+      <header className="space-y-2">
+        <h1 className="font-heading text-2xl font-semibold tracking-tight sm:text-3xl">
+          Prosessdesign
+        </h1>
+        <p className="max-w-2xl text-sm leading-6 text-muted-foreground">
+          Velg en vurdering for å åpne dens prosessdesign (PDD).
+          {assessments.length === 0 ? (
+            <>
+              {" "}Mangler det vurderinger? Opprett en under{" "}
+              <Link
+                href={`/w/${wid}/vurderinger`}
+                className="font-medium text-foreground underline-offset-2 hover:underline"
+              >
+                Vurderinger
+              </Link>
+              .
+            </>
+          ) : null}
+        </p>
       </header>
 
       {assessments.length === 0 ? (
         <ProductEmptyState
           icon={FileText}
-          title="Ingen vurderinger å åpne PDD for"
-          description="PDD følger PVV-vurderinger. Har du opprettet en prosess under fanen Prosesser, må du også opprette eller koble den til en vurdering før den vises her."
+          title="Ingen vurderinger ennå"
+          description="Prosessdesign følger en vurdering. Opprett en vurdering først, så vises den her."
           action={
-            <div className="flex flex-wrap items-center justify-center gap-2">
-              <Link
-                href={`/w/${wid}/vurderinger`}
-                className={buttonVariants({ variant: "default", size: "sm" })}
-              >
-                Gå til vurderinger
-              </Link>
-              <Link
-                href={`/w/${wid}/vurderinger?fane=prosesser`}
-                className={buttonVariants({ variant: "outline", size: "sm" })}
-              >
-                Til prosessregister
-              </Link>
-            </div>
+            <Link
+              href={`/w/${wid}/vurderinger`}
+              className={buttonVariants({ variant: "default", size: "sm" })}
+            >
+              Gå til vurderinger
+            </Link>
           }
         />
       ) : (
         <>
-          <div className="rounded-2xl border border-border/60 bg-card/40 p-2 shadow-sm backdrop-blur-sm">
+          {showFilters ? (
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
               <div className="relative min-w-0 flex-1">
                 <Search
@@ -164,8 +145,9 @@ function ProcessDesignHubBody() {
                     setQ(e.target.value);
                     setPage(1);
                   }}
-                  placeholder="Søk etter PDD eller vurdering …"
+                  placeholder="Søk etter tittel …"
                   autoComplete="off"
+                  aria-label="Søk i vurderinger"
                   className={cn(
                     "h-10 w-full rounded-xl border border-border/60 bg-background/60 pl-9 pr-3 text-sm outline-none",
                     "transition-colors placeholder:text-muted-foreground/70",
@@ -173,124 +155,97 @@ function ProcessDesignHubBody() {
                   )}
                 />
               </div>
-              <div className="flex flex-wrap items-center gap-2">
-                {(orgUnits ?? []).length > 0 && (
-                  <div className="relative shrink-0">
-                    <select
-                      aria-label="Filtrer på organisasjonsenhet"
-                      value={orgUnitFilter}
-                      onChange={(e) => {
-                        setOrgUnitFilter(e.target.value as "" | Id<"orgUnits">);
-                        setPage(1);
-                      }}
-                      className={cn(
-                        "h-10 max-w-[14rem] cursor-pointer appearance-none truncate rounded-xl border border-border/60 bg-background/60 py-0 pl-3 pr-8 text-sm outline-none",
-                        "transition-colors focus:border-foreground/25 focus:bg-background",
-                      )}
-                    >
-                      <option value="">Alle enheter</option>
-                      {(orgUnits ?? []).map((u) => (
-                        <option key={u._id} value={u._id}>
-                          {orgUnitSearchLabel(u._id, orgUnits ?? [])}
-                        </option>
-                      ))}
-                    </select>
-                    <ChevronDown
-                      className="pointer-events-none absolute right-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground"
-                      aria-hidden
-                    />
-                  </div>
-                )}
+              {hasOrgUnits ? (
                 <div className="relative shrink-0">
                   <select
-                    aria-label="Antall per side"
-                    value={String(pageSize)}
+                    aria-label="Filtrer på organisasjonsenhet"
+                    value={orgUnitFilter}
                     onChange={(e) => {
-                      setPageSize(Number(e.target.value) as PageSizeOption);
+                      setOrgUnitFilter(e.target.value as "" | Id<"orgUnits">);
                       setPage(1);
                     }}
                     className={cn(
-                      "h-10 cursor-pointer appearance-none rounded-xl border border-border/60 bg-background/60 py-0 pl-3 pr-8 text-sm outline-none",
+                      "h-10 max-w-[14rem] cursor-pointer appearance-none truncate rounded-xl border border-border/60 bg-background/60 py-0 pl-3 pr-8 text-sm outline-none",
                       "transition-colors focus:border-foreground/25 focus:bg-background",
                     )}
                   >
-                    <option value="5">5 per side</option>
-                    <option value="10">10 per side</option>
-                    <option value="50">50 per side</option>
+                    <option value="">Alle enheter</option>
+                    {(orgUnits ?? []).map((u) => (
+                      <option key={u._id} value={u._id}>
+                        {orgUnitSearchLabel(u._id, orgUnits ?? [])}
+                      </option>
+                    ))}
                   </select>
                   <ChevronDown
                     className="pointer-events-none absolute right-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground"
                     aria-hidden
                   />
                 </div>
-                <div className="relative shrink-0">
-                  <select
-                    aria-label="Sorter"
-                    value={sortMode}
-                    onChange={(e) => {
-                      setSortMode(e.target.value as SortMode);
-                      setPage(1);
-                    }}
-                    className={cn(
-                      "h-10 cursor-pointer appearance-none rounded-xl border border-border/60 bg-background/60 py-0 pl-3 pr-8 text-sm outline-none",
-                      "transition-colors focus:border-foreground/25 focus:bg-background",
-                    )}
-                  >
-                    <option value="updated_desc">Nyeste</option>
-                    <option value="updated_asc">Eldste</option>
-                    <option value="title_asc">A → Å</option>
-                    <option value="title_desc">Å → A</option>
-                  </select>
-                  <ChevronDown
-                    className="pointer-events-none absolute right-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground"
-                    aria-hidden
-                  />
-                </div>
-              </div>
+              ) : null}
             </div>
-          </div>
+          ) : null}
 
-          {/* List */}
           {paginated.length === 0 ? (
-            <div className="rounded-2xl border border-dashed border-border/60 bg-card/20 px-6 py-16 text-center">
+            <div className="rounded-2xl border border-dashed border-border/60 bg-card/20 px-6 py-14 text-center">
               <p className="text-sm text-muted-foreground">
-                Ingen treff for «{q.trim()}»
+                Ingen treff.{" "}
+                <button
+                  type="button"
+                  className="font-medium text-foreground underline-offset-4 hover:underline"
+                  onClick={() => {
+                    setQ("");
+                    setOrgUnitFilter("");
+                    setPage(1);
+                  }}
+                >
+                  Nullstill
+                </button>
               </p>
             </div>
           ) : (
             <div className="space-y-2">
-              {paginated.map((a) => (
-                <Link
-                  key={a._id}
-                  href={`/w/${wid}/a/${a._id}/prosessdesign`}
-                  className={cn(
-                    "group flex items-center gap-4 rounded-2xl border border-border/60 bg-card/35 px-4 py-4 shadow-sm transition-all",
-                    "hover:-translate-y-0.5 hover:border-border hover:bg-card/60 hover:shadow-md active:translate-y-0",
-                    "focus-visible:relative focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                  )}
-                >
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-base font-medium text-foreground">
-                      {a.title}
-                    </p>
-                    <p className="mt-1 text-sm text-muted-foreground">
-                      {formatRelativeUpdatedAt(a.updatedAt)}
-                    </p>
-                  </div>
-                  <ArrowUpRight
-                    className="size-4 shrink-0 text-muted-foreground/50 transition-all group-hover:translate-x-0.5 group-hover:-translate-y-0.5 group-hover:text-foreground"
-                    aria-hidden
-                  />
-                </Link>
-              ))}
+              {paginated.map((a) => {
+                const orgName = a.orgUnitId
+                  ? orgUnitNameById.get(String(a.orgUnitId))
+                  : undefined;
+                return (
+                  <Link
+                    key={a._id}
+                    href={`/w/${wid}/a/${a._id}/prosessdesign`}
+                    className={cn(
+                      "group flex items-center gap-4 rounded-2xl border border-border/60 bg-card/35 px-4 py-4 shadow-sm transition-all",
+                      "hover:-translate-y-0.5 hover:border-border hover:bg-card/60 hover:shadow-md active:translate-y-0",
+                      "focus-visible:relative focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                    )}
+                  >
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-base font-medium text-foreground">
+                        {a.title}
+                      </p>
+                      <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
+                        <span>{formatRelativeUpdatedAt(a.updatedAt)}</span>
+                        {orgName ? (
+                          <>
+                            <span aria-hidden>·</span>
+                            <span className="truncate">{orgName}</span>
+                          </>
+                        ) : null}
+                      </p>
+                    </div>
+                    <ArrowUpRight
+                      className="size-4 shrink-0 text-muted-foreground/50 transition-all group-hover:translate-x-0.5 group-hover:-translate-y-0.5 group-hover:text-foreground"
+                      aria-hidden
+                    />
+                  </Link>
+                );
+              })}
             </div>
           )}
 
-          {/* Pagination — only when needed */}
           {totalPages > 1 && (
-            <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border/60 bg-card/30 px-4 py-3 text-xs text-muted-foreground">
+            <div className="flex flex-wrap items-center justify-between gap-3 px-1 text-xs text-muted-foreground">
               <span className="tabular-nums">
-                {pageStart + 1}–{Math.min(pageStart + pageSize, filtered.length)}{" "}
+                {pageStart + 1}–{Math.min(pageStart + PAGE_SIZE, filtered.length)}{" "}
                 av {filtered.length}
               </span>
               <div className="flex items-center gap-1">

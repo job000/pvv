@@ -147,6 +147,12 @@ export const listReviewDueReminderTargets = internalQuery({
       .order("desc")
       .take(800);
     for (const r of rosRows) {
+      if (r.reviewScheduleActive === false) {
+        continue;
+      }
+      if (r.reviewEmailRemindersEnabled === false) {
+        continue;
+      }
       if (r.nextReviewAt == null || r.nextReviewAt > now) {
         continue;
       }

@@ -15,7 +15,6 @@ import { AssessmentValueImpactStep } from "@/components/assessment-wizard/assess
 import { AssessmentWizardSchemaHelp } from "@/components/assessment-wizard/assessment-wizard-schema-help";
 import { AssessmentWizardMeta } from "@/components/assessment-wizard/assessment-wizard-meta";
 import { LikertField } from "@/components/rpa-assessment/likert-field";
-import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
@@ -34,7 +33,6 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import type { AssessmentPayload } from "@/lib/assessment-types";
@@ -55,10 +53,7 @@ import {
 import { cn } from "@/lib/utils";
 import { payloadToSnapshot } from "@/convex/lib/payloadSnapshot";
 import { ASSESSMENT_WIZARD_STEP_LABELS } from "@/lib/assessment-wizard-steps";
-import {
-  ASSESSMENT_COLLAB_ROLE_LABEL_NB,
-  WORKSPACE_ROLE_LABEL_NB,
-} from "@/lib/role-labels-nb";
+import { ASSESSMENT_COLLAB_ROLE_LABEL_NB } from "@/lib/role-labels-nb";
 import { clampLikert5, computeAllResults } from "@/lib/rpa-assessment/scoring";
 import { useMutation, useQuery } from "convex/react";
 import useEmblaCarousel from "embla-carousel-react";
@@ -141,52 +136,6 @@ const KPI_DEFAULTS = {
   employees: 3,
 } as const;
 
-const QUICK_AUTOMATION_PRESETS: Record<
-  1 | 2 | 3 | 4 | 5,
-  Partial<AssessmentPayload>
-> = {
-  1: {
-    baselineHours: 120,
-    reworkHours: 10,
-    auditHours: 10,
-    structuredInput: 2,
-    processVariability: 1,
-    digitization: 2,
-  },
-  2: {
-    baselineHours: 300,
-    reworkHours: 20,
-    auditHours: 20,
-    structuredInput: 3,
-    processVariability: 2,
-    digitization: 3,
-  },
-  3: {
-    baselineHours: 800,
-    reworkHours: 50,
-    auditHours: 40,
-    structuredInput: 3,
-    processVariability: 3,
-    digitization: 3,
-  },
-  4: {
-    baselineHours: 1400,
-    reworkHours: 80,
-    auditHours: 60,
-    structuredInput: 4,
-    processVariability: 4,
-    digitization: 4,
-  },
-  5: {
-    baselineHours: 2200,
-    reworkHours: 120,
-    auditHours: 80,
-    structuredInput: 5,
-    processVariability: 5,
-    digitization: 5,
-  },
-};
-
 function roundKpiValue(value: number) {
   return Math.round(value * 10) / 10;
 }
@@ -212,6 +161,115 @@ function parseOptionalKpiNumber(
   const normalized = raw.replace(",", ".");
   const n = Number(normalized);
   return Number.isFinite(n) ? n : current;
+}
+
+/** Lokalt format som lar brukere skrive «1,5» — vi viser komma, og bytter til
+ *  punktum kun for parsing internt. Returnerer kort tekst uten unødige nuller. */
+function formatLocaleNumber(value: number): string {
+  if (!Number.isFinite(value)) return "";
+  return String(Math.round(value * 1000) / 1000).replace(".", ",");
+}
+
+/** Streng tolking — brukes mens brukeren skriver, så «1,» / «1.» / «-» ikke
+ *  forstyrrer (returnerer null så den lokale råstrengen beholdes urørt). */
+function tryParseLocaleNumber(raw: string): number | null {
+  const trimmed = raw.trim();
+  if (trimmed === "") return null;
+  if (/[,.]$/.test(trimmed)) return null;
+  if (trimmed === "-" || trimmed === "+") return null;
+  const normalized = trimmed.replace(",", ".");
+  if (!/^-?\d+(\.\d+)?$/.test(normalized)) return null;
+  const n = Number(normalized);
+  return Number.isFinite(n) ? n : null;
+}
+
+/**
+ * Talloppføring som beholder brukerens råstreng under fokus.
+ * Fikser ergonomi-bug der man ikke kunne skrive «1,5» fordi `String(parsed)`
+ * fjerner trailing komma/punktum mellom hver tastetrykk.
+ */
+function NumericInput({
+  value,
+  onValueChange,
+  required = false,
+  min,
+  max,
+  className,
+  ...inputProps
+}: {
+  value: number | undefined;
+  onValueChange: (next: number | undefined) => void;
+  required?: boolean;
+  min?: number;
+  max?: number;
+  className?: string;
+} & Omit<
+  React.InputHTMLAttributes<HTMLInputElement>,
+  "value" | "onChange" | "type" | "min" | "max"
+>) {
+  const [isFocused, setIsFocused] = useState(false);
+  const [lastSyncedValue, setLastSyncedValue] = useState<number | undefined>(
+    value,
+  );
+  const [raw, setRaw] = useState<string>(
+    value === undefined || value === null ? "" : formatLocaleNumber(value),
+  );
+  // Synk eksternt `value` inn til lokal råstreng — kun når feltet ikke er
+  // fokusert. Beholder bruker-skrevet «1,» / «1.» mens man taster.
+  if (!isFocused && value !== lastSyncedValue) {
+    setLastSyncedValue(value);
+    setRaw(value === undefined || value === null ? "" : formatLocaleNumber(value));
+  }
+
+  return (
+    <Input
+      {...inputProps}
+      type="text"
+      inputMode="decimal"
+      autoComplete="off"
+      value={raw}
+      className={className}
+      onFocus={(e) => {
+        setIsFocused(true);
+        inputProps.onFocus?.(e);
+      }}
+      onBlur={(e) => {
+        setIsFocused(false);
+        const parsed = tryParseLocaleNumber(raw);
+        if (parsed === null) {
+          if (raw.trim() === "") {
+            if (required && value !== undefined) {
+              setRaw(formatLocaleNumber(value));
+            } else if (!required) {
+              onValueChange(undefined);
+              setRaw("");
+            }
+          } else {
+            setRaw(value === undefined ? "" : formatLocaleNumber(value));
+          }
+        } else {
+          let next = parsed;
+          if (typeof min === "number" && next < min) next = min;
+          if (typeof max === "number" && next > max) next = max;
+          onValueChange(next);
+          setRaw(formatLocaleNumber(next));
+        }
+        inputProps.onBlur?.(e);
+      }}
+      onChange={(e) => {
+        const v = e.target.value;
+        setRaw(v);
+        if (v.trim() === "") {
+          if (!required) onValueChange(undefined);
+          return;
+        }
+        const parsed = tryParseLocaleNumber(v);
+        if (parsed !== null) {
+          onValueChange(parsed);
+        }
+      }}
+    />
+  );
 }
 
 function effectiveTimePerCaseValue(payload: AssessmentPayload): number | undefined {
@@ -940,6 +998,47 @@ export function AssessmentWizard({ assessmentId }: Props) {
         </Alert>
       ) : null}
 
+      {/* Hero: tittel + lett meta-strimmel i ett luftig kort.
+          Subtilt gradient-bakgrunn for å gi siden et moderne anker øverst,
+          uten ekstra knapper eller badges som drukner det viktigste. */}
+      <div className="rounded-3xl border border-border/40 bg-gradient-to-br from-primary/[0.06] via-card to-card p-5 shadow-sm sm:p-6">
+        {canEdit ? (
+          <Input
+            id="assessment-display-title"
+            aria-label="Tittel på vurderingen"
+            value={titleDraft}
+            onChange={(e) => setTitleDraft(e.target.value)}
+            placeholder="F.eks. Fakturamottak — leverandør"
+            autoComplete="off"
+            title="Skilles fra prosessnavn under «Prosess»."
+            className="font-heading h-auto border-0 bg-transparent px-0 py-0 text-2xl font-semibold tracking-tight shadow-none focus-visible:ring-0 sm:text-3xl"
+          />
+        ) : (
+          <h1 className="font-heading text-2xl font-semibold tracking-tight sm:text-3xl">
+            {assessment.title}
+          </h1>
+        )}
+        <p
+          className="text-muted-foreground mt-2 flex flex-wrap items-center gap-1.5 text-[11px] sm:text-xs"
+          title="Endringer lagres automatisk."
+        >
+          <span className="inline-flex items-center gap-1 rounded-full bg-card/70 px-2 py-0.5 ring-1 ring-border/40">
+            {canEdit ? "Lagrer automatisk" : "Kun visning"}
+          </span>
+          {access?.shareWithWorkspace ? (
+            <span className="inline-flex items-center gap-1 rounded-full bg-card/70 px-2 py-0.5 ring-1 ring-border/40">
+              <Share2 className="size-3" aria-hidden /> Delt
+            </span>
+          ) : null}
+          {access?.collaboratorRole ? (
+            <span className="inline-flex items-center gap-1 rounded-full bg-card/70 px-2 py-0.5 ring-1 ring-border/40">
+              {ASSESSMENT_COLLAB_ROLE_LABEL_NB[access.collaboratorRole] ??
+                access.collaboratorRole}
+            </span>
+          ) : null}
+        </p>
+      </div>
+
       {rosContext !== undefined ? (
         <AssessmentObjectHeader
           workspaceId={assessment.workspaceId}
@@ -953,114 +1052,66 @@ export function AssessmentWizard({ assessmentId }: Props) {
           evaluationContext={evaluationContext}
         />
       ) : (
-        <div className="bg-muted/30 h-24 animate-pulse rounded-xl border border-border/50" />
+        <div className="bg-muted/30 h-12 animate-pulse rounded-xl border border-border/50" />
       )}
 
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <div className="min-w-0 flex-1 space-y-1.5">
+      {/* Sekundær-info samlet i én lukket disclosure. Tidligere lå dette
+          alltid synlig som to tunge kort («MED I VURDERINGEN» + «Eksport og
+          deling»), som dyttet selve vurderingen langt ned på siden. */}
+      <details className="group overflow-hidden rounded-2xl bg-card/40 ring-1 ring-border/40">
+        <summary className="text-foreground flex cursor-pointer list-none items-center justify-between gap-2 rounded-2xl px-3 py-2 text-sm font-medium transition-colors hover:bg-muted/40 [&::-webkit-details-marker]:hidden sm:px-4">
+          <span className="inline-flex items-center gap-2">
+            Team, milepæler og deling
+            {ownerDisplayName ? (
+              <span className="text-muted-foreground text-xs font-normal">
+                · Eier: {ownerDisplayName}
+              </span>
+            ) : null}
+          </span>
+          <ChevronRight
+            className="text-muted-foreground size-4 transition-transform group-open:rotate-90"
+            aria-hidden
+          />
+        </summary>
+        <div className="border-border/40 space-y-3 border-t px-3 py-3 sm:px-4">
+          <AssessmentWizardMeta
+            collaborators={collaborators}
+            versions={versions}
+            draftUpdatedAt={data?.draft?.updatedAt}
+            onOpenTeamAndVersions={openTeamAndVersions}
+            onPickVersionPreview={onPickVersionPreview}
+          />
+          <AssessmentExportPanel
+            assessmentId={assessmentId}
+            workspaceId={assessment.workspaceId}
+            canEdit={canEdit}
+          />
           {canEdit ? (
-            <>
-              <Label
-                htmlFor="assessment-display-title"
-                className="text-muted-foreground text-xs font-medium"
+            <div className="flex justify-end pt-1">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="gap-1.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                onClick={() => {
+                  if (
+                    window.confirm(
+                      `Slette «${assessment.title}»?\n\nAlle utkast, versjoner, oppgaver, kommentarer og koblinger fjernes permanent.`,
+                    )
+                  ) {
+                    void deleteAssessment({ assessmentId }).then(() => {
+                      router.replace(`/w/${assessment.workspaceId}/vurderinger`);
+                    });
+                  }
+                }}
               >
-                Tittel
-              </Label>
-              <Input
-                id="assessment-display-title"
-                value={titleDraft}
-                onChange={(e) => setTitleDraft(e.target.value)}
-                placeholder="F.eks. Fakturamottak — leverandør"
-                autoComplete="off"
-                title="Skilles fra prosessnavn under «Prosess»."
-                className="font-heading h-auto max-w-2xl border-0 border-b border-border/60 bg-transparent px-0 py-1 text-xl font-semibold shadow-none focus-visible:border-primary focus-visible:ring-0 sm:text-2xl"
-              />
-            </>
-          ) : (
-            <>
-              <h1 className="font-heading text-xl font-semibold sm:text-2xl">
-                {assessment.title}
-              </h1>
-              <p className="text-muted-foreground text-xs sm:text-sm">
-                Kun visning.
-                {access?.collaboratorRole
-                  ? ` · Rolle på vurdering: ${ASSESSMENT_COLLAB_ROLE_LABEL_NB[access.collaboratorRole] ?? access.collaboratorRole}`
-                  : ""}
-                {access?.workspaceRole
-                  ? ` · Arbeidsområde: ${WORKSPACE_ROLE_LABEL_NB[access.workspaceRole] ?? access.workspaceRole}`
-                  : ""}
-              </p>
-            </>
-          )}
-          {canEdit ? (
-            <p
-              className="text-muted-foreground text-[11px] sm:text-xs"
-              title="Ved samtidig redigering får du valg om å hente siste utkast eller overskrive."
-            >
-              Lagrer automatisk
-              {access?.collaboratorRole || access?.workspaceRole ? (
-                <>
-                  {" · "}
-                  {access?.collaboratorRole
-                    ? ASSESSMENT_COLLAB_ROLE_LABEL_NB[access.collaboratorRole] ??
-                      access.collaboratorRole
-                    : null}
-                  {access?.collaboratorRole && access?.workspaceRole ? " · " : null}
-                  {access?.workspaceRole
-                    ? WORKSPACE_ROLE_LABEL_NB[access.workspaceRole] ??
-                      access.workspaceRole
-                    : null}
-                </>
-              ) : null}
-            </p>
+                <Trash2 className="size-3.5" />
+                Slett vurdering
+              </Button>
+            </div>
           ) : null}
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          {access?.shareWithWorkspace ? (
-            <Badge variant="secondary" className="gap-1">
-              <Share2 className="size-3" />
-              Delt med arbeidsområdet
-            </Badge>
-          ) : null}
-          {canEdit ? (
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="gap-1.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-              onClick={() => {
-                if (
-                  window.confirm(
-                    `Slette «${assessment.title}»?\n\nAlle utkast, versjoner, oppgaver, kommentarer og koblinger fjernes permanent.`,
-                  )
-                ) {
-                  void deleteAssessment({ assessmentId }).then(() => {
-                    router.replace(`/w/${assessment.workspaceId}/vurderinger`);
-                  });
-                }
-              }}
-            >
-              <Trash2 className="size-3.5" />
-              Slett
-            </Button>
-          ) : null}
-        </div>
-      </div>
-
-      <div className="space-y-3">
-        <AssessmentWizardMeta
-          collaborators={collaborators}
-          versions={versions}
-          draftUpdatedAt={data?.draft?.updatedAt}
-          onOpenTeamAndVersions={openTeamAndVersions}
-          onPickVersionPreview={onPickVersionPreview}
-        />
-        <AssessmentExportPanel
-          assessmentId={assessmentId}
-          workspaceId={assessment.workspaceId}
-          canEdit={canEdit}
-        />
-      </div>
+      </details>
 
       <p id="wizard-gesture-hint" className="sr-only">
         Sveip horisontalt med finger, eller dra med mus på steget, for å gå til
@@ -1071,84 +1122,59 @@ export function AssessmentWizard({ assessmentId }: Props) {
         className="overflow-hidden rounded-2xl bg-card shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.06]"
         aria-labelledby="wizard-step-heading"
       >
-        <header className="border-border/60 bg-muted/20 border-b px-4 py-3 sm:px-6 sm:py-4">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-            <div className="min-w-0">
-              <p className="text-muted-foreground text-[11px] font-semibold uppercase tracking-wider sm:text-xs">
-                Vurdering · {stepLabels.length} steg
-              </p>
-              <h2
-                id="wizard-step-heading"
-                className="font-heading text-foreground mt-1 text-lg font-semibold leading-snug sm:text-xl"
-              >
-                Steg {slide + 1} av {stepLabels.length}: {stepLabels[slide]}
-              </h2>
-              <p className="text-muted-foreground mt-1.5 max-w-2xl text-sm leading-relaxed">
-                {slide === stepLabels.length - 1
-                  ? "Siste steg kan hoppes over — se forklaring øverst på siden."
-                  : "Gå gjennom steg 1–" +
-                    stepLabels.length +
-                    " i rekkefølge. Fyll ut det du trenger — resten er valgfritt."}
-              </p>
-            </div>
-            <div className="flex shrink-0 flex-wrap items-center gap-2 sm:justify-end">
-              <AssessmentWizardSchemaHelp />
-              <label className="text-muted-foreground sr-only" htmlFor="wizard-step-jump">
-                Hopp til steg
-              </label>
-              <select
-                id="wizard-step-jump"
-                className="border-input bg-background h-9 max-w-full rounded-lg border px-2.5 text-xs shadow-sm sm:max-w-[16rem]"
-                value={slide}
-                onChange={(e) => emblaApi?.scrollTo(Number(e.target.value))}
-              >
-                {stepLabels.map((label, i) => (
-                  <option key={label} value={i}>
-                    Steg {i + 1}: {label}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          <nav
-            className="mt-3 flex gap-1.5 overflow-x-auto pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] sm:flex-wrap sm:overflow-visible [&::-webkit-scrollbar]:hidden"
-            aria-label="Hovedsteg i vurderingen"
-          >
-            {stepLabels.map((label, i) => (
-              <button
-                key={label}
-                type="button"
-                aria-label={`Steg ${i + 1}: ${label}`}
-                aria-current={slide === i ? "step" : undefined}
-                onClick={() => emblaApi?.scrollTo(i)}
-                className={cn(
-                  "flex min-w-[calc(50%-0.25rem)] shrink-0 items-center gap-1.5 rounded-lg border px-2 py-1.5 text-left transition sm:min-w-0 sm:flex-1 sm:basis-0",
-                  i === slide
-                    ? "border-primary bg-primary/12 ring-primary/30 shadow-sm ring-2"
-                    : i < slide
-                      ? "border-primary/35 bg-primary/[0.07] hover:bg-primary/12"
-                      : "border-border/60 bg-background/60 hover:bg-muted/40",
-                )}
-              >
-                <span
+        {/* Slim steg-strimmel: kun et progress-spor + diskret hjelpe-ikon.
+            Tidligere hadde vi en eyebrow («Vurdering · X steg»), en H2
+            («Steg X av Y: …»), en lang forklaringssetning og en separat
+            «Hopp til steg»-nedtrekksmeny. Alt er nå representert i selve
+            stegnavet (knappene under) + bunn-navigasjonen «Forrige/Neste»,
+            så vi kunne fjerne all duplisering. */}
+        <header className="border-border/40 bg-card/60 border-b px-3 py-2.5 backdrop-blur-sm sm:px-4 sm:py-3">
+          <div className="flex items-center gap-2">
+            <h2 id="wizard-step-heading" className="sr-only">
+              Steg {slide + 1} av {stepLabels.length}: {stepLabels[slide]}
+            </h2>
+            <nav
+              className="flex flex-1 gap-1.5 overflow-x-auto pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] sm:flex-wrap sm:overflow-visible [&::-webkit-scrollbar]:hidden"
+              aria-label="Hovedsteg i vurderingen"
+            >
+              {stepLabels.map((label, i) => (
+                <button
+                  key={label}
+                  type="button"
+                  aria-label={`Steg ${i + 1}: ${label}`}
+                  aria-current={slide === i ? "step" : undefined}
+                  onClick={() => emblaApi?.scrollTo(i)}
                   className={cn(
-                    "flex size-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold tabular-nums sm:text-sm",
+                    "flex min-w-[calc(50%-0.25rem)] shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1.5 text-left transition sm:min-w-0 sm:flex-1 sm:basis-0",
                     i === slide
-                      ? "bg-primary text-primary-foreground"
+                      ? "bg-primary/12 ring-2 ring-primary/30 shadow-sm"
                       : i < slide
-                        ? "bg-primary/25 text-primary"
-                        : "bg-muted text-muted-foreground",
+                        ? "bg-primary/[0.06] hover:bg-primary/12"
+                        : "bg-muted/40 hover:bg-muted/70",
                   )}
                 >
-                  {i + 1}
-                </span>
-                <span className="text-foreground min-w-0 text-xs font-medium leading-snug">
-                  {label}
-                </span>
-              </button>
-            ))}
-          </nav>
+                  <span
+                    className={cn(
+                      "flex size-6 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold tabular-nums sm:size-7 sm:text-xs",
+                      i === slide
+                        ? "bg-primary text-primary-foreground shadow-sm"
+                        : i < slide
+                          ? "bg-primary/25 text-primary"
+                          : "bg-card text-muted-foreground ring-1 ring-border/50",
+                    )}
+                  >
+                    {i + 1}
+                  </span>
+                  <span className="text-foreground min-w-0 text-xs font-medium leading-snug">
+                    {label}
+                  </span>
+                </button>
+              ))}
+            </nav>
+            <div className="hidden shrink-0 sm:block">
+              <AssessmentWizardSchemaHelp />
+            </div>
+          </div>
         </header>
 
         <div
@@ -1161,347 +1187,274 @@ export function AssessmentWizard({ assessmentId }: Props) {
             <Slide>
               <div className="space-y-1">
                 <h2 className="text-foreground text-xl font-semibold sm:text-2xl">
-                  Kandidat og volum
+                  Hva og hvor mye
                 </h2>
                 <p className="text-muted-foreground text-sm">
-                  Navn på jobben, omtrent hvor lang tid den tar og hvor ofte den gjøres — grovt
-                  anslag holder.
+                  Navn på jobben + omtrent hvor mye tid den tar i året. Grove anslag er nok.
                 </p>
               </div>
-              <div className="space-y-6">
-                <div className="space-y-4 rounded-2xl bg-muted/10 p-5 ring-1 ring-black/[0.04] dark:ring-white/[0.06]">
-                  <div className="space-y-2">
-                    <Label htmlFor="quick-process-name" className="text-sm font-medium">
-                      Kort navn på prosessen
-                    </Label>
-                    <Input
-                      id="quick-process-name"
-                      value={payload.processName}
-                      onChange={(e) => update("processName", e.target.value)}
-                      disabled={!canEdit}
-                      placeholder="F.eks. Fakturamottak eller manuell registrering"
-                      className="h-11 rounded-xl bg-background shadow-sm"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="quick-process-description" className="text-sm font-medium">
-                      Kort beskrivelse (valgfritt)
-                    </Label>
-                    <Textarea
-                      id="quick-process-description"
-                      value={payload.processDescription ?? ""}
-                      onChange={(e) => update("processDescription", e.target.value)}
-                      disabled={!canEdit}
-                      placeholder="F.eks. Overføring mellom to systemer"
-                      rows={3}
-                      className="min-h-[6.5rem] resize-y rounded-xl bg-background shadow-sm"
-                    />
-                  </div>
+              <div className="space-y-5">
+                <div className="space-y-2">
+                  <Label htmlFor="quick-process-name" className="text-sm font-medium">
+                    Kort navn på prosessen
+                  </Label>
+                  <Input
+                    id="quick-process-name"
+                    value={payload.processName}
+                    onChange={(e) => update("processName", e.target.value)}
+                    disabled={!canEdit}
+                    placeholder="F.eks. Fakturamottak eller manuell registrering"
+                    className="h-11 rounded-xl bg-background shadow-sm"
+                  />
                 </div>
+
                 <div className="space-y-4 rounded-2xl bg-muted/10 p-5 ring-1 ring-black/[0.04] dark:ring-white/[0.06]">
-                  <div className="space-y-1">
-                    <h3 className="text-base font-semibold text-foreground">
-                      Hvor mye tid tar dette i dag — og hvor ofte?
-                    </h3>
-                    <p className="text-sm text-muted-foreground">
-                      Velg én måte å svare på under.
-                    </p>
-                  </div>
-                  <div className="grid gap-3 md:grid-cols-2">
-                    <button
-                      type="button"
-                      className={cn(
-                        "rounded-2xl border p-4 text-left transition",
-                        effectiveWorkloadInputMode(payload) === "per_case"
-                          ? "border-primary bg-primary/5 shadow-sm"
-                          : "border-border/50 bg-background/70 hover:bg-background",
-                      )}
-                      onClick={() =>
-                        applyPayloadPatch({
-                          workloadInputMode: "per_case",
-                          manualFteEstimate: undefined,
-                        })
-                      }
-                      disabled={!canEdit}
-                    >
-                      <p className="text-sm font-semibold text-foreground">
-                        Tid per gang + hvor ofte
-                      </p>
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        F.eks. 10 minutter og 40 ganger i uken.
-                      </p>
-                    </button>
-                    <button
-                      type="button"
-                      className={cn(
-                        "rounded-2xl border p-4 text-left transition",
-                        effectiveWorkloadInputMode(payload) === "fte"
-                          ? "border-primary bg-primary/5 shadow-sm"
-                          : "border-border/50 bg-background/70 hover:bg-background",
-                      )}
-                      onClick={() =>
-                        applyPayloadPatch({
-                          workloadInputMode: "fte",
-                          timePerCaseValue: undefined,
-                          timePerCaseUnit: undefined,
-                          caseVolumeValue: undefined,
-                          caseVolumeUnit: undefined,
-                          minutesPerCase: undefined,
-                          casesPerWeek: undefined,
-                          casesPerMonth: undefined,
-                        })
-                      }
-                      disabled={!canEdit}
-                    >
-                      <p className="text-sm font-semibold text-foreground">
-                        Jeg tenker i årsverk / stilling
-                      </p>
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        F.eks. «omtrent en halv stilling».
-                      </p>
-                    </button>
-                  </div>
-                  <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-                    {effectiveWorkloadInputMode(payload) === "per_case" ? (
-                      <>
-                    <div className="space-y-2 xl:col-span-2">
-                      <Label htmlFor="screening-time-per-case">
-                        Hvor lang tid bruker dere vanligvis på én runde av oppgaven?
-                      </Label>
-                      <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_11rem]">
-                        <Input
-                          id="screening-time-per-case"
-                          inputMode="decimal"
-                          value={
-                            effectiveTimePerCaseValue(payload) === undefined
-                              ? ""
-                              : String(effectiveTimePerCaseValue(payload))
-                          }
-                          onChange={(e) =>
-                            applyPayloadPatch({
-                              timePerCaseValue: parseOptionalKpiNumber(
-                                e.target.value,
-                                effectiveTimePerCaseValue(payload),
-                              ),
-                              timePerCaseUnit: effectiveTimePerCaseUnit(payload),
-                              minutesPerCase: undefined,
-                            })
-                          }
-                          disabled={!canEdit}
-                          placeholder="F.eks. 12"
-                          className="h-10 rounded-xl bg-background shadow-sm"
-                        />
-                        <select
-                          className="h-10 rounded-xl border border-input bg-background px-3 text-sm shadow-sm"
-                          value={effectiveTimePerCaseUnit(payload)}
-                          onChange={(e) =>
-                            applyPayloadPatch({
-                              timePerCaseValue: effectiveTimePerCaseValue(payload),
-                              timePerCaseUnit: e.target.value as TimePerCaseUnit,
-                              minutesPerCase: undefined,
-                            })
-                          }
-                          disabled={!canEdit}
-                        >
-                          <option value="minutes">Minutter</option>
-                          <option value="hours">Timer</option>
-                        </select>
-                      </div>
-                      <p className="text-xs text-muted-foreground">
-                        Skriv tallet først — deretter om det er minutter eller timer for én
-                        runde.
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="min-w-0 space-y-0.5">
+                      <h3 className="text-foreground text-sm font-semibold">
+                        Volum og tid i dag
+                      </h3>
+                      <p className="text-muted-foreground text-xs">
+                        Brukes til å regne timer manuelt arbeid per år.
                       </p>
                     </div>
-                    <div className="space-y-2 xl:col-span-2">
-                      <Label htmlFor="screening-case-volume">
-                        Hvor mange ganger skjer dette i vanlig drift?
-                      </Label>
-                      <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_11rem]">
-                        <Input
-                          id="screening-case-volume"
-                          inputMode="decimal"
-                          value={
-                            effectiveCaseVolumeValue(payload) === undefined
-                              ? ""
-                              : String(effectiveCaseVolumeValue(payload))
-                          }
-                          onChange={(e) =>
-                            applyPayloadPatch({
-                              caseVolumeValue: parseOptionalKpiNumber(
-                                e.target.value,
-                                effectiveCaseVolumeValue(payload),
-                              ),
-                              caseVolumeUnit: effectiveCaseVolumeUnit(payload),
-                              casesPerWeek: undefined,
-                              casesPerMonth: undefined,
-                            })
-                          }
-                          disabled={!canEdit}
-                          placeholder="F.eks. 40"
-                          className="h-10 rounded-xl bg-background shadow-sm"
-                        />
-                        <select
-                          className="h-10 rounded-xl border border-input bg-background px-3 text-sm shadow-sm"
-                          value={effectiveCaseVolumeUnit(payload)}
-                          onChange={(e) =>
-                            applyPayloadPatch({
-                              caseVolumeValue: effectiveCaseVolumeValue(payload),
-                              caseVolumeUnit: e.target.value as CaseVolumeUnit,
-                              casesPerWeek: undefined,
-                              casesPerMonth: undefined,
-                            })
-                          }
-                          disabled={!canEdit}
-                        >
-                          <option value="day">Per dag</option>
-                          <option value="week">Per uke</option>
-                          <option value="month">Per måned</option>
-                        </select>
-                      </div>
-                      <p className="text-xs text-muted-foreground">
-                        Velg om tallet er per dag, per uke eller per måned — slik dere selv
-                        tenker på det.
-                      </p>
-                    </div>
-                      </>
-                    ) : null}
-                    {effectiveWorkloadInputMode(payload) === "fte" ? (
-                    <div className="space-y-2">
-                      <Label htmlFor="screening-manual-fte">
-                        Omtrent hvor mange heltidsstillinger (år) brukes på dette?
-                      </Label>
-                      <Input
-                        id="screening-manual-fte"
-                        inputMode="decimal"
-                        value={
-                          payload.manualFteEstimate === undefined
-                            ? ""
-                            : String(payload.manualFteEstimate)
-                        }
-                        onChange={(e) =>
+                    <div
+                      className="bg-card/80 inline-flex shrink-0 gap-1 rounded-full border border-border/50 p-1 text-xs ring-1 ring-black/[0.03]"
+                      role="tablist"
+                      aria-label="Hvordan beskrive arbeidsmengde"
+                    >
+                      <button
+                        type="button"
+                        role="tab"
+                        aria-selected={effectiveWorkloadInputMode(payload) === "per_case"}
+                        disabled={!canEdit}
+                        onClick={() =>
                           applyPayloadPatch({
-                            manualFteEstimate: parseOptionalKpiNumber(
-                              e.target.value,
-                              payload.manualFteEstimate,
-                            ),
+                            workloadInputMode: "per_case",
+                            manualFteEstimate: undefined,
                           })
                         }
+                        className={cn(
+                          "rounded-full px-3 py-1.5 font-medium transition",
+                          effectiveWorkloadInputMode(payload) === "per_case"
+                            ? "bg-primary text-primary-foreground shadow-sm"
+                            : "text-muted-foreground hover:text-foreground",
+                        )}
+                      >
+                        Tid + volum
+                      </button>
+                      <button
+                        type="button"
+                        role="tab"
+                        aria-selected={effectiveWorkloadInputMode(payload) === "fte"}
                         disabled={!canEdit}
-                        placeholder="F.eks. 1,5 eller 0,25"
-                        className="h-10 rounded-xl bg-background shadow-sm"
-                      />
-                      <p className="text-xs text-muted-foreground">
-                        <span className="text-foreground/90">Årsverk</span> betyr én heltidsjobb
-                        gjennom ett år. 0,25 er én firedel stilling, 1,5 er én og en halv
-                        stilling — skriv det som passer.
-                      </p>
+                        onClick={() =>
+                          applyPayloadPatch({
+                            workloadInputMode: "fte",
+                            timePerCaseValue: undefined,
+                            timePerCaseUnit: undefined,
+                            caseVolumeValue: undefined,
+                            caseVolumeUnit: undefined,
+                            minutesPerCase: undefined,
+                            casesPerWeek: undefined,
+                            casesPerMonth: undefined,
+                          })
+                        }
+                        className={cn(
+                          "rounded-full px-3 py-1.5 font-medium transition",
+                          effectiveWorkloadInputMode(payload) === "fte"
+                            ? "bg-primary text-primary-foreground shadow-sm"
+                            : "text-muted-foreground hover:text-foreground",
+                        )}
+                      >
+                        Årsverk
+                      </button>
                     </div>
-                    ) : null}
-                    {effectiveWorkloadInputMode(payload) === "fte" ? (
-                      <>
-                    <div className="space-y-2">
-                      <Label htmlFor="screening-working-days">
-                        Hvor mange arbeidsdager i året regner dere med?
+                  </div>
+
+                  {effectiveWorkloadInputMode(payload) === "per_case" ? (
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <div className="space-y-1.5">
+                        <Label htmlFor="screening-time-per-case" className="text-xs font-medium">
+                          Tid per gang
+                        </Label>
+                        <div className="grid grid-cols-[minmax(0,1fr)_8rem] gap-2">
+                          <NumericInput
+                            id="screening-time-per-case"
+                            value={effectiveTimePerCaseValue(payload)}
+                            min={0}
+                            onValueChange={(v) =>
+                              applyPayloadPatch({
+                                timePerCaseValue: v,
+                                timePerCaseUnit: effectiveTimePerCaseUnit(payload),
+                                minutesPerCase: undefined,
+                              })
+                            }
+                            disabled={!canEdit}
+                            placeholder="F.eks. 12"
+                            className="h-10 rounded-xl bg-background shadow-sm"
+                          />
+                          <select
+                            className="h-10 rounded-xl border border-input bg-background px-3 text-sm shadow-sm"
+                            value={effectiveTimePerCaseUnit(payload)}
+                            onChange={(e) =>
+                              applyPayloadPatch({
+                                timePerCaseValue: effectiveTimePerCaseValue(payload),
+                                timePerCaseUnit: e.target.value as TimePerCaseUnit,
+                                minutesPerCase: undefined,
+                              })
+                            }
+                            disabled={!canEdit}
+                            aria-label="Enhet for tid per gang"
+                          >
+                            <option value="minutes">Minutter</option>
+                            <option value="hours">Timer</option>
+                          </select>
+                        </div>
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label htmlFor="screening-case-volume" className="text-xs font-medium">
+                          Hvor ofte
+                        </Label>
+                        <div className="grid grid-cols-[minmax(0,1fr)_8rem] gap-2">
+                          <NumericInput
+                            id="screening-case-volume"
+                            value={effectiveCaseVolumeValue(payload)}
+                            min={0}
+                            onValueChange={(v) =>
+                              applyPayloadPatch({
+                                caseVolumeValue: v,
+                                caseVolumeUnit: effectiveCaseVolumeUnit(payload),
+                                casesPerWeek: undefined,
+                                casesPerMonth: undefined,
+                              })
+                            }
+                            disabled={!canEdit}
+                            placeholder="F.eks. 40"
+                            className="h-10 rounded-xl bg-background shadow-sm"
+                          />
+                          <select
+                            className="h-10 rounded-xl border border-input bg-background px-3 text-sm shadow-sm"
+                            value={effectiveCaseVolumeUnit(payload)}
+                            onChange={(e) =>
+                              applyPayloadPatch({
+                                caseVolumeValue: effectiveCaseVolumeValue(payload),
+                                caseVolumeUnit: e.target.value as CaseVolumeUnit,
+                                casesPerWeek: undefined,
+                                casesPerMonth: undefined,
+                              })
+                            }
+                            disabled={!canEdit}
+                            aria-label="Frekvens"
+                          >
+                            <option value="day">Per dag</option>
+                            <option value="week">Per uke</option>
+                            <option value="month">Per måned</option>
+                          </select>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="space-y-1.5">
+                      <Label htmlFor="screening-manual-fte" className="text-xs font-medium">
+                        Årsverk på dette i dag
                       </Label>
-                      <Input
-                        id="screening-working-days"
-                        inputMode="decimal"
-                        value={String(payload.workingDays)}
-                        onChange={(e) =>
-                          update(
-                            "workingDays",
-                            parseKpiNumber(
-                              e.target.value,
-                              KPI_DEFAULTS.workingDays,
-                              payload.workingDays,
-                            ),
-                          )
+                      <NumericInput
+                        id="screening-manual-fte"
+                        value={payload.manualFteEstimate}
+                        min={0}
+                        onValueChange={(v) =>
+                          applyPayloadPatch({ manualFteEstimate: v })
                         }
                         disabled={!canEdit}
-                        className="h-10 rounded-xl bg-background shadow-sm"
+                        placeholder="F.eks. 0,5 eller 1,5"
+                        className="h-10 max-w-xs rounded-xl bg-background shadow-sm"
                       />
-                      <p className="text-xs text-muted-foreground">
-                        Mange bruker 220–230. Her står 230 som forslag — endre bare hvis dere har
-                        avtalt noe annet (f.eks. turnus).
+                      <p className="text-muted-foreground text-xs">
+                        Ett årsverk = én heltidsjobb i ett år. 0,5 = halv stilling.
                       </p>
                     </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="screening-working-hours">
-                        Hvor mange timer er en vanlig arbeidsdag hos dere?
-                      </Label>
-                      <Input
-                        id="screening-working-hours"
-                        inputMode="decimal"
-                        value={String(payload.workingHoursPerDay)}
-                        onChange={(e) =>
-                          update(
-                            "workingHoursPerDay",
-                            parseKpiNumber(
-                              e.target.value,
-                              KPI_DEFAULTS.workingHoursPerDay,
-                              payload.workingHoursPerDay,
-                            ),
-                          )
-                        }
-                        disabled={!canEdit}
-                        className="h-10 rounded-xl bg-background shadow-sm"
-                      />
-                      <p className="text-xs text-muted-foreground">
-                        Ofte 7,5 i offentlig sektor. Vi bruker dette sammen med årsverk og
-                        arbeidsdager for å finne omtrentlig timeforbruk i året.
-                      </p>
-                    </div>
-                      </>
-                    ) : null}
-                  </div>
-                  <div className="rounded-2xl border border-border/50 bg-background/80 p-4">
-                    <p className="text-sm font-medium text-foreground">Oppsummering av tallene</p>
-                    {workloadSummary ? (
-                      <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
-                        <span className="font-medium text-foreground">
-                          {workloadSummary.title}.
-                        </span>{" "}
-                        {workloadSummary.description}
-                      </p>
-                    ) : (
-                      <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
-                        Velg først hvordan dere vil beskrive arbeidsmengden (tid per gang, eller
-                        stillingsbruk). Da viser vi bare feltene som trengs.
-                      </p>
-                    )}
-                    <p className="mt-2 text-xs text-muted-foreground">
-                      Dere trenger ikke perfekte tall — et godt anslag er nok til første
-                      vurdering.
-                    </p>
-                  </div>
-                </div>
-                <LikertField
-                  id="quick-automation"
-                  label="Hvor mye av jobben er gjentakende manuelt arbeid (tasting, kopiering)?"
-                  hint="Jo mer som gjøres likt om igjen, jo mer kan ofte spares."
-                  value={clampLikert5(
-                    payload.baselineHours >= 1800
-                      ? 5
-                      : payload.baselineHours >= 1200
-                        ? 4
-                        : payload.baselineHours >= 650
-                          ? 3
-                          : payload.baselineHours >= 220
-                            ? 2
-                            : 1,
                   )}
-                  onChange={(v) => updateMany(QUICK_AUTOMATION_PRESETS[v])}
-                  left="Lite manuelt"
-                  right="Svært mye manuelt"
-                  scaleLabels={[
-                    "Lite",
-                    "Noe",
-                    "Middels",
-                    "Mye",
-                    "Svært mye",
-                  ]}
-                  disabled={readOnly}
-                />
+
+                  {/* Inline summary — én linje, ingen ekstra kort. */}
+                  <div className="flex flex-wrap items-center gap-2 rounded-xl bg-primary/[0.05] px-3 py-2 text-sm">
+                    <span
+                      className="bg-primary/15 text-primary inline-flex size-6 items-center justify-center rounded-full text-[11px] font-semibold"
+                      aria-hidden
+                    >
+                      Σ
+                    </span>
+                    {workloadSummary ? (
+                      <span className="text-foreground/90">
+                        ≈ <span className="font-semibold">{Math.round(derivedBaselineHoursFromPayload(payload) ?? 0)} timer/år</span> manuelt arbeid
+                      </span>
+                    ) : (
+                      <span className="text-muted-foreground">
+                        Fyll inn feltene over for å se omtrentlige timer/år.
+                      </span>
+                    )}
+                  </div>
+
+                  {effectiveWorkloadInputMode(payload) === "fte" ? (
+                    <details className="group rounded-xl bg-card/40 ring-1 ring-border/40">
+                      <summary className="text-muted-foreground hover:text-foreground flex cursor-pointer list-none items-center justify-between gap-2 rounded-xl px-3 py-2 text-xs font-medium transition-colors [&::-webkit-details-marker]:hidden">
+                        <span>Avansert · arbeidsdager og timer per dag</span>
+                        <ChevronRight
+                          className="size-3.5 transition-transform group-open:rotate-90"
+                          aria-hidden
+                        />
+                      </summary>
+                      <div className="grid gap-3 border-t border-border/40 px-3 py-3 sm:grid-cols-2">
+                        <div className="space-y-1.5">
+                          <Label
+                            htmlFor="screening-working-days"
+                            className="text-xs font-medium"
+                          >
+                            Arbeidsdager i året
+                          </Label>
+                          <NumericInput
+                            id="screening-working-days"
+                            value={payload.workingDays}
+                            required
+                            min={1}
+                            max={366}
+                            onValueChange={(v) =>
+                              update(
+                                "workingDays",
+                                v ?? KPI_DEFAULTS.workingDays,
+                              )
+                            }
+                            disabled={!canEdit}
+                            className="h-10 rounded-xl bg-background shadow-sm"
+                          />
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label
+                            htmlFor="screening-working-hours"
+                            className="text-xs font-medium"
+                          >
+                            Timer per arbeidsdag
+                          </Label>
+                          <NumericInput
+                            id="screening-working-hours"
+                            value={payload.workingHoursPerDay}
+                            required
+                            min={1}
+                            max={24}
+                            onValueChange={(v) =>
+                              update(
+                                "workingHoursPerDay",
+                                v ?? KPI_DEFAULTS.workingHoursPerDay,
+                              )
+                            }
+                            disabled={!canEdit}
+                            className="h-10 rounded-xl bg-background shadow-sm"
+                          />
+                        </div>
+                      </div>
+                    </details>
+                  ) : null}
+                </div>
               </div>
             </Slide>
 

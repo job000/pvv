@@ -28,7 +28,10 @@ import {
   computeRosSummary,
   type RosSummary,
 } from "../lib/ros-summary";
-import { rosRequirementRefValidator } from "./schema";
+import {
+  rosRequirementRefValidator,
+  rosReviewRecurrenceKindValidator,
+} from "./schema";
 import {
   DEFAULT_ROS_COL_AXIS,
   DEFAULT_ROS_COL_LABELS,
@@ -820,7 +823,8 @@ export const workspaceDashboard = query({
           assessedCells > 0 ? Math.round((sumAssessed / assessedCells) * 10) / 10 : 0,
         highRiskCells,
         counts,
-        nextReviewAt: r.nextReviewAt,
+        nextReviewAt:
+          r.reviewScheduleActive === false ? undefined : r.nextReviewAt,
         reviewRoutineNotes: r.reviewRoutineNotes?.trim() || null,
         openTasksCount,
       });
@@ -1492,6 +1496,12 @@ export const updateAnalysis = mutation({
     notes: v.optional(v.union(v.string(), v.null())),
     nextReviewAt: v.optional(v.union(v.number(), v.null())),
     reviewRoutineNotes: v.optional(v.union(v.string(), v.null())),
+    reviewEmailRemindersEnabled: v.optional(v.union(v.boolean(), v.null())),
+    reviewScheduleActive: v.optional(v.union(v.boolean(), v.null())),
+    reviewRecurrenceKind: v.optional(
+      v.union(rosReviewRecurrenceKindValidator, v.null()),
+    ),
+    lastFormalReviewCompletedAt: v.optional(v.union(v.number(), v.null())),
     methodologyStatement: v.optional(v.union(v.string(), v.null())),
     contextSummary: v.optional(v.union(v.string(), v.null())),
     scopeAndCriteria: v.optional(v.union(v.string(), v.null())),
@@ -1742,6 +1752,30 @@ export const updateAnalysis = mutation({
         args.reviewRoutineNotes === null
           ? undefined
           : args.reviewRoutineNotes.trim() || undefined;
+    }
+    if (args.reviewEmailRemindersEnabled !== undefined) {
+      patch.reviewEmailRemindersEnabled =
+        args.reviewEmailRemindersEnabled === null
+          ? undefined
+          : args.reviewEmailRemindersEnabled;
+    }
+    if (args.reviewScheduleActive !== undefined) {
+      patch.reviewScheduleActive =
+        args.reviewScheduleActive === null
+          ? undefined
+          : args.reviewScheduleActive;
+    }
+    if (args.reviewRecurrenceKind !== undefined) {
+      patch.reviewRecurrenceKind =
+        args.reviewRecurrenceKind === null
+          ? undefined
+          : args.reviewRecurrenceKind;
+    }
+    if (args.lastFormalReviewCompletedAt !== undefined) {
+      patch.lastFormalReviewCompletedAt =
+        args.lastFormalReviewCompletedAt === null
+          ? undefined
+          : args.lastFormalReviewCompletedAt;
     }
     if (args.methodologyStatement !== undefined) {
       patch.methodologyStatement =

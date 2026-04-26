@@ -8,12 +8,7 @@ import {
   PIPELINE_STATUS_LABELS,
   type PipelineStatus,
 } from "@/lib/assessment-pipeline";
-import {
-  formatRelativeUpdatedAt,
-  priorityBandBadgeClass,
-  priorityBandLabel,
-  priorityBorderAccentClass,
-} from "@/lib/assessment-ui-helpers";
+import { formatRelativeUpdatedAt } from "@/lib/assessment-ui-helpers";
 import { cn } from "@/lib/utils";
 import {
   ArrowRight,
@@ -37,62 +32,6 @@ type DashboardRow = {
   ownerName: string | null;
   nextStepHint: string;
 };
-
-function dashboardMetricTone(tone: "warning" | "action" | "neutral"): string {
-  switch (tone) {
-    case "warning":
-      return "bg-amber-500/[0.08] ring-amber-500/25";
-    case "action":
-      return "bg-primary/[0.06] ring-primary/20";
-    default:
-      return "bg-card ring-black/[0.04] dark:ring-white/[0.06]";
-  }
-}
-
-function DashboardMetricCard({
-  title,
-  value,
-  status,
-  hint,
-  href,
-  icon: Icon,
-  tone,
-}: {
-  title: string;
-  value: string | number;
-  status: string;
-  /** Kort forklaring for skjermleser / tooltip — ikke vises som avsnitt (mindre støy). */
-  hint: string;
-  href: string;
-  icon: ComponentType<{ className?: string }>;
-  tone: "warning" | "action" | "neutral";
-}) {
-  return (
-    <Link
-      href={href}
-      title={hint}
-      className={cn(
-        "group block rounded-2xl p-4 shadow-sm ring-1 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md",
-        dashboardMetricTone(tone),
-      )}
-    >
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-            {title}
-          </p>
-          <p className="font-heading mt-2 text-3xl font-semibold tracking-tight text-foreground">
-            {value}
-          </p>
-          <p className="mt-2 text-xs font-medium text-muted-foreground">{status}</p>
-        </div>
-        <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-background/80 shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.08]">
-          <Icon className="size-4.5 text-foreground/80 transition-transform group-hover:scale-110" />
-        </div>
-      </div>
-    </Link>
-  );
-}
 
 /**
  * Hvor primærkortet «Én ting å gjøre nå» leder:
@@ -124,7 +63,6 @@ function FocusActionCard({
   cta,
   icon: Icon,
   tone = "default",
-  emphasize,
   navigationTarget,
 }: {
   eyebrow: string;
@@ -135,96 +73,82 @@ function FocusActionCard({
   cta: string;
   icon: ComponentType<{ className?: string }>;
   tone?: "default" | "warning" | "action";
-  /** Primærkort — større type og tydeligere CTA */
-  emphasize?: boolean;
   navigationTarget: PrimaryFocusNavigation;
 }) {
   const linkTitle = focusCardLinkTitle(navigationTarget);
-  const iconWrapClass =
-    tone === "warning"
-      ? "bg-amber-500/10 text-amber-900 ring-amber-500/20 dark:text-amber-100"
-      : tone === "action"
-        ? "bg-primary/10 text-primary ring-primary/20"
-        : "bg-muted/80 text-foreground ring-border/60";
 
-  if (emphasize) {
-    return (
-      <Link
-        href={href}
-        title={linkTitle}
-        className={cn(
-          "group bg-card flex gap-4 rounded-2xl border p-4 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md sm:gap-5 sm:p-5",
-          tone === "warning"
-            ? "border-amber-500/35"
-            : tone === "action"
-              ? "border-primary/25"
-              : "border-border/70",
-        )}
-      >
-        <div
-          className={cn(
-            "flex size-12 shrink-0 items-center justify-center rounded-2xl ring-1 sm:size-14",
-            iconWrapClass,
-          )}
-          aria-hidden
-        >
-          <Icon className="size-6 sm:size-7 transition-transform duration-200 group-hover:scale-105" />
-        </div>
-        <div className="min-w-0 flex-1">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-            {eyebrow}
-          </p>
-          <p className="mt-2 text-base font-semibold leading-snug text-foreground sm:text-lg">
-            {title}
-          </p>
-          {detail ? (
-            <p className="mt-1.5 line-clamp-2 text-xs leading-snug text-muted-foreground sm:text-sm">
-              {detail}
-            </p>
-          ) : null}
-          <div className="mt-4 inline-flex items-center gap-1 text-base font-semibold text-foreground">
-            {cta}
-            <ArrowRight className="size-3.5 transition-transform group-hover:translate-x-0.5" />
-          </div>
-        </div>
-      </Link>
-    );
-  }
+  /** Tone styrer både gradient-aksent og ikon-bobble.
+   * Subtilt — vi vil ikke at "Gjør dette først" skal skrike — men nok til
+   * å plassere primærhandlingen visuelt foran resten av siden. */
+  const surface =
+    tone === "warning"
+      ? "from-amber-500/[0.10] via-card to-card border-amber-500/25"
+      : tone === "action"
+        ? "from-primary/[0.10] via-card to-card border-primary/25"
+        : "from-muted/40 via-card to-card border-border/60";
+  const iconBubble =
+    tone === "warning"
+      ? "bg-amber-500/15 text-amber-900 dark:text-amber-100 ring-amber-500/25"
+      : tone === "action"
+        ? "bg-primary/12 text-primary ring-primary/25"
+        : "bg-muted text-foreground ring-border/60";
+  const ctaTone =
+    tone === "warning"
+      ? "bg-amber-600 text-white hover:bg-amber-600/90 dark:bg-amber-500 dark:text-amber-950 dark:hover:bg-amber-500/90"
+      : tone === "action"
+        ? "bg-primary text-primary-foreground hover:bg-primary/90"
+        : "bg-foreground text-background hover:opacity-90";
+  const eyebrowChip =
+    tone === "warning"
+      ? "bg-amber-500/15 text-amber-900 dark:text-amber-100"
+      : tone === "action"
+        ? "bg-primary/12 text-primary"
+        : "bg-muted text-muted-foreground";
 
   return (
     <Link
       href={href}
       title={linkTitle}
       className={cn(
-        "group rounded-2xl p-4 ring-1 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md",
-        tone === "warning"
-          ? "bg-amber-500/[0.07] ring-amber-500/20"
-          : tone === "action"
-            ? "bg-primary/[0.06] ring-primary/20"
-            : "bg-background/85 ring-black/[0.04] dark:ring-white/[0.06]",
+        "group relative flex gap-4 overflow-hidden rounded-3xl border bg-gradient-to-br p-5 shadow-sm transition-all duration-200 hover:shadow-lg sm:gap-6 sm:p-7",
+        surface,
       )}
     >
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-            {eyebrow}
-          </p>
-          <p className="mt-2 text-sm font-semibold leading-snug text-foreground">
-            {title}
-          </p>
-          {detail ? (
-            <p className="mt-1.5 line-clamp-2 text-xs leading-snug text-muted-foreground">
-              {detail}
-            </p>
-          ) : null}
-        </div>
-        <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-card shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.08]">
-          <Icon className="size-4.5 text-foreground/80 transition-transform group-hover:scale-110" />
-        </div>
+      <div
+        className={cn(
+          "flex size-12 shrink-0 items-center justify-center rounded-2xl shadow-sm ring-1 sm:size-14",
+          iconBubble,
+        )}
+        aria-hidden
+      >
+        <Icon className="size-6 sm:size-7 transition-transform duration-200 group-hover:scale-110" />
       </div>
-      <div className="mt-4 inline-flex items-center gap-1 text-sm font-semibold text-foreground">
-        {cta}
-        <ArrowRight className="size-3.5 transition-transform group-hover:translate-x-0.5" />
+      <div className="min-w-0 flex-1">
+        <span
+          className={cn(
+            "inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em]",
+            eyebrowChip,
+          )}
+        >
+          {eyebrow}
+        </span>
+        <p className="font-heading mt-3 text-lg font-semibold leading-snug tracking-tight text-foreground sm:text-2xl">
+          {title}
+        </p>
+        {detail ? (
+          <p className="mt-2 line-clamp-2 text-sm leading-relaxed text-muted-foreground">
+            {detail}
+          </p>
+        ) : null}
+        <div
+          className={cn(
+            "mt-5 inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-sm font-semibold shadow-sm transition-all duration-200 group-hover:shadow-md",
+            ctaTone,
+          )}
+        >
+          {cta}
+          <ArrowRight className="size-3.5 transition-transform group-hover:translate-x-0.5" />
+        </div>
       </div>
     </Link>
   );
@@ -381,222 +305,132 @@ export function WorkspaceOperationalDashboard({
 
   return (
     <div className="space-y-6">
+      {/* Stripped: tidligere et kort-i-kort med eyebrow «Fokus nå» og en
+          forklarende setning. FocusActionCard er allerede tydelig styla, så
+          vi lar den stå som hero direkte og lister snarveier under som
+          rene tekstlenker — uten innpakning. KISS. */}
       {showMetrics ? (
-        <section className="space-y-4" aria-labelledby="workspace-focus-heading">
-          <div className="rounded-3xl border border-border/50 bg-card/80 p-4 shadow-sm sm:p-5">
-            <div className="space-y-4">
-              <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-                <h2
-                  id="workspace-focus-heading"
-                  className="font-heading text-lg font-semibold tracking-tight text-foreground sm:text-xl"
-                >
-                  Fokus nå
-                </h2>
-                <p className="text-sm text-muted-foreground">
-                  Én anbefalt handling og de viktigste køene akkurat nå.
-                </p>
-              </div>
-
-              <FocusActionCard
-                eyebrow={primarySpec.eyebrow}
-                title={primarySpec.title}
-                detail={primarySpec.detail}
-                href={primarySpec.href}
-                cta={primarySpec.cta}
-                icon={primarySpec.icon}
-                tone={primarySpec.tone}
-                navigationTarget={primarySpec.navigationTarget}
-                emphasize
+        <section className="space-y-3" aria-labelledby="workspace-focus-heading">
+          <h2 id="workspace-focus-heading" className="sr-only">
+            Anbefalt handling
+          </h2>
+          <FocusActionCard
+            eyebrow={primarySpec.eyebrow}
+            title={primarySpec.title}
+            detail={primarySpec.detail}
+            href={primarySpec.href}
+            cta={primarySpec.cta}
+            icon={primarySpec.icon}
+            tone={primarySpec.tone}
+            navigationTarget={primarySpec.navigationTarget}
+          />
+          <div
+            className="flex flex-wrap gap-2"
+            aria-label="Snarveier"
+          >
+            {primarySpec.key !== "ros" && withoutRosLinkCount > 0 && rosTarget ? (
+              <ShortcutChip
+                href={`/w/${wid}?kobleRos=1&assessmentId=${rosTarget.assessmentId}`}
+                icon={ShieldPlus}
+                tone="warning"
+                label={`Uten ROS (${withoutRosLinkCount})`}
               />
-
-              <div
-                className="flex flex-wrap gap-x-5 gap-y-2 border-t border-black/[0.06] pt-4 text-sm dark:border-white/[0.08]"
-                aria-label="Andre snarveier"
-              >
-                {primarySpec.key !== "ros" && withoutRosLinkCount > 0 && rosTarget ? (
-                  <Link
-                    href={`/w/${wid}?kobleRos=1&assessmentId=${rosTarget.assessmentId}`}
-                    className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 font-medium transition-colors"
-                  >
-                    <ShieldPlus className="size-3.5 text-amber-600 dark:text-amber-400" aria-hidden />
-                    Uten ROS ({withoutRosLinkCount})
-                    <ArrowRight className="size-3.5 opacity-60" aria-hidden />
-                  </Link>
-                ) : null}
-                {primarySpec.key !== "followup" && followUpCount > 0 ? (
-                  <Link
-                    href={
-                      followUpRow
-                        ? `/w/${wid}/a/${followUpRow.assessmentId}`
-                        : `/w/${wid}/vurderinger`
-                    }
-                    className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 font-medium transition-colors"
-                  >
-                    <PlayCircle className="size-3.5 text-primary" aria-hidden />
-                    Trenger oppfølging ({followUpCount})
-                    <ArrowRight className="size-3.5 opacity-60" aria-hidden />
-                  </Link>
-                ) : null}
-                {primarySpec.key !== "recent" && latestWork ? (
-                  <Link
-                    href={`/w/${wid}/a/${latestWork.assessmentId}`}
-                    className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 font-medium transition-colors"
-                  >
-                    <ClipboardList className="size-3.5" aria-hidden />
-                    Sist arbeid
-                    <ArrowRight className="size-3.5 opacity-60" aria-hidden />
-                  </Link>
-                ) : null}
-                {withoutRosLinkCount === 0 ? (
-                  <Link
-                    href={`/w/${wid}/ros`}
-                    className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 font-medium transition-colors"
-                  >
-                    ROS-oversikt
-                    <ArrowRight className="size-3.5 opacity-60" aria-hidden />
-                  </Link>
-                ) : null}
-              </div>
-            </div>
-          </div>
-
-          <div className="grid gap-3 sm:grid-cols-3">
-            <DashboardMetricCard
-              title="Uten ROS"
-              value={withoutRosLinkCount}
-              status={withoutRosLinkCount > 0 ? "Trenger handling" : "Ingen åpne mangler"}
-              hint={
-                withoutRosLinkCount > 0
-                  ? "Vurderinger som mangler ROS-kobling — klikk for liste."
-                  : "Alle synlige vurderinger har ROS der det trengs."
-              }
+            ) : null}
+            {primarySpec.key !== "followup" && followUpCount > 0 ? (
+              <ShortcutChip
+                href={
+                  followUpRow
+                    ? `/w/${wid}/a/${followUpRow.assessmentId}`
+                    : `/w/${wid}/vurderinger`
+                }
+                icon={PlayCircle}
+                tone="action"
+                label={`Oppfølging (${followUpCount})`}
+              />
+            ) : null}
+            <ShortcutChip
               href={`/w/${wid}/vurderinger`}
-              icon={ShieldAlert}
-              tone={withoutRosLinkCount > 0 ? "warning" : "neutral"}
+              icon={ClipboardList}
+              label="Alle vurderinger"
             />
-            <DashboardMetricCard
-              title="Beslutning neste"
-              value={readyForPrioritizationCount}
-              status={readyForPrioritizationCount > 0 ? "Klar for prioritering" : "Ingen åpne"}
-              hint={
-                readyForPrioritizationCount > 0
-                  ? "Klare for prioritering eller beslutning."
-                  : "Ingen vurderinger venter på neste steg."
-              }
-              href={`/w/${wid}/vurderinger`}
-              icon={PlayCircle}
-              tone={readyForPrioritizationCount > 0 ? "action" : "neutral"}
-            />
-            <DashboardMetricCard
-              title="Prosesser"
-              value="Åpne"
-              status="Register og dokumentasjon"
-              hint={
-                onHoldCount > 0
-                  ? "Prosessregisteret med prosesser, dokumentasjon og koblinger."
-                  : "Prosessregisteret med prosesser, dokumentasjon og koblinger."
-              }
+            <ShortcutChip
               href={`/w/${wid}/vurderinger?fane=prosesser`}
               icon={Workflow}
-              tone="neutral"
+              label="Prosesser"
             />
           </div>
         </section>
       ) : null}
 
-      {showPriority || showRecent ? (
-        <div
-          className={
-            showPriority && showRecent
-              ? "grid gap-4 xl:grid-cols-2"
-              : "grid max-w-3xl gap-4"
-          }
-        >
-          {showPriority ? (
-            <section className="space-y-3">
-              <div className="flex items-center justify-between gap-2">
-                <h2 className="font-heading text-base font-semibold tracking-tight">
-                  Høyest prioritet
-                </h2>
-                <Link
-                  href={`/w/${wid}/vurderinger`}
-                  className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-semibold text-muted-foreground transition-colors hover:text-foreground"
-                >
-                  Alle
-                  <ArrowRight className="size-3" />
-                </Link>
-              </div>
-              {priorityTop.length === 0 ? (
-                <EmptyState wid={wid} />
-              ) : (
-                <ul className="space-y-3">
-                  {priorityTop.map((row, index) => (
-                    <li key={row.assessmentId}>
-                      <AssessmentDashRow
-                        wid={wid}
-                        row={row}
-                        emphasize={index === 0}
-                      />
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </section>
-          ) : null}
-
-          {showRecent ? (
-            <section className="space-y-3">
-              <div className="flex items-center justify-between gap-2">
-                <h2 className="font-heading text-base font-semibold tracking-tight">
-                  Siste aktivitet
-                </h2>
-                <Link
-                  href={`/w/${wid}/vurderinger`}
-                  className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-semibold text-muted-foreground transition-colors hover:text-foreground"
-                >
-                  Alle
-                  <ArrowRight className="size-3" />
-                </Link>
-              </div>
-              {recentlyUpdated.length === 0 ? (
-                <EmptyState wid={wid} />
-              ) : (
-                <ul className="space-y-3">
-                  {recentlyUpdated.map((row, index) => (
-                    <li key={`r-${row.assessmentId}`}>
-                      <AssessmentDashRow
-                        wid={wid}
-                        row={row}
-                        showTime
-                        emphasize={index === 0}
-                      />
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </section>
-          ) : null}
-        </div>
-      ) : null}
+      {/* Én forenklet liste i stedet for to parallelle kolonner.
+          «Høyest prioritet» og «Siste aktivitet» dekker stort sett samme
+          vurderinger; vi viser bare én — flettet etter brukerens preferanse
+          (recent har forrang fordi det matcher hva folk forventer å finne
+          igjen først). Brukeren kan fortsatt skjule listen i Visning-menyen. */}
+      {showPriority || showRecent ? (() => {
+        const list =
+          showRecent && recentlyUpdated.length > 0
+            ? recentlyUpdated
+            : priorityTop;
+        const heading =
+          showRecent && recentlyUpdated.length > 0
+            ? "Siste aktivitet"
+            : "Høyest prioritet";
+        return (
+          <section className="space-y-3">
+            <div className="flex items-center justify-between gap-2">
+              <h2 className="font-heading text-base font-semibold tracking-tight">
+                {heading}
+              </h2>
+              <Link
+                href={`/w/${wid}/vurderinger`}
+                className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-semibold text-muted-foreground transition-colors hover:text-foreground"
+              >
+                Alle
+                <ArrowRight className="size-3" />
+              </Link>
+            </div>
+            {list.length === 0 ? (
+              <EmptyState wid={wid} />
+            ) : (
+              <ul className="divide-y divide-border/40 overflow-hidden rounded-2xl bg-card/80 shadow-sm ring-1 ring-black/[0.04] backdrop-blur-sm dark:ring-white/[0.06]">
+                {list.map((row) => (
+                  <li key={row.assessmentId}>
+                    <AssessmentDashRow wid={wid} row={row} />
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+        );
+      })() : null}
     </div>
   );
 }
 
 function EmptyState({ wid }: { wid: string }) {
   return (
-    <div className="rounded-2xl border border-dashed border-border/50 bg-muted/10 px-4 py-8 text-center ring-1 ring-black/[0.03] dark:ring-white/[0.05]">
-      <p className="text-sm text-muted-foreground">Ingen vurderinger ennå.</p>
-      <div className="mt-4 flex flex-wrap items-center justify-center gap-3">
+    <div className="rounded-2xl border border-dashed border-border/50 bg-gradient-to-br from-muted/30 via-card/40 to-card/40 px-4 py-10 text-center backdrop-blur-sm">
+      <div className="mx-auto flex size-10 items-center justify-center rounded-full bg-muted text-muted-foreground">
+        <ClipboardList className="size-5" aria-hidden />
+      </div>
+      <p className="mt-3 text-sm font-medium text-foreground">
+        Ingen vurderinger ennå
+      </p>
+      <p className="text-muted-foreground mt-1 text-xs">
+        Start fra en prosess eller opprett en ny vurdering.
+      </p>
+      <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
         <Link
           href={`/w/${wid}/vurderinger`}
-          className="inline-flex items-center gap-1 rounded-xl bg-foreground px-3 py-2 text-sm font-semibold text-background transition-opacity hover:opacity-90"
+          className="inline-flex items-center gap-1.5 rounded-full bg-foreground px-4 py-2 text-sm font-semibold text-background shadow-sm transition-all hover:shadow-md hover:opacity-90"
         >
           Start ny vurdering
           <ArrowRight className="size-3.5" />
         </Link>
         <Link
           href={`/w/${wid}/vurderinger?fane=prosesser`}
-          className="inline-flex items-center gap-1 rounded-xl px-3 py-2 text-sm font-medium text-foreground transition-colors hover:bg-muted"
+          className="inline-flex items-center gap-1.5 rounded-full border border-border/60 bg-card/60 px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-card"
         >
           Se prosesser
         </Link>
@@ -605,84 +439,99 @@ function EmptyState({ wid }: { wid: string }) {
   );
 }
 
+function ShortcutChip({
+  href,
+  icon: Icon,
+  label,
+  tone = "neutral",
+}: {
+  href: string;
+  icon: ComponentType<{ className?: string }>;
+  label: string;
+  tone?: "neutral" | "warning" | "action";
+}) {
+  const toneClass =
+    tone === "warning"
+      ? "border-amber-500/25 bg-amber-500/[0.06] text-amber-900 hover:bg-amber-500/[0.12] hover:border-amber-500/40 dark:text-amber-100"
+      : tone === "action"
+        ? "border-primary/25 bg-primary/[0.06] text-foreground hover:bg-primary/[0.12] hover:border-primary/40"
+        : "border-border/60 bg-card/60 text-muted-foreground hover:bg-card hover:text-foreground hover:border-border backdrop-blur-sm";
+  const iconClass =
+    tone === "warning"
+      ? "text-amber-600 dark:text-amber-400"
+      : tone === "action"
+        ? "text-primary"
+        : "text-muted-foreground/80 group-hover:text-foreground";
+  return (
+    <Link
+      href={href}
+      className={cn(
+        "group inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium shadow-xs transition-all duration-200 hover:shadow-sm",
+        toneClass,
+      )}
+    >
+      <Icon className={cn("size-3.5 transition-colors", iconClass)} aria-hidden />
+      {label}
+    </Link>
+  );
+}
+
+/** Liten farget prikk som indikator i stedet for tykk venstre-kant.
+ * Mer moderne, mindre visuell støy, fungerer like godt som signal. */
+function priorityDotClass(score: number): string {
+  if (!Number.isFinite(score)) return "bg-slate-400/60";
+  if (score >= 70) return "bg-emerald-500";
+  if (score >= 45) return "bg-amber-500";
+  return "bg-slate-400/70";
+}
+
 function AssessmentDashRow({
   wid,
   row,
-  showTime,
-  emphasize,
 }: {
   wid: string;
   row: DashboardRow;
-  showTime?: boolean;
-  emphasize?: boolean;
 }) {
-  const priority = priorityBandLabel(row.effectivePriority);
   const rosLinked = row.rosLinked ?? row.hasRosLink;
 
   return (
     <Link
       href={`/w/${wid}/a/${row.assessmentId}`}
-      className={cn(
-        "group flex min-h-[88px] flex-col gap-3 rounded-2xl border-l-4 bg-card p-4 shadow-sm ring-1 ring-black/[0.04] transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md dark:ring-white/[0.06]",
-        priorityBorderAccentClass(row.effectivePriority),
-        emphasize
-          ? "ring-primary/20 shadow-md"
-          : "border-border/40",
-      )}
+      className="group flex items-center gap-3 px-4 py-3 transition-colors hover:bg-muted/40 sm:gap-4 sm:px-5 sm:py-3.5"
     >
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-2">
-            <span
-              className={cn(
-                "rounded-lg border px-2 py-1 text-[10px] font-semibold",
-                priorityBandBadgeClass(row.effectivePriority),
-              )}
-            >
-              {priority.short}
-            </span>
-            {!rosLinked ? (
-              <span className="rounded-lg bg-amber-500/12 px-2 py-1 text-[10px] font-semibold text-amber-950 dark:text-amber-100">
+      <span
+        className={cn(
+          "size-2 shrink-0 rounded-full ring-2 ring-background transition-transform group-hover:scale-125",
+          priorityDotClass(row.effectivePriority),
+        )}
+        aria-hidden
+      />
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm font-medium text-foreground group-hover:text-primary">
+          {row.title}
+        </p>
+        <div className="text-muted-foreground mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px]">
+          <span>{PIPELINE_STATUS_LABELS[row.pipelineStatus]}</span>
+          <span aria-hidden>·</span>
+          <span className="inline-flex items-center gap-1">
+            <Clock3 className="size-3 opacity-70" aria-hidden />
+            {formatRelativeUpdatedAt(row.updatedAt)}
+          </span>
+          {!rosLinked ? (
+            <>
+              <span aria-hidden>·</span>
+              <span className="inline-flex items-center gap-1 font-medium text-amber-700 dark:text-amber-300">
+                <ShieldAlert className="size-3" aria-hidden />
                 Uten ROS
               </span>
-            ) : null}
-            {showTime ? (
-              <span className="inline-flex items-center gap-1 text-[10px] font-medium text-muted-foreground">
-                <Clock3 className="size-3" />
-                {formatRelativeUpdatedAt(row.updatedAt)}
-              </span>
-            ) : null}
-          </div>
-          <p className="mt-2 line-clamp-2 text-sm font-semibold leading-snug text-foreground">
-            {row.title}
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
-            {row.effectivePriority.toFixed(1)}
-          </span>
-          <ArrowRight className="size-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
+            </>
+          ) : null}
         </div>
       </div>
-
-      <div className="text-muted-foreground flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px]">
-        <span>{PIPELINE_STATUS_LABELS[row.pipelineStatus]}</span>
-        {row.ownerName ? <span>{row.ownerName}</span> : null}
-      </div>
-
-      <div className="bg-muted/25 flex items-start gap-2 rounded-xl px-3 py-2">
-        {rosLinked ? (
-          <PlayCircle className="text-primary mt-0.5 size-3.5 shrink-0" aria-hidden />
-        ) : (
-          <ShieldAlert
-            className="mt-0.5 size-3.5 shrink-0 text-amber-700 dark:text-amber-300"
-            aria-hidden
-          />
-        )}
-        <p className="line-clamp-2 text-xs leading-snug text-foreground/90 sm:line-clamp-1">
-          {row.nextStepHint}
-        </p>
-      </div>
+      <ArrowRight
+        className="size-4 shrink-0 text-muted-foreground/40 transition-all duration-200 group-hover:translate-x-0.5 group-hover:text-foreground"
+        aria-hidden
+      />
     </Link>
   );
 }
