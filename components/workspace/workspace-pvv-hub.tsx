@@ -128,6 +128,7 @@ export function WorkspacePvvHub({ workspaceId, activeTab, initialOrgUnit }: Prop
             workspaceId={workspaceId}
             hubMode
             approvedIntakeForProcessregister={approvedIntakeForProcessregister}
+            initialOrgUnit={initialOrgUnit}
           />
         )}
       </div>

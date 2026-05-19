@@ -745,6 +745,7 @@ export function WorkspaceCandidatesPanel({
   workspaceId,
   hubMode = false,
   approvedIntakeForProcessregister,
+  initialOrgUnit,
 }: {
   workspaceId: Id<"workspaces">;
   /** Når true: vist under PVV-hub med tydeligere forklaring og layout */
@@ -756,10 +757,13 @@ export function WorkspaceCandidatesPanel({
   approvedIntakeForProcessregister:
     | undefined
     | ApprovedIntakeProcessregisterRow[];
+  /** Valgfritt deep-link: filtrer prosesser til valgt enhet (inkludert underenheter). */
+  initialOrgUnit?: Id<"orgUnits"> | null;
 }) {
   const membership = useQuery(api.workspaces.getMyMembership, { workspaceId });
   const workspace = useQuery(api.workspaces.get, { workspaceId });
   const candidates = useQuery(api.candidates.listByWorkspace, { workspaceId });
+  const assessments = useQuery(api.assessments.listByWorkspace, { workspaceId });
   /** Eksisterende query (alltid deployet) — ROS-kandidat-sett utledes i useMemo under. */
   const rosAnalysesForWorkspace = useQuery(api.ros.listAnalyses, {
     workspaceId,
@@ -841,6 +845,10 @@ export function WorkspaceCandidatesPanel({
   const [autoGhHelpOpen, setAutoGhHelpOpen] = useState(false);
   const [processRegHelpOpen, setProcessRegHelpOpen] = useState(false);
   const [processRegisterSearch, setProcessRegisterSearch] = useState("");
+  const [orgUnitFilter, setOrgUnitFilter] = useStickyState<
+    "" | Id<"orgUnits">
+  >(`ws:${workspaceId}:processes:orgFilter`, initialOrgUnit ?? "");
+  const appliedOrgUnitRef = useRef(false);
 
   type GithubPreviewData = {
     title: string;
@@ -1224,6 +1232,13 @@ export function WorkspaceCandidatesPanel({
     );
   }, [workspace]);
 
+  useEffect(() => {
+    if (initialOrgUnit && !appliedOrgUnitRef.current) {
+      appliedOrgUnitRef.current = true;
+      setOrgUnitFilter(initialOrgUnit);
+    }
+  }, [initialOrgUnit, setOrgUnitFilter]);
+
   const candidatesSorted = useMemo(() => {
     if (!candidates) {
       return [];
@@ -1236,21 +1251,43 @@ export function WorkspaceCandidatesPanel({
   const processRegisterSearchQuery = processRegisterSearch.trim().toLowerCase();
 
   const approvedIntakeFiltered = useMemo(() => {
-    const rows = approvedIntakeForProcessregister ?? [];
+    let rows = approvedIntakeForProcessregister ?? [];
+    const units = orgUnits ?? [];
+    if (orgUnitFilter) {
+      const subtree = orgSubtreeIds(orgUnitFilter, units);
+      const assessmentOrgById = new Map(
+        (assessments ?? []).map((a) => [a._id, a.orgUnitId] as const),
+      );
+      rows = rows.filter((r) => {
+        const ou = assessmentOrgById.get(r.approvedAssessmentId);
+        return ou ? subtree.has(ou) : false;
+      });
+    }
     if (!processRegisterSearchQuery) {
       return rows;
     }
     return rows.filter((r) =>
       r.title.toLowerCase().includes(processRegisterSearchQuery),
     );
-  }, [approvedIntakeForProcessregister, processRegisterSearchQuery]);
+  }, [
+    approvedIntakeForProcessregister,
+    processRegisterSearchQuery,
+    orgUnits,
+    orgUnitFilter,
+    assessments,
+  ]);
 
   const candidatesFiltered = useMemo(() => {
-    if (!processRegisterSearchQuery) {
-      return candidatesSorted;
-    }
     const units = orgUnits ?? [];
-    return candidatesSorted.filter((c) => {
+    let rows = candidatesSorted;
+    if (orgUnitFilter) {
+      const subtree = orgSubtreeIds(orgUnitFilter, units);
+      rows = rows.filter((c) => (c.orgUnitId ? subtree.has(c.orgUnitId) : false));
+    }
+    if (!processRegisterSearchQuery) {
+      return rows;
+    }
+    return rows.filter((c) => {
       const org = candidateOrgUnitLabel(c, units);
       return (
         c.name.toLowerCase().includes(processRegisterSearchQuery) ||
@@ -1258,7 +1295,7 @@ export function WorkspaceCandidatesPanel({
         org.toLowerCase().includes(processRegisterSearchQuery)
       );
     });
-  }, [candidatesSorted, processRegisterSearchQuery, orgUnits]);
+  }, [candidatesSorted, processRegisterSearchQuery, orgUnits, orgUnitFilter]);
 
   const projectItemIdsLinkedInPvv = useMemo(() => {
     const s = new Set<string>();
@@ -1311,6 +1348,7 @@ export function WorkspaceCandidatesPanel({
 
   if (
     candidates === undefined ||
+    assessments === undefined ||
     membership === undefined ||
     orgUnits === undefined ||
     workspace === undefined ||
@@ -1804,15 +1842,38 @@ export function WorkspaceCandidatesPanel({
                 >
                   Alle prosesser
                 </h2>
-                {candidates.length + approvedIntakeForProcessregister.length >= 5 ? (
-                  <SearchInput
-                    value={processRegisterSearch}
-                    onChange={(e) => setProcessRegisterSearch(e.target.value)}
-                    placeholder="Søk navn, ID eller enhet …"
-                    className="h-9 w-full min-w-0 rounded-full sm:max-w-xs"
-                    aria-label="Søk i prosesser og skjemavurderinger"
-                  />
-                ) : null}
+                <div className="flex w-full min-w-0 flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
+                  {candidates.length + approvedIntakeForProcessregister.length >= 5 ? (
+                    <SearchInput
+                      value={processRegisterSearch}
+                      onChange={(e) => setProcessRegisterSearch(e.target.value)}
+                      placeholder="Søk navn, ID eller enhet …"
+                      className="h-9 w-full min-w-0 rounded-full sm:max-w-xs"
+                      aria-label="Søk i prosesser og skjemavurderinger"
+                    />
+                  ) : null}
+                  {orgUnits.length > 0 ? (
+                    <select
+                      className="border-input bg-background h-9 w-full rounded-full border px-3 text-xs sm:w-[15rem]"
+                      value={orgUnitFilter}
+                      onChange={(e) =>
+                        setOrgUnitFilter(
+                          e.target.value === ""
+                            ? ""
+                            : (e.target.value as Id<"orgUnits">),
+                        )
+                      }
+                      aria-label="Filtrer prosesser på organisasjonsenhet"
+                    >
+                      <option value="">Alle enheter</option>
+                      {orgUnits.map((u) => (
+                        <option key={u._id} value={u._id}>
+                          {u.name}
+                        </option>
+                      ))}
+                    </select>
+                  ) : null}
+                </div>
               </div>
             ) : (
               <h2
@@ -1826,6 +1887,28 @@ export function WorkspaceCandidatesPanel({
                     : `${approvedIntakeForProcessregister.length} fra skjema`}
               </h2>
             )}
+            {hubMode ? (
+              <div className="flex flex-wrap gap-2" aria-label="Start etter rolle">
+                <Link
+                  href={`/w/${workspaceId}/vurderinger?fane=prosesser`}
+                  className="text-muted-foreground hover:text-foreground rounded-full border border-border/50 bg-card/60 px-2.5 py-1 text-[11px] transition-colors"
+                >
+                  Prosessdesigner: opprett/vedlikehold prosess
+                </Link>
+                <Link
+                  href={`/w/${workspaceId}/vurderinger`}
+                  className="text-muted-foreground hover:text-foreground rounded-full border border-border/50 bg-card/60 px-2.5 py-1 text-[11px] transition-colors"
+                >
+                  Koordinator: start vurdering fra prosess
+                </Link>
+                <Link
+                  href={`/w/${workspaceId}/ros`}
+                  className="text-muted-foreground hover:text-foreground rounded-full border border-border/50 bg-card/60 px-2.5 py-1 text-[11px] transition-colors"
+                >
+                  Utvikler: sjekk ROS og tiltak
+                </Link>
+              </div>
+            ) : null}
 
             {processRegisterSearchQuery &&
             approvedIntakeFiltered.length === 0 &&
@@ -4071,6 +4154,28 @@ export function WorkspaceAssessmentsPanel({
             />
           ) : null}
         </div>
+        {hubMode ? (
+          <div className="flex flex-wrap gap-2" aria-label="Start etter rolle">
+            <Link
+              href={`/w/${workspaceId}/vurderinger`}
+              className="text-muted-foreground hover:text-foreground rounded-full border border-border/50 bg-card/60 px-2.5 py-1 text-[11px] transition-colors"
+            >
+              Koordinator: prioriter og følg opp vurderinger
+            </Link>
+            <Link
+              href={`/w/${workspaceId}/vurderinger?fane=prosesser`}
+              className="text-muted-foreground hover:text-foreground rounded-full border border-border/50 bg-card/60 px-2.5 py-1 text-[11px] transition-colors"
+            >
+              Prosessdesigner: koble riktig prosess
+            </Link>
+            <Link
+              href={`/w/${workspaceId}/ros`}
+              className="text-muted-foreground hover:text-foreground rounded-full border border-border/50 bg-card/60 px-2.5 py-1 text-[11px] transition-colors"
+            >
+              Utvikler: valider ROS-grunnlag
+            </Link>
+          </div>
+        ) : null}
 
         {assessments.length >= 8 ? (
           <FilterToolbar>

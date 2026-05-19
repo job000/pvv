@@ -3822,80 +3822,112 @@ export function RosAnalysisEditor({
             </div>
           </div>
 
-          <div className="border-border/40 space-y-3 rounded-xl border bg-card/70 px-3 py-3 sm:px-4">
-            <label className="flex cursor-pointer items-start gap-3">
-              <Checkbox
-                checked={reviewScheduleActive}
-                disabled={reviewMetaSaving}
-                onCheckedChange={(c) => {
-                  const checked = Boolean(c);
-                  void (async () => {
-                    const prev = reviewScheduleActive;
-                    setReviewScheduleActive(checked);
-                    const ok = await patchRosReviewFields({
-                      reviewScheduleActive: checked,
-                    });
-                    if (!ok) {
-                      setReviewScheduleActive(prev);
-                      return;
-                    }
-                    toast.success(
-                      checked
-                        ? "Planlagt revisjon er aktiv."
-                        : "Planlagt revisjon er pauset (ingen liste/e-post for denne analysen).",
-                    );
-                  })();
-                }}
-                className="mt-0.5"
-              />
-              <span>
-                <span className="text-sm font-medium">Planlagt revisjon</span>
-                <span className="text-muted-foreground block text-[11px] leading-snug">
-                  Neste frist vises i arbeidsområdets revisjonsoversikt når dette er
-                  på.
-                </span>
+          <div className="flex flex-wrap gap-2">
+            <span className="bg-card ring-border/40 rounded-full px-2.5 py-1 text-[11px] ring-1">
+              Planlagt revisjon:{" "}
+              <strong>{reviewScheduleActive ? "På" : "Av"}</strong>
+            </span>
+            <span className="bg-card ring-border/40 rounded-full px-2.5 py-1 text-[11px] ring-1">
+              E-postvarsling:{" "}
+              <strong>
+                {reviewScheduleActive
+                  ? reviewEmailRemindersEnabled
+                    ? "På"
+                    : "Av"
+                  : "Pauset"}
+              </strong>
+            </span>
+            {nextReviewLocal ? (
+              <span className="bg-card ring-border/40 rounded-full px-2.5 py-1 text-[11px] ring-1">
+                Neste frist satt
               </span>
-            </label>
-
-            <label className="flex cursor-pointer items-start gap-3">
-              <Checkbox
-                checked={reviewEmailRemindersEnabled}
-                disabled={reviewMetaSaving || !reviewScheduleActive}
-                onCheckedChange={(c) => {
-                  const checked = Boolean(c);
-                  void (async () => {
-                    const prev = reviewEmailRemindersEnabled;
-                    setReviewEmailRemindersEnabled(checked);
-                    const ok = await patchRosReviewFields({
-                      reviewEmailRemindersEnabled: checked,
-                    });
-                    if (!ok) {
-                      setReviewEmailRemindersEnabled(prev);
-                      return;
-                    }
-                    toast.success(
-                      checked
-                        ? "E-post påminnelse ved forfalt frist er på."
-                        : "E-post påminnelse er av (fristen vises fortsatt i appen).",
-                    );
-                  })();
-                }}
-                className="mt-0.5"
-              />
-              <span>
-                <span className="text-sm font-medium">E-postvarsling</span>
-                <span className="text-muted-foreground block text-[11px] leading-snug">
-                  Sendes når fristen er passert (maks. én gang i uken per analyse).
-                  Krever e-post konfigurert i drift.
-                </span>
-                <span className="text-foreground/90 mt-1.5 block text-[11px] leading-snug">
-                  <span className="font-semibold">Mottaker:</span>{" "}
-                  {rosReviewReminderRecipientLine ??
-                    "Den som opprettet denne ROS-analysen — samme e-postadresse som på brukerkontoen (ikke valgfritt mottaker i dag)."}
-                </span>
+            ) : (
+              <span className="bg-card ring-border/40 rounded-full px-2.5 py-1 text-[11px] ring-1">
+                Mangler neste frist
               </span>
-            </label>
+            )}
           </div>
+
+          <details className="group/rev rounded-xl border border-border/40 bg-card/70 px-3 py-3 sm:px-4">
+            <summary className="hover:text-foreground text-muted-foreground flex cursor-pointer list-none items-center justify-between text-xs font-medium transition-colors [&::-webkit-details-marker]:hidden">
+              Varslingsinnstillinger (avansert)
+              <ChevronRight className="size-4 transition-transform group-open/rev:rotate-90" />
+            </summary>
+            <div className="mt-3 space-y-3">
+              <label className="flex cursor-pointer items-start gap-3">
+                <Checkbox
+                  checked={reviewScheduleActive}
+                  disabled={reviewMetaSaving}
+                  onCheckedChange={(c) => {
+                    const checked = Boolean(c);
+                    void (async () => {
+                      const prev = reviewScheduleActive;
+                      setReviewScheduleActive(checked);
+                      const ok = await patchRosReviewFields({
+                        reviewScheduleActive: checked,
+                      });
+                      if (!ok) {
+                        setReviewScheduleActive(prev);
+                        return;
+                      }
+                      toast.success(
+                        checked
+                          ? "Planlagt revisjon er aktiv."
+                          : "Planlagt revisjon er pauset (ingen liste/e-post for denne analysen).",
+                      );
+                    })();
+                  }}
+                  className="mt-0.5"
+                />
+                <span>
+                  <span className="text-sm font-medium">Planlagt revisjon</span>
+                  <span className="text-muted-foreground block text-[11px] leading-snug">
+                    Neste frist vises i arbeidsområdets revisjonsoversikt når
+                    dette er på.
+                  </span>
+                </span>
+              </label>
+
+              <label className="flex cursor-pointer items-start gap-3">
+                <Checkbox
+                  checked={reviewEmailRemindersEnabled}
+                  disabled={reviewMetaSaving || !reviewScheduleActive}
+                  onCheckedChange={(c) => {
+                    const checked = Boolean(c);
+                    void (async () => {
+                      const prev = reviewEmailRemindersEnabled;
+                      setReviewEmailRemindersEnabled(checked);
+                      const ok = await patchRosReviewFields({
+                        reviewEmailRemindersEnabled: checked,
+                      });
+                      if (!ok) {
+                        setReviewEmailRemindersEnabled(prev);
+                        return;
+                      }
+                      toast.success(
+                        checked
+                          ? "E-post påminnelse ved forfalt frist er på."
+                          : "E-post påminnelse er av (fristen vises fortsatt i appen).",
+                      );
+                    })();
+                  }}
+                  className="mt-0.5"
+                />
+                <span>
+                  <span className="text-sm font-medium">E-postvarsling</span>
+                  <span className="text-muted-foreground block text-[11px] leading-snug">
+                    Sendes når fristen er passert (maks. én gang i uken per
+                    analyse). Krever e-post konfigurert i drift.
+                  </span>
+                  <span className="text-foreground/90 mt-1.5 block text-[11px] leading-snug">
+                    <span className="font-semibold">Mottaker:</span>{" "}
+                    {rosReviewReminderRecipientLine ??
+                      "Den som opprettet denne ROS-analysen — samme e-postadresse som på brukerkontoen (ikke valgfritt mottaker i dag)."}
+                  </span>
+                </span>
+              </label>
+            </div>
+          </details>
 
           {!reviewScheduleActive ? (
             <p className="text-muted-foreground text-[11px] leading-relaxed">
@@ -3904,78 +3936,22 @@ export function RosAnalysisEditor({
             </p>
           ) : (
             <div className="space-y-3">
-              <div className="grid gap-3 sm:grid-cols-2">
-                <div className="space-y-1.5 sm:col-span-2">
-                  <Label htmlFor="ros-next-review" className="text-xs">
-                    Neste revisjon (dato og klokkeslett)
-                  </Label>
-                  <Input
-                    id="ros-next-review"
-                    type="datetime-local"
-                    value={nextReviewLocal}
-                    disabled={reviewMetaSaving}
-                    onChange={(e) => {
-                      setNextReviewLocal(e.target.value);
-                      setDirty(true);
-                    }}
-                    onBlur={() => void flushReviewSchedule()}
-                    className="h-10 rounded-xl"
-                  />
-                </div>
-                <div className="space-y-1.5 sm:col-span-2">
-                  <Label htmlFor="ros-review-recurrence" className="text-xs">
-                    Intervall etter «revisjon gjennomført»
-                  </Label>
-                  <select
-                    id="ros-review-recurrence"
-                    className="border-input bg-background flex h-10 w-full rounded-xl border px-3 text-sm disabled:opacity-50"
-                    value={reviewRecurrenceKind}
-                    disabled={reviewMetaSaving}
-                    onChange={(e) => {
-                      const nextKind = parseRosReviewRecurrenceKind(
-                        e.target.value,
-                      );
-                      const prevKind = reviewRecurrenceKind;
-                      setReviewRecurrenceKind(nextKind);
-                      void (async () => {
-                        const ok = await patchRosReviewFields({
-                          reviewRecurrenceKind:
-                            nextKind === "none" ? null : nextKind,
-                        });
-                        if (!ok) setReviewRecurrenceKind(prevKind);
-                      })();
-                    }}
-                  >
-                    {ROS_REVIEW_RECURRENCE_OPTIONS.map((o) => (
-                      <option key={o.value} value={o.value}>
-                        {o.label}
-                      </option>
-                    ))}
-                  </select>
-                  <p className="text-muted-foreground text-[11px] leading-relaxed">
-                    Med intervall annet enn «Kun manuell frist» oppdateres neste
-                    revisjonsdato automatisk når du trykker «Merk revisjon
-                    gjennomført».
-                  </p>
-                </div>
-                <div className="space-y-1.5 sm:col-span-2">
-                  <Label htmlFor="ros-review-routine" className="text-xs">
-                    Rutine / huskeliste
-                  </Label>
-                  <Textarea
-                    id="ros-review-routine"
-                    value={reviewRoutineNotes}
-                    disabled={reviewMetaSaving}
-                    onChange={(e) => {
-                      setReviewRoutineNotes(e.target.value);
-                      setDirty(true);
-                    }}
-                    onBlur={() => void flushReviewSchedule()}
-                    rows={2}
-                    className="min-h-[2.5rem] rounded-xl"
-                    placeholder="F.eks. årlig gjennomgang i sikkerhetsforum, eier bytter …"
-                  />
-                </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="ros-next-review" className="text-xs">
+                  Neste revisjon (dato og klokkeslett)
+                </Label>
+                <Input
+                  id="ros-next-review"
+                  type="datetime-local"
+                  value={nextReviewLocal}
+                  disabled={reviewMetaSaving}
+                  onChange={(e) => {
+                    setNextReviewLocal(e.target.value);
+                    setDirty(true);
+                  }}
+                  onBlur={() => void flushReviewSchedule()}
+                  className="h-10 rounded-xl"
+                />
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 <Button
@@ -4009,6 +3985,68 @@ export function RosAnalysisEditor({
                   Merk revisjon gjennomført
                 </Button>
               </div>
+              <details className="group/rev-extra rounded-xl border border-border/40 bg-card/70 px-3 py-3 sm:px-4">
+                <summary className="hover:text-foreground text-muted-foreground flex cursor-pointer list-none items-center justify-between text-xs font-medium transition-colors [&::-webkit-details-marker]:hidden">
+                  Automatikk og rutine (avansert)
+                  <ChevronRight className="size-4 transition-transform group-open/rev-extra:rotate-90" />
+                </summary>
+                <div className="mt-3 space-y-3">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="ros-review-recurrence" className="text-xs">
+                      Intervall etter «revisjon gjennomført»
+                    </Label>
+                    <select
+                      id="ros-review-recurrence"
+                      className="border-input bg-background flex h-10 w-full rounded-xl border px-3 text-sm disabled:opacity-50"
+                      value={reviewRecurrenceKind}
+                      disabled={reviewMetaSaving}
+                      onChange={(e) => {
+                        const nextKind = parseRosReviewRecurrenceKind(
+                          e.target.value,
+                        );
+                        const prevKind = reviewRecurrenceKind;
+                        setReviewRecurrenceKind(nextKind);
+                        void (async () => {
+                          const ok = await patchRosReviewFields({
+                            reviewRecurrenceKind:
+                              nextKind === "none" ? null : nextKind,
+                          });
+                          if (!ok) setReviewRecurrenceKind(prevKind);
+                        })();
+                      }}
+                    >
+                      {ROS_REVIEW_RECURRENCE_OPTIONS.map((o) => (
+                        <option key={o.value} value={o.value}>
+                          {o.label}
+                        </option>
+                      ))}
+                    </select>
+                    <p className="text-muted-foreground text-[11px] leading-relaxed">
+                      Med intervall annet enn «Kun manuell frist» oppdateres
+                      neste revisjonsdato automatisk når du markerer revisjon som
+                      gjennomført.
+                    </p>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="ros-review-routine" className="text-xs">
+                      Rutine / huskeliste
+                    </Label>
+                    <Textarea
+                      id="ros-review-routine"
+                      value={reviewRoutineNotes}
+                      disabled={reviewMetaSaving}
+                      onChange={(e) => {
+                        setReviewRoutineNotes(e.target.value);
+                        setDirty(true);
+                      }}
+                      onBlur={() => void flushReviewSchedule()}
+                      rows={2}
+                      className="min-h-[2.5rem] rounded-xl"
+                      placeholder="F.eks. årlig gjennomgang i sikkerhetsforum, eier bytter …"
+                    />
+                  </div>
+                </div>
+              </details>
               {data.lastFormalReviewCompletedAt != null ? (
                 <p className="text-muted-foreground text-[11px]">
                   Sist merket gjennomført:{" "}

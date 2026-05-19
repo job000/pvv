@@ -1,6 +1,6 @@
 "use client";
 
-import type { ComponentType } from "react";
+import { type ComponentType, useState } from "react";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import { useQuery } from "convex/react";
@@ -8,6 +8,7 @@ import {
   PIPELINE_STATUS_LABELS,
   type PipelineStatus,
 } from "@/lib/assessment-pipeline";
+import { SearchInput } from "@/components/ui/search-input";
 import { formatRelativeUpdatedAt } from "@/lib/assessment-ui-helpers";
 import { cn } from "@/lib/utils";
 import {
@@ -170,6 +171,10 @@ export function WorkspaceOperationalDashboard({
 }) {
   const dash = useQuery(api.assessments.workspaceDashboard, { workspaceId });
   const wid = String(workspaceId);
+  const [quickListFilter, setQuickListFilter] = useState<
+    "all" | "without_ros" | "follow_up"
+  >("all");
+  const [quickListSearch, setQuickListSearch] = useState("");
 
   const showMetrics = sectionVisibility?.showMetrics !== false;
   const showPriority = sectionVisibility?.showPrioritySection !== false;
@@ -359,6 +364,31 @@ export function WorkspaceOperationalDashboard({
               label="Prosesser"
             />
           </div>
+          <div className="rounded-2xl border border-border/40 bg-card/60 p-3">
+            <p className="text-xs font-medium text-foreground">
+              Start raskt etter rolle
+            </p>
+            <div className="mt-2 flex flex-wrap gap-2 text-[11px]">
+              <Link
+                href={`/w/${wid}/vurderinger`}
+                className="rounded-full border border-border/50 px-2.5 py-1 text-muted-foreground hover:text-foreground"
+              >
+                Koordinator: vurderinger
+              </Link>
+              <Link
+                href={`/w/${wid}/vurderinger?fane=prosesser`}
+                className="rounded-full border border-border/50 px-2.5 py-1 text-muted-foreground hover:text-foreground"
+              >
+                Prosessdesigner: prosesser
+              </Link>
+              <Link
+                href={`/w/${wid}/ros`}
+                className="rounded-full border border-border/50 px-2.5 py-1 text-muted-foreground hover:text-foreground"
+              >
+                Utvikler: ROS og tiltak
+              </Link>
+            </div>
+          </div>
         </section>
       ) : null}
 
@@ -368,7 +398,7 @@ export function WorkspaceOperationalDashboard({
           (recent har forrang fordi det matcher hva folk forventer å finne
           igjen først). Brukeren kan fortsatt skjule listen i Visning-menyen. */}
       {showPriority || showRecent ? (() => {
-        const list =
+        const listBase =
           showRecent && recentlyUpdated.length > 0
             ? recentlyUpdated
             : priorityTop;
@@ -376,6 +406,23 @@ export function WorkspaceOperationalDashboard({
           showRecent && recentlyUpdated.length > 0
             ? "Siste aktivitet"
             : "Høyest prioritet";
+        const quickSearch = quickListSearch.trim().toLowerCase();
+        const list = listBase.filter((row) => {
+          if (quickListFilter === "without_ros" && row.hasRosLink) return false;
+          if (
+            quickListFilter === "follow_up" &&
+            row.pipelineStatus !== "assessed" &&
+            row.pipelineStatus !== "on_hold"
+          ) {
+            return false;
+          }
+          if (!quickSearch) return true;
+          return (
+            row.title.toLowerCase().includes(quickSearch) ||
+            (row.ownerName ?? "").toLowerCase().includes(quickSearch) ||
+            row.nextStepHint.toLowerCase().includes(quickSearch)
+          );
+        });
         return (
           <section className="space-y-3">
             <div className="flex items-center justify-between gap-2">
@@ -389,6 +436,53 @@ export function WorkspaceOperationalDashboard({
                 Alle
                 <ArrowRight className="size-3" />
               </Link>
+            </div>
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex flex-wrap gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setQuickListFilter("all")}
+                  className={cn(
+                    "rounded-full border px-2.5 py-1 text-[11px] transition-colors",
+                    quickListFilter === "all"
+                      ? "border-primary/40 bg-primary/10 text-foreground"
+                      : "border-border/50 bg-card/60 text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  Alle
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setQuickListFilter("without_ros")}
+                  className={cn(
+                    "rounded-full border px-2.5 py-1 text-[11px] transition-colors",
+                    quickListFilter === "without_ros"
+                      ? "border-amber-500/40 bg-amber-500/[0.08] text-foreground"
+                      : "border-border/50 bg-card/60 text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  Uten ROS
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setQuickListFilter("follow_up")}
+                  className={cn(
+                    "rounded-full border px-2.5 py-1 text-[11px] transition-colors",
+                    quickListFilter === "follow_up"
+                      ? "border-primary/40 bg-primary/10 text-foreground"
+                      : "border-border/50 bg-card/60 text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  Oppfølging
+                </button>
+              </div>
+              <SearchInput
+                value={quickListSearch}
+                onChange={(e) => setQuickListSearch(e.target.value)}
+                placeholder="Søk i listen …"
+                aria-label="Søk i arbeidsområdelisten"
+                className="h-8 w-full rounded-full sm:max-w-xs"
+              />
             </div>
             {list.length === 0 ? (
               <EmptyState wid={wid} />

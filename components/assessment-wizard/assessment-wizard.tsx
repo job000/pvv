@@ -1037,6 +1037,17 @@ export function AssessmentWizard({ assessmentId }: Props) {
             </span>
           ) : null}
         </p>
+        <div className="mt-3 flex flex-wrap gap-2" aria-label="Rollehjelp">
+          <span className="rounded-full border border-border/50 bg-card/70 px-2.5 py-1 text-[11px] text-muted-foreground">
+            Koordinator: følg steg og oppdater status
+          </span>
+          <span className="rounded-full border border-border/50 bg-card/70 px-2.5 py-1 text-[11px] text-muted-foreground">
+            Prosessdesigner: kvalitetssikre prosessdata i steg 1
+          </span>
+          <span className="rounded-full border border-border/50 bg-card/70 px-2.5 py-1 text-[11px] text-muted-foreground">
+            Utvikler: bruk ROS-lenken i objektfeltet videre
+          </span>
+        </div>
       </div>
 
       {rosContext !== undefined ? (

@@ -11,6 +11,7 @@ import { WorkspaceOverviewViewSettings } from "@/components/workspace/workspace-
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import { useQuery } from "convex/react";
+import Link from "next/link";
 import { useParams } from "next/navigation";
 import { Suspense, useMemo } from "react";
 
@@ -60,6 +61,33 @@ export default function WorkspaceOverviewPage() {
         }
         actions={<WorkspaceOverviewViewSettings workspaceId={workspaceId} />}
       />
+      <section className="rounded-2xl border border-border/40 bg-card/60 p-3">
+        <p className="text-sm font-medium text-foreground">Start her</p>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Samme funksjoner som før, men enklere inngang: velg rolle og gå rett
+          til riktig arbeidsflate.
+        </p>
+        <div className="mt-2 flex flex-wrap gap-2 text-[11px]">
+          <Link
+            href={`/w/${workspaceId}/vurderinger`}
+            className="rounded-full border border-border/50 px-2.5 py-1 text-muted-foreground hover:text-foreground"
+          >
+            Koordinator
+          </Link>
+          <Link
+            href={`/w/${workspaceId}/vurderinger?fane=prosesser`}
+            className="rounded-full border border-border/50 px-2.5 py-1 text-muted-foreground hover:text-foreground"
+          >
+            Prosessdesigner
+          </Link>
+          <Link
+            href={`/w/${workspaceId}/ros`}
+            className="rounded-full border border-border/50 px-2.5 py-1 text-muted-foreground hover:text-foreground"
+          >
+            Utvikler
+          </Link>
+        </div>
+      </section>
 
       <WorkspaceOperationalDashboard
         workspaceId={workspaceId}

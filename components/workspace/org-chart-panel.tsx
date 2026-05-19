@@ -22,12 +22,15 @@ import { toast } from "@/lib/app-toast";
 import { formatUserFacingError } from "@/lib/user-facing-error";
 import { cn } from "@/lib/utils";
 import { useMutation, useQuery } from "convex/react";
+import Link from "next/link";
 import {
   AlertTriangle,
   ArrowRightLeft,
   Building2,
   ChevronDown,
   ChevronRight,
+  ClipboardList,
+  FileText,
   Hand,
   Maximize2,
   Minimize2,
@@ -2139,9 +2142,11 @@ export function OrgChartPanel({
     token: number;
   } | null>(null);
   const [orgSearch, setOrgSearch] = useState("");
+  const [activeOrgUnitId, setActiveOrgUnitId] = useState<Id<"orgUnits"> | "">("");
   const orgSearchWrapRef = useRef<HTMLDivElement | null>(null);
 
   const onCardSurfaceActivate = useCallback((id: Id<"orgUnits">) => {
+    setActiveOrgUnitId(id);
     setHighlightedUnitId(id);
     setChartZoom((z) => clampOrgChartZoom(z < 1 ? 1 : z));
     setFocusPulse({ id, token: Date.now() });
@@ -2180,6 +2185,21 @@ export function OrgChartPanel({
       return code.length > 0 && code.includes(q);
     });
   }, [rows, orgSearch]);
+
+  useEffect(() => {
+    if (!rows || rows.length === 0) return;
+    if (activeOrgUnitId && rows.some((u) => u._id === activeOrgUnitId)) return;
+    setActiveOrgUnitId(rows[0]!._id);
+  }, [rows, activeOrgUnitId]);
+
+  const activeOrgUnit = useMemo(
+    () => rows?.find((u) => u._id === activeOrgUnitId) ?? null,
+    [rows, activeOrgUnitId],
+  );
+  const activeRollup = useMemo(() => {
+    if (!activeOrgUnit || !rosRollup) return null;
+    return rosRollup.byOrgUnitId[activeOrgUnit._id] ?? null;
+  }, [activeOrgUnit, rosRollup]);
 
   if (
     rows === undefined ||
@@ -2225,6 +2245,97 @@ export function OrgChartPanel({
             })()}
           </p>
         </div>
+      ) : null}
+
+      {rows.length > 0 ? (
+        <section className="space-y-3 rounded-2xl border border-border/50 bg-card/70 p-4 shadow-sm sm:p-5">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h2 className="text-foreground text-sm font-semibold tracking-tight">
+                Enhetshub
+              </h2>
+              <p className="text-muted-foreground text-xs">
+                Velg enhet og hopp direkte til Prosesser, Vurderinger og ROS.
+              </p>
+            </div>
+            <select
+              className="border-input bg-background h-9 w-full rounded-full border px-3 text-xs sm:w-[22rem]"
+              value={activeOrgUnitId === "" ? rows[0]!._id : activeOrgUnitId}
+              onChange={(e) => {
+                const next = e.target.value as Id<"orgUnits">;
+                setActiveOrgUnitId(next);
+                onCardSurfaceActivate(next);
+              }}
+              aria-label="Velg organisasjonsenhet"
+            >
+              {rows.map((u) => (
+                <option key={u._id} value={u._id}>
+                  {ORG_UNIT_KIND_LABELS[u.kind]} · {u.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          {activeOrgUnit ? (
+            <div className="flex flex-wrap gap-2">
+              <span className="rounded-full border border-border/50 bg-muted/40 px-2.5 py-1 text-[11px] text-muted-foreground">
+                {ORG_UNIT_KIND_LABELS[activeOrgUnit.kind]}
+              </span>
+              {activeRollup ? (
+                <>
+                  <span className="rounded-full border border-border/50 bg-muted/40 px-2.5 py-1 text-[11px] text-muted-foreground">
+                    {activeRollup.candidateCount} prosesser
+                  </span>
+                  <span className="rounded-full border border-border/50 bg-muted/40 px-2.5 py-1 text-[11px] text-muted-foreground">
+                    {activeRollup.assessmentCount ?? 0} vurderinger
+                  </span>
+                  <span className="rounded-full border border-border/50 bg-muted/40 px-2.5 py-1 text-[11px] text-muted-foreground">
+                    {activeRollup.analysisCount} ROS
+                  </span>
+                </>
+              ) : null}
+            </div>
+          ) : null}
+          {activeOrgUnit ? (
+            <div className="grid gap-2 sm:grid-cols-3">
+              <Link
+                href={`/w/${workspaceId}/vurderinger?fane=prosesser&orgUnit=${activeOrgUnit._id}`}
+                className="group rounded-xl border border-border/50 bg-card/80 p-3 transition-colors hover:bg-muted/40"
+              >
+                <p className="flex items-center gap-2 text-sm font-medium text-foreground">
+                  <Users className="size-4 text-primary" aria-hidden />
+                  Prosesser
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Se prosesser i valgt enhet
+                </p>
+              </Link>
+              <Link
+                href={`/w/${workspaceId}/vurderinger?orgUnit=${activeOrgUnit._id}`}
+                className="group rounded-xl border border-border/50 bg-card/80 p-3 transition-colors hover:bg-muted/40"
+              >
+                <p className="flex items-center gap-2 text-sm font-medium text-foreground">
+                  <ClipboardList className="size-4 text-primary" aria-hidden />
+                  Vurderinger
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Se vurderinger for denne enheten
+                </p>
+              </Link>
+              <Link
+                href={`/w/${workspaceId}/ros?fane=analyser&orgUnit=${activeOrgUnit._id}`}
+                className="group rounded-xl border border-border/50 bg-card/80 p-3 transition-colors hover:bg-muted/40"
+              >
+                <p className="flex items-center gap-2 text-sm font-medium text-foreground">
+                  <FileText className="size-4 text-primary" aria-hidden />
+                  ROS
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Se ROS-analyser for denne enheten
+                </p>
+              </Link>
+            </div>
+          ) : null}
+        </section>
       ) : null}
 
       {roots.length === 0 ? (
