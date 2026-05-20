@@ -243,6 +243,10 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
   const [analysisSearch, setAnalysisSearch] = useState("");
   const [analysisOrgFilter, setAnalysisOrgFilter] = useStickyState<"" | Id<"orgUnits">>(`ros-ws:${workspaceId}:orgFilter`, rawOrgUnit ?? "");
   const [analysisSort, setAnalysisSort] = useStickyState<AnalysisSort>(`ros-ws:${workspaceId}:sort`, "updated");
+  const activeAnalysisOrgName = useMemo(() => {
+    if (!analysisOrgFilter) return null;
+    return orgUnits?.find((u) => u._id === analysisOrgFilter)?.name ?? null;
+  }, [analysisOrgFilter, orgUnits]);
 
   const appliedOrgUnitRef = useRef(false);
   useEffect(() => {
@@ -812,6 +816,34 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
               ) : null}
             </div>
           </div>
+          {analysisOrgFilter ? (
+            <div className="flex flex-wrap items-center gap-2 rounded-xl border border-border/40 bg-card/60 px-3 py-2 text-xs">
+              <span className="text-muted-foreground">
+                Filtrert på enhet:
+                <span className="ml-1 font-medium text-foreground">
+                  {activeAnalysisOrgName ?? "Valgt enhet"}
+                </span>
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  setAnalysisOrgFilter("");
+                  const params = new URLSearchParams(searchParams.toString());
+                  params.delete("orgUnit");
+                  const qs = params.toString();
+                  router.replace(
+                    qs
+                      ? `/w/${workspaceId}/ros?${qs}`
+                      : `/w/${workspaceId}/ros`,
+                    { scroll: false },
+                  );
+                }}
+                className="rounded-full border border-border/50 px-2 py-0.5 text-muted-foreground transition-colors hover:text-foreground"
+              >
+                Fjern filter
+              </button>
+            </div>
+          ) : null}
 
           {analysesList.length > 5 ? (
             <div className="rounded-2xl border border-border/40 bg-card/40 p-3 shadow-sm sm:p-4">

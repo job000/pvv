@@ -2,6 +2,7 @@
 
 import type { ComponentType } from "react";
 import { cn } from "@/lib/utils";
+import { SearchInput } from "@/components/ui/search-input";
 import type { Id } from "@/convex/_generated/dataModel";
 import {
   Building2,
@@ -17,7 +18,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
-import { Suspense } from "react";
+import { Suspense, useMemo, useState } from "react";
 
 type NavKind = "default" | "vurderinger" | "prosesser" | "prosessdesign";
 
@@ -173,6 +174,19 @@ function WorkspaceNavInner({
   const wid = String(workspaceId);
   const sections = navSections(wid);
   const fane = searchParams.get("fane");
+  const [navQuery, setNavQuery] = useState("");
+  const navQueryNorm = navQuery.trim().toLowerCase();
+  const visibleSections = useMemo(() => {
+    if (!navQueryNorm) return sections;
+    return sections
+      .map((section) => ({
+        ...section,
+        items: section.items.filter((item) =>
+          item.label.toLowerCase().includes(navQueryNorm),
+        ),
+      }))
+      .filter((section) => section.items.length > 0);
+  }, [sections, navQueryNorm]);
 
   return (
     <nav
@@ -189,9 +203,21 @@ function WorkspaceNavInner({
         <p className="mt-1.5 truncate font-heading text-sm font-semibold leading-tight tracking-tight">
           {workspaceName ?? "…"}
         </p>
+        <SearchInput
+          value={navQuery}
+          onChange={(e) => setNavQuery(e.target.value)}
+          placeholder="Hopp til side …"
+          className="mt-2 h-9 rounded-full"
+          aria-label="Søk i arbeidsområdemeny"
+        />
       </div>
       <ul className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto overflow-x-hidden py-2 [scrollbar-gutter:stable] [scrollbar-width:thin]">
-        {sections.map((section) => (
+        {visibleSections.length === 0 ? (
+          <li className="px-3 py-2 text-xs text-muted-foreground">
+            Ingen treff i menyen.
+          </li>
+        ) : null}
+        {visibleSections.map((section) => (
           <li key={section.heading}>
             <div role="group" aria-label={section.heading}>
               <p className="text-muted-foreground px-3 pb-1.5 text-[0.6rem] font-semibold uppercase tracking-[0.14em]">

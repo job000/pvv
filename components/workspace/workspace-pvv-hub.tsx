@@ -7,7 +7,7 @@ import { useQuery } from "convex/react";
 import { ClipboardList, Users } from "lucide-react";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
-import { useCallback } from "react";
+import { useCallback, useMemo } from "react";
 
 const WorkspaceAssessmentsPanel = dynamic(
   () =>
@@ -49,6 +49,7 @@ type Props = {
 
 export function WorkspacePvvHub({ workspaceId, activeTab, initialOrgUnit }: Props) {
   const router = useRouter();
+  const orgUnits = useQuery(api.orgUnits.listByWorkspace, { workspaceId });
 
   /** Alltid abonnert — ikke bare når Prosessregister-fanen er aktiv (unngår tom liste ved bytte av fane). */
   const approvedIntakeForProcessregister = useQuery(
@@ -63,6 +64,14 @@ export function WorkspacePvvHub({ workspaceId, activeTab, initialOrgUnit }: Prop
     },
     [router, workspaceId],
   );
+  const activeOrgUnitName = useMemo(() => {
+    if (!initialOrgUnit) return null;
+    return orgUnits?.find((u) => u._id === initialOrgUnit)?.name ?? null;
+  }, [initialOrgUnit, orgUnits]);
+  const clearOrgFilter = useCallback(() => {
+    const q = activeTab === "prosesser" ? "?fane=prosesser" : "";
+    router.replace(`/w/${workspaceId}/vurderinger${q}`, { scroll: false });
+  }, [activeTab, router, workspaceId]);
 
   return (
     <div className="space-y-5 pb-6">
@@ -109,6 +118,23 @@ export function WorkspacePvvHub({ workspaceId, activeTab, initialOrgUnit }: Prop
           </button>
         </div>
       </header>
+      {initialOrgUnit ? (
+        <div className="flex flex-wrap items-center gap-2 rounded-xl border border-border/40 bg-card/60 px-3 py-2 text-xs">
+          <span className="text-muted-foreground">
+            Filtrert på enhet:
+            <span className="ml-1 font-medium text-foreground">
+              {activeOrgUnitName ?? "Valgt enhet"}
+            </span>
+          </span>
+          <button
+            type="button"
+            onClick={clearOrgFilter}
+            className="rounded-full border border-border/50 px-2 py-0.5 text-muted-foreground transition-colors hover:text-foreground"
+          >
+            Fjern filter
+          </button>
+        </div>
+      ) : null}
 
       <div
         role="tabpanel"

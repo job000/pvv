@@ -616,10 +616,17 @@ export function RosAnalysisEditor({
   const [taskResidualNote, setTaskResidualNote] = useState("");
   const [taskDueAt, setTaskDueAt] = useState("");
   const [taskBusy, setTaskBusy] = useState(false);
+  const [selectedTaskIds, setSelectedTaskIds] = useState<Id<"rosTasks">[]>([]);
 
   const [editingTaskId, setEditingTaskId] = useState<Id<"rosTasks"> | null>(
     null,
   );
+  const [reviewChecklistOpen, setReviewChecklistOpen] = useState(false);
+  const [reviewChecklist, setReviewChecklist] = useState({
+    matrixReviewed: false,
+    actionsReviewed: false,
+    pvvChecked: false,
+  });
 
   const [savingTaskToLibrary, setSavingTaskToLibrary] = useState<{
     taskId: Id<"rosTasks">;
@@ -917,6 +924,17 @@ export function RosAnalysisEditor({
     out.sort((a, b) => b.level - a.level);
     return out;
   }, [data, tasks, cellItemsMatrix, matrix]);
+
+  useEffect(() => {
+    if (!tasks) {
+      setSelectedTaskIds([]);
+      return;
+    }
+    const allowed = new Set(tasks.map((t) => String(t._id)));
+    setSelectedTaskIds((prev) =>
+      prev.filter((id) => allowed.has(String(id))),
+    );
+  }, [tasks]);
 
   function startAddTaskForRisk(riskId: string) {
     setTaskRiskLink(`before:${riskId}`);
@@ -1963,6 +1981,52 @@ export function RosAnalysisEditor({
     await flushReviewSchedule(next);
   }
 
+  const openTaskCount = useMemo(
+    () => (tasks ?? []).filter((t) => t.status !== "done").length,
+    [tasks],
+  );
+  const selectedTaskRows = useMemo(() => {
+    if (!tasks || selectedTaskIds.length === 0) return [];
+    const picked = new Set(selectedTaskIds.map((id) => String(id)));
+    return tasks.filter((t) => picked.has(String(t._id)));
+  }, [tasks, selectedTaskIds]);
+  const selectedOpenTasksCount = selectedTaskRows.filter(
+    (t) => t.status !== "done",
+  ).length;
+  const selectedDoneTasksCount = selectedTaskRows.filter(
+    (t) => t.status === "done",
+  ).length;
+  const reviewDueNow =
+    reviewScheduleActive &&
+    nextReviewLocal.trim() !== "" &&
+    Number.isFinite(new Date(nextReviewLocal.trim()).getTime()) &&
+    new Date(nextReviewLocal.trim()).getTime() < Date.now();
+  const checklistComplete =
+    reviewChecklist.matrixReviewed &&
+    reviewChecklist.actionsReviewed &&
+    reviewChecklist.pvvChecked;
+
+  async function setSelectedTasksStatus(status: "open" | "done") {
+    if (selectedTaskIds.length === 0) return;
+    const targetRows = selectedTaskRows.filter((t) =>
+      status === "done" ? t.status !== "done" : t.status === "done",
+    );
+    if (targetRows.length === 0) return;
+    await Promise.all(
+      targetRows.map((t) =>
+        setRosTaskStatus({
+          taskId: t._id,
+          status,
+        }),
+      ),
+    );
+    toast.success(
+      status === "done"
+        ? `${targetRows.length} tiltak markert som fullført.`
+        : `${targetRows.length} tiltak gjenåpnet.`,
+    );
+  }
+
   /** Auto-lagre ulagret arbeid så matrise/risiko ikke tapes ved navigasjon. */
   useEffect(() => {
     if (!dirty || !data || !canAutosave) return;
@@ -2572,6 +2636,60 @@ export function RosAnalysisEditor({
           </div>
         );
       })()}
+      <section className="rounded-2xl border border-border/40 bg-card/70 p-3 shadow-sm sm:p-4">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-sm font-semibold text-foreground">
+              Hva bør gjøres nå
+            </p>
+            <p className="text-xs text-muted-foreground">
+              Hurtigvalg basert på status i analysen akkurat nå.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-1.5 text-[11px]">
+            <span className="rounded-full border border-border/50 bg-muted/40 px-2 py-0.5">
+              {openTaskCount} åpne tiltak
+            </span>
+            <span className="rounded-full border border-border/50 bg-muted/40 px-2 py-0.5">
+              {uncoveredBeforeRisks.length} risiko uten tiltak
+            </span>
+            <span className="rounded-full border border-border/50 bg-muted/40 px-2 py-0.5">
+              {data.linkedAssessments.length} PVV-koblinger
+            </span>
+          </div>
+        </div>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="rounded-full"
+            onClick={() => setRosSection(1)}
+          >
+            Gå til tiltak
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="rounded-full"
+            onClick={() => setRosSection(3)}
+          >
+            Gå til PVV-kobling
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            className="rounded-full"
+            onClick={() => {
+              setRosSection(4);
+              setReviewChecklistOpen(true);
+            }}
+          >
+            Start revisjon
+          </Button>
+        </div>
+      </section>
 
       {/* === Section 0: Risikovurdering — punkter først, matrise som visning === */}
       {rosSection === 0 && (
@@ -3311,6 +3429,48 @@ export function RosAnalysisEditor({
             </div>
           );
         })()}
+        {tasks && tasks.length > 0 ? (
+          <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-border/50 bg-muted/[0.08] px-3 py-2">
+            <button
+              type="button"
+              className="rounded-full border border-border/50 px-2.5 py-1 text-[11px] text-muted-foreground transition-colors hover:text-foreground"
+              onClick={() =>
+                setSelectedTaskIds(
+                  selectedTaskIds.length === tasks.length
+                    ? []
+                    : tasks.map((t) => t._id),
+                )
+              }
+            >
+              {selectedTaskIds.length === tasks.length ? "Fjern alle" : "Velg alle"}
+            </button>
+            <span className="text-xs text-muted-foreground tabular-nums">
+              {selectedTaskIds.length} valgt
+            </span>
+            <div className="ml-auto flex flex-wrap gap-2">
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="rounded-full"
+                disabled={selectedOpenTasksCount === 0}
+                onClick={() => void setSelectedTasksStatus("done")}
+              >
+                Fullfør valgte ({selectedOpenTasksCount})
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="rounded-full"
+                disabled={selectedDoneTasksCount === 0}
+                onClick={() => void setSelectedTasksStatus("open")}
+              >
+                Gjenåpne ({selectedDoneTasksCount})
+              </Button>
+            </div>
+          </div>
+        ) : null}
 
         {/* Task list — eller diskret tom-tekst */}
         {tasks === undefined ? (
@@ -3344,6 +3504,21 @@ export function RosAnalysisEditor({
                   </div>
                 ) : (
                   <div className="flex items-start gap-3 px-4 py-3.5 sm:gap-4">
+                    <label className="mt-1.5 flex shrink-0 cursor-pointer items-center">
+                      <input
+                        type="checkbox"
+                        checked={selectedTaskIds.includes(t._id)}
+                        onChange={() =>
+                          setSelectedTaskIds((prev) =>
+                            prev.includes(t._id)
+                              ? prev.filter((id) => id !== t._id)
+                              : [...prev, t._id],
+                          )
+                        }
+                        className="size-4 rounded border-border text-primary focus:ring-ring"
+                        aria-label={`Velg tiltak ${t.title}`}
+                      />
+                    </label>
                     <button
                       type="button"
                       className={cn(
@@ -3980,10 +4155,15 @@ export function RosAnalysisEditor({
                   size="sm"
                   disabled={reviewMetaSaving}
                   className="h-9 gap-1.5 rounded-full px-4 text-xs font-semibold"
-                  onClick={() => void markFormalReviewDone()}
+                  onClick={() => setReviewChecklistOpen(true)}
                 >
                   Merk revisjon gjennomført
                 </Button>
+                {reviewDueNow ? (
+                  <span className="inline-flex items-center rounded-full bg-amber-500/10 px-2 py-0.5 text-[11px] font-medium text-amber-700 ring-1 ring-amber-500/20 dark:text-amber-300">
+                    Frist er passert
+                  </span>
+                ) : null}
               </div>
               <details className="group/rev-extra rounded-xl border border-border/40 bg-card/70 px-3 py-3 sm:px-4">
                 <summary className="hover:text-foreground text-muted-foreground flex cursor-pointer list-none items-center justify-between text-xs font-medium transition-colors [&::-webkit-details-marker]:hidden">
@@ -4412,6 +4592,96 @@ export function RosAnalysisEditor({
           )}
         </div>
       </div>
+
+      <Dialog open={reviewChecklistOpen} onOpenChange={setReviewChecklistOpen}>
+        <DialogContent size="md" titleId="ros-review-checklist-title">
+          <DialogHeader>
+            <h2 id="ros-review-checklist-title" className="text-lg font-semibold">
+              Revisjonssjekkliste
+            </h2>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Kort kontroll før du markerer ROS-revisjon som gjennomført.
+            </p>
+          </DialogHeader>
+          <DialogBody className="space-y-3">
+            <label className="flex items-start gap-3 rounded-xl border border-border/40 bg-card/60 px-3 py-2.5">
+              <Checkbox
+                checked={reviewChecklist.matrixReviewed}
+                onCheckedChange={(v) =>
+                  setReviewChecklist((prev) => ({
+                    ...prev,
+                    matrixReviewed: Boolean(v),
+                  }))
+                }
+                className="mt-0.5"
+              />
+              <span>
+                <span className="text-sm font-medium">Risikomatrise er oppdatert</span>
+                <span className="block text-xs text-muted-foreground">
+                  Både før- og etter-nivå er kontrollert der det er relevant.
+                </span>
+              </span>
+            </label>
+            <label className="flex items-start gap-3 rounded-xl border border-border/40 bg-card/60 px-3 py-2.5">
+              <Checkbox
+                checked={reviewChecklist.actionsReviewed}
+                onCheckedChange={(v) =>
+                  setReviewChecklist((prev) => ({
+                    ...prev,
+                    actionsReviewed: Boolean(v),
+                  }))
+                }
+                className="mt-0.5"
+              />
+              <span>
+                <span className="text-sm font-medium">Tiltak og status er gjennomgått</span>
+                <span className="block text-xs text-muted-foreground">
+                  Åpne tiltak er vurdert, og ferdige tiltak er markert.
+                </span>
+              </span>
+            </label>
+            <label className="flex items-start gap-3 rounded-xl border border-border/40 bg-card/60 px-3 py-2.5">
+              <Checkbox
+                checked={reviewChecklist.pvvChecked}
+                onCheckedChange={(v) =>
+                  setReviewChecklist((prev) => ({
+                    ...prev,
+                    pvvChecked: Boolean(v),
+                  }))
+                }
+                className="mt-0.5"
+              />
+              <span>
+                <span className="text-sm font-medium">PVV-kobling er kontrollert</span>
+                <span className="block text-xs text-muted-foreground">
+                  Relevante vurderinger er koblet, eller avklart som ikke relevant.
+                </span>
+              </span>
+            </label>
+          </DialogBody>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              className="rounded-full"
+              onClick={() => setReviewChecklistOpen(false)}
+            >
+              Avbryt
+            </Button>
+            <Button
+              type="button"
+              className="rounded-full"
+              disabled={!checklistComplete || reviewMetaSaving}
+              onClick={async () => {
+                await markFormalReviewDone();
+                setReviewChecklistOpen(false);
+              }}
+            >
+              Merk revisjon gjennomført
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* === Lagre tiltak (med risiko) i bibliotek === */}
       <Dialog

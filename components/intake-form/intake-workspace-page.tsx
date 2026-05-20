@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { SearchInput } from "@/components/ui/search-input";
 import { Textarea } from "@/components/ui/textarea";
 import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
@@ -1192,6 +1193,16 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
     useState(true);
   const prevActiveFormIdRef = useRef<Id<"intakeForms"> | null>(null);
   const [showResponses, setShowResponses] = useState(false);
+  const [formSearch, setFormSearch] = useState("");
+  const [formStatusFilter, setFormStatusFilter] = useState<
+    "all" | "draft" | "published"
+  >("all");
+  const [submissionStatusFilter, setSubmissionStatusFilter] = useState<
+    "all" | IntakeSubmissionStatus
+  >("all");
+  const [selectedQueueSubmissionIds, setSelectedQueueSubmissionIds] = useState<
+    Id<"intakeSubmissions">[]
+  >([]);
 
   const selectedForm = forms.find((form) => form._id === activeFormId) ?? null;
 
@@ -1818,10 +1829,6 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
     });
   }
 
-  if (formsQuery === undefined || submissionsQuery === undefined) {
-    return <p className="text-sm text-muted-foreground">Laster skjemaer …</p>;
-  }
-
   const canDeleteIntakeSubmissions =
     myWorkspaceMembership !== undefined &&
     myWorkspaceMembership !== null &&
@@ -1830,6 +1837,86 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
   const pendingCount = submissions.filter(
     (submission) => submission.status === "submitted" || submission.status === "under_review",
   ).length;
+  const formSearchLower = formSearch.trim().toLowerCase();
+  const formsForSidebarDisplay = formsForSidebarList.filter((form) => {
+    if (formStatusFilter !== "all" && form.status !== formStatusFilter) {
+      return false;
+    }
+    if (!formSearchLower) return true;
+    const org = form.orgUnitId ? orgUnitNameById.get(form.orgUnitId) ?? "" : "";
+    return (
+      form.title.toLowerCase().includes(formSearchLower) ||
+      org.toLowerCase().includes(formSearchLower)
+    );
+  });
+  const submissionsForQueue = submissions.filter((submission) => {
+    if (submissionStatusFilter !== "all" && submission.status !== submissionStatusFilter) {
+      return false;
+    }
+    if (!formSearchLower) return true;
+    return (
+      submission.formTitle.toLowerCase().includes(formSearchLower) ||
+      submission.generatedAssessmentDraft.title.toLowerCase().includes(formSearchLower)
+    );
+  });
+  useEffect(() => {
+    const allowed = new Set(submissionsForQueue.map((s) => s._id));
+    setSelectedQueueSubmissionIds((prev) => {
+      const next = prev.filter((id) => allowed.has(id));
+      if (next.length === prev.length) {
+        let same = true;
+        for (let i = 0; i < prev.length; i++) {
+          if (prev[i] !== next[i]) {
+            same = false;
+            break;
+          }
+        }
+        if (same) return prev;
+      }
+      return next;
+    });
+  }, [submissionsForQueue]);
+  const selectedQueueRows = useMemo(() => {
+    if (selectedQueueSubmissionIds.length === 0) return [];
+    const picked = new Set(selectedQueueSubmissionIds);
+    return submissionsForQueue.filter((s) => picked.has(s._id));
+  }, [selectedQueueSubmissionIds, submissionsForQueue]);
+  const selectedQueueUnderReviewCount = selectedQueueRows.filter(
+    (s) => s.status === "submitted",
+  ).length;
+  const toggleQueueSubmission = (id: Id<"intakeSubmissions">) => {
+    setSelectedQueueSubmissionIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+    );
+  };
+  async function markSelectedQueueUnderReview() {
+    if (selectedQueueSubmissionIds.length === 0) return;
+    const targets = selectedQueueRows.filter((s) => s.status === "submitted");
+    if (targets.length === 0) {
+      toast.message("Ingen nye forslag i utvalget.");
+      return;
+    }
+    await Promise.all(targets.map((s) => markUnderReview({ submissionId: s._id })));
+    toast.success(`${targets.length} forslag markert som under vurdering.`);
+  }
+  async function deleteSelectedQueueRows() {
+    if (selectedQueueSubmissionIds.length === 0) return;
+    if (
+      typeof window !== "undefined" &&
+      !window.confirm(
+        `Slette ${selectedQueueSubmissionIds.length} valgte forslag permanent?`,
+      )
+    ) {
+      return;
+    }
+    await Promise.all(
+      selectedQueueSubmissionIds.map((submissionId) =>
+        removeSubmission({ submissionId }),
+      ),
+    );
+    setSelectedQueueSubmissionIds([]);
+    toast.success("Valgte forslag er slettet.");
+  }
   const activeFormResponseRows = activeFormId
     ? submissions.filter((submission) => submission.formId === activeFormId)
     : [];
@@ -1911,6 +1998,10 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
     );
   };
 
+  if (formsQuery === undefined || submissionsQuery === undefined) {
+    return <p className="text-sm text-muted-foreground">Laster skjemaer …</p>;
+  }
+
   return (
     <div className="space-y-6 pb-6">
       <header className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -1927,6 +2018,35 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
           Nytt skjema
         </Button>
       </header>
+      <div className="rounded-2xl border border-border/40 bg-card/60 p-3">
+        <p className="text-xs font-medium text-foreground">Start raskt etter rolle</p>
+        <div className="mt-2 flex flex-wrap gap-2 text-[11px]">
+          <Link
+            href={`/w/${workspaceId}/skjemaer`}
+            className="rounded-full border border-border/50 px-2.5 py-1 text-muted-foreground hover:text-foreground"
+          >
+            Koordinator: behandle innsendte forslag
+          </Link>
+          <Link
+            href={`/w/${workspaceId}/vurderinger`}
+            className="rounded-full border border-border/50 px-2.5 py-1 text-muted-foreground hover:text-foreground"
+          >
+            Teamleder: åpne vurderinger
+          </Link>
+          <Link
+            href={`/w/${workspaceId}/vurderinger?fane=prosesser`}
+            className="rounded-full border border-border/50 px-2.5 py-1 text-muted-foreground hover:text-foreground"
+          >
+            Prosessdesigner: gå til prosesser
+          </Link>
+          <Link
+            href={`/w/${workspaceId}/ros?fane=analyser`}
+            className="rounded-full border border-border/50 px-2.5 py-1 text-muted-foreground hover:text-foreground"
+          >
+            Utvikler: gå til ROS
+          </Link>
+        </div>
+      </div>
 
       <section className="grid gap-5 xl:grid-cols-[1.1fr_0.9fr]">
         <Card className="rounded-3xl">
@@ -1937,6 +2057,29 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <SearchInput
+                value={formSearch}
+                onChange={(e) => setFormSearch(e.target.value)}
+                placeholder="Søk skjema eller enhet …"
+                className="h-9 w-full rounded-full sm:max-w-xs"
+                aria-label="Søk i skjemaer"
+              />
+              <select
+                className="border-input bg-background h-9 rounded-full border px-3 text-xs sm:w-44"
+                value={formStatusFilter}
+                onChange={(e) =>
+                  setFormStatusFilter(
+                    e.target.value as "all" | "draft" | "published",
+                  )
+                }
+                aria-label="Filtrer skjemaer på status"
+              >
+                <option value="all">Alle statuser</option>
+                <option value="draft">Utkast</option>
+                <option value="published">Publisert</option>
+              </select>
+            </div>
             {forms.length === 0 ? (
               <div className="border-border/60 bg-muted/10 rounded-2xl border border-dashed p-6 text-center">
                 <FileText className="text-muted-foreground mx-auto mb-2 size-6" />
@@ -1945,9 +2088,9 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
                   Trykk «Nytt skjema» over.
                 </p>
               </div>
-            ) : formsForSidebarList.length === 0 ? (
+            ) : formsForSidebarDisplay.length === 0 ? (
               <p className="text-muted-foreground px-1 text-sm">
-                Valgt skjema vises under.
+                Ingen treff i filteret. Prøv et annet søk eller status.
               </p>
             ) : (
               <div
@@ -1957,7 +2100,7 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
                     : "flex flex-col gap-1"
                 }
               >
-                {formsForSidebarList.map((form) => {
+                {formsForSidebarDisplay.map((form) => {
                   const isSelected = activeFormId === form._id;
                   const statusLabel =
                     form.status === "published"
@@ -2287,6 +2430,96 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex flex-wrap gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setSubmissionStatusFilter("all")}
+                  className={cn(
+                    "rounded-full border px-2.5 py-1 text-[11px] transition-colors",
+                    submissionStatusFilter === "all"
+                      ? "border-primary/40 bg-primary/10 text-foreground"
+                      : "border-border/50 bg-card/60 text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  Alle
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSubmissionStatusFilter("submitted")}
+                  className={cn(
+                    "rounded-full border px-2.5 py-1 text-[11px] transition-colors",
+                    submissionStatusFilter === "submitted"
+                      ? "border-primary/40 bg-primary/10 text-foreground"
+                      : "border-border/50 bg-card/60 text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  Nye
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSubmissionStatusFilter("under_review")}
+                  className={cn(
+                    "rounded-full border px-2.5 py-1 text-[11px] transition-colors",
+                    submissionStatusFilter === "under_review"
+                      ? "border-amber-500/40 bg-amber-500/10 text-foreground"
+                      : "border-border/50 bg-card/60 text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  Under vurdering
+                </button>
+              </div>
+              <span className="text-xs tabular-nums text-muted-foreground">
+                {submissionsForQueue.length} i kø
+              </span>
+            </div>
+            {submissionsForQueue.length > 0 ? (
+              <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-border/50 bg-muted/[0.08] px-3 py-2">
+                <button
+                  type="button"
+                  className="rounded-full border border-border/60 px-2.5 py-1 text-[11px] text-muted-foreground transition-colors hover:text-foreground"
+                  onClick={() =>
+                    setSelectedQueueSubmissionIds(
+                      selectedQueueSubmissionIds.length ===
+                        submissionsForQueue.length
+                        ? []
+                        : submissionsForQueue.map((s) => s._id),
+                    )
+                  }
+                >
+                  {selectedQueueSubmissionIds.length === submissionsForQueue.length
+                    ? "Fjern alle"
+                    : "Velg alle"}
+                </button>
+                <span className="text-xs text-muted-foreground tabular-nums">
+                  {selectedQueueSubmissionIds.length} valgt
+                </span>
+                <div className="ml-auto flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="rounded-xl"
+                    disabled={selectedQueueUnderReviewCount === 0}
+                    onClick={() => void markSelectedQueueUnderReview()}
+                  >
+                    Marker under vurdering ({selectedQueueUnderReviewCount})
+                  </Button>
+                  {canDeleteIntakeSubmissions ? (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      className="rounded-xl text-destructive hover:bg-destructive/10 hover:text-destructive"
+                      disabled={selectedQueueSubmissionIds.length === 0}
+                      onClick={() => void deleteSelectedQueueRows()}
+                    >
+                      Slett valgte
+                    </Button>
+                  ) : null}
+                </div>
+              </div>
+            ) : null}
             {submissions.length === 0 ? (
               <div className="border-border/60 bg-muted/10 rounded-2xl border border-dashed p-6 text-center">
                 <ClipboardCheck className="text-muted-foreground mx-auto mb-2 size-6" />
@@ -2295,30 +2528,53 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
                   De dukker opp her når noen sender inn.
                 </p>
               </div>
+            ) : submissionsForQueue.length === 0 ? (
+              <div className="border-border/60 bg-muted/10 rounded-2xl border border-dashed p-6 text-center">
+                <ClipboardCheck className="text-muted-foreground mx-auto mb-2 size-6" />
+                <p className="font-medium">Ingen treff i køen</p>
+                <p className="text-muted-foreground mt-1 text-sm">
+                  Endre filter eller søk for å vise flere forslag.
+                </p>
+              </div>
             ) : (
-              submissions.map((submission) => (
-                <IntakeSubmissionQueueCard
+              submissionsForQueue.map((submission) => (
+                <div
                   key={submission._id}
-                  submission={submission}
-                  subtitle={`${submission.formTitle} · ${new Date(submission.submittedAt).toLocaleString("nb-NO")}`}
-                  onOpenReview={() => void openSubmissionForReview(submission)}
-                  onDelete={() => handleRemoveSubmission(submission)}
-                  canDelete={canDeleteIntakeSubmissions}
-                  extraBadges={
-                    <>
-                      {submission.personDataSignal ? (
-                        <Badge variant="outline">Persondata</Badge>
-                      ) : null}
-                      {submission.generatedRosSuggestion.shouldCreateRos ? (
-                        <Badge variant="outline">ROS-forslag</Badge>
-                      ) : null}
-                      <Badge variant="outline">
-                        {submission.generatedRosSuggestion.risks.length} risikoer
-                      </Badge>
-                    </>
-                  }
-                  githubSlot={renderSubmissionGithubStrip(submission)}
-                />
+                  className="flex items-start gap-2 rounded-2xl border border-transparent p-1"
+                >
+                  <label className="mt-3 flex shrink-0 cursor-pointer items-center px-1">
+                    <input
+                      type="checkbox"
+                      checked={selectedQueueSubmissionIds.includes(submission._id)}
+                      onChange={() => toggleQueueSubmission(submission._id)}
+                      className="size-4 rounded border-border text-primary focus:ring-ring"
+                      aria-label={`Velg forslag ${submission.generatedAssessmentDraft.title}`}
+                    />
+                  </label>
+                  <div className="min-w-0 flex-1">
+                    <IntakeSubmissionQueueCard
+                      submission={submission}
+                      subtitle={`${submission.formTitle} · ${new Date(submission.submittedAt).toLocaleString("nb-NO")}`}
+                      onOpenReview={() => void openSubmissionForReview(submission)}
+                      onDelete={() => handleRemoveSubmission(submission)}
+                      canDelete={canDeleteIntakeSubmissions}
+                      extraBadges={
+                        <>
+                          {submission.personDataSignal ? (
+                            <Badge variant="outline">Persondata</Badge>
+                          ) : null}
+                          {submission.generatedRosSuggestion.shouldCreateRos ? (
+                            <Badge variant="outline">ROS-forslag</Badge>
+                          ) : null}
+                          <Badge variant="outline">
+                            {submission.generatedRosSuggestion.risks.length} risikoer
+                          </Badge>
+                        </>
+                      }
+                      githubSlot={renderSubmissionGithubStrip(submission)}
+                    />
+                  </div>
+                </div>
               ))
             )}
           </CardContent>
