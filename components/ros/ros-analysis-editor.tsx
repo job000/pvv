@@ -2005,6 +2005,18 @@ export function RosAnalysisEditor({
     reviewChecklist.matrixReviewed &&
     reviewChecklist.actionsReviewed &&
     reviewChecklist.pvvChecked;
+  const linkedAssessmentCount = data?.linkedAssessments?.length ?? 0;
+  const linkedPddCount =
+    data?.linkedAssessments?.filter((l) => {
+      const s = l.pddStatus ?? "not_started";
+      return s !== "not_started" && s !== "not_applicable";
+    }).length ?? 0;
+  const linkedPddDoneCount =
+    data?.linkedAssessments?.filter((l) => l.pddStatus === "completed")
+      .length ?? 0;
+  const firstLinkedAssessmentId =
+    data?.linkedAssessments?.[0]?.assessmentId ?? null;
+  const flowOrgUnitId = orgUnitLocal || "";
 
   async function setSelectedTasksStatus(status: "open" | "done") {
     if (selectedTaskIds.length === 0) return;
@@ -2688,6 +2700,55 @@ export function RosAnalysisEditor({
           >
             Start revisjon
           </Button>
+        </div>
+        <div className="mt-3 space-y-2 rounded-xl border border-border/40 bg-muted/[0.08] p-3">
+          <p className="text-[11px] font-medium text-muted-foreground">
+            Sammenheng i arbeidsflyten
+          </p>
+          <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
+            <Link
+              href={`/w/${workspaceId}/skjemaer`}
+              className="rounded-full border border-border/50 bg-card/70 px-2 py-0.5 text-muted-foreground hover:text-foreground"
+            >
+              Skjemaer
+            </Link>
+            <span className="text-muted-foreground/60">→</span>
+            <Link
+              href={`/w/${workspaceId}/vurderinger?fane=prosesser${
+                flowOrgUnitId ? `&orgUnit=${flowOrgUnitId}` : ""
+              }`}
+              className="rounded-full border border-border/50 bg-card/70 px-2 py-0.5 text-muted-foreground hover:text-foreground"
+            >
+              Prosesser
+            </Link>
+            <span className="text-muted-foreground/60">→</span>
+            <Link
+              href={`/w/${workspaceId}/vurderinger${
+                flowOrgUnitId ? `?orgUnit=${flowOrgUnitId}` : ""
+              }`}
+              className="rounded-full border border-border/50 bg-card/70 px-2 py-0.5 text-muted-foreground hover:text-foreground"
+            >
+              Vurderinger ({linkedAssessmentCount})
+            </Link>
+            <span className="text-muted-foreground/60">→</span>
+            <Link
+              href={
+                firstLinkedAssessmentId
+                  ? `/w/${workspaceId}/a/${firstLinkedAssessmentId}/prosessdesign`
+                  : `/w/${workspaceId}/prosessdesign`
+              }
+              className="rounded-full border border-border/50 bg-card/70 px-2 py-0.5 text-muted-foreground hover:text-foreground"
+            >
+              Prosessdesign ({linkedPddDoneCount}/{linkedPddCount})
+            </Link>
+            <span className="text-muted-foreground/60">→</span>
+            <span className="rounded-full border border-primary/25 bg-primary/[0.08] px-2 py-0.5 text-foreground">
+              ROS
+            </span>
+          </div>
+          <p className="text-[11px] text-muted-foreground">
+            Matrise: nivå 1–2 er ofte lavt, 3 bør følges opp, 4–5 krever tydelig tiltak eller formell aksept.
+          </p>
         </div>
       </section>
 
