@@ -70,6 +70,7 @@ import {
   User,
   Users,
   Workflow,
+  X,
   Zap,
 } from "lucide-react";
 
@@ -3836,17 +3837,34 @@ export function WorkspaceCandidatesPanel({
             descriptionId="edit-process-desc"
           >
             <DialogHeader>
-              <h2
-                id="edit-process-title"
-                className="text-foreground text-lg font-semibold tracking-tight"
-              >
-                {canEditCandidates ? "Rediger prosess" : "Vis prosess"}
-              </h2>
-              <p id="edit-process-desc" className="text-muted-foreground text-sm">
-                {editingCandidate
-                  ? `${editingCandidate.code} · ${editingCandidate.name}`
-                  : "…"}
-              </p>
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <h2
+                    id="edit-process-title"
+                    className="text-foreground text-lg font-semibold tracking-tight"
+                  >
+                    {canEditCandidates ? "Rediger prosess" : "Vis prosess"}
+                  </h2>
+                  <p
+                    id="edit-process-desc"
+                    className="text-muted-foreground mt-0.5 truncate text-sm"
+                  >
+                    {editingCandidate
+                      ? `${editingCandidate.code} · ${editingCandidate.name}`
+                      : "…"}
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="size-9 shrink-0 rounded-full"
+                  onClick={() => setEditCandidateId(null)}
+                  aria-label="Lukk rediger prosess"
+                >
+                  <X className="size-4" aria-hidden />
+                </Button>
+              </div>
             </DialogHeader>
             <DialogBody>
               {editingCandidate ? (

@@ -6,6 +6,7 @@ import type { ActionCtx } from "./_generated/server";
 import { action, internalAction, internalMutation } from "./_generated/server";
 import {
   githubGraphql,
+  isGithubGraphqlNodeNotFoundError,
   isGithubGraphqlRateLimitError,
 } from "./lib/githubGraphql";
 import {
@@ -1222,7 +1223,25 @@ export const describeGithubProjectItemForCandidate = action({
       };
     }
     const token = await resolveGithubToken(ctx, candidate.workspaceId);
-    return await fetchGithubProjectItemShape(token, itemId, defaultRepos);
+    try {
+      return await fetchGithubProjectItemShape(token, itemId, defaultRepos);
+    } catch (e) {
+      if (isGithubGraphqlNodeNotFoundError(e)) {
+        await ctx.runMutation(internal.candidates.setGithubProjectItem, {
+          candidateId: args.candidateId,
+          itemNodeId: null,
+        });
+        await ctx.runMutation(internal.candidates.clearGithubIssueLink, {
+          candidateId: args.candidateId,
+        });
+        return {
+          kind: "no_item",
+          workspaceDefaultRepos: defaultRepos,
+          issueMatchesDefaultRepo: null,
+        };
+      }
+      throw e;
+    }
   },
 });
 
@@ -1685,7 +1704,13 @@ export const removeCandidateFromGithubProject = action({
         deletedItemId
       }
     }`;
-    await githubGraphql(token, delM, { itemId });
+    try {
+      await githubGraphql(token, delM, { itemId });
+    } catch (e) {
+      if (!isGithubGraphqlNodeNotFoundError(e)) {
+        throw e;
+      }
+    }
     await ctx.runMutation(internal.candidates.setGithubProjectItem, {
       candidateId: args.candidateId,
       itemNodeId: null,

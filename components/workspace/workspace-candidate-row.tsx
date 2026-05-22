@@ -285,7 +285,7 @@ export function WorkspaceCandidateRow({
   return (
     <Wrapper
       id={`cand-detail-${c._id}`}
-      className="scroll-mt-24 rounded-2xl border border-border/70 bg-card p-4 shadow-sm sm:p-5"
+      className="scroll-mt-24 min-w-0 overflow-hidden rounded-2xl border border-border/70 bg-card p-4 shadow-sm sm:p-5"
     >
       <p className="text-muted-foreground mb-4 flex flex-wrap items-center gap-2 text-xs leading-relaxed">
         <span className="bg-muted text-foreground inline-flex items-center rounded-md px-2 py-0.5 font-mono text-[11px] font-semibold">
@@ -581,12 +581,14 @@ export function WorkspaceCandidateRow({
           c.githubProjectItemNodeId &&
           !githubProject.loading ? (
             <div
-              className="rounded-lg border border-border/50 bg-background/60 px-3 py-2 text-xs leading-relaxed"
+              className="min-w-0 overflow-hidden rounded-lg border border-border/50 bg-background/60 px-3 py-2 text-xs leading-relaxed"
               role="status"
             >
               {githubItemShapeErr ? (
                 <div className="space-y-2">
-                  <p className="text-destructive">{githubItemShapeErr}</p>
+                  <p className="text-destructive break-all whitespace-pre-wrap">
+                    {githubItemShapeErr}
+                  </p>
                   <Button
                     type="button"
                     size="sm"
@@ -606,7 +608,7 @@ export function WorkspaceCandidateRow({
                   Sjekker kort på GitHub …
                 </p>
               ) : githubItemShape?.kind === "draft" ? (
-                <p className="text-muted-foreground">
+                <p className="text-muted-foreground break-words">
                   <span className="text-foreground font-medium">GitHub:</span>{" "}
                   fortsatt <strong className="text-foreground">utkast</strong>{" "}
                   (draft) — ikke et issue i et repo. Da kan PVV oppdatere tittel og
@@ -628,7 +630,7 @@ export function WorkspaceCandidateRow({
                       #{githubItemShape.issue.number}
                     </a>{" "}
                     i{" "}
-                    <code className="bg-muted rounded px-1 py-0.5 font-mono text-[0.7rem]">
+                    <code className="bg-muted break-all rounded px-1 py-0.5 font-mono text-[0.7rem]">
                       {githubItemShape.issue.repoFullName || "—"}
                     </code>{" "}
                     ({githubItemShape.issue.state})
@@ -656,7 +658,7 @@ export function WorkspaceCandidateRow({
                 </div>
               ) : githubItemShape?.kind === "pull_request" &&
                 githubItemShape.pullRequest ? (
-                <p className="text-muted-foreground">
+                <p className="text-muted-foreground break-words">
                   <span className="text-foreground font-medium">GitHub:</span>{" "}
                   kortet peker på en{" "}
                   <a

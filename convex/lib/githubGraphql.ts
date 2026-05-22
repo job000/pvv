@@ -87,3 +87,8 @@ export function isGithubGraphqlRateLimitError(e: unknown): boolean {
   const msg = errorMessageFromUnknown(e);
   return /rate limit|forespørselgrensen|HTTP 403|HTTP 429/i.test(msg);
 }
+
+export function isGithubGraphqlNodeNotFoundError(e: unknown): boolean {
+  const msg = errorMessageFromUnknown(e);
+  return /could not resolve to a node with the global id/i.test(msg);
+}
