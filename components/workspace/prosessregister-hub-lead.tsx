@@ -59,10 +59,10 @@ export function ProsessregisterHubLead({
     <>
       <div
         data-tutorial-anchor="hub-registrering"
-        className="group relative flex flex-col gap-4 overflow-hidden rounded-3xl border border-emerald-500/20 bg-gradient-to-br from-emerald-500/[0.10] via-card to-card p-5 shadow-sm sm:flex-row sm:items-center sm:gap-6 sm:p-6"
+        className="group relative flex flex-col gap-4 overflow-hidden rounded-3xl border border-border/50 bg-card p-5 shadow-sm sm:flex-row sm:items-center sm:gap-6 sm:p-6"
       >
         <div
-          className="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-emerald-500/15 text-emerald-700 shadow-sm ring-1 ring-emerald-500/25 dark:text-emerald-200 sm:size-14"
+          className="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary shadow-sm ring-1 ring-border/60 sm:size-14"
           aria-hidden
         >
           <Workflow className="size-6 sm:size-7" />
@@ -80,7 +80,7 @@ export function ProsessregisterHubLead({
             <Button
               type="button"
               size="default"
-              className="gap-1.5 rounded-full bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-all hover:bg-emerald-600/90 hover:shadow-md dark:bg-emerald-500 dark:text-emerald-950 dark:hover:bg-emerald-500/90"
+              className="gap-1.5 rounded-full bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm transition-all hover:bg-primary/90 hover:shadow-md"
               onClick={onRegisterClick}
             >
               <Plus className="size-4 shrink-0" aria-hidden />

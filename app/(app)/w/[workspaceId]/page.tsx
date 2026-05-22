@@ -61,13 +61,13 @@ export default function WorkspaceOverviewPage() {
         }
         actions={<WorkspaceOverviewViewSettings workspaceId={workspaceId} />}
       />
-      <section className="rounded-2xl border border-border/40 bg-card/60 p-3">
+      <section className="rounded-2xl border border-border/50 bg-card p-3.5">
         <p className="text-sm font-medium text-foreground">Start her</p>
         <p className="mt-1 text-xs text-muted-foreground">
           Samme funksjoner som før, men enklere inngang: velg rolle og gå rett
           til riktig arbeidsflate.
         </p>
-        <div className="mt-2 flex flex-wrap gap-2 text-[11px]">
+        <div className="mt-2.5 flex flex-wrap gap-2 text-xs">
           <Link
             href={`/w/${workspaceId}/vurderinger`}
             className="rounded-full border border-border/50 px-2.5 py-1 text-muted-foreground hover:text-foreground"

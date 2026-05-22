@@ -892,8 +892,8 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
           ) : null}
 
           {analysesList.length === 0 ? (
-            <div className="from-primary/[0.06] via-card to-card border-border/40 flex flex-col items-center gap-3 rounded-3xl border bg-gradient-to-br px-6 py-10 text-center shadow-sm">
-              <div className="bg-primary/15 ring-primary/20 flex size-12 items-center justify-center rounded-2xl ring-1">
+            <div className="border-border/40 flex flex-col items-center gap-3 rounded-3xl border bg-card px-6 py-10 text-center shadow-sm">
+              <div className="bg-primary/10 ring-border/60 flex size-12 items-center justify-center rounded-2xl ring-1">
                 <ClipboardList className="text-primary size-6" />
               </div>
               <div className="max-w-md space-y-1">

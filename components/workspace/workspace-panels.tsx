@@ -1891,21 +1891,21 @@ export function WorkspaceCandidatesPanel({
               <div className="flex flex-wrap gap-2" aria-label="Start etter rolle">
                 <Link
                   href={`/w/${workspaceId}/vurderinger?fane=prosesser`}
-                  className="text-muted-foreground hover:text-foreground rounded-full border border-border/50 bg-card/60 px-2.5 py-1 text-[11px] transition-colors"
+                  className="text-muted-foreground hover:text-foreground rounded-full border border-border/50 bg-card px-3 py-1 text-xs transition-colors"
                 >
-                  Prosessdesigner: opprett/vedlikehold prosess
+                  Prosessdesigner - Prosesser
                 </Link>
                 <Link
                   href={`/w/${workspaceId}/vurderinger`}
-                  className="text-muted-foreground hover:text-foreground rounded-full border border-border/50 bg-card/60 px-2.5 py-1 text-[11px] transition-colors"
+                  className="text-muted-foreground hover:text-foreground rounded-full border border-border/50 bg-card px-3 py-1 text-xs transition-colors"
                 >
-                  Koordinator: start vurdering fra prosess
+                  Koordinator - Vurderinger
                 </Link>
                 <Link
                   href={`/w/${workspaceId}/ros`}
-                  className="text-muted-foreground hover:text-foreground rounded-full border border-border/50 bg-card/60 px-2.5 py-1 text-[11px] transition-colors"
+                  className="text-muted-foreground hover:text-foreground rounded-full border border-border/50 bg-card px-3 py-1 text-xs transition-colors"
                 >
-                  Utvikler: sjekk ROS og tiltak
+                  Utvikler - ROS og tiltak
                 </Link>
               </div>
             ) : null}
@@ -4158,21 +4158,21 @@ export function WorkspaceAssessmentsPanel({
           <div className="flex flex-wrap gap-2" aria-label="Start etter rolle">
             <Link
               href={`/w/${workspaceId}/vurderinger`}
-              className="text-muted-foreground hover:text-foreground rounded-full border border-border/50 bg-card/60 px-2.5 py-1 text-[11px] transition-colors"
+              className="text-muted-foreground hover:text-foreground rounded-full border border-border/50 bg-card px-3 py-1 text-xs transition-colors"
             >
-              Koordinator: prioriter og følg opp vurderinger
+              Koordinator - Prioriter vurderinger
             </Link>
             <Link
               href={`/w/${workspaceId}/vurderinger?fane=prosesser`}
-              className="text-muted-foreground hover:text-foreground rounded-full border border-border/50 bg-card/60 px-2.5 py-1 text-[11px] transition-colors"
+              className="text-muted-foreground hover:text-foreground rounded-full border border-border/50 bg-card px-3 py-1 text-xs transition-colors"
             >
-              Prosessdesigner: koble riktig prosess
+              Prosessdesigner - Koble prosess
             </Link>
             <Link
               href={`/w/${workspaceId}/ros`}
-              className="text-muted-foreground hover:text-foreground rounded-full border border-border/50 bg-card/60 px-2.5 py-1 text-[11px] transition-colors"
+              className="text-muted-foreground hover:text-foreground rounded-full border border-border/50 bg-card px-3 py-1 text-xs transition-colors"
             >
-              Utvikler: valider ROS-grunnlag
+              Utvikler - Valider ROS
             </Link>
           </div>
         ) : null}
@@ -4253,7 +4253,7 @@ export function WorkspaceAssessmentsPanel({
         ) : null}
 
         {assessments.length === 0 ? (
-          <div className="relative overflow-hidden rounded-3xl border border-dashed border-border/60 bg-gradient-to-br from-primary/[0.06] via-card to-card px-6 py-12 text-center sm:py-14">
+          <div className="relative overflow-hidden rounded-3xl border border-dashed border-border/60 bg-card px-6 py-12 text-center sm:py-14">
             <div
               className="mx-auto mb-4 flex size-12 items-center justify-center rounded-2xl bg-primary/10 text-primary ring-1 ring-primary/20"
               aria-hidden

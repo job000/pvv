@@ -45,7 +45,7 @@ export function WorkspaceShell({
     >
       {showDesktopSidebar ? (
         <aside
-          className="fixed left-0 top-14 z-30 hidden h-[calc(100vh-3.5rem)] w-[15.5rem] flex-col overflow-hidden border-r border-border/60 bg-gradient-to-b from-muted/60 via-muted/35 to-muted/20 md:flex"
+          className="fixed left-0 top-14 z-30 hidden h-[calc(100vh-3.5rem)] w-[15.5rem] flex-col overflow-hidden border-r border-border/60 bg-card md:flex"
           aria-hidden={false}
         >
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
@@ -54,7 +54,7 @@ export function WorkspaceShell({
               workspaceName={workspace === null ? undefined : name}
             />
           </div>
-          <div className="shrink-0 border-t border-border/60 bg-background/40 p-2 backdrop-blur-sm">
+          <div className="shrink-0 border-t border-border/60 bg-card p-2">
             <Link
               href="/dashboard?oversikt=1"
               className="text-muted-foreground hover:text-foreground flex min-h-11 items-center rounded-xl px-3 text-sm font-medium transition-colors"
@@ -75,7 +75,7 @@ export function WorkspaceShell({
                 onNavigate={() => setMobileOpen(false)}
               />
             </div>
-            <div className="shrink-0 border-t border-border/60 bg-muted/20 p-3">
+            <div className="shrink-0 border-t border-border/60 bg-card p-3">
               <Link
                 href="/dashboard?oversikt=1"
                 onClick={() => setMobileOpen(false)}

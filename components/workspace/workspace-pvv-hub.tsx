@@ -80,7 +80,7 @@ export function WorkspacePvvHub({ workspaceId, activeTab, initialOrgUnit }: Prop
           {activeTab === "vurderinger" ? "Vurderinger" : "Prosesser"}
         </h1>
         <div
-          className="flex w-full shrink-0 gap-1 rounded-xl border border-border/40 bg-muted/30 p-1 sm:w-auto"
+          className="flex w-full shrink-0 gap-1 rounded-xl border border-border/50 bg-card p-1 sm:w-auto"
           role="tablist"
           aria-label="Vis vurderinger eller prosesser"
         >

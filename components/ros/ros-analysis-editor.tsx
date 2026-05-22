@@ -3793,7 +3793,7 @@ export function RosAnalysisEditor({
               after={riskRegisterSnapshot.after}
             />
           ) : (
-            <div className="from-primary/[0.06] via-card to-card border-border/40 flex flex-col items-center gap-3 rounded-3xl border bg-gradient-to-br px-6 py-10 text-center shadow-sm">
+            <div className="border-border/40 flex flex-col items-center gap-3 rounded-3xl border bg-card px-6 py-10 text-center shadow-sm">
               <div className="bg-primary/15 ring-primary/20 flex size-12 items-center justify-center rounded-2xl ring-1">
                 <Shield className="text-primary size-6" />
               </div>
@@ -3914,7 +3914,7 @@ export function RosAnalysisEditor({
         )}
 
         {data.linkedAssessments.length === 0 ? (
-          <div className="from-primary/[0.06] via-card to-card border-border/40 flex flex-col items-center gap-3 rounded-3xl border bg-gradient-to-br px-6 py-10 text-center shadow-sm">
+          <div className="border-border/40 flex flex-col items-center gap-3 rounded-3xl border bg-card px-6 py-10 text-center shadow-sm">
             <div className="bg-primary/15 ring-primary/20 flex size-12 items-center justify-center rounded-2xl ring-1">
               <Link2 className="text-primary size-6" />
             </div>
@@ -4040,7 +4040,7 @@ export function RosAnalysisEditor({
         </div>
 
         {/* Revisjon og varsling — planlagt oppfølging etter ROS (ISO 31000 / NS 5814) */}
-        <div className="from-primary/[0.04] via-card to-card ring-border/40 space-y-4 rounded-2xl bg-gradient-to-br p-4 shadow-sm ring-1 sm:p-5">
+        <div className="ring-border/40 space-y-4 rounded-2xl bg-card p-4 shadow-sm ring-1 sm:p-5">
           <div className="flex items-start gap-2.5">
             <Calendar
               className="text-primary mt-0.5 size-4 shrink-0"

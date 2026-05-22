@@ -10,7 +10,7 @@ export default function WorkspaceOrganisasjonPage() {
 
   return (
     <div className="space-y-6">
-      <div className="rounded-2xl border border-border/40 bg-gradient-to-br from-primary/[0.06] via-card to-card p-4 shadow-sm sm:p-5">
+      <div className="rounded-2xl border border-border/40 bg-card p-4 shadow-sm sm:p-5">
         <h1 className="font-heading text-lg font-semibold tracking-tight sm:text-xl">
           Organisasjon
         </h1>

@@ -13,9 +13,8 @@ function RosPageBody() {
   return (
     <div className="mx-auto w-full max-w-7xl space-y-6 pb-16">
       <header className="relative overflow-hidden rounded-2xl border border-border/40 bg-card shadow-sm ring-1 ring-black/[0.03] dark:ring-white/[0.05]">
-        <div className="from-primary/[0.06] pointer-events-none absolute inset-0 bg-gradient-to-br via-transparent to-transparent" />
         <div className="relative flex items-start gap-4 px-5 py-5 sm:px-6 sm:py-6">
-          <div className="bg-primary/12 text-primary flex size-12 shrink-0 items-center justify-center rounded-2xl ring-1 ring-primary/15">
+          <div className="bg-primary/10 text-primary flex size-11 shrink-0 items-center justify-center rounded-xl ring-1 ring-border/60">
             <Shield className="size-6" aria-hidden />
           </div>
           <div className="min-w-0">

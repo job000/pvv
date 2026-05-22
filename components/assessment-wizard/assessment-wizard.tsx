@@ -1001,7 +1001,7 @@ export function AssessmentWizard({ assessmentId }: Props) {
       {/* Hero: tittel + lett meta-strimmel i ett luftig kort.
           Subtilt gradient-bakgrunn for å gi siden et moderne anker øverst,
           uten ekstra knapper eller badges som drukner det viktigste. */}
-      <div className="rounded-3xl border border-border/40 bg-gradient-to-br from-primary/[0.06] via-card to-card p-5 shadow-sm sm:p-6">
+      <div className="rounded-3xl border border-border/40 bg-card p-5 shadow-sm sm:p-6">
         {canEdit ? (
           <Input
             id="assessment-display-title"
@@ -1038,14 +1038,14 @@ export function AssessmentWizard({ assessmentId }: Props) {
           ) : null}
         </p>
         <div className="mt-3 flex flex-wrap gap-2" aria-label="Rollehjelp">
-          <span className="rounded-full border border-border/50 bg-card/70 px-2.5 py-1 text-[11px] text-muted-foreground">
-            Koordinator: følg steg og oppdater status
+          <span className="rounded-full border border-border/50 bg-card px-3 py-1 text-xs text-muted-foreground">
+            Koordinator - Følg steg og status
           </span>
-          <span className="rounded-full border border-border/50 bg-card/70 px-2.5 py-1 text-[11px] text-muted-foreground">
-            Prosessdesigner: kvalitetssikre prosessdata i steg 1
+          <span className="rounded-full border border-border/50 bg-card px-3 py-1 text-xs text-muted-foreground">
+            Prosessdesigner - Kvalitetssikre prosessdata
           </span>
-          <span className="rounded-full border border-border/50 bg-card/70 px-2.5 py-1 text-[11px] text-muted-foreground">
-            Utvikler: bruk ROS-lenken i objektfeltet videre
+          <span className="rounded-full border border-border/50 bg-card px-3 py-1 text-xs text-muted-foreground">
+            Utvikler - Fortsett via ROS-lenken
           </span>
         </div>
       </div>
