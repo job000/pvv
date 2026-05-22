@@ -7,9 +7,9 @@ import {
 } from "@/components/product";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
+import { formatRelativeUpdatedAt } from "@/lib/assessment-ui-helpers";
 import { buildAssessmentPdfInputFromDraft } from "@/lib/assessment-pdf-from-draft";
 import {
   buildAssessmentPdfBlob,
@@ -31,6 +31,8 @@ import {
   FileText,
   Loader2,
   Search,
+  Check,
+  ArrowUpDown,
   X,
 } from "lucide-react";
 import { useParams } from "next/navigation";
@@ -47,29 +49,45 @@ function safePdfFilename(title: string, prefix: string): string {
   return `${prefix}-${safe || "dokument"}.pdf`;
 }
 
-type AssessmentRow = { _id: Id<"assessments">; title: string };
-type AnalysisRow = { _id: Id<"rosAnalyses">; title: string };
+type AssessmentRow = {
+  _id: Id<"assessments">;
+  title: string;
+  updatedAt?: number;
+};
+type AnalysisRow = {
+  _id: Id<"rosAnalyses">;
+  title: string;
+  updatedAt?: number;
+};
+type ListSort = "updated_desc" | "title_asc";
 
-function useFilteredRows<T extends { _id: string; title: string }>(
+function useFilteredRows<T extends { _id: string; title: string; updatedAt?: number }>(
   rows: T[],
   selectedId: string,
   query: string,
+  sort: ListSort,
 ): T[] {
   return useMemo(() => {
     const q = query.trim().toLowerCase();
-    const filtered = q
+    const base = q
       ? rows.filter((r) => r.title.toLowerCase().includes(q))
       : rows;
+    const sorted = [...base];
+    if (sort === "title_asc") {
+      sorted.sort((a, b) => a.title.localeCompare(b.title, "nb"));
+    } else {
+      sorted.sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0));
+    }
     const selected = rows.find((r) => r._id === selectedId);
     if (
       selected &&
       selectedId &&
-      !filtered.some((r) => r._id === selectedId)
+      !sorted.some((r) => r._id === selectedId)
     ) {
-      return [selected, ...filtered];
+      return [selected, ...sorted];
     }
-    return filtered;
-  }, [rows, selectedId, query]);
+    return sorted;
+  }, [rows, selectedId, query, sort]);
 }
 
 const TAB_CONFIG = [
@@ -107,6 +125,7 @@ export default function PdfForhandsvisningPage() {
   );
 
   const [listFilter, setListFilter] = useState("");
+  const [listSort, setListSort] = useState<ListSort>("updated_desc");
 
   const draftBundle = useQuery(
     api.assessments.getDraft,
@@ -372,16 +391,19 @@ export default function PdfForhandsvisningPage() {
     assessmentList,
     assessmentId,
     tab === "vurdering" ? listFilter : "",
+    listSort,
   );
   const filteredPddAssessments = useFilteredRows(
     assessmentList,
     pddAssessmentId,
     tab === "pdd" ? listFilter : "",
+    listSort,
   );
   const filteredAnalyses = useFilteredRows(
     analysisList,
     analysisId,
     tab === "ros" ? listFilter : "",
+    listSort,
   );
 
   useEffect(() => {
@@ -408,6 +430,7 @@ export default function PdfForhandsvisningPage() {
     !noAssessments &&
     assessmentList.length >= 2;
   const showRosFilter = tab === "ros" && !noAnalyses && analysisList.length >= 2;
+  const canFilterList = showFilter || showRosFilter;
 
   const selectionCount =
     tab === "ros"
@@ -418,13 +441,30 @@ export default function PdfForhandsvisningPage() {
 
   const totalCount =
     tab === "ros" ? analysisList.length : assessmentList.length;
-
-  const selectId =
-    tab === "vurdering"
-      ? "pdf-assessment"
-      : tab === "ros"
-        ? "pdf-ros"
-        : "pdf-pdd";
+  const activeRows = (
+    tab === "ros"
+      ? filteredAnalyses
+      : tab === "pdd"
+        ? filteredPddAssessments
+        : filteredAssessments
+  ) as Array<{ _id: string; title: string; updatedAt?: number }>;
+  const activeSelectedId =
+    tab === "ros"
+      ? String(analysisId)
+      : tab === "pdd"
+        ? String(pddAssessmentId)
+        : String(assessmentId);
+  const selectActiveRow = (id: string) => {
+    if (tab === "ros") {
+      setAnalysisId(id as Id<"rosAnalyses">);
+      return;
+    }
+    if (tab === "pdd") {
+      setPddAssessmentId(id as Id<"assessments">);
+      return;
+    }
+    setAssessmentId(id as Id<"assessments">);
+  };
 
   const previewTitle =
     tab === "vurdering" && draftBundle
@@ -540,53 +580,58 @@ export default function PdfForhandsvisningPage() {
         {!noAssessments || (tab === "ros" && !noAnalyses) ? (
           <ProductSection
             title="Velg dokument"
-            description={
-              showFilter || showRosFilter
-                ? "Søk filtrerer nedtrekkslisten. Aktivt valg vises alltid."
-                : "Velg utkast eller analyse."
-            }
+            description="Bruk listevisning for å velge og forhåndsvise riktig PDF."
           >
-            <div className="max-w-2xl space-y-4 rounded-xl border border-border/50 bg-card/40 p-4 shadow-sm sm:p-5">
-              {(showFilter || showRosFilter) && (
+            <div className="max-w-3xl space-y-4 rounded-2xl border border-border/50 bg-card/50 p-4 shadow-sm sm:p-5">
+              {canFilterList ? (
                 <div className="space-y-2">
-                  <Label
-                    htmlFor="pdf-list-filter"
-                    className="text-[0.7rem] font-medium uppercase tracking-wide text-muted-foreground"
-                  >
-                    Søk i liste
-                  </Label>
-                  <div className="relative flex w-full items-center">
-                    <span
-                      className="text-muted-foreground pointer-events-none absolute left-3.5 flex size-9 items-center justify-center"
-                      aria-hidden
-                    >
-                      <Search className="size-4 shrink-0 opacity-80" />
-                    </span>
-                    <Input
-                      id="pdf-list-filter"
-                      type="search"
-                      value={listFilter}
-                      onChange={(e) => setListFilter(e.target.value)}
-                      placeholder={
-                        tab === "ros" ? "Filtrer etter ROS-tittel" : "Filtrer etter vurdering"
-                      }
-                      autoComplete="off"
-                      className={cn(
-                        "h-10 min-h-10 w-full rounded-lg border-border/50 bg-background text-sm shadow-none",
-                        /* Egen horisontal padding — overstyrer Input sitt md:px-2.5 som ga ikon/tekst-overlapp */
-                        "!pl-11 !pr-10 md:!min-h-10 md:!pl-11 md:!pr-10",
-                      )}
-                    />
-                    {listFilter ? (
-                      <button
-                        type="button"
-                        className="text-muted-foreground hover:text-foreground absolute right-2 top-1/2 flex size-9 -translate-y-1/2 items-center justify-center rounded-md transition-colors"
-                        onClick={() => setListFilter("")}
-                        aria-label="Tøm søk"
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                    <div className="relative flex w-full items-center">
+                      <span
+                        className="text-muted-foreground pointer-events-none absolute left-3.5 flex size-9 items-center justify-center"
+                        aria-hidden
                       >
-                        <X className="size-4 shrink-0" />
-                      </button>
-                    ) : null}
+                        <Search className="size-4 shrink-0 opacity-80" />
+                      </span>
+                      <Input
+                        id="pdf-list-filter"
+                        type="search"
+                        value={listFilter}
+                        onChange={(e) => setListFilter(e.target.value)}
+                        placeholder={
+                          tab === "ros"
+                            ? "Søk ROS-analyse …"
+                            : "Søk vurdering …"
+                        }
+                        autoComplete="off"
+                        className={cn(
+                          "h-10 min-h-10 w-full rounded-lg border-border/50 bg-background text-sm shadow-none",
+                          "!pl-11 !pr-10 md:!min-h-10 md:!pl-11 md:!pr-10",
+                        )}
+                      />
+                      {listFilter ? (
+                        <button
+                          type="button"
+                          className="text-muted-foreground hover:text-foreground absolute right-2 top-1/2 flex size-9 -translate-y-1/2 items-center justify-center rounded-md transition-colors"
+                          onClick={() => setListFilter("")}
+                          aria-label="Tøm søk"
+                        >
+                          <X className="size-4 shrink-0" />
+                        </button>
+                      ) : null}
+                    </div>
+                    <div className="relative shrink-0">
+                      <select
+                        aria-label="Sorter dokumentliste"
+                        value={listSort}
+                        onChange={(e) => setListSort(e.target.value as ListSort)}
+                        className="h-10 min-w-[11rem] appearance-none rounded-lg border border-border/50 bg-background pl-3 pr-8 text-sm"
+                      >
+                        <option value="updated_desc">Nyeste først</option>
+                        <option value="title_asc">Tittel A–Å</option>
+                      </select>
+                      <ArrowUpDown className="pointer-events-none absolute right-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+                    </div>
                   </div>
                   <p className="text-muted-foreground text-[11px] tabular-nums">
                     {selectionCount} av {totalCount}{" "}
@@ -594,108 +639,69 @@ export default function PdfForhandsvisningPage() {
                     {listFilter.trim() ? " · filtrert" : ""}
                   </p>
                 </div>
-              )}
+              ) : null}
 
-              <div className="space-y-2">
-                <Label
-                  htmlFor={selectId}
-                  className="text-[0.7rem] font-medium uppercase tracking-wide text-muted-foreground"
-                >
-                  {tab === "ros"
-                    ? "ROS-analyse"
-                    : tab === "pdd"
-                      ? "Vurdering (PDD)"
-                      : "Vurdering"}
-                </Label>
-                {tab === "vurdering" ? (
-                  <select
-                    id={selectId}
-                    className="border-input bg-background focus-visible:ring-ring h-10 w-full rounded-lg border border-border/50 px-3 text-sm shadow-none outline-none transition-[box-shadow] focus-visible:ring-2 disabled:opacity-50"
-                    value={assessmentId}
-                    disabled={noAssessments}
-                    onChange={(e) =>
-                      setAssessmentId(e.target.value as Id<"assessments">)
-                    }
-                  >
-                    {noAssessments ? (
-                      <option value="">—</option>
-                    ) : (
-                      filteredAssessments.map((a) => (
-                        <option key={a._id} value={a._id}>
-                          {a.title}
-                        </option>
-                      ))
-                    )}
-                  </select>
-                ) : null}
-
-                {tab === "ros" ? (
-                  <select
-                    id={selectId}
-                    className="border-input bg-background focus-visible:ring-ring h-10 w-full rounded-lg border border-border/50 px-3 text-sm shadow-none outline-none transition-[box-shadow] focus-visible:ring-2 disabled:opacity-50"
-                    value={analysisId}
-                    disabled={noAnalyses}
-                    onChange={(e) =>
-                      setAnalysisId(e.target.value as Id<"rosAnalyses">)
-                    }
-                  >
-                    {noAnalyses ? (
-                      <option value="">—</option>
-                    ) : (
-                      filteredAnalyses.map((a) => (
-                        <option key={a._id} value={a._id}>
-                          {a.title}
-                        </option>
-                      ))
-                    )}
-                  </select>
-                ) : null}
-
-                {tab === "pdd" ? (
-                  <select
-                    id={selectId}
-                    className="border-input bg-background focus-visible:ring-ring h-10 w-full rounded-lg border border-border/50 px-3 text-sm shadow-none outline-none transition-[box-shadow] focus-visible:ring-2 disabled:opacity-50"
-                    value={pddAssessmentId}
-                    disabled={noAssessments}
-                    onChange={(e) =>
-                      setPddAssessmentId(e.target.value as Id<"assessments">)
-                    }
-                  >
-                    {noAssessments ? (
-                      <option value="">—</option>
-                    ) : (
-                      filteredPddAssessments.map((a) => (
-                        <option key={a._id} value={a._id}>
-                          {a.title}
-                        </option>
-                      ))
-                    )}
-                  </select>
-                ) : null}
+              <div className="overflow-hidden rounded-xl border border-border/50 bg-card">
+                <ul className="divide-y divide-border/40">
+                  {activeRows.map((row) => {
+                    const selected = activeSelectedId === String(row._id);
+                    return (
+                      <li key={String(row._id)}>
+                        <button
+                          type="button"
+                          onClick={() => selectActiveRow(String(row._id))}
+                          className={cn(
+                            "grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-2 px-3 py-2.5 text-left transition-colors hover:bg-muted/35",
+                            selected && "bg-primary/10",
+                          )}
+                          aria-pressed={selected}
+                        >
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-medium text-foreground">
+                              {row.title}
+                            </p>
+                            {row.updatedAt ? (
+                              <p className="text-[11px] text-muted-foreground">
+                                Oppdatert {formatRelativeUpdatedAt(row.updatedAt)}
+                              </p>
+                            ) : null}
+                          </div>
+                          {selected ? (
+                            <span className="inline-flex items-center gap-1 rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 text-[11px] text-primary">
+                              <Check className="size-3" />
+                              Valgt
+                            </span>
+                          ) : null}
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
             </div>
-          </div>
-        </ProductSection>
+          </ProductSection>
       ) : null}
 
-        {error ? (
-          <div
-            className="border-destructive/30 bg-destructive/5 rounded-xl border px-4 py-3 text-sm text-destructive"
-            role="alert"
-          >
-            {error}
-          </div>
-        ) : null}
+      {error ? (
+        <div
+          className="border-destructive/30 bg-destructive/5 rounded-xl border px-4 py-3 text-sm text-destructive"
+          role="alert"
+        >
+          {error}
+        </div>
+      ) : null}
 
-        {pdfUrl && !error && !busy ? (
-          <div className="border-border/40 min-w-0 border-t pt-3">
-            <p className="text-muted-foreground text-[0.65rem] font-medium uppercase tracking-wider">
-              Aktiv forhåndsvisning
-            </p>
-            <p className="text-foreground mt-0.5 truncate text-sm font-semibold leading-snug">
-              {previewTitle}
-            </p>
-          </div>
-        ) : null}
+      {pdfUrl && !error && !busy ? (
+        <div className="border-border/40 min-w-0 border-t pt-3">
+          <p className="text-muted-foreground text-[0.65rem] font-medium uppercase tracking-wider">
+            Aktiv forhåndsvisning
+          </p>
+          <p className="text-foreground mt-0.5 truncate text-sm font-semibold leading-snug">
+            {previewTitle}
+          </p>
+          <p className="text-xs text-muted-foreground">{downloadLabel}</p>
+        </div>
+      ) : null}
       </div>
 
       <section

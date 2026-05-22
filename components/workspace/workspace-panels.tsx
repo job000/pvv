@@ -4274,113 +4274,119 @@ export function WorkspaceAssessmentsPanel({
             <p className="text-muted-foreground text-sm">Ingen treff for filteret.</p>
           </div>
         ) : (
-          <ul className="divide-y divide-border/40 overflow-hidden rounded-2xl bg-card/80 shadow-sm ring-1 ring-black/[0.04] backdrop-blur-sm dark:ring-white/[0.06]">
-            {filteredAssessments.map((a) => {
-              const pipeline = normalizePipelineStatus(a.pipelineStatus);
-              const prio = effectiveAssessmentPriority(a);
-              const orgLine = orgUnitSearchLabel(a.orgUnitId ?? undefined, orgUnits);
-              const fromIntake = intakeAssessmentIdSet.has(a._id);
-              return (
-                <li
-                  key={a._id}
-                  className="group/card relative flex items-center gap-3 px-4 py-3 transition-colors hover:bg-muted/40 sm:gap-4 sm:px-5 sm:py-3.5"
-                >
-                  <span
-                    className={cn(
-                      "size-2.5 shrink-0 rounded-full transition-transform group-hover/card:scale-125",
-                      priorityFillClass(prio),
-                    )}
-                    aria-hidden
-                  />
-                  <Link
-                    href={`/w/${workspaceId}/a/${a._id}`}
-                    className="absolute inset-0 z-0 rounded-none"
-                    aria-label={`Åpne vurdering: ${a.title}`}
-                  />
-                  <div className="pointer-events-none relative z-10 min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
-                      <p className="text-foreground truncate text-sm font-medium group-hover/card:text-foreground">
-                        {a.title}
-                      </p>
-                      {fromIntake ? (
-                        <Badge
-                          variant="outline"
-                          className="rounded-full border-primary/25 bg-primary/[0.06] text-[10px] font-medium text-primary"
-                        >
-                          Skjema
-                        </Badge>
-                      ) : null}
+          <div className="overflow-hidden rounded-2xl bg-card shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.06]">
+            <div className="text-muted-foreground hidden grid-cols-[minmax(0,2.1fr)_minmax(0,1.4fr)_5.5rem_10rem_2.5rem] items-center gap-3 border-b border-border/50 bg-muted/20 px-5 py-2 text-[11px] font-medium sm:grid">
+              <span>Vurdering</span>
+              <span>Enhet / sist oppdatert</span>
+              <span className="text-center">Prioritet</span>
+              <span>Status</span>
+              <span className="sr-only">Åpne</span>
+            </div>
+            <ul className="divide-y divide-border/40">
+              {filteredAssessments.map((a) => {
+                const pipeline = normalizePipelineStatus(a.pipelineStatus);
+                const prio = effectiveAssessmentPriority(a);
+                const orgLine = orgUnitSearchLabel(a.orgUnitId ?? undefined, orgUnits);
+                const fromIntake = intakeAssessmentIdSet.has(a._id);
+                return (
+                  <li
+                    key={a._id}
+                    className="group/card relative grid grid-cols-1 gap-2 px-4 py-3 transition-colors hover:bg-muted/35 sm:grid-cols-[minmax(0,2.1fr)_minmax(0,1.4fr)_5.5rem_10rem_2.5rem] sm:items-center sm:gap-3 sm:px-5 sm:py-3.5"
+                  >
+                    <Link
+                      href={`/w/${workspaceId}/a/${a._id}`}
+                      className="absolute inset-0 z-0 rounded-none"
+                      aria-label={`Åpne vurdering: ${a.title}`}
+                    />
+                    <div className="pointer-events-none relative z-10 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span
+                          className={cn("size-2 shrink-0 rounded-full", priorityFillClass(prio))}
+                          aria-hidden
+                        />
+                        <p className="text-foreground truncate text-sm font-medium">
+                          {a.title}
+                        </p>
+                        {fromIntake ? (
+                          <Badge
+                            variant="outline"
+                            className="rounded-full border-primary/25 bg-primary/[0.06] text-[10px] font-medium text-primary"
+                          >
+                            Skjema
+                          </Badge>
+                        ) : null}
+                      </div>
                     </div>
-                    <div className="text-muted-foreground mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px]">
-                      {orgLine ? <span className="truncate">{orgLine}</span> : null}
-                      <span
+                    <div className="pointer-events-none relative z-10 min-w-0 text-[11px] text-muted-foreground">
+                      <p className="truncate">{orgLine || "Ikke satt"}</p>
+                      <p
                         className="tabular-nums"
                         title={new Date(a.updatedAt).toLocaleString("nb-NO")}
                       >
                         {formatRelativeUpdatedAt(a.updatedAt)}
-                      </span>
-                      <span className="inline-flex items-center gap-1 tabular-nums">
-                        <span className="text-foreground font-semibold">
-                          {prio.toFixed(0)}
-                        </span>
-                        <span className="opacity-70">/ 100</span>
-                      </span>
+                      </p>
                     </div>
-                  </div>
-                  <div className="pointer-events-auto relative z-10 flex shrink-0 items-center gap-1.5">
-                    {canEditPipeline ? (
-                      <PipelineStatusSelect
-                        assessmentId={a._id}
-                        value={pipeline}
-                        compact
-                      />
-                    ) : (
-                      <Badge
-                        variant="secondary"
-                        className="rounded-full text-[10px] font-medium"
-                      >
-                        {PIPELINE_STATUS_LABELS[pipeline]}
-                      </Badge>
-                    )}
-                    <button
-                      type="button"
-                      className="text-muted-foreground/60 hover:bg-destructive/10 hover:text-destructive flex size-8 items-center justify-center rounded-full opacity-0 transition-all sm:group-hover/card:opacity-100"
-                      title="Slett vurdering"
-                      aria-label={`Slett vurdering ${a.title}`}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        if (
-                          !window.confirm(
-                            `Slette «${a.title}»?\n\nAlle data fjernes permanent.`,
-                          )
-                        ) {
-                          return;
-                        }
-                        void (async () => {
-                          try {
-                            await deleteAssessment({ assessmentId: a._id });
-                            toast.success("Vurdering slettet.");
-                          } catch (err) {
-                            toast.error(
-                              err instanceof Error
-                                ? err.message
-                                : "Kunne ikke slette vurderingen.",
-                            );
+                    <div className="pointer-events-none relative z-10 text-center text-xs tabular-nums">
+                      <span className="font-semibold text-foreground">{prio.toFixed(0)}</span>
+                      <span className="text-muted-foreground"> / 100</span>
+                    </div>
+                    <div className="pointer-events-auto relative z-10">
+                      {canEditPipeline ? (
+                        <PipelineStatusSelect
+                          assessmentId={a._id}
+                          value={pipeline}
+                          compact
+                        />
+                      ) : (
+                        <Badge
+                          variant="secondary"
+                          className="rounded-full text-[10px] font-medium"
+                        >
+                          {PIPELINE_STATUS_LABELS[pipeline]}
+                        </Badge>
+                      )}
+                    </div>
+                    <div className="pointer-events-auto relative z-10 ml-auto flex items-center gap-1">
+                      <button
+                        type="button"
+                        className="text-muted-foreground/60 hover:bg-destructive/10 hover:text-destructive flex size-8 items-center justify-center rounded-full opacity-0 transition-all sm:group-hover/card:opacity-100"
+                        title="Slett vurdering"
+                        aria-label={`Slett vurdering ${a.title}`}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (
+                            !window.confirm(
+                              `Slette «${a.title}»?\n\nAlle data fjernes permanent.`,
+                            )
+                          ) {
+                            return;
                           }
-                        })();
-                      }}
-                    >
-                      <Trash2 className="size-3.5" aria-hidden />
-                    </button>
-                    <ChevronRight
-                      className="text-muted-foreground/40 size-4 transition-all duration-200 group-hover/card:text-foreground group-hover/card:translate-x-0.5"
-                      aria-hidden
-                    />
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
+                          void (async () => {
+                            try {
+                              await deleteAssessment({ assessmentId: a._id });
+                              toast.success("Vurdering slettet.");
+                            } catch (err) {
+                              toast.error(
+                                err instanceof Error
+                                  ? err.message
+                                  : "Kunne ikke slette vurderingen.",
+                              );
+                            }
+                          })();
+                        }}
+                      >
+                        <Trash2 className="size-3.5" aria-hidden />
+                      </button>
+                      <ChevronRight
+                        className="text-muted-foreground/40 size-4 transition-all duration-200 group-hover/card:text-foreground group-hover/card:translate-x-0.5"
+                        aria-hidden
+                      />
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
         )}
       </section>
     </div>

@@ -62,6 +62,7 @@ import {
   Plus,
   RefreshCw,
   Save,
+  Search,
   Sparkles,
   Trash2,
   X,
@@ -144,6 +145,18 @@ const PDD_SOURCE_MAPPING_GROUPS = [
       "ROS er hovedkilde for risiko og kontroller. Vurdering tilfører fallback, barrierer og driftsbehov. Inntak kan supplere med konkrete lokale avvik.",
   },
 ] as const;
+
+const PDD_SECTION_SHORTCUTS: {
+  value: string;
+  label: string;
+}[] = [
+  { value: "overview", label: "Oversikt" },
+  { value: "asis", label: "As-Is" },
+  { value: "tobe", label: "To-Be" },
+  { value: "huki", label: "HUKI" },
+  { value: "risk", label: "Risiko" },
+  { value: "extra", label: "Tillegg" },
+];
 
 /* ------------------------------------------------------------------ */
 /*  Primitives                                                         */
@@ -594,40 +607,40 @@ const HUKI_COLS = [
     letter: "H",
     label: "Høres",
     full: "Hvem rådspørres?",
-    headerBg: "bg-blue-500/15",
-    headerText: "text-blue-700 dark:text-blue-400",
-    badge: "bg-blue-500/20 text-blue-700 dark:text-blue-400",
-    dot: "bg-blue-500",
+    headerBg: "bg-muted/40",
+    headerText: "text-foreground",
+    badge: "bg-muted text-foreground",
+    dot: "bg-foreground/60",
   },
   {
     key: "u" as const,
     letter: "U",
     label: "Utfører",
     full: "Hvem utfører?",
-    headerBg: "bg-emerald-500/15",
-    headerText: "text-emerald-700 dark:text-emerald-400",
-    badge: "bg-emerald-500/20 text-emerald-700 dark:text-emerald-400",
-    dot: "bg-emerald-500",
+    headerBg: "bg-muted/40",
+    headerText: "text-foreground",
+    badge: "bg-muted text-foreground",
+    dot: "bg-foreground/60",
   },
   {
     key: "k" as const,
     letter: "K",
     label: "Kontrollerer",
     full: "Hvem godkjenner?",
-    headerBg: "bg-amber-500/15",
-    headerText: "text-amber-700 dark:text-amber-400",
-    badge: "bg-amber-500/20 text-amber-700 dark:text-amber-400",
-    dot: "bg-amber-500",
+    headerBg: "bg-muted/40",
+    headerText: "text-foreground",
+    badge: "bg-muted text-foreground",
+    dot: "bg-foreground/60",
   },
   {
     key: "i" as const,
     letter: "I",
     label: "Informeres",
     full: "Hvem informeres?",
-    headerBg: "bg-purple-500/15",
-    headerText: "text-purple-700 dark:text-purple-400",
-    badge: "bg-purple-500/20 text-purple-700 dark:text-purple-400",
-    dot: "bg-purple-500",
+    headerBg: "bg-muted/40",
+    headerText: "text-foreground",
+    badge: "bg-muted text-foreground",
+    dot: "bg-foreground/60",
   },
 ] as const;
 
@@ -1117,6 +1130,10 @@ export function ProcessDesignDocPage({
     "asis",
     "tobe",
   ]);
+  const [sectionQuery, setSectionQuery] = useState("");
+  const [sectionFilter, setSectionFilter] = useState<
+    "all" | "incomplete" | "complete"
+  >("all");
   const autoAutofillKeyRef = useRef<string | null>(null);
   const payloadRef = useRef(payload);
   const organizationLineRef = useRef(organizationLine);
@@ -1476,6 +1493,127 @@ export function ProcessDesignDocPage({
     const v = docState?.versions?.[0]?.version;
     return v && v > 0 ? v : null;
   }, [docState?.versions]);
+  const sectionCompletion = useMemo(() => {
+    return {
+      overview: Boolean(
+        payload.processTitle?.trim() ||
+          payload.shortDescription?.trim() ||
+          payload.summary?.trim(),
+      ),
+      asis: Boolean(
+        payload.currentProcessDescription?.trim() ||
+          (payload.appRows?.length ?? 0) > 0,
+      ),
+      tobe: Boolean(
+        payload.futureProcessDescription?.trim() ||
+          payload.solutionSummary?.trim(),
+      ),
+      huki: Boolean((payload.hukiRows?.length ?? 0) > 0),
+      risk: Boolean(
+        (payload.businessExceptionsKnown?.length ?? 0) > 0 ||
+          payload.businessExceptionsUnknown?.trim() ||
+          (payload.appErrorsKnown?.length ?? 0) > 0 ||
+          payload.appErrorsUnknown?.trim(),
+      ),
+      extra: Boolean(
+        payload.otherObservations?.trim() ||
+          payload.additionalSources?.trim() ||
+          payload.targetTimeline?.trim() ||
+          payload.appendix?.trim(),
+      ),
+    };
+  }, [payload]);
+  const completedSectionCount = Object.values(sectionCompletion).filter(Boolean).length;
+  const sectionVisible = useMemo(() => {
+    const q = sectionQuery.trim().toLowerCase();
+    const rosText = (rosCtx ?? [])
+      .map((r) => `${r.title} ${(r.rosSummary.summaryLines ?? []).join(" ")}`)
+      .join(" ")
+      .toLowerCase();
+    const matches = {
+      overview:
+        q.length === 0 ||
+        [
+          "oversikt",
+          "prosesstittel",
+          payload.processTitle,
+          payload.shortDescription,
+          payload.summary,
+        ]
+          .join(" ")
+          .toLowerCase()
+          .includes(q),
+      asis:
+        q.length === 0 ||
+        [
+          "asis nåværende prosess",
+          payload.currentProcessDescription,
+          payload.asIsShortDescription,
+          payload.asIsProcessMap,
+        ]
+          .join(" ")
+          .toLowerCase()
+          .includes(q),
+      tobe:
+        q.length === 0 ||
+        [
+          "tobe fremtidig prosess",
+          payload.futureProcessDescription,
+          payload.solutionSummary,
+          payload.toBeMap,
+        ]
+          .join(" ")
+          .toLowerCase()
+          .includes(q),
+      huki:
+        q.length === 0 ||
+        [
+          "huki roller ansvar",
+          JSON.stringify(payload.hukiRows ?? []),
+        ]
+          .toLowerCase()
+          .includes(q),
+      risk:
+        q.length === 0 ||
+        [
+          "risiko feilhåndtering ros",
+          payload.businessExceptionsUnknown,
+          payload.appErrorsUnknown,
+          payload.reporting,
+          rosText,
+        ]
+          .join(" ")
+          .toLowerCase()
+          .includes(q),
+      extra:
+        q.length === 0 ||
+        [
+          "tilleggsinformasjon observasjoner kilder tidsplan vedlegg",
+          payload.otherObservations,
+          payload.additionalSources,
+          payload.targetTimeline,
+          payload.appendix,
+        ]
+          .join(" ")
+          .toLowerCase()
+          .includes(q),
+    } as const;
+
+    const modeVisible = (key: keyof typeof sectionCompletion) => {
+      if (sectionFilter === "incomplete") return !sectionCompletion[key];
+      if (sectionFilter === "complete") return sectionCompletion[key];
+      return true;
+    };
+
+    return {
+      overview: matches.overview && modeVisible("overview"),
+      asis: matches.asis && modeVisible("asis"),
+      tobe: matches.tobe && modeVisible("tobe"),
+      huki: matches.huki && modeVisible("huki"),
+      risk: matches.risk && modeVisible("risk"),
+      extra: matches.extra && modeVisible("extra"),
+    };
+  }, [sectionQuery, sectionFilter, sectionCompletion, payload, rosCtx]);
 
   const exportPdf = async () => {
     setPdfExporting(true);
@@ -1590,6 +1728,28 @@ export function ProcessDesignDocPage({
           Beskriv prosessen seksjon for seksjon. Bruk «Fyll fra kilder» i menyen
           for å foreslå tekst fra vurdering, register og ROS.
         </p>
+        {hasDoc ? (
+          <div className="grid gap-2 rounded-2xl border border-border/50 bg-card p-3 sm:grid-cols-3">
+            <div className="rounded-xl border border-border/50 bg-muted/20 px-3 py-2">
+              <p className="text-[11px] text-muted-foreground">Seksjoner fylt</p>
+              <p className="text-base font-semibold tabular-nums text-foreground">
+                {completedSectionCount} / {PDD_SECTION_SHORTCUTS.length}
+              </p>
+            </div>
+            <div className="rounded-xl border border-border/50 bg-muted/20 px-3 py-2">
+              <p className="text-[11px] text-muted-foreground">Koblede ROS</p>
+              <p className="text-base font-semibold tabular-nums text-foreground">
+                {rosAnalyses.length}
+              </p>
+            </div>
+            <div className="rounded-xl border border-border/50 bg-muted/20 px-3 py-2">
+              <p className="text-[11px] text-muted-foreground">Prosesskobling</p>
+              <p className="text-base font-semibold text-foreground">
+                {explicitRegistry ? "Verifisert" : draftRegistryOnly ? "Utkast" : "Mangler"}
+              </p>
+            </div>
+          </div>
+        ) : null}
       </header>
 
       {!hasDoc ? (
@@ -1678,6 +1838,108 @@ export function ProcessDesignDocPage({
               pdfPreviewing={pdfPreviewing}
               pdfExporting={pdfExporting}
             />
+          </div>
+          <div className="space-y-2 rounded-2xl border border-border/50 bg-card p-2.5">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+              <div className="relative min-w-0 flex-1">
+                <Search
+                  className="pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground"
+                  aria-hidden
+                />
+                <Input
+                  value={sectionQuery}
+                  onChange={(e) => setSectionQuery(e.target.value)}
+                  placeholder="Søk i dokumentseksjoner …"
+                  className="h-9 rounded-xl border-border/60 pl-9 text-sm"
+                />
+              </div>
+              <div className="inline-flex rounded-xl border border-border/50 bg-muted/20 p-0.5">
+                <button
+                  type="button"
+                  onClick={() => setSectionFilter("all")}
+                  className={cn(
+                    "rounded-lg px-2.5 py-1 text-xs transition-colors",
+                    sectionFilter === "all"
+                      ? "bg-background text-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  Alle
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSectionFilter("incomplete")}
+                  className={cn(
+                    "rounded-lg px-2.5 py-1 text-xs transition-colors",
+                    sectionFilter === "incomplete"
+                      ? "bg-background text-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  Mangler innhold
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSectionFilter("complete")}
+                  className={cn(
+                    "rounded-lg px-2.5 py-1 text-xs transition-colors",
+                    sectionFilter === "complete"
+                      ? "bg-background text-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  Ferdige
+                </button>
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {PDD_SECTION_SHORTCUTS.filter(
+                (section) =>
+                  sectionVisible[section.value as keyof typeof sectionVisible],
+              ).map((section) => {
+              const active = openSections.includes(section.value);
+              const done = sectionCompletion[section.value as keyof typeof sectionCompletion];
+              return (
+                <button
+                  key={section.value}
+                  type="button"
+                  onClick={() => {
+                    setOpenSections((prev) =>
+                      prev.includes(section.value)
+                        ? prev
+                        : [...prev, section.value],
+                    );
+                    document
+                      .getElementById(`pdd-section-${section.value}`)
+                      ?.scrollIntoView({ behavior: "smooth", block: "start" });
+                  }}
+                  className={cn(
+                    "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs transition-colors",
+                    active
+                      ? "border-primary/30 bg-primary/10 text-foreground"
+                      : "border-border/50 bg-card text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  <span
+                    className={cn(
+                      "size-1.5 rounded-full",
+                      done ? "bg-primary" : "bg-muted-foreground/40",
+                    )}
+                    aria-hidden
+                  />
+                  {section.label}
+                </button>
+              );
+            })}
+            </div>
+            {PDD_SECTION_SHORTCUTS.every(
+              (section) =>
+                !sectionVisible[section.value as keyof typeof sectionVisible],
+            ) ? (
+              <p className="px-1 text-xs text-muted-foreground">
+                Ingen seksjoner matcher gjeldende søk/filter.
+              </p>
+            ) : null}
           </div>
 
           {/* Koblinger — read-only data from linked sources */}
@@ -1779,7 +2041,9 @@ export function ProcessDesignDocPage({
             className="space-y-3"
           >
             {/* ---- 1. Oversikt ---- */}
+            {sectionVisible.overview ? (
             <AccordionItem
+              id="pdd-section-overview"
               value="overview"
               className="overflow-hidden rounded-2xl border border-border/60 bg-card/70 px-4 shadow-sm backdrop-blur-sm sm:px-5"
             >
@@ -1920,9 +2184,12 @@ export function ProcessDesignDocPage({
                 />
               </AccordionContent>
             </AccordionItem>
+            ) : null}
 
             {/* ---- 2. As-Is ---- */}
+            {sectionVisible.asis ? (
             <AccordionItem
+              id="pdd-section-asis"
               value="asis"
               className="overflow-hidden rounded-2xl border border-border/60 bg-card/70 px-4 shadow-sm backdrop-blur-sm sm:px-5"
             >
@@ -2016,9 +2283,12 @@ export function ProcessDesignDocPage({
                 />
               </AccordionContent>
             </AccordionItem>
+            ) : null}
 
             {/* ---- 3. To-Be ---- */}
+            {sectionVisible.tobe ? (
             <AccordionItem
+              id="pdd-section-tobe"
               value="tobe"
               className="overflow-hidden rounded-2xl border border-border/60 bg-card/70 px-4 shadow-sm backdrop-blur-sm sm:px-5"
             >
@@ -2080,9 +2350,12 @@ export function ProcessDesignDocPage({
                 />
               </AccordionContent>
             </AccordionItem>
+            ) : null}
 
             {/* ---- 4. HUKI ---- */}
+            {sectionVisible.huki ? (
             <AccordionItem
+              id="pdd-section-huki"
               value="huki"
               className="overflow-hidden rounded-2xl border border-border/60 bg-card/70 px-4 shadow-sm backdrop-blur-sm sm:px-5"
             >
@@ -2101,9 +2374,12 @@ export function ProcessDesignDocPage({
                 />
               </AccordionContent>
             </AccordionItem>
+            ) : null}
 
             {/* ---- 5. Risiko og feilhåndtering ---- */}
+            {sectionVisible.risk ? (
             <AccordionItem
+              id="pdd-section-risk"
               value="risk"
               className="overflow-hidden rounded-2xl border border-border/60 bg-card/70 px-4 shadow-sm backdrop-blur-sm sm:px-5"
             >
@@ -2230,9 +2506,12 @@ export function ProcessDesignDocPage({
                 />
               </AccordionContent>
             </AccordionItem>
+            ) : null}
 
             {/* ---- 6. Tillegg ---- */}
+            {sectionVisible.extra ? (
             <AccordionItem
+              id="pdd-section-extra"
               value="extra"
               className="overflow-hidden rounded-2xl border border-border/60 bg-card/70 px-4 shadow-sm backdrop-blur-sm sm:px-5"
             >
@@ -2276,6 +2555,7 @@ export function ProcessDesignDocPage({
                 />
               </AccordionContent>
             </AccordionItem>
+            ) : null}
           </Accordion>
 
           {/* Mobile sticky bottom bar */}

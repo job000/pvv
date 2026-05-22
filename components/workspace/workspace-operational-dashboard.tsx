@@ -328,10 +328,7 @@ export function WorkspaceOperationalDashboard({
             tone={primarySpec.tone}
             navigationTarget={primarySpec.navigationTarget}
           />
-          <div
-            className="flex flex-wrap gap-2"
-            aria-label="Snarveier"
-          >
+          <div className="flex flex-wrap gap-2" aria-label="Snarveier">
             {primarySpec.key !== "ros" && withoutRosLinkCount > 0 && rosTarget ? (
               <ShortcutChip
                 href={`/w/${wid}?kobleRos=1&assessmentId=${rosTarget.assessmentId}`}
@@ -363,29 +360,24 @@ export function WorkspaceOperationalDashboard({
               label="Prosesser"
             />
           </div>
-          <div className="rounded-2xl border border-border/40 bg-card/60 p-3">
-            <p className="text-xs font-medium text-foreground">
-              Start raskt etter rolle
-            </p>
-            <div className="mt-2 flex flex-wrap gap-2 text-[11px]">
-              <Link
-                href={`/w/${wid}/vurderinger`}
-                className="rounded-full border border-border/50 px-2.5 py-1 text-muted-foreground hover:text-foreground"
-              >
-                Koordinator: vurderinger
-              </Link>
-              <Link
-                href={`/w/${wid}/vurderinger?fane=prosesser`}
-                className="rounded-full border border-border/50 px-2.5 py-1 text-muted-foreground hover:text-foreground"
-              >
-                Prosessdesigner: prosesser
-              </Link>
-              <Link
-                href={`/w/${wid}/ros`}
-                className="rounded-full border border-border/50 px-2.5 py-1 text-muted-foreground hover:text-foreground"
-              >
-                Utvikler: ROS og tiltak
-              </Link>
+          <div className="grid gap-2 rounded-2xl border border-border/50 bg-card p-3 sm:grid-cols-3">
+            <div className="rounded-xl border border-border/50 bg-muted/20 px-3 py-2">
+              <p className="text-[11px] text-muted-foreground">Uten ROS</p>
+              <p className="text-base font-semibold tabular-nums text-foreground">
+                {withoutRosLinkCount}
+              </p>
+            </div>
+            <div className="rounded-xl border border-border/50 bg-muted/20 px-3 py-2">
+              <p className="text-[11px] text-muted-foreground">Oppfølging</p>
+              <p className="text-base font-semibold tabular-nums text-foreground">
+                {followUpCount}
+              </p>
+            </div>
+            <div className="rounded-xl border border-border/50 bg-muted/20 px-3 py-2">
+              <p className="text-[11px] text-muted-foreground">Totalt i prioritering</p>
+              <p className="text-base font-semibold tabular-nums text-foreground">
+                {priorityTop.length}
+              </p>
             </div>
           </div>
         </section>
@@ -486,13 +478,22 @@ export function WorkspaceOperationalDashboard({
             {list.length === 0 ? (
               <EmptyState wid={wid} />
             ) : (
-              <ul className="divide-y divide-border/40 overflow-hidden rounded-2xl bg-card/80 shadow-sm ring-1 ring-black/[0.04] backdrop-blur-sm dark:ring-white/[0.06]">
-                {list.map((row) => (
-                  <li key={row.assessmentId}>
-                    <AssessmentDashRow wid={wid} row={row} />
-                  </li>
-                ))}
-              </ul>
+              <div className="overflow-hidden rounded-2xl bg-card shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.06]">
+                <div className="text-muted-foreground hidden grid-cols-[minmax(0,2fr)_9rem_8rem_5.5rem_2.5rem] items-center gap-3 border-b border-border/50 bg-muted/20 px-5 py-2 text-[11px] font-medium sm:grid">
+                  <span>Vurdering</span>
+                  <span>Status</span>
+                  <span>Sist oppdatert</span>
+                  <span className="text-center">Prioritet</span>
+                  <span className="sr-only">Åpne</span>
+                </div>
+                <ul className="divide-y divide-border/40">
+                  {list.map((row) => (
+                    <li key={row.assessmentId}>
+                      <AssessmentDashRow wid={wid} row={row} />
+                    </li>
+                  ))}
+                </ul>
+              </div>
             )}
           </section>
         );
@@ -590,39 +591,45 @@ function AssessmentDashRow({
   return (
     <Link
       href={`/w/${wid}/a/${row.assessmentId}`}
-      className="group flex items-center gap-3 px-4 py-3 transition-colors hover:bg-muted/40 sm:gap-4 sm:px-5 sm:py-3.5"
+      className="group grid grid-cols-1 gap-1.5 px-4 py-3 transition-colors hover:bg-muted/35 sm:grid-cols-[minmax(0,2fr)_9rem_8rem_5.5rem_2.5rem] sm:items-center sm:gap-3 sm:px-5 sm:py-3.5"
     >
-      <span
-        className={cn(
-          "size-2 shrink-0 rounded-full ring-2 ring-background transition-transform group-hover:scale-125",
-          priorityDotClass(row.effectivePriority),
-        )}
-        aria-hidden
-      />
-      <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-medium text-foreground">
-          {row.title}
-        </p>
-        <div className="text-muted-foreground mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px]">
-          <span>{PIPELINE_STATUS_LABELS[row.pipelineStatus]}</span>
-          <span aria-hidden>·</span>
-          <span className="inline-flex items-center gap-1">
-            <Clock3 className="size-3 opacity-70" aria-hidden />
-            {formatRelativeUpdatedAt(row.updatedAt)}
-          </span>
-          {!rosLinked ? (
-            <>
-              <span aria-hidden>·</span>
-              <span className="inline-flex items-center gap-1 font-medium text-muted-foreground">
-                <ShieldAlert className="size-3" aria-hidden />
-                Uten ROS
-              </span>
-            </>
-          ) : null}
+      <div className="min-w-0">
+        <div className="flex items-center gap-2">
+          <span
+            className={cn(
+              "size-2 shrink-0 rounded-full ring-2 ring-background",
+              priorityDotClass(row.effectivePriority),
+            )}
+            aria-hidden
+          />
+          <p className="truncate text-sm font-medium text-foreground">
+            {row.title}
+          </p>
         </div>
+        {!rosLinked ? (
+          <div className="mt-0.5 inline-flex items-center gap-1 text-[11px] font-medium text-muted-foreground">
+            <ShieldAlert className="size-3" aria-hidden />
+            Uten ROS
+          </div>
+        ) : null}
+      </div>
+      <div className="text-xs text-muted-foreground">
+        {PIPELINE_STATUS_LABELS[row.pipelineStatus]}
+      </div>
+      <div className="text-xs text-muted-foreground tabular-nums">
+        <span className="inline-flex items-center gap-1">
+          <Clock3 className="size-3 opacity-70" aria-hidden />
+          {formatRelativeUpdatedAt(row.updatedAt)}
+        </span>
+      </div>
+      <div className="text-center text-xs tabular-nums">
+        <span className="font-semibold text-foreground">
+          {row.effectivePriority.toFixed(0)}
+        </span>
+        <span className="text-muted-foreground"> / 100</span>
       </div>
       <ArrowRight
-        className="size-4 shrink-0 text-muted-foreground/40 transition-all duration-200 group-hover:translate-x-0.5 group-hover:text-foreground"
+        className="ml-auto size-4 shrink-0 text-muted-foreground/40 transition-all duration-200 group-hover:translate-x-0.5 group-hover:text-foreground"
         aria-hidden
       />
     </Link>

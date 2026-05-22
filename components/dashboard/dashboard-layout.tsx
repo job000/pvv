@@ -32,7 +32,7 @@ export function DashboardLayout({
   return (
     <div className="mx-auto flex w-full max-w-[100rem] flex-col lg:flex-row lg:items-start">
       <aside
-        className="border-border/30 bg-background/80 supports-[backdrop-filter]:bg-background/60 sticky top-14 z-30 hidden h-[calc(100dvh-3.5rem)] w-48 shrink-0 flex-col backdrop-blur-lg lg:flex lg:border-r"
+        className="sticky top-14 z-30 hidden h-[calc(100dvh-3.5rem)] w-52 shrink-0 flex-col border-r border-border/60 bg-card lg:flex"
         aria-label="Dashboard-meny"
       >
         <nav className="flex flex-col gap-0.5 px-2.5 pt-4">
@@ -62,7 +62,7 @@ export function DashboardLayout({
 
           {workspaces.length > 0 && (
             <>
-              <div className="mx-1 my-3 h-px bg-border/25" />
+              <div className="mx-1 my-3 h-px bg-border/40" />
               <p className="text-muted-foreground/60 px-2 pb-1 text-[10px] font-semibold uppercase tracking-widest">
                 Arbeidsområder
               </p>
@@ -78,7 +78,7 @@ export function DashboardLayout({
                         isDefault
                           ? "text-foreground font-medium"
                           : "text-muted-foreground hover:text-foreground",
-                        "hover:bg-muted/30",
+                        "hover:bg-muted/45",
                       )}
                     >
                       <span className="flex size-5 shrink-0 items-center justify-center rounded bg-muted/50 text-[10px] font-bold text-muted-foreground">
@@ -122,8 +122,8 @@ function NavLink({
       className={cn(
         "flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] font-medium transition-colors",
         active
-          ? "bg-muted/50 text-foreground"
-          : "text-muted-foreground hover:bg-muted/30 hover:text-foreground",
+          ? "bg-muted text-foreground"
+          : "text-muted-foreground hover:bg-muted/45 hover:text-foreground",
       )}
     >
       <Icon className="size-4 shrink-0 opacity-60" aria-hidden />

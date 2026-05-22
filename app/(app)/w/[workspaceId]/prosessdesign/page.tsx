@@ -24,8 +24,8 @@ import { useParams, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 
 const PAGE_SIZE = 20;
-/** Vis filter/søk først når listen er stor nok til å trenge det. */
-const FILTER_THRESHOLD = 6;
+type ActivityFilter = "all" | "7d" | "30d";
+type SortBy = "updated_desc" | "updated_asc" | "title_asc";
 
 function ProcessDesignHubBody() {
   const params = useParams();
@@ -42,6 +42,8 @@ function ProcessDesignHubBody() {
   const [q, setQ] = useState("");
   const [page, setPage] = useState(1);
   const [orgUnitFilter, setOrgUnitFilter] = useState<"" | Id<"orgUnits">>(rawOrgUnit ?? "");
+  const [activityFilter, setActivityFilter] = useState<ActivityFilter>("all");
+  const [sortBy, setSortBy] = useState<SortBy>("updated_desc");
 
   const appliedRef = useRef(false);
   useEffect(() => {
@@ -63,17 +65,39 @@ function ProcessDesignHubBody() {
     if (!assessments) return [];
     const units = orgUnits ?? [];
     const term = q.trim().toLowerCase();
+    const now = Date.now();
+    const freshnessCutoffMs =
+      activityFilter === "7d"
+        ? now - 7 * 24 * 60 * 60 * 1000
+        : activityFilter === "30d"
+          ? now - 30 * 24 * 60 * 60 * 1000
+          : null;
     let list = assessments;
     if (orgUnitFilter) {
       const subtree = orgSubtreeIds(orgUnitFilter, units);
       list = list.filter((a) => a.orgUnitId ? subtree.has(a.orgUnitId) : false);
     }
-    if (term) {
-      list = list.filter((a) => a.title.toLowerCase().includes(term));
+    if (freshnessCutoffMs !== null) {
+      list = list.filter((a) => a.updatedAt >= freshnessCutoffMs);
     }
-    // Alltid sortert etter sist oppdatert — det brukeren forventer her.
-    return [...list].sort((a, b) => b.updatedAt - a.updatedAt);
-  }, [assessments, orgUnits, orgUnitFilter, q]);
+    if (term) {
+      list = list.filter((a) => {
+        const orgName = a.orgUnitId
+          ? orgUnitNameById.get(String(a.orgUnitId))?.toLowerCase() ?? ""
+          : "";
+        return a.title.toLowerCase().includes(term) || orgName.includes(term);
+      });
+    }
+    const sorted = [...list];
+    if (sortBy === "title_asc") {
+      sorted.sort((a, b) => a.title.localeCompare(b.title, "nb"));
+    } else if (sortBy === "updated_asc") {
+      sorted.sort((a, b) => a.updatedAt - b.updatedAt);
+    } else {
+      sorted.sort((a, b) => b.updatedAt - a.updatedAt);
+    }
+    return sorted;
+  }, [assessments, orgUnits, orgUnitFilter, q, activityFilter, sortBy, orgUnitNameById]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const safePage = Math.max(1, Math.min(page, totalPages));
@@ -89,8 +113,13 @@ function ProcessDesignHubBody() {
     );
   }
 
-  const showFilters = assessments.length >= FILTER_THRESHOLD;
   const hasOrgUnits = (orgUnits ?? []).length > 0;
+  const activeFiltersCount =
+    (q.trim() ? 1 : 0) +
+    (orgUnitFilter ? 1 : 0) +
+    (activityFilter !== "all" ? 1 : 0) +
+    (sortBy !== "updated_desc" ? 1 : 0);
+  const withOrgCount = assessments.filter((a) => Boolean(a.orgUnitId)).length;
 
   return (
     <div className="mx-auto max-w-4xl space-y-6 px-4 pb-12 sm:px-6 lg:px-0">
@@ -131,7 +160,28 @@ function ProcessDesignHubBody() {
         />
       ) : (
         <>
-          {showFilters ? (
+          <div className="grid gap-2 rounded-2xl border border-border/50 bg-card p-3 sm:grid-cols-3">
+            <div className="rounded-xl border border-border/50 bg-muted/20 px-3 py-2">
+              <p className="text-[11px] text-muted-foreground">Totalt vurderinger</p>
+              <p className="text-base font-semibold tabular-nums text-foreground">
+                {assessments.length}
+              </p>
+            </div>
+            <div className="rounded-xl border border-border/50 bg-muted/20 px-3 py-2">
+              <p className="text-[11px] text-muted-foreground">Med enhet satt</p>
+              <p className="text-base font-semibold tabular-nums text-foreground">
+                {withOrgCount}
+              </p>
+            </div>
+            <div className="rounded-xl border border-border/50 bg-muted/20 px-3 py-2">
+              <p className="text-[11px] text-muted-foreground">Vises nå</p>
+              <p className="text-base font-semibold tabular-nums text-foreground">
+                {filtered.length}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-2 rounded-2xl border border-border/50 bg-card p-3">
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
               <div className="relative min-w-0 flex-1">
                 <Search
@@ -145,7 +195,7 @@ function ProcessDesignHubBody() {
                     setQ(e.target.value);
                     setPage(1);
                   }}
-                  placeholder="Søk etter tittel …"
+                  placeholder="Søk tittel eller enhet …"
                   autoComplete="off"
                   aria-label="Søk i vurderinger"
                   className={cn(
@@ -182,8 +232,72 @@ function ProcessDesignHubBody() {
                   />
                 </div>
               ) : null}
+              <div className="relative shrink-0">
+                <select
+                  aria-label="Filtrer på aktivitet"
+                  value={activityFilter}
+                  onChange={(e) => {
+                    setActivityFilter(e.target.value as ActivityFilter);
+                    setPage(1);
+                  }}
+                  className={cn(
+                    "h-10 w-full min-w-[9rem] cursor-pointer appearance-none truncate rounded-xl border border-border/60 bg-background/60 py-0 pl-3 pr-8 text-sm outline-none",
+                    "transition-colors focus:border-foreground/25 focus:bg-background",
+                  )}
+                >
+                  <option value="all">All aktivitet</option>
+                  <option value="7d">Siste 7 dager</option>
+                  <option value="30d">Siste 30 dager</option>
+                </select>
+                <ChevronDown
+                  className="pointer-events-none absolute right-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground"
+                  aria-hidden
+                />
+              </div>
+              <div className="relative shrink-0">
+                <select
+                  aria-label="Sorter liste"
+                  value={sortBy}
+                  onChange={(e) => {
+                    setSortBy(e.target.value as SortBy);
+                    setPage(1);
+                  }}
+                  className={cn(
+                    "h-10 w-full min-w-[9rem] cursor-pointer appearance-none truncate rounded-xl border border-border/60 bg-background/60 py-0 pl-3 pr-8 text-sm outline-none",
+                    "transition-colors focus:border-foreground/25 focus:bg-background",
+                  )}
+                >
+                  <option value="updated_desc">Nyeste først</option>
+                  <option value="updated_asc">Eldste først</option>
+                  <option value="title_asc">Tittel A–Å</option>
+                </select>
+                <ChevronDown
+                  className="pointer-events-none absolute right-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground"
+                  aria-hidden
+                />
+              </div>
             </div>
-          ) : null}
+            {activeFiltersCount > 0 ? (
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-xs text-muted-foreground">
+                  {activeFiltersCount} aktiv{activeFiltersCount === 1 ? "" : "e"} filter
+                </p>
+                <button
+                  type="button"
+                  className="rounded-full border border-border/50 px-2.5 py-1 text-xs text-muted-foreground transition-colors hover:text-foreground"
+                  onClick={() => {
+                    setQ("");
+                    setOrgUnitFilter("");
+                    setActivityFilter("all");
+                    setSortBy("updated_desc");
+                    setPage(1);
+                  }}
+                >
+                  Nullstill filtre
+                </button>
+              </div>
+            ) : null}
+          </div>
 
           {paginated.length === 0 ? (
             <div className="rounded-2xl border border-dashed border-border/60 bg-card/20 px-6 py-14 text-center">
@@ -203,42 +317,53 @@ function ProcessDesignHubBody() {
               </p>
             </div>
           ) : (
-            <div className="space-y-2">
-              {paginated.map((a) => {
-                const orgName = a.orgUnitId
-                  ? orgUnitNameById.get(String(a.orgUnitId))
-                  : undefined;
-                return (
-                  <Link
-                    key={a._id}
-                    href={`/w/${wid}/a/${a._id}/prosessdesign`}
-                    className={cn(
-                      "group flex items-center gap-4 rounded-2xl border border-border/60 bg-card/35 px-4 py-4 shadow-sm transition-all",
-                      "hover:-translate-y-0.5 hover:border-border hover:bg-card/60 hover:shadow-md active:translate-y-0",
-                      "focus-visible:relative focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                    )}
-                  >
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-base font-medium text-foreground">
-                        {a.title}
-                      </p>
-                      <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
-                        <span>{formatRelativeUpdatedAt(a.updatedAt)}</span>
-                        {orgName ? (
-                          <>
-                            <span aria-hidden>·</span>
-                            <span className="truncate">{orgName}</span>
-                          </>
-                        ) : null}
-                      </p>
-                    </div>
-                    <ArrowUpRight
-                      className="size-4 shrink-0 text-muted-foreground/50 transition-all group-hover:translate-x-0.5 group-hover:-translate-y-0.5 group-hover:text-foreground"
-                      aria-hidden
-                    />
-                  </Link>
-                );
-              })}
+            <div className="overflow-hidden rounded-2xl bg-card shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.06]">
+              <div className="text-muted-foreground hidden grid-cols-[minmax(0,2.2fr)_minmax(0,1.4fr)_8rem_2.5rem] items-center gap-3 border-b border-border/50 bg-muted/20 px-4 py-2 text-[11px] font-medium sm:grid">
+                <span>Vurdering</span>
+                <span>Enhet</span>
+                <span>Sist oppdatert</span>
+                <span className="sr-only">Åpne</span>
+              </div>
+              <ul className="divide-y divide-border/40">
+                {paginated.map((a) => {
+                  const orgName = a.orgUnitId
+                    ? orgUnitNameById.get(String(a.orgUnitId))
+                    : undefined;
+                  return (
+                    <li key={a._id}>
+                      <Link
+                        href={`/w/${wid}/a/${a._id}/prosessdesign`}
+                        className={cn(
+                          "group grid grid-cols-1 gap-1.5 px-4 py-3 transition-colors hover:bg-muted/35",
+                          "sm:grid-cols-[minmax(0,2.2fr)_minmax(0,1.4fr)_8rem_2.5rem] sm:items-center sm:gap-3 sm:py-3.5",
+                          "focus-visible:relative focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                        )}
+                      >
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-medium text-foreground sm:text-[0.95rem]">
+                            {a.title}
+                          </p>
+                        </div>
+                        <div className="min-w-0 text-xs text-muted-foreground">
+                          <span className="truncate">
+                            {orgName ?? "Ikke satt"}
+                          </span>
+                        </div>
+                        <div
+                          className="text-xs tabular-nums text-muted-foreground"
+                          title={new Date(a.updatedAt).toLocaleString("nb-NO")}
+                        >
+                          {formatRelativeUpdatedAt(a.updatedAt)}
+                        </div>
+                        <ArrowUpRight
+                          className="ml-auto size-4 shrink-0 text-muted-foreground/50 transition-all group-hover:translate-x-0.5 group-hover:-translate-y-0.5 group-hover:text-foreground"
+                          aria-hidden
+                        />
+                      </Link>
+                    </li>
+                  );
+                })}
+              </ul>
             </div>
           )}
 

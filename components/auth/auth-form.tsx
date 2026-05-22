@@ -204,13 +204,6 @@ export function AuthForm({
           </form>
         </div>
 
-        {/* Footer link */}
-        <Link
-          href="/"
-          className="text-muted-foreground hover:text-foreground mt-6 text-xs transition-colors"
-        >
-          ← Tilbake til forsiden
-        </Link>
       </div>
     </div>
   );

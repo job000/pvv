@@ -20,7 +20,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 
 type WorkspaceRow = {
   workspace: Doc<"workspaces">;
@@ -53,16 +53,36 @@ export function WorkspaceDashboardGrid({
     null,
   );
   const [searchQuery, setSearchQuery] = useState("");
+  const [roleFilter, setRoleFilter] = useState<"all" | WorkspaceRow["role"]>("all");
+  const [sortBy, setSortBy] = useState<"name_asc" | "name_desc" | "recent">("name_asc");
   const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
-  const menuRef = useRef<HTMLDivElement>(null);
 
-  const filteredWorkspaces = useMemo(() => {
+  const visibleWorkspaces = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
-    if (!q) return workspaces;
-    return workspaces.filter(({ workspace }) =>
-      workspace.name.toLowerCase().includes(q),
-    );
-  }, [workspaces, searchQuery]);
+    const filtered = workspaces.filter(({ workspace, role }) => {
+      const searchPass = !q || workspace.name.toLowerCase().includes(q);
+      const rolePass = roleFilter === "all" || role === roleFilter;
+      return searchPass && rolePass;
+    });
+    const sorted = [...filtered];
+    switch (sortBy) {
+      case "name_desc":
+        sorted.sort((a, b) =>
+          b.workspace.name.localeCompare(a.workspace.name, "nb-NO"),
+        );
+        break;
+      case "recent":
+        sorted.sort((a, b) => b.workspace._creationTime - a.workspace._creationTime);
+        break;
+      case "name_asc":
+      default:
+        sorted.sort((a, b) =>
+          a.workspace.name.localeCompare(b.workspace.name, "nb-NO"),
+        );
+        break;
+    }
+    return sorted;
+  }, [workspaces, searchQuery, roleFilter, sortBy]);
 
   async function handleCreate() {
     setCreateError(null);
@@ -147,161 +167,232 @@ export function WorkspaceDashboardGrid({
         className="scroll-mt-24 space-y-3"
         aria-labelledby="dash-workspaces-heading"
       >
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-          <h2
-            id="dash-workspaces-heading"
-            className="text-foreground text-base font-semibold tracking-tight"
-          >
-            Arbeidsområder
-            {workspaces.length > 0 ? (
-              <span className="text-muted-foreground ml-2 text-sm font-normal tabular-nums">
-                · {workspaces.length}
-              </span>
-            ) : null}
-          </h2>
-          {workspaces.length > 3 ? (
+        <div className="grid gap-2 rounded-2xl border border-border/50 bg-card p-3 sm:grid-cols-3">
+          <div className="rounded-xl border border-border/50 bg-muted/20 px-3 py-2">
+            <p className="text-[11px] text-muted-foreground">Totalt</p>
+            <p className="text-base font-semibold tabular-nums text-foreground">
+              {workspaces.length}
+            </p>
+          </div>
+          <div className="rounded-xl border border-border/50 bg-muted/20 px-3 py-2">
+            <p className="text-[11px] text-muted-foreground">Eier eller admin</p>
+            <p className="text-base font-semibold tabular-nums text-foreground">
+              {workspaces.filter((w) => w.role === "owner" || w.role === "admin").length}
+            </p>
+          </div>
+          <div className="rounded-xl border border-border/50 bg-muted/20 px-3 py-2">
+            <p className="text-[11px] text-muted-foreground">Vises nå</p>
+            <p className="text-base font-semibold tabular-nums text-foreground">
+              {visibleWorkspaces.length}
+            </p>
+          </div>
+        </div>
+
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <h2
+              id="dash-workspaces-heading"
+              className="text-foreground text-base font-semibold tracking-tight"
+            >
+              Arbeidsområder
+            </h2>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              Åpne riktig område raskt med søk, rollefilter og sortering.
+            </p>
+          </div>
+          <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
             <SearchInput
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Søk i navn …"
               aria-label="Filtrer arbeidsområder"
-              className="w-full sm:max-w-xs sm:flex-none"
+              className="w-full sm:min-w-[16rem]"
             />
-          ) : null}
+            <select
+              aria-label="Filtrer på rolle"
+              value={roleFilter}
+              onChange={(e) =>
+                setRoleFilter(e.target.value as "all" | WorkspaceRow["role"])
+              }
+              className="h-10 rounded-lg border border-border/50 bg-background px-3 text-sm"
+            >
+              <option value="all">Alle roller</option>
+              <option value="owner">Eier</option>
+              <option value="admin">Admin</option>
+              <option value="member">Medlem</option>
+              <option value="viewer">Visning</option>
+            </select>
+            <select
+              aria-label="Sorter arbeidsområder"
+              value={sortBy}
+              onChange={(e) =>
+                setSortBy(e.target.value as "name_asc" | "name_desc" | "recent")
+              }
+              className="h-10 rounded-lg border border-border/50 bg-background px-3 text-sm"
+            >
+              <option value="name_asc">Navn A-Å</option>
+              <option value="name_desc">Navn Å-A</option>
+              <option value="recent">Nyeste først</option>
+            </select>
+          </div>
         </div>
 
-        {filteredWorkspaces.length === 0 && workspaces.length > 0 ? (
+        {visibleWorkspaces.length === 0 && workspaces.length > 0 ? (
           <p className="text-muted-foreground py-6 text-center text-sm" role="status">
             Ingen treff.{" "}
             <button
               type="button"
               className="text-primary font-medium hover:underline"
-              onClick={() => setSearchQuery("")}
+              onClick={() => {
+                setSearchQuery("");
+                setRoleFilter("all");
+              }}
             >
               Nullstill
             </button>
           </p>
         ) : null}
 
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {filteredWorkspaces.map(({ workspace, role }) => {
+        <div className="overflow-hidden rounded-2xl border border-border/50 bg-card shadow-sm">
+          <div className="text-muted-foreground hidden grid-cols-[minmax(0,2fr)_7rem_7rem_2.5rem_2.5rem] items-center gap-3 border-b border-border/50 bg-muted/20 px-5 py-2 text-[11px] font-medium sm:grid">
+            <span>Arbeidsområde</span>
+            <span>Rolle</span>
+            <span>Standard</span>
+            <span className="sr-only">Innstillinger</span>
+            <span className="sr-only">Åpne</span>
+          </div>
+          <ul className="divide-y divide-border/40">
+            {visibleWorkspaces.map(({ workspace, role }) => {
             const isOwner = role === "owner";
             const canManage = role === "owner" || role === "admin";
             const isDefault = defaultWorkspaceId === workspace._id;
             const isMenuOpen = menuOpenId === workspace._id;
 
             return (
-              <div
+              <li
                 key={workspace._id}
                 className={cn(
-                  "group relative cursor-pointer rounded-2xl border p-4 shadow-sm transition-all",
-                  "border-border/45 bg-card/75 hover:-translate-y-0.5 hover:border-border/65",
-                  isDefault && "border-primary/25 bg-primary/[0.04]",
+                  "group/row relative grid grid-cols-1 gap-2 px-4 py-3 transition-colors hover:bg-muted/35 sm:grid-cols-[minmax(0,2fr)_7rem_7rem_2.5rem_2.5rem] sm:items-center sm:gap-3 sm:px-5 sm:py-3.5",
+                  isDefault && "bg-primary/[0.05]",
                 )}
               >
                 <Link
                   href={`/w/${workspace._id}`}
-                  className="absolute inset-0 z-[1] rounded-2xl focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                  className="absolute inset-0 z-0 rounded-none"
                   aria-label={`Åpne ${workspace.name}`}
                 />
 
-                <div className="pointer-events-none relative z-[2] flex items-start justify-between gap-3">
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
-                      <h3 className="text-foreground truncate text-base font-semibold tracking-tight">
-                        {workspace.name}
-                      </h3>
-                      {isDefault ? (
-                        <Star
-                          className="text-primary size-3.5 shrink-0 fill-current"
-                          aria-label="Standard"
-                        />
-                      ) : null}
-                    </div>
-                    <p className="text-muted-foreground mt-1 text-xs">
-                      {ROLE_LABELS[role]}
-                    </p>
-                  </div>
-
-                  <div className="flex shrink-0 items-center gap-1">
-                    <ArrowRight
-                      className="text-muted-foreground/30 size-5 transition-all duration-200 group-hover:text-foreground group-hover:translate-x-1"
-                      aria-hidden
-                    />
-
-                    {canManage ? (
-                      <div ref={isMenuOpen ? menuRef : undefined} className="pointer-events-auto">
-                        <button
-                          type="button"
-                          className="text-muted-foreground/50 hover:text-foreground hover:bg-muted/60 flex size-8 items-center justify-center rounded-xl opacity-0 transition-all duration-200 group-hover:opacity-100"
-                          onClick={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            setMenuOpenId(isMenuOpen ? null : workspace._id);
-                          }}
-                          aria-label="Flere valg"
-                        >
-                          <MoreHorizontal className="size-4" aria-hidden />
-                        </button>
-
-                        {isMenuOpen ? (
-                          <>
-                            <div
-                              className="fixed inset-0 z-40"
-                              onClick={() => setMenuOpenId(null)}
-                            />
-                            <div className="absolute right-0 top-full z-50 mt-1 w-48 rounded-2xl bg-card p-1.5 shadow-xl ring-1 ring-black/[0.08] dark:ring-white/[0.12]">
-                              <button
-                                type="button"
-                                className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-[13px] text-foreground transition-colors hover:bg-muted/70"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  void setDefaultWorkspace({
-                                    workspaceId: isDefault
-                                      ? null
-                                      : (workspace._id as Id<"workspaces">),
-                                  });
-                                  setMenuOpenId(null);
-                                }}
-                              >
-                                <Star className="size-4 opacity-60" aria-hidden />
-                                {isDefault ? "Fjern som standard" : "Sett som standard"}
-                              </button>
-                              <Link
-                                href={`/w/${workspace._id}/innstillinger`}
-                                className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-[13px] text-foreground transition-colors hover:bg-muted/70"
-                                onClick={() => setMenuOpenId(null)}
-                              >
-                                <Settings className="size-4 opacity-60" aria-hidden />
-                                Innstillinger
-                              </Link>
-                              {isOwner ? (
-                                <>
-                                  <div className="mx-2 my-1 h-px bg-border/40" />
-                                  <button
-                                    type="button"
-                                    className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-[13px] text-destructive transition-colors hover:bg-destructive/10"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      setDeleteTarget(workspace);
-                                      setMenuOpenId(null);
-                                    }}
-                                  >
-                                    <Trash2 className="size-4 opacity-60" aria-hidden />
-                                    Slett
-                                  </button>
-                                </>
-                              ) : null}
-                            </div>
-                          </>
-                        ) : null}
-                      </div>
+                <div className="pointer-events-none relative z-10 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <h3 className="truncate text-sm font-medium text-foreground">
+                      {workspace.name}
+                    </h3>
+                    {isDefault ? (
+                      <span className="inline-flex items-center gap-1 rounded-full border border-primary/25 bg-primary/[0.08] px-2 py-0.5 text-[10px] font-medium text-primary">
+                        <Star className="size-3 fill-current" aria-hidden />
+                        Sist brukt
+                      </span>
                     ) : null}
                   </div>
+                  <p className="mt-0.5 text-[11px] text-muted-foreground tabular-nums">
+                    Opprettet {new Date(workspace._creationTime).toLocaleDateString("nb-NO")}
+                  </p>
                 </div>
-              </div>
+
+                <div className="pointer-events-none relative z-10 text-xs text-muted-foreground">
+                  {ROLE_LABELS[role]}
+                </div>
+
+                <div className="pointer-events-none relative z-10">
+                  {isDefault ? (
+                    <span className="inline-flex rounded-full border border-border/60 bg-muted px-2 py-0.5 text-[10px] text-foreground">
+                      Aktiv
+                    </span>
+                  ) : (
+                    <span className="text-[11px] text-muted-foreground">-</span>
+                  )}
+                </div>
+
+                <div className="pointer-events-auto relative z-10">
+                  {canManage ? (
+                    <div>
+                      <button
+                        type="button"
+                        className="text-muted-foreground/50 hover:text-foreground hover:bg-muted/60 flex size-8 items-center justify-center rounded-xl opacity-0 transition-all duration-200 sm:group-hover/row:opacity-100"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          setMenuOpenId(isMenuOpen ? null : workspace._id);
+                        }}
+                        aria-label="Flere valg"
+                      >
+                        <MoreHorizontal className="size-4" aria-hidden />
+                      </button>
+
+                      {isMenuOpen ? (
+                        <>
+                          <div
+                            className="fixed inset-0 z-40"
+                            onClick={() => setMenuOpenId(null)}
+                          />
+                          <div className="absolute right-0 top-full z-50 mt-1 w-48 rounded-2xl bg-card p-1.5 shadow-xl ring-1 ring-black/[0.08] dark:ring-white/[0.12]">
+                            <button
+                              type="button"
+                              className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-[13px] text-foreground transition-colors hover:bg-muted/70"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                void setDefaultWorkspace({
+                                  workspaceId: isDefault
+                                    ? null
+                                    : (workspace._id as Id<"workspaces">),
+                                });
+                                setMenuOpenId(null);
+                              }}
+                            >
+                              <Star className="size-4 opacity-60" aria-hidden />
+                              {isDefault ? "Fjern som standard" : "Sett som standard"}
+                            </button>
+                            <Link
+                              href={`/w/${workspace._id}/innstillinger`}
+                              className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-[13px] text-foreground transition-colors hover:bg-muted/70"
+                              onClick={() => setMenuOpenId(null)}
+                            >
+                              <Settings className="size-4 opacity-60" aria-hidden />
+                              Innstillinger
+                            </Link>
+                            {isOwner ? (
+                              <>
+                                <div className="mx-2 my-1 h-px bg-border/40" />
+                                <button
+                                  type="button"
+                                  className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-[13px] text-destructive transition-colors hover:bg-destructive/10"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setDeleteTarget(workspace);
+                                    setMenuOpenId(null);
+                                  }}
+                                >
+                                  <Trash2 className="size-4 opacity-60" aria-hidden />
+                                  Slett
+                                </button>
+                              </>
+                            ) : null}
+                          </div>
+                        </>
+                      ) : null}
+                    </div>
+                  ) : null}
+                </div>
+                <div className="pointer-events-none relative z-10 ml-auto hidden items-center sm:flex">
+                  <ArrowRight
+                    className="size-4 text-muted-foreground/40 transition-all duration-200 group-hover/row:text-foreground group-hover/row:translate-x-0.5"
+                    aria-hidden
+                  />
+                </div>
+              </li>
             );
           })}
+          </ul>
         </div>
       </section>
 

@@ -55,6 +55,9 @@ export default function DashboardPage() {
     defaultId != null
       ? workspaces.find((w) => w.workspace._id === defaultId)?.workspace
       : null;
+  const ownerOrAdminCount = workspaces.filter(
+    (w) => w.role === "owner" || w.role === "admin",
+  ).length;
 
   return (
     <DashboardLayout workspaces={workspaces} defaultWorkspaceId={defaultId}>
@@ -62,26 +65,57 @@ export default function DashboardPage() {
         <DashboardEntryRedirect />
       </Suspense>
 
-      <div className="mx-auto max-w-5xl space-y-8 px-5 pb-16 pt-6 sm:px-8 lg:px-10">
+      <div className="mx-auto max-w-6xl space-y-6 px-5 pb-16 pt-6 sm:px-8 lg:px-10">
         {/* Header */}
-        <header>
+        <header className="rounded-2xl border border-border/50 bg-card p-4 shadow-sm sm:p-5">
           <h1 className="font-heading text-2xl font-semibold tracking-tight">
             Oversikt
           </h1>
-          {defaultWorkspace && (
-            <p className="mt-1 text-sm text-muted-foreground">
-              Sist brukt:{" "}
-              <Link href={`/w/${defaultWorkspace._id}`} className="font-medium text-primary hover:underline">
-                {defaultWorkspace.name}
-              </Link>
-            </p>
-          )}
+          <p className="mt-1 text-sm text-muted-foreground">
+            Ett sted for arbeidsområder, oppgaver og prioriteringer.
+            {defaultWorkspace ? (
+              <>
+                {" "}
+                Sist brukt:{" "}
+                <Link
+                  href={`/w/${defaultWorkspace._id}`}
+                  className="font-medium text-primary hover:underline"
+                >
+                  {defaultWorkspace.name}
+                </Link>
+                .
+              </>
+            ) : null}
+          </p>
+          <div className="mt-3 grid gap-2 sm:grid-cols-3">
+            <div className="rounded-xl border border-border/50 bg-muted/20 px-3 py-2">
+              <p className="text-[11px] text-muted-foreground">Arbeidsområder</p>
+              <p className="text-base font-semibold tabular-nums text-foreground">
+                {workspaces.length}
+              </p>
+            </div>
+            <div className="rounded-xl border border-border/50 bg-muted/20 px-3 py-2">
+              <p className="text-[11px] text-muted-foreground">Eier eller admin</p>
+              <p className="text-base font-semibold tabular-nums text-foreground">
+                {ownerOrAdminCount}
+              </p>
+            </div>
+            <div className="rounded-xl border border-border/50 bg-muted/20 px-3 py-2">
+              <p className="text-[11px] text-muted-foreground">Vurderinger i fokus</p>
+              <p className="text-base font-semibold tabular-nums text-foreground">
+                {priorityHighlights?.length ?? 0}
+              </p>
+            </div>
+          </div>
         </header>
 
         <PendingWorkspaceInvitesBanner />
 
         {/* Arbeidsområder */}
-        <section id="arbeidsområder" className="scroll-mt-24 space-y-3">
+        <section
+          id="arbeidsområder"
+          className="scroll-mt-24 space-y-3 rounded-2xl border border-border/50 bg-card p-4 shadow-sm sm:p-5"
+        >
           <div>
             <h2 className="text-base font-semibold tracking-tight">Arbeidsområder</h2>
             <p className="mt-0.5 text-xs text-muted-foreground">
@@ -99,7 +133,10 @@ export default function DashboardPage() {
 
         {/* I fokus */}
         {priorityHighlights !== undefined && priorityHighlights.length > 0 && (
-          <section id="prioriteringer" className="scroll-mt-24 space-y-3">
+          <section
+            id="prioriteringer"
+            className="scroll-mt-24 space-y-3 rounded-2xl border border-border/50 bg-card p-4 shadow-sm sm:p-5"
+          >
             <div className="flex items-baseline justify-between gap-3">
               <h2 className="text-base font-semibold tracking-tight">I fokus</h2>
               {(defaultWorkspace || priorityHighlights[0]) && (
@@ -144,7 +181,7 @@ export default function DashboardPage() {
 
         {/* Delte med deg */}
         {mineAssessments && mineAssessments.length > 0 && (
-          <section className="space-y-3">
+          <section className="space-y-3 rounded-2xl border border-border/50 bg-card p-4 shadow-sm sm:p-5">
             <h2 className="text-base font-semibold tracking-tight">Delte med deg</h2>
             <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
               {mineAssessments.map(({ assessment, role }) => (
