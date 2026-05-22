@@ -314,7 +314,8 @@ function RiskSummaryBar({
       cellItemsAfterMatrix,
     ).max;
     const overallLevel = maxBefore >= 5 ? "Kritisk" : maxBefore >= 4 ? "Høy" : maxBefore >= 3 ? "Middels" : maxBefore >= 2 ? "Lav" : "Ingen";
-    const overallColor = maxBefore >= 5 ? "text-red-600 dark:text-red-400" : maxBefore >= 4 ? "text-orange-600 dark:text-orange-400" : maxBefore >= 3 ? "text-amber-600 dark:text-amber-400" : "text-emerald-600 dark:text-emerald-400";
+    const overallColor =
+      maxBefore >= 4 ? "text-foreground" : "text-muted-foreground";
 
     return {
       total: item.textItemCount,
@@ -365,19 +366,19 @@ function RiskSummaryBar({
         <span className="text-muted-foreground">risikoer</span>
       </span>
       {stats.highBefore > 0 && (
-        <span className="inline-flex items-center gap-1 rounded-full bg-red-500/10 px-2 py-0.5 text-xs text-red-700 ring-1 ring-red-500/15 dark:text-red-300">
+        <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-xs text-foreground ring-1 ring-border/50">
           <ShieldAlert className="size-3" aria-hidden />
           <span className="tabular-nums font-semibold">{stats.highBefore}</span> høy/kritisk
         </span>
       )}
       {stats.needsAction > 0 && (
-        <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/10 px-2 py-0.5 text-xs text-amber-700 ring-1 ring-amber-500/15 dark:text-amber-300">
+        <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-xs text-foreground ring-1 ring-border/50">
           <AlertTriangle className="size-3" aria-hidden />
           <span className="tabular-nums font-semibold">{stats.needsAction}</span> trenger tiltak
         </span>
       )}
       {improved && (
-        <span className="ml-auto inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-xs font-medium text-emerald-700 ring-1 ring-emerald-500/15 dark:text-emerald-300">
+        <span className="ml-auto inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary ring-1 ring-primary/20">
           <ArrowRight className="size-3" aria-hidden />
           Max {stats.maxAfter} etter tiltak
         </span>
@@ -627,6 +628,9 @@ export function RosAnalysisEditor({
     actionsReviewed: false,
     pvvChecked: false,
   });
+  const [reviewApproverName, setReviewApproverName] = useState("");
+  const [reviewApproverRole, setReviewApproverRole] = useState("");
+  const [reviewDecisionSummary, setReviewDecisionSummary] = useState("");
 
   const [savingTaskToLibrary, setSavingTaskToLibrary] = useState<{
     taskId: Id<"rosTasks">;
@@ -1954,19 +1958,49 @@ export function RosAnalysisEditor({
   }
 
   async function markFormalReviewDone() {
+    const completedAtMs = Date.now();
+    const completedAtLabel = new Date(completedAtMs).toLocaleString("nb-NO", {
+      dateStyle: "short",
+      timeStyle: "short",
+    });
+    const existingRoutine = reviewRoutineNotes.trim();
+    const approvalLine = reviewApproverRole.trim()
+      ? `${reviewApproverName.trim()} (${reviewApproverRole.trim()})`
+      : reviewApproverName.trim();
+    const reviewLogEntry =
+      `Revisjon gjennomført: ${completedAtLabel}\n` +
+      `Godkjent av: ${approvalLine}\n` +
+      `Beslutning: ${reviewDecisionSummary.trim()}\n` +
+      `Sjekkpunkter: Matrise, tiltakstatus og PVV kontrollert.`;
+    const mergedRoutine = existingRoutine
+      ? `${existingRoutine}\n\n${reviewLogEntry}`
+      : reviewLogEntry;
     const kind = reviewRecurrenceKind;
     const patch: {
       lastFormalReviewCompletedAt: number;
       nextReviewAt?: number | null;
-    } = { lastFormalReviewCompletedAt: Date.now() };
+      reviewRoutineNotes?: string | null;
+    } = {
+      lastFormalReviewCompletedAt: completedAtMs,
+      reviewRoutineNotes: mergedRoutine,
+    };
     if (kind !== "none") {
-      patch.nextReviewAt = advanceRosReviewDate(Date.now(), kind);
+      patch.nextReviewAt = advanceRosReviewDate(completedAtMs, kind);
     }
     const ok = await patchRosReviewFields(patch);
     if (ok) {
+      setReviewRoutineNotes(mergedRoutine);
       if (kind !== "none" && patch.nextReviewAt != null) {
         setNextReviewLocal(tsToDatetimeLocal(patch.nextReviewAt));
       }
+      setReviewChecklist({
+        matrixReviewed: false,
+        actionsReviewed: false,
+        pvvChecked: false,
+      });
+      setReviewApproverName("");
+      setReviewApproverRole("");
+      setReviewDecisionSummary("");
       toast.success("Revisjon merket som gjennomført.");
     }
   }
@@ -2004,7 +2038,9 @@ export function RosAnalysisEditor({
   const checklistComplete =
     reviewChecklist.matrixReviewed &&
     reviewChecklist.actionsReviewed &&
-    reviewChecklist.pvvChecked;
+    reviewChecklist.pvvChecked &&
+    reviewApproverName.trim().length > 0 &&
+    reviewDecisionSummary.trim().length > 0;
   const linkedAssessmentCount = data?.linkedAssessments?.length ?? 0;
   const linkedPddCount =
     data?.linkedAssessments?.filter((l) => {
@@ -2802,6 +2838,9 @@ export function RosAnalysisEditor({
                   <p className="text-muted-foreground mt-0.5 text-xs">
                     {data.rowAxisTitle} × {data.colAxisTitle} · klikk celler for å redigere
                   </p>
+                <p className="text-muted-foreground mt-1 text-[11px]">
+                  Før = iboende risiko. Etter = restrisiko når tiltak er gjennomført.
+                </p>
                 </div>
                 <div
                   className="bg-card/80 ring-border/40 inline-flex shrink-0 items-center gap-1 rounded-full p-1 ring-1"
@@ -4719,8 +4758,55 @@ export function RosAnalysisEditor({
                 </span>
               </span>
             </label>
+            <div className="grid gap-2 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label htmlFor="ros-review-approver-name" className="text-xs">
+                  Godkjent av (navn)
+                </Label>
+                <Input
+                  id="ros-review-approver-name"
+                  value={reviewApproverName}
+                  onChange={(e) => setReviewApproverName(e.target.value)}
+                  placeholder="F.eks. Kari Nordmann"
+                  className="h-9 rounded-xl"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="ros-review-approver-role" className="text-xs">
+                  Rolle / funksjon (valgfritt)
+                </Label>
+                <Input
+                  id="ros-review-approver-role"
+                  value={reviewApproverRole}
+                  onChange={(e) => setReviewApproverRole(e.target.value)}
+                  placeholder="F.eks. Fagansvarlig IKT-drift"
+                  className="h-9 rounded-xl"
+                />
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="ros-review-decision-summary" className="text-xs">
+                Beslutningsnotat
+              </Label>
+              <Textarea
+                id="ros-review-decision-summary"
+                value={reviewDecisionSummary}
+                onChange={(e) => setReviewDecisionSummary(e.target.value)}
+                rows={3}
+                className="min-h-[4.25rem] rounded-xl"
+                placeholder="Kort begrunnelse for status nå, gjenstående risiko og hva som skal følges opp videre."
+              />
+              <p className="text-muted-foreground text-[11px] leading-relaxed">
+                Dette legges i revisjonsloggen for sporbarhet (hvem godkjente, når og hvorfor).
+              </p>
+            </div>
           </DialogBody>
           <DialogFooter>
+            {!checklistComplete ? (
+              <p className="mr-auto text-[11px] text-muted-foreground">
+                Fullfør alle sjekkpunkter, navn og beslutningsnotat for å markere revisjon.
+              </p>
+            ) : null}
             <Button
               type="button"
               variant="outline"

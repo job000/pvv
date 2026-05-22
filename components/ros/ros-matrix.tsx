@@ -363,6 +363,16 @@ export function RosMatrix({
 
   return (
     <div className="space-y-4">
+      <div className="flex flex-wrap items-start gap-2 rounded-2xl border border-border/50 bg-card px-3 py-2.5 text-xs">
+        <span className="rounded-full border border-border/60 bg-muted px-2 py-0.5 font-medium text-foreground">
+          Aktiv visning: {currentPhase === "before" ? "Før tiltak" : "Etter tiltak"}
+        </span>
+        <p className="text-muted-foreground leading-relaxed">
+          {currentPhase === "before"
+            ? "Iboende risiko før tiltak. Beskriv hva som kan gå galt og marker hva som må håndteres."
+            : "Restrisiko etter tiltak. Dokumenter forventet nivå etter at tiltak er gjennomført."}
+        </p>
+      </div>
       {isEmpty && interactive ? (
         <details className="rounded-2xl border border-border/50 bg-muted/20 text-sm ring-1 ring-black/[0.03] dark:ring-white/[0.05]">
           <summary className="flex cursor-pointer list-none items-center gap-2 rounded-2xl px-4 py-3 font-medium text-foreground marker:content-none [&::-webkit-details-marker]:hidden hover:bg-muted/35">
@@ -385,6 +395,12 @@ export function RosMatrix({
 
       <div className="relative -mx-1 touch-pan-x overflow-x-auto px-1 sm:mx-0 sm:px-0 rounded-2xl bg-card shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.06]">
         <table className="w-full min-w-full table-fixed border-collapse text-left text-sm md:min-w-[min(100%,56rem)]">
+          <caption className="sr-only">
+            {currentPhase === "before"
+              ? "Risikomatrise før tiltak (iboende risiko)"
+              : "Risikomatrise etter tiltak (restrisiko)"}{" "}
+            med rader for sannsynlighet og kolonner for konsekvens.
+          </caption>
           <thead>
             <tr className="border-b border-border/20">
               <th
@@ -585,17 +601,17 @@ export function RosMatrix({
           <span className="h-4 w-px bg-border/60" />
           {matrixStats.highRisk > 0 ? (
             <div className="flex items-center gap-1.5">
-              <AlertTriangle className="size-4 text-red-500" aria-hidden />
-              <span className="text-xs font-semibold text-red-700 dark:text-red-400">
+              <AlertTriangle className="size-4 text-foreground/70" aria-hidden />
+              <span className="text-xs font-semibold text-foreground">
                 {matrixStats.highRisk} høy/kritisk
               </span>
             </div>
           ) : (
             <div className="flex items-center gap-1.5">
-              <span className="flex size-5 items-center justify-center rounded-full bg-emerald-500/15">
-                <span className="size-2 rounded-full bg-emerald-500" />
+              <span className="flex size-5 items-center justify-center rounded-full bg-muted">
+                <span className="size-2 rounded-full bg-foreground/50" />
               </span>
-              <span className="text-xs font-medium text-emerald-700 dark:text-emerald-400">
+              <span className="text-xs font-medium text-muted-foreground">
                 Ingen høy risiko
               </span>
             </div>
@@ -603,7 +619,7 @@ export function RosMatrix({
           {matrixStats.needsAction > 0 ? (
             <>
               <span className="h-4 w-px bg-border/60" />
-              <span className="text-xs font-medium text-amber-700 dark:text-amber-400">
+              <span className="text-xs font-medium text-foreground">
                 {matrixStats.needsAction} uten handling
               </span>
             </>

@@ -123,11 +123,11 @@ function riskLevelLabel(level: number): string {
 
 function riskBorderClass(level: number): string {
   switch (level) {
-    case 1: return "border-l-emerald-500";
-    case 2: return "border-l-lime-500";
-    case 3: return "border-l-amber-400";
-    case 4: return "border-l-orange-500";
-    case 5: return "border-l-red-500";
+    case 1: return "border-l-foreground/30";
+    case 2: return "border-l-foreground/40";
+    case 3: return "border-l-foreground/55";
+    case 4: return "border-l-primary/70";
+    case 5: return "border-l-primary";
     default: return "border-l-border";
   }
 }

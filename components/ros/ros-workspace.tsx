@@ -88,7 +88,7 @@ const FLOW_TABS = [
   { id: "analyser" as const, label: "Arbeid", icon: ClipboardList },
   { id: "maler" as const, label: "Maler", icon: Grid3x3 },
   { id: "oversikt" as const, label: "Status", icon: BarChart3 },
-  { id: "bibliotek" as const, label: "Stotte", icon: BookMarked },
+  { id: "bibliotek" as const, label: "Støtte", icon: BookMarked },
 ] as const;
 
 function RosFlowNav({
