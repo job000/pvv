@@ -1498,15 +1498,15 @@ export function ProcessDesignDocPage({
       overview: Boolean(
         payload.processTitle?.trim() ||
           payload.shortDescription?.trim() ||
-          payload.summary?.trim(),
+          payload.executiveSummary?.trim(),
       ),
       asis: Boolean(
-        payload.currentProcessDescription?.trim() ||
-          (payload.appRows?.length ?? 0) > 0,
+        payload.asIsShortDescription?.trim() ||
+          (payload.asIsApplications?.length ?? 0) > 0,
       ),
       tobe: Boolean(
-        payload.futureProcessDescription?.trim() ||
-          payload.solutionSummary?.trim(),
+        payload.toBeSteps?.trim() ||
+          payload.toBeMap?.trim(),
       ),
       huki: Boolean((payload.hukiRows?.length ?? 0) > 0),
       risk: Boolean(
@@ -1538,7 +1538,7 @@ export function ProcessDesignDocPage({
           "prosesstittel",
           payload.processTitle,
           payload.shortDescription,
-          payload.summary,
+          payload.executiveSummary,
         ]
           .join(" ")
           .toLowerCase()
@@ -1547,7 +1547,7 @@ export function ProcessDesignDocPage({
         q.length === 0 ||
         [
           "asis nåværende prosess",
-          payload.currentProcessDescription,
+          payload.asIsProcessName,
           payload.asIsShortDescription,
           payload.asIsProcessMap,
         ]
@@ -1558,8 +1558,8 @@ export function ProcessDesignDocPage({
         q.length === 0 ||
         [
           "tobe fremtidig prosess",
-          payload.futureProcessDescription,
-          payload.solutionSummary,
+          payload.toBeSteps,
+          payload.parallelInitiatives,
           payload.toBeMap,
         ]
           .join(" ")
@@ -1571,6 +1571,7 @@ export function ProcessDesignDocPage({
           "huki roller ansvar",
           JSON.stringify(payload.hukiRows ?? []),
         ]
+          .join(" ")
           .toLowerCase()
           .includes(q),
       risk:
