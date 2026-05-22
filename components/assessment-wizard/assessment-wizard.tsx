@@ -1145,7 +1145,7 @@ export function AssessmentWizard({ assessmentId }: Props) {
               Steg {slide + 1} av {stepLabels.length}: {stepLabels[slide]}
             </h2>
             <nav
-              className="flex flex-1 gap-1.5 overflow-x-auto pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] sm:flex-wrap sm:overflow-visible [&::-webkit-scrollbar]:hidden"
+              className="grid flex-1 grid-cols-2 gap-1.5 sm:flex sm:flex-wrap"
               aria-label="Hovedsteg i vurderingen"
             >
               {stepLabels.map((label, i) => (
@@ -1156,7 +1156,7 @@ export function AssessmentWizard({ assessmentId }: Props) {
                   aria-current={slide === i ? "step" : undefined}
                   onClick={() => emblaApi?.scrollTo(i)}
                   className={cn(
-                    "flex min-w-[calc(50%-0.25rem)] shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1.5 text-left transition sm:min-w-0 sm:flex-1 sm:basis-0",
+                    "flex w-full min-w-0 items-center gap-1.5 rounded-full px-2.5 py-1.5 text-left transition sm:min-w-0 sm:flex-1 sm:basis-0",
                     i === slide
                       ? "bg-primary/12 ring-2 ring-primary/30 shadow-sm"
                       : i < slide
