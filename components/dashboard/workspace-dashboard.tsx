@@ -272,7 +272,7 @@ export function WorkspaceDashboardGrid({
               <li
                 key={workspace._id}
                 className={cn(
-                  "group/row relative grid grid-cols-1 gap-2 px-4 py-3 transition-colors hover:bg-muted/35 sm:grid-cols-[minmax(0,2fr)_7rem_7rem_2.5rem_2.5rem] sm:items-center sm:gap-3 sm:px-5 sm:py-3.5",
+                  "group/row relative grid grid-cols-[minmax(0,1fr)_auto] gap-2 px-4 py-3 transition-colors hover:bg-muted/35 sm:grid-cols-[minmax(0,2fr)_7rem_7rem_2.5rem_2.5rem] sm:items-center sm:gap-3 sm:px-5 sm:py-3.5",
                   isDefault && "bg-primary/[0.05]",
                 )}
               >
@@ -297,13 +297,24 @@ export function WorkspaceDashboardGrid({
                   <p className="mt-0.5 text-[11px] text-muted-foreground tabular-nums">
                     Opprettet {new Date(workspace._creationTime).toLocaleDateString("nb-NO")}
                   </p>
+                  <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground sm:hidden">
+                    <span>{ROLE_LABELS[role]}</span>
+                    <span aria-hidden>•</span>
+                    {isDefault ? (
+                      <span className="inline-flex rounded-full border border-border/60 bg-muted px-2 py-0.5 text-[10px] text-foreground">
+                        Aktiv
+                      </span>
+                    ) : (
+                      <span>Ikke aktiv</span>
+                    )}
+                  </div>
                 </div>
 
-                <div className="pointer-events-none relative z-10 text-xs text-muted-foreground">
+                <div className="pointer-events-none relative z-10 hidden text-xs text-muted-foreground sm:block">
                   {ROLE_LABELS[role]}
                 </div>
 
-                <div className="pointer-events-none relative z-10">
+                <div className="pointer-events-none relative z-10 hidden sm:block">
                   {isDefault ? (
                     <span className="inline-flex rounded-full border border-border/60 bg-muted px-2 py-0.5 text-[10px] text-foreground">
                       Aktiv
@@ -318,7 +329,7 @@ export function WorkspaceDashboardGrid({
                     <div>
                       <button
                         type="button"
-                        className="text-muted-foreground/50 hover:text-foreground hover:bg-muted/60 flex size-8 items-center justify-center rounded-xl opacity-0 transition-all duration-200 sm:group-hover/row:opacity-100"
+                        className="text-muted-foreground/60 hover:text-foreground hover:bg-muted/60 flex size-9 items-center justify-center rounded-xl opacity-100 transition-all duration-200 sm:size-8 sm:opacity-0 sm:group-hover/row:opacity-100"
                         onClick={(e) => {
                           e.preventDefault();
                           e.stopPropagation();

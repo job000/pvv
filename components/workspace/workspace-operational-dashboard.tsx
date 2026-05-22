@@ -434,7 +434,7 @@ export function WorkspaceOperationalDashboard({
                   type="button"
                   onClick={() => setQuickListFilter("all")}
                   className={cn(
-                    "rounded-full border px-2.5 py-1 text-[11px] transition-colors",
+                    "rounded-full border px-3 py-1.5 text-xs transition-colors",
                     quickListFilter === "all"
                       ? "border-border bg-muted text-foreground"
                       : "border-border/50 bg-card/60 text-muted-foreground hover:text-foreground",
@@ -446,7 +446,7 @@ export function WorkspaceOperationalDashboard({
                   type="button"
                   onClick={() => setQuickListFilter("without_ros")}
                   className={cn(
-                    "rounded-full border px-2.5 py-1 text-[11px] transition-colors",
+                    "rounded-full border px-3 py-1.5 text-xs transition-colors",
                     quickListFilter === "without_ros"
                       ? "border-border bg-muted text-foreground"
                       : "border-border/50 bg-card/60 text-muted-foreground hover:text-foreground",
@@ -458,7 +458,7 @@ export function WorkspaceOperationalDashboard({
                   type="button"
                   onClick={() => setQuickListFilter("follow_up")}
                   className={cn(
-                    "rounded-full border px-2.5 py-1 text-[11px] transition-colors",
+                    "rounded-full border px-3 py-1.5 text-xs transition-colors",
                     quickListFilter === "follow_up"
                       ? "border-border bg-muted text-foreground"
                       : "border-border/50 bg-card/60 text-muted-foreground hover:text-foreground",
@@ -472,7 +472,7 @@ export function WorkspaceOperationalDashboard({
                 onChange={(e) => setQuickListSearch(e.target.value)}
                 placeholder="Søk i listen …"
                 aria-label="Søk i arbeidsområdelisten"
-                className="h-8 w-full rounded-full sm:max-w-xs"
+                className="h-10 w-full rounded-full sm:h-8 sm:max-w-xs"
               />
             </div>
             {list.length === 0 ? (
@@ -612,17 +612,29 @@ function AssessmentDashRow({
             Uten ROS
           </div>
         ) : null}
+        <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-[11px] sm:hidden">
+          <span className="inline-flex rounded-full border border-border/60 bg-muted px-2 py-0.5 text-foreground">
+            {PIPELINE_STATUS_LABELS[row.pipelineStatus]}
+          </span>
+          <span className="inline-flex items-center gap-1 rounded-full border border-border/60 bg-card px-2 py-0.5 text-muted-foreground">
+            <Clock3 className="size-3 opacity-70" aria-hidden />
+            {formatRelativeUpdatedAt(row.updatedAt)}
+          </span>
+          <span className="inline-flex rounded-full border border-border/60 bg-card px-2 py-0.5 text-foreground">
+            {row.effectivePriority.toFixed(0)} / 100
+          </span>
+        </div>
       </div>
-      <div className="text-xs text-muted-foreground">
+      <div className="hidden text-xs text-muted-foreground sm:block">
         {PIPELINE_STATUS_LABELS[row.pipelineStatus]}
       </div>
-      <div className="text-xs text-muted-foreground tabular-nums">
+      <div className="hidden text-xs text-muted-foreground tabular-nums sm:block">
         <span className="inline-flex items-center gap-1">
           <Clock3 className="size-3 opacity-70" aria-hidden />
           {formatRelativeUpdatedAt(row.updatedAt)}
         </span>
       </div>
-      <div className="text-center text-xs tabular-nums">
+      <div className="hidden text-center text-xs tabular-nums sm:block">
         <span className="font-semibold text-foreground">
           {row.effectivePriority.toFixed(0)}
         </span>

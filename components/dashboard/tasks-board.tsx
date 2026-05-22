@@ -269,7 +269,7 @@ export function TasksBoard() {
   const updateTask = useMutation(api.assessmentTasks.update);
   const removeTask = useMutation(api.assessmentTasks.remove);
 
-  const [view, setView] = useStickyState<"list" | "kanban">("tasks-board:view", "kanban");
+  const [view, setView] = useStickyState<"list" | "kanban">("tasks-board:view", "list");
   const [activeDrag, setActiveDrag] = useState<TaskRow | null>(null);
   const [editTask, setEditTask] = useState<TaskRow | null>(null);
   const [editTitle, setEditTitle] = useState("");
@@ -445,7 +445,7 @@ export function TasksBoard() {
             type="button"
             variant={view === "kanban" ? "secondary" : "ghost"}
             size="sm"
-            className="h-9 gap-1 rounded-xl px-3 text-xs shadow-none"
+            className="h-10 gap-1 rounded-xl px-3 text-xs shadow-none sm:h-9"
             onClick={() => setView("kanban")}
           >
             <LayoutGrid className="size-3.5" aria-hidden />
@@ -455,7 +455,7 @@ export function TasksBoard() {
             type="button"
             variant={view === "list" ? "secondary" : "ghost"}
             size="sm"
-            className="h-9 gap-1 rounded-xl px-3 text-xs shadow-none"
+            className="h-10 gap-1 rounded-xl px-3 text-xs shadow-none sm:h-9"
             onClick={() => setView("list")}
           >
             <List className="size-3.5" aria-hidden />
