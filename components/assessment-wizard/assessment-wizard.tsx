@@ -364,6 +364,21 @@ function workloadSummaryFromPayload(payload: AssessmentPayload): {
 
 type Props = { assessmentId: Id<"assessments"> };
 
+function compactStepLabel(label: string): string {
+  switch (label) {
+    case "Kandidat og volum":
+      return "Kandidat/volum";
+    case "Prosess og systemer":
+      return "Prosess/systemer";
+    case "Verdi og effekt":
+      return "Verdi/effekt";
+    case "Valgfritt mer":
+      return "Valgfritt";
+    default:
+      return label;
+  }
+}
+
 export function AssessmentWizard({ assessmentId }: Props) {
   const params = useParams();
   const workspaceIdParam = params.workspaceId as Id<"workspaces"> | undefined;
@@ -1176,7 +1191,10 @@ export function AssessmentWizard({ assessmentId }: Props) {
                   >
                     {i + 1}
                   </span>
-                  <span className="text-foreground min-w-0 text-xs font-medium leading-snug">
+                  <span className="text-foreground min-w-0 text-xs font-medium leading-snug sm:hidden">
+                    {compactStepLabel(label)}
+                  </span>
+                  <span className="text-foreground hidden min-w-0 text-xs font-medium leading-snug sm:inline">
                     {label}
                   </span>
                 </button>
