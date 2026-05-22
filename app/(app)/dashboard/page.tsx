@@ -157,9 +157,9 @@ export default function DashboardPage() {
                 <Link
                   key={row.assessment._id}
                   href={`/w/${row.workspaceId}/a/${row.assessment._id}`}
-                  className="group flex flex-col rounded-xl border border-border/40 bg-card/60 p-4 transition-all hover:border-border/60 hover:bg-card/80"
+                  className="group flex w-full min-w-0 flex-col overflow-hidden rounded-xl border border-border/40 bg-card/60 p-4 transition-all hover:border-border/60 hover:bg-card/80"
                 >
-                  <p className="line-clamp-2 text-sm font-medium leading-snug group-hover:text-primary">
+                  <p className="line-clamp-2 break-words text-sm font-medium leading-snug group-hover:text-primary">
                     {row.assessment.title}
                   </p>
                   <p className="mt-1 text-xs text-muted-foreground">
@@ -188,10 +188,10 @@ export default function DashboardPage() {
                 <Link
                   key={assessment._id}
                   href={`/w/${assessment.workspaceId}/a/${assessment._id}`}
-                  className="group flex items-center justify-between gap-3 rounded-xl border border-border/40 bg-card/60 p-3.5 transition-all hover:border-border/60 hover:bg-card/80"
+                  className="group flex w-full min-w-0 items-center justify-between gap-3 overflow-hidden rounded-xl border border-border/40 bg-card/60 p-3.5 transition-all hover:border-border/60 hover:bg-card/80"
                 >
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-medium group-hover:text-primary">
+                  <div className="min-w-0 flex-1 overflow-hidden">
+                    <p className="truncate break-words text-sm font-medium group-hover:text-primary">
                       {assessment.title}
                     </p>
                     <p className="mt-0.5 text-xs text-muted-foreground">
