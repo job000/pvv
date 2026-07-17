@@ -158,6 +158,56 @@ function SuperAdminDashboard() {
 
 /* ── Shared small components ── */
 
+function ConfirmDialog({
+  open,
+  title,
+  description,
+  confirmLabel,
+  destructive = false,
+  busy = false,
+  error,
+  onCancel,
+  onConfirm,
+}: {
+  open: boolean;
+  title: string;
+  description: string;
+  confirmLabel: string;
+  destructive?: boolean;
+  busy?: boolean;
+  error?: string | null;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <Dialog open={open} onOpenChange={(v) => { if (!v) onCancel(); }}>
+      <DialogContent size="sm">
+        <DialogHeader>
+          <h2 className="text-lg font-semibold">{title}</h2>
+          <p className="text-sm text-muted-foreground">{description}</p>
+        </DialogHeader>
+        {error ? (
+          <DialogBody className="pt-0 sm:pt-0">
+            <p className="text-sm text-destructive" role="alert">{error}</p>
+          </DialogBody>
+        ) : null}
+        <DialogFooter className="gap-2">
+          <Button variant="outline" onClick={onCancel} disabled={busy}>
+            Avbryt
+          </Button>
+          <Button
+            variant={destructive ? "destructive" : "default"}
+            onClick={onConfirm}
+            disabled={busy}
+          >
+            {busy ? "Vent …" : confirmLabel}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function TabBtn({
   active,
   onClick,
@@ -250,6 +300,10 @@ function UsersPanel({ users }: { users: UserRow[] | undefined }) {
   const [q, setQ] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
   const [editUser, setEditUser] = useState<UserRow | null>(null);
+  const [confirmSA, setConfirmSA] = useState<UserRow | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<UserRow | null>(null);
+  const [confirmBusy, setConfirmBusy] = useState(false);
+  const [confirmError, setConfirmError] = useState<string | null>(null);
 
   const filtered = useMemo(() => {
     if (!users) return [];
@@ -262,21 +316,20 @@ function UsersPanel({ users }: { users: UserRow[] | undefined }) {
     );
   }, [users, q]);
 
-  const handleToggleSA = useCallback(
-    async (u: UserRow) => {
-      const action = u.isSuperAdmin ? "fjerne" : "gi";
-      if (!confirm(`${action === "gi" ? "Gi" : "Fjern"} superadmin-tilgang for ${u.name ?? u.email}?`)) return;
-      await toggleSuperAdmin({ userId: u._id });
+  const runConfirm = useCallback(
+    async (fn: () => Promise<unknown>, close: () => void) => {
+      setConfirmError(null);
+      setConfirmBusy(true);
+      try {
+        await fn();
+        close();
+      } catch (e: unknown) {
+        setConfirmError(e instanceof Error ? e.message : "Noe gikk galt.");
+      } finally {
+        setConfirmBusy(false);
+      }
     },
-    [toggleSuperAdmin],
-  );
-
-  const handleDelete = useCallback(
-    async (u: UserRow) => {
-      if (!confirm(`Slett ${u.name ?? u.email ?? "bruker"}? Alle medlemskap fjernes permanent.`)) return;
-      await deleteUser({ userId: u._id });
-    },
-    [deleteUser],
+    [],
   );
 
   if (users === undefined) {
@@ -287,30 +340,25 @@ function UsersPanel({ users }: { users: UserRow[] | undefined }) {
     <>
       <div className="flex items-center gap-3">
         <div className="relative min-w-0 flex-1">
-          <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/70" />
+          <Search className="pointer-events-none absolute left-4 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/70" />
           <Input
             type="search"
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder="Søk etter navn eller e-post …"
-            className="pl-9"
+            placeholder="Søk etter navn eller e-post"
+            className="h-11 rounded-full border-border/50 !pl-10"
           />
         </div>
-        <Button className="gap-1.5" onClick={() => setCreateOpen(true)}>
+        <Button
+          className="h-11 gap-2 rounded-full bg-foreground px-5 text-sm font-semibold text-background transition-opacity hover:opacity-90"
+          onClick={() => setCreateOpen(true)}
+        >
           <UserPlus className="size-4" />
           <span className="hidden sm:inline">Ny bruker</span>
         </Button>
       </div>
 
-      <div className="overflow-hidden rounded-xl border border-border/50">
-        {/* Table header */}
-        <div className="hidden border-b border-border/40 bg-muted/20 px-4 py-2 text-[11px] font-medium uppercase tracking-wider text-muted-foreground sm:grid sm:grid-cols-[1fr_1fr_auto_auto]">
-          <span>Bruker</span>
-          <span>Arbeidsområder</span>
-          <span className="w-16 text-center">Rolle</span>
-          <span className="w-24 text-right">Handlinger</span>
-        </div>
-
+      <div className="overflow-hidden rounded-2xl border border-border/50 bg-card">
         {filtered.length === 0 ? (
           <p className="px-4 py-12 text-center text-sm text-muted-foreground">
             {q ? "Ingen treff" : "Ingen brukere"}
@@ -320,14 +368,20 @@ function UsersPanel({ users }: { users: UserRow[] | undefined }) {
             {filtered.map((u) => (
               <div
                 key={u._id}
-                className="group flex flex-col gap-2 px-4 py-3 transition-colors hover:bg-muted/20 sm:grid sm:grid-cols-[1fr_1fr_auto_auto] sm:items-center sm:gap-4"
+                className="flex flex-col gap-2 px-4 py-3.5 transition-colors hover:bg-muted/25 sm:grid sm:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)_auto] sm:items-center sm:gap-4 sm:px-5"
               >
                 {/* User info */}
                 <div className="flex items-center gap-3">
                   <Avatar name={u.name} email={u.email} image={u.image} />
                   <div className="min-w-0">
-                    <p className="truncate text-sm font-medium leading-tight">
+                    <p className="flex items-center gap-1.5 truncate text-sm font-medium leading-tight">
                       {u.name ?? "Uten navn"}
+                      {u.isSuperAdmin ? (
+                        <ShieldCheck
+                          className="size-3.5 shrink-0 text-foreground"
+                          aria-label="Superadmin"
+                        />
+                      ) : null}
                     </p>
                     <p className="truncate text-xs text-muted-foreground">
                       {u.email ?? "–"}
@@ -336,57 +390,38 @@ function UsersPanel({ users }: { users: UserRow[] | undefined }) {
                 </div>
 
                 {/* Workspaces */}
-                <div className="flex flex-wrap gap-1 pl-12 sm:pl-0">
-                  {u.workspaces.length === 0 ? (
-                    <span className="text-xs text-muted-foreground/60">Ingen</span>
-                  ) : (
-                    u.workspaces.map((w) => (
-                      <span
-                        key={w.id}
-                        className="inline-flex items-center gap-1 rounded-full bg-muted/40 px-2 py-0.5 text-[11px] text-muted-foreground"
-                      >
-                        {w.name}
-                        <span className="opacity-60">({w.role})</span>
-                      </span>
-                    ))
-                  )}
-                </div>
-
-                {/* SA badge */}
-                <div className="hidden w-16 justify-center sm:flex">
-                  {u.isSuperAdmin ? (
-                    <span className="inline-flex items-center gap-0.5 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary ring-1 ring-primary/20">
-                      <ShieldCheck className="size-3" />
-                      SA
-                    </span>
-                  ) : (
-                    <span className="text-xs text-muted-foreground/40">–</span>
-                  )}
-                </div>
+                <p className="truncate pl-12 text-xs text-muted-foreground sm:pl-0">
+                  {u.workspaces.length === 0
+                    ? "Ingen arbeidsområder"
+                    : u.workspaces.map((w) => w.name).join(" · ")}
+                </p>
 
                 {/* Actions */}
-                <div className="flex items-center justify-end gap-1 pl-12 sm:w-24 sm:pl-0">
+                <div className="flex items-center justify-end gap-0.5 pl-12 sm:pl-0">
                   <button
                     type="button"
                     onClick={() => setEditUser(u)}
-                    className="inline-flex size-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                    className="inline-flex size-9 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                     title="Rediger"
+                    aria-label={`Rediger ${u.name ?? u.email ?? "bruker"}`}
                   >
                     <Pencil className="size-3.5" />
                   </button>
                   <button
                     type="button"
-                    onClick={() => handleToggleSA(u)}
-                    className="inline-flex size-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                    onClick={() => { setConfirmError(null); setConfirmSA(u); }}
+                    className="inline-flex size-9 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                     title={u.isSuperAdmin ? "Fjern superadmin" : "Gi superadmin"}
+                    aria-label={u.isSuperAdmin ? "Fjern superadmin" : "Gi superadmin"}
                   >
                     <ShieldCheck className="size-3.5" />
                   </button>
                   <button
                     type="button"
-                    onClick={() => handleDelete(u)}
-                    className="inline-flex size-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+                    onClick={() => { setConfirmError(null); setConfirmDelete(u); }}
+                    className="inline-flex size-9 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
                     title="Slett"
+                    aria-label={`Slett ${u.name ?? u.email ?? "bruker"}`}
                   >
                     <Trash2 className="size-3.5" />
                   </button>
@@ -399,6 +434,47 @@ function UsersPanel({ users }: { users: UserRow[] | undefined }) {
 
       <CreateUserDialog open={createOpen} setOpen={setCreateOpen} />
       <EditUserDialog user={editUser} onClose={() => setEditUser(null)} />
+      <ConfirmDialog
+        open={confirmSA !== null}
+        title={confirmSA?.isSuperAdmin ? "Fjern superadmin?" : "Gi superadmin?"}
+        description={
+          confirmSA
+            ? `${confirmSA.name ?? confirmSA.email ?? "Brukeren"} ${confirmSA.isSuperAdmin ? "mister" : "får"} full tilgang til administrasjonen.`
+            : ""
+        }
+        confirmLabel={confirmSA?.isSuperAdmin ? "Fjern tilgang" : "Gi tilgang"}
+        busy={confirmBusy}
+        error={confirmError}
+        onCancel={() => setConfirmSA(null)}
+        onConfirm={() => {
+          if (!confirmSA) return;
+          void runConfirm(
+            () => toggleSuperAdmin({ userId: confirmSA._id }),
+            () => setConfirmSA(null),
+          );
+        }}
+      />
+      <ConfirmDialog
+        open={confirmDelete !== null}
+        title="Slett bruker?"
+        description={
+          confirmDelete
+            ? `«${confirmDelete.name ?? confirmDelete.email ?? "Brukeren"}» og alle medlemskap slettes permanent.`
+            : ""
+        }
+        confirmLabel="Slett bruker"
+        destructive
+        busy={confirmBusy}
+        error={confirmError}
+        onCancel={() => setConfirmDelete(null)}
+        onConfirm={() => {
+          if (!confirmDelete) return;
+          void runConfirm(
+            () => deleteUser({ userId: confirmDelete._id }),
+            () => setConfirmDelete(null),
+          );
+        }}
+      />
     </>
   );
 }
@@ -636,6 +712,9 @@ function WorkspacesPanel({
   const [createOpen, setCreateOpen] = useState(false);
   const [editWs, setEditWs] = useState<WsRow | null>(null);
   const [managingWorkspaceId, setManagingWorkspaceId] = useState<Id<"workspaces"> | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<WsRow | null>(null);
+  const [confirmBusy, setConfirmBusy] = useState(false);
+  const [confirmError, setConfirmError] = useState<string | null>(null);
 
   const managingWs = useMemo(() => {
     if (!managingWorkspaceId || !workspaces) return null;
@@ -661,14 +740,6 @@ function WorkspacesPanel({
     );
   }, [workspaces, q]);
 
-  const handleDelete = useCallback(
-    async (w: WsRow) => {
-      if (!confirm(`Slett «${w.name}» permanent? Alt innhold slettes.`)) return;
-      await deleteWorkspace({ workspaceId: w._id });
-    },
-    [deleteWorkspace],
-  );
-
   if (workspaces === undefined || allUsers === undefined) {
     return <ProductLoadingBlock label="Laster arbeidsområder …" className="min-h-[30vh]" />;
   }
@@ -677,29 +748,25 @@ function WorkspacesPanel({
     <>
       <div className="flex items-center gap-3">
         <div className="relative min-w-0 flex-1">
-          <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/70" />
+          <Search className="pointer-events-none absolute left-4 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/70" />
           <Input
             type="search"
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder="Søk etter arbeidsområde …"
-            className="pl-9"
+            placeholder="Søk etter arbeidsområde"
+            className="h-11 rounded-full border-border/50 !pl-10"
           />
         </div>
-        <Button className="gap-1.5" onClick={() => setCreateOpen(true)}>
+        <Button
+          className="h-11 gap-2 rounded-full bg-foreground px-5 text-sm font-semibold text-background transition-opacity hover:opacity-90"
+          onClick={() => setCreateOpen(true)}
+        >
           <Plus className="size-4" />
           <span className="hidden sm:inline">Nytt område</span>
         </Button>
       </div>
 
-      <div className="overflow-hidden rounded-xl border border-border/50">
-        <div className="hidden border-b border-border/40 bg-muted/20 px-4 py-2 text-[11px] font-medium uppercase tracking-wider text-muted-foreground sm:grid sm:grid-cols-[1fr_auto_auto_auto]">
-          <span>Arbeidsområde</span>
-          <span className="w-20 text-center">Medl.</span>
-          <span className="w-20 text-center">Vurd.</span>
-          <span className="w-28 text-right">Handlinger</span>
-        </div>
-
+      <div className="overflow-hidden rounded-2xl border border-border/50 bg-card">
         {filtered.length === 0 ? (
           <p className="px-4 py-12 text-center text-sm text-muted-foreground">
             {q ? "Ingen treff" : "Ingen arbeidsområder"}
@@ -709,47 +776,50 @@ function WorkspacesPanel({
             {filtered.map((w) => (
               <div
                 key={w._id}
-                className="group flex flex-col gap-2 px-4 py-3 transition-colors hover:bg-muted/20 sm:grid sm:grid-cols-[1fr_auto_auto_auto] sm:items-center sm:gap-4"
+                className="flex flex-col gap-2 px-4 py-3.5 transition-colors hover:bg-muted/25 sm:grid sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:gap-4 sm:px-5"
               >
                 <div className="flex items-center gap-3">
-                  <div className="flex size-9 items-center justify-center rounded-xl bg-muted/60 text-sm font-bold text-muted-foreground ring-1 ring-border/40">
+                  <div className="flex size-9 items-center justify-center rounded-xl bg-muted text-sm font-semibold text-foreground">
                     {w.name.charAt(0).toUpperCase()}
                   </div>
                   <div className="min-w-0">
                     <p className="truncate text-sm font-medium">{w.name}</p>
                     <p className="truncate text-xs text-muted-foreground">
-                      Eier: {w.ownerName ?? "–"}
+                      {[
+                        w.ownerName ? `Eier: ${w.ownerName}` : null,
+                        `${w.memberCount} ${w.memberCount === 1 ? "medlem" : "medlemmer"}`,
+                        `${w.assessmentCount} ${w.assessmentCount === 1 ? "vurdering" : "vurderinger"}`,
+                      ]
+                        .filter(Boolean)
+                        .join(" · ")}
                     </p>
                   </div>
                 </div>
-                <p className="hidden w-20 text-center text-sm tabular-nums text-muted-foreground sm:block">
-                  {w.memberCount}
-                </p>
-                <p className="hidden w-20 text-center text-sm tabular-nums text-muted-foreground sm:block">
-                  {w.assessmentCount}
-                </p>
-                <div className="flex items-center justify-end gap-1 pl-12 sm:w-28 sm:pl-0">
+                <div className="flex items-center justify-end gap-0.5 pl-12 sm:pl-0">
                   <button
                     type="button"
                     onClick={() => setManagingWorkspaceId(w._id)}
-                    className="inline-flex size-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                    className="inline-flex size-9 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                     title="Medlemmer"
+                    aria-label={`Medlemmer i ${w.name}`}
                   >
                     <Users className="size-3.5" />
                   </button>
                   <button
                     type="button"
                     onClick={() => setEditWs(w)}
-                    className="inline-flex size-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                    className="inline-flex size-9 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                     title="Rediger"
+                    aria-label={`Rediger ${w.name}`}
                   >
                     <Pencil className="size-3.5" />
                   </button>
                   <button
                     type="button"
-                    onClick={() => handleDelete(w)}
-                    className="inline-flex size-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+                    onClick={() => { setConfirmError(null); setConfirmDelete(w); }}
+                    className="inline-flex size-9 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
                     title="Slett"
+                    aria-label={`Slett ${w.name}`}
                   >
                     <Trash2 className="size-3.5" />
                   </button>
@@ -759,6 +829,36 @@ function WorkspacesPanel({
           </div>
         )}
       </div>
+
+      <ConfirmDialog
+        open={confirmDelete !== null}
+        title="Slett arbeidsområde?"
+        description={
+          confirmDelete
+            ? `«${confirmDelete.name}» og alt innhold slettes permanent. Dette kan ikke angres.`
+            : ""
+        }
+        confirmLabel="Slett permanent"
+        destructive
+        busy={confirmBusy}
+        error={confirmError}
+        onCancel={() => setConfirmDelete(null)}
+        onConfirm={() => {
+          if (!confirmDelete) return;
+          setConfirmError(null);
+          setConfirmBusy(true);
+          void (async () => {
+            try {
+              await deleteWorkspace({ workspaceId: confirmDelete._id });
+              setConfirmDelete(null);
+            } catch (e: unknown) {
+              setConfirmError(e instanceof Error ? e.message : "Noe gikk galt.");
+            } finally {
+              setConfirmBusy(false);
+            }
+          })();
+        }}
+      />
 
       <CreateWorkspaceDialog open={createOpen} setOpen={setCreateOpen} allUsers={allUsers} />
       <EditWorkspaceDialog ws={editWs} onClose={() => setEditWs(null)} />

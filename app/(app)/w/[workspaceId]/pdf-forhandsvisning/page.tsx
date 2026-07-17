@@ -1,10 +1,5 @@
 "use client";
 
-import {
-  ProductEmptyState,
-  ProductPageHeader,
-  ProductSection,
-} from "@/components/product";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { api } from "@/convex/_generated/api";
@@ -26,9 +21,7 @@ import { cn } from "@/lib/utils";
 import { useQuery } from "convex/react";
 import {
   ExternalLink,
-  Eye,
   FileDown,
-  FileText,
   Loader2,
   Search,
   Check,
@@ -91,21 +84,9 @@ function useFilteredRows<T extends { _id: string; title: string; updatedAt?: num
 }
 
 const TAB_CONFIG = [
-  {
-    id: "vurdering" as const,
-    label: "PVV-vurdering",
-    hint: "Utkast fra veiviseren eksporteres som PDF.",
-  },
-  {
-    id: "ros" as const,
-    label: "ROS",
-    hint: "Valgt ROS-analyse med matrise og notater.",
-  },
-  {
-    id: "pdd" as const,
-    label: "Prosessdesign (PDD)",
-    hint: "PDD knyttet til valgt vurdering.",
-  },
+  { id: "vurdering" as const, label: "Vurdering" },
+  { id: "ros" as const, label: "ROS" },
+  { id: "pdd" as const, label: "Prosessdesign" },
 ];
 
 export default function PdfForhandsvisningPage() {
@@ -335,8 +316,6 @@ export default function PdfForhandsvisningPage() {
     return "dokument.pdf";
   }, [tab, draftBundle, rosAnalysis, pddState]);
 
-  const activeTabHint = TAB_CONFIG.find((t) => t.id === tab)?.hint ?? "";
-
   async function handleDownload() {
     if (tab === "vurdering" && draftBundle && workspace) {
       const input = buildAssessmentPdfInputFromDraft(
@@ -475,49 +454,188 @@ export default function PdfForhandsvisningPage() {
           ? pddState.assessment.title
           : "PDF";
 
-  /** Rom til sticky kontroller; iframe med nettleserens PDF (samme blob som «Ny fane») */
+  const emptyForTab =
+    (tab === "vurdering" || tab === "pdd") ? noAssessments : noAnalyses;
+
   const viewerHeightClass =
-    "h-[min(56rem,calc(100dvh-15.5rem))] sm:h-[min(56rem,calc(100dvh-14rem))]";
+    "h-[min(56rem,calc(100dvh-14rem))] min-h-[24rem]";
 
   return (
-    <div className="mx-auto max-w-5xl px-4 pb-8 pt-1 sm:px-6 lg:px-0">
-      {/* Sticky: faner, valg og handlinger */}
+    <div className="mx-auto max-w-6xl space-y-6 pb-10">
+      <header className="space-y-1">
+        <h1 className="font-heading text-2xl font-semibold tracking-tight sm:text-3xl">
+          PDF-eksport
+        </h1>
+        <p className="text-sm text-muted-foreground">
+          Forhåndsvis og last ned vurderinger, ROS og prosessdesign.
+        </p>
+      </header>
+
       <div
-        className={cn(
-          "sticky top-0 z-20 -mx-4 mb-4 space-y-4 border-b border-border/50 bg-background/90 px-4 pb-4 pt-1 shadow-[0_8px_24px_-12px_rgba(0,0,0,0.15)] backdrop-blur-md dark:bg-background/88 dark:shadow-[0_8px_28px_-12px_rgba(0,0,0,0.45)] sm:-mx-6 sm:px-6 lg:mx-0 lg:px-0",
-        )}
+        className="inline-flex rounded-full border border-border/50 bg-background p-1"
+        role="tablist"
+        aria-label="Dokumenttype"
       >
-        <ProductPageHeader
-          eyebrow={
-            <span className="inline-flex items-center gap-1.5 text-muted-foreground">
-              <Eye className="size-3.5" aria-hidden />
-              Dokumentasjon
-            </span>
-          }
-          title="PDF-forhåndsvisning"
-          description={
-            <span className="text-pretty text-sm leading-relaxed">
-              Forhåndsvisningen bruker nettleserens innebygde PDF-visning — samme innhold som når du
-              åpner i ny fane. Kontrollene over forblir synlige når du ruller.
-            </span>
-          }
-          actions={
-            <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
+        {TAB_CONFIG.map(({ id, label }) => {
+          const active = tab === id;
+          return (
+            <button
+              key={id}
+              type="button"
+              role="tab"
+              aria-selected={active}
+              onClick={() => setTab(id)}
+              className={cn(
+                "rounded-full px-4 py-1.5 text-sm font-medium transition-colors",
+                active
+                  ? "bg-foreground text-background"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              {label}
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,20rem)_minmax(0,1fr)]">
+        {/* Venstre: dokumentliste */}
+        <aside className="min-w-0 space-y-3">
+          {emptyForTab ? (
+            <div className="rounded-2xl border border-dashed border-border/60 px-5 py-10 text-center">
+              <p className="text-sm font-medium text-foreground">
+                {tab === "ros" ? "Ingen ROS-analyser" : "Ingen vurderinger ennå"}
+              </p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                {tab === "ros"
+                  ? "Opprett en analyse under Risiko (ROS)."
+                  : "Opprett en vurdering først."}
+              </p>
+            </div>
+          ) : (
+            <>
+              {canFilterList ? (
+                <div className="space-y-2">
+                  <div className="relative flex items-center">
+                    <span
+                      className="text-muted-foreground pointer-events-none absolute left-3.5 flex items-center"
+                      aria-hidden
+                    >
+                      <Search className="size-4 shrink-0 opacity-80" />
+                    </span>
+                    <Input
+                      id="pdf-list-filter"
+                      type="search"
+                      value={listFilter}
+                      onChange={(e) => setListFilter(e.target.value)}
+                      placeholder={
+                        tab === "ros" ? "Søk ROS-analyse" : "Søk vurdering"
+                      }
+                      autoComplete="off"
+                      className={cn(
+                        "h-11 w-full rounded-full border-border/50 bg-background text-sm shadow-none",
+                        "!pl-10 !pr-10",
+                      )}
+                    />
+                    {listFilter ? (
+                      <button
+                        type="button"
+                        className="text-muted-foreground hover:text-foreground absolute right-2 top-1/2 flex size-9 -translate-y-1/2 items-center justify-center rounded-full transition-colors"
+                        onClick={() => setListFilter("")}
+                        aria-label="Tøm søk"
+                      >
+                        <X className="size-4 shrink-0" />
+                      </button>
+                    ) : null}
+                  </div>
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-muted-foreground text-xs tabular-nums">
+                      {selectionCount} av {totalCount}
+                    </p>
+                    <div className="relative shrink-0">
+                      <select
+                        aria-label="Sorter dokumentliste"
+                        value={listSort}
+                        onChange={(e) => setListSort(e.target.value as ListSort)}
+                        className="h-8 appearance-none rounded-full border border-border/50 bg-background pl-3 pr-8 text-xs"
+                      >
+                        <option value="updated_desc">Nyeste først</option>
+                        <option value="title_asc">Tittel A–Å</option>
+                      </select>
+                      <ArrowUpDown className="pointer-events-none absolute right-2.5 top-1/2 size-3 -translate-y-1/2 text-muted-foreground" />
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+
+              <ul className="divide-y divide-border/40 overflow-hidden rounded-2xl border border-border/50 bg-card">
+                {activeRows.map((row) => {
+                  const selected = activeSelectedId === String(row._id);
+                  return (
+                    <li key={String(row._id)}>
+                      <button
+                        type="button"
+                        onClick={() => selectActiveRow(String(row._id))}
+                        className={cn(
+                          "flex w-full items-center gap-3 px-4 py-3 text-left transition-colors",
+                          selected ? "bg-muted/50" : "hover:bg-muted/25",
+                        )}
+                        aria-pressed={selected}
+                      >
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-medium text-foreground">
+                            {row.title}
+                          </p>
+                          {row.updatedAt ? (
+                            <p className="mt-0.5 text-xs text-muted-foreground">
+                              {formatRelativeUpdatedAt(row.updatedAt)}
+                            </p>
+                          ) : null}
+                        </div>
+                        {selected ? (
+                          <Check className="size-4 shrink-0 text-foreground" aria-hidden />
+                        ) : null}
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            </>
+          )}
+        </aside>
+
+        {/* Høyre: forhåndsvisning med verktøylinje */}
+        <section
+          aria-label="PDF-forhåndsvisning"
+          className="min-w-0 space-y-3"
+        >
+          <div className="flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <p className="truncate text-sm font-medium text-foreground">
+                {pdfUrl && !error ? previewTitle : "Forhåndsvisning"}
+              </p>
+              {pdfUrl && !error ? (
+                <p className="truncate text-xs text-muted-foreground">
+                  {downloadLabel}
+                </p>
+              ) : null}
+            </div>
+            <div className="flex shrink-0 items-center gap-2">
               <Button
                 type="button"
-                variant="outline"
-                size="sm"
-                className="h-10 gap-2 rounded-xl border-border/70"
+                variant="ghost"
+                size="icon"
+                className="size-10 rounded-full text-muted-foreground hover:text-foreground"
+                aria-label="Åpne i ny fane"
+                title="Åpne i ny fane"
                 disabled={!pdfUrl || !!error || busy}
                 onClick={openPdfInNewTab}
               >
-                <ExternalLink className="size-4 shrink-0" aria-hidden />
-                Ny fane
+                <ExternalLink className="size-4" aria-hidden />
               </Button>
               <Button
                 type="button"
-                size="sm"
-                className="h-10 gap-2 rounded-xl"
+                className="h-10 gap-2 rounded-full bg-foreground px-5 text-sm font-semibold text-background transition-opacity hover:opacity-90"
                 disabled={!pdfUrl || !!error || busy}
                 onClick={() => void handleDownload()}
               >
@@ -525,219 +643,48 @@ export default function PdfForhandsvisningPage() {
                 Last ned
               </Button>
             </div>
-          }
-        />
-
-        <div className="space-y-2">
-          <div
-            className="flex gap-1 overflow-x-auto pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-            role="tablist"
-            aria-label="Dokumenttype"
-          >
-            {TAB_CONFIG.map(({ id, label }) => {
-              const active = tab === id;
-              return (
-                <button
-                  key={id}
-                  type="button"
-                  role="tab"
-                  aria-selected={active}
-                  onClick={() => setTab(id)}
-                  className={cn(
-                    "relative shrink-0 touch-manipulation rounded-lg px-3 py-2 text-sm font-medium transition-colors",
-                    active
-                      ? "bg-muted/90 text-foreground"
-                      : "text-muted-foreground hover:bg-muted/50 hover:text-foreground",
-                  )}
-                >
-                  {label}
-                </button>
-              );
-            })}
           </div>
-          <p className="text-muted-foreground max-w-2xl text-xs leading-relaxed">
-            {activeTabHint}
-          </p>
-        </div>
 
-        {(tab === "vurdering" || tab === "pdd") && noAssessments ? (
-          <ProductEmptyState
-            icon={FileText}
-            title="Ingen vurderinger ennå"
-            description="Opprett en PVV-vurdering for å forhåndsvise dokument her. PDD følger samme vurdering."
-            className="border-border/50 bg-muted/15 py-8"
-          />
-        ) : null}
-        {tab === "ros" && noAnalyses ? (
-          <ProductEmptyState
-            icon={FileText}
-            title="Ingen ROS-analyser"
-            description="Opprett en analyse under Risiko (ROS) for å generere PDF fra matrisen og notatene."
-            className="border-border/50 bg-muted/15 py-8"
-          />
-        ) : null}
+          {error ? (
+            <div
+              className="border-destructive/30 bg-destructive/5 rounded-2xl border px-4 py-3 text-sm text-destructive"
+              role="alert"
+            >
+              {error}
+            </div>
+          ) : null}
 
-        {!noAssessments || (tab === "ros" && !noAnalyses) ? (
-          <ProductSection
-            title="Velg dokument"
-            description="Bruk listevisning for å velge og forhåndsvise riktig PDF."
+          <div
+            className={cn(
+              "relative isolate flex w-full flex-col overflow-hidden rounded-2xl border border-border/50 bg-muted/25 dark:bg-muted/15",
+              viewerHeightClass,
+            )}
           >
-            <div className="max-w-3xl space-y-4 rounded-2xl border border-border/50 bg-card/50 p-4 shadow-sm sm:p-5">
-              {canFilterList ? (
-                <div className="space-y-2">
-                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-                    <div className="relative flex w-full items-center">
-                      <span
-                        className="text-muted-foreground pointer-events-none absolute left-3.5 flex size-9 items-center justify-center"
-                        aria-hidden
-                      >
-                        <Search className="size-4 shrink-0 opacity-80" />
-                      </span>
-                      <Input
-                        id="pdf-list-filter"
-                        type="search"
-                        value={listFilter}
-                        onChange={(e) => setListFilter(e.target.value)}
-                        placeholder={
-                          tab === "ros"
-                            ? "Søk ROS-analyse …"
-                            : "Søk vurdering …"
-                        }
-                        autoComplete="off"
-                        className={cn(
-                          "h-10 min-h-10 w-full rounded-lg border-border/50 bg-background text-sm shadow-none",
-                          "!pl-11 !pr-10 md:!min-h-10 md:!pl-11 md:!pr-10",
-                        )}
-                      />
-                      {listFilter ? (
-                        <button
-                          type="button"
-                          className="text-muted-foreground hover:text-foreground absolute right-2 top-1/2 flex size-9 -translate-y-1/2 items-center justify-center rounded-md transition-colors"
-                          onClick={() => setListFilter("")}
-                          aria-label="Tøm søk"
-                        >
-                          <X className="size-4 shrink-0" />
-                        </button>
-                      ) : null}
-                    </div>
-                    <div className="relative shrink-0">
-                      <select
-                        aria-label="Sorter dokumentliste"
-                        value={listSort}
-                        onChange={(e) => setListSort(e.target.value as ListSort)}
-                        className="h-10 min-w-[11rem] appearance-none rounded-lg border border-border/50 bg-background pl-3 pr-8 text-sm"
-                      >
-                        <option value="updated_desc">Nyeste først</option>
-                        <option value="title_asc">Tittel A–Å</option>
-                      </select>
-                      <ArrowUpDown className="pointer-events-none absolute right-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
-                    </div>
-                  </div>
-                  <p className="text-muted-foreground text-[11px] tabular-nums">
-                    {selectionCount} av {totalCount}{" "}
-                    {tab === "ros" ? "analyser" : "vurderinger"}
-                    {listFilter.trim() ? " · filtrert" : ""}
-                  </p>
-                </div>
-              ) : null}
-
-              <div className="overflow-hidden rounded-xl border border-border/50 bg-card">
-                <ul className="divide-y divide-border/40">
-                  {activeRows.map((row) => {
-                    const selected = activeSelectedId === String(row._id);
-                    return (
-                      <li key={String(row._id)}>
-                        <button
-                          type="button"
-                          onClick={() => selectActiveRow(String(row._id))}
-                          className={cn(
-                            "grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-2 px-3 py-2.5 text-left transition-colors hover:bg-muted/35",
-                            selected && "bg-primary/10",
-                          )}
-                          aria-pressed={selected}
-                        >
-                          <div className="min-w-0">
-                            <p className="truncate text-sm font-medium text-foreground">
-                              {row.title}
-                            </p>
-                            {row.updatedAt ? (
-                              <p className="text-[11px] text-muted-foreground">
-                                Oppdatert {formatRelativeUpdatedAt(row.updatedAt)}
-                              </p>
-                            ) : null}
-                          </div>
-                          {selected ? (
-                            <span className="inline-flex items-center gap-1 rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 text-[11px] text-primary">
-                              <Check className="size-3" />
-                              Valgt
-                            </span>
-                          ) : null}
-                        </button>
-                      </li>
-                    );
-                  })}
-                </ul>
+            {busy ? (
+              <div className="bg-background/80 absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 backdrop-blur-sm">
+                <Loader2 className="text-muted-foreground size-9 animate-spin" />
+                <p className="text-muted-foreground text-sm">Genererer PDF …</p>
               </div>
-            </div>
-          </ProductSection>
-      ) : null}
-
-      {error ? (
-        <div
-          className="border-destructive/30 bg-destructive/5 rounded-xl border px-4 py-3 text-sm text-destructive"
-          role="alert"
-        >
-          {error}
-        </div>
-      ) : null}
-
-      {pdfUrl && !error && !busy ? (
-        <div className="border-border/40 min-w-0 border-t pt-3">
-          <p className="text-muted-foreground text-[0.65rem] font-medium uppercase tracking-wider">
-            Aktiv forhåndsvisning
-          </p>
-          <p className="text-foreground mt-0.5 truncate text-sm font-semibold leading-snug">
-            {previewTitle}
-          </p>
-          <p className="text-xs text-muted-foreground">{downloadLabel}</p>
-        </div>
-      ) : null}
+            ) : null}
+            {pdfUrl && !error ? (
+              <iframe
+                key={pdfUrl}
+                title={`PDF: ${previewTitle}`}
+                src={pdfUrl}
+                className="block h-full min-h-0 w-full flex-1 border-0 bg-neutral-950 dark:bg-neutral-950"
+              />
+            ) : !error && !busy ? (
+              <div className="text-muted-foreground flex h-full min-h-[12rem] w-full flex-1 items-center justify-center px-6 text-center text-sm">
+                {emptyForTab
+                  ? tab === "ros"
+                    ? "Opprett en ROS-analyse først."
+                    : "Opprett en vurdering først."
+                  : "Velg et dokument i listen."}
+              </div>
+            ) : null}
+          </div>
+        </section>
       </div>
-
-      <section
-        aria-label="PDF-forhåndsvisning"
-        className="flex min-h-0 flex-col gap-2"
-      >
-        <div
-          className={cn(
-            "relative isolate flex w-full flex-col overflow-hidden rounded-xl border border-border/50 bg-muted/25 dark:bg-muted/15",
-            viewerHeightClass,
-          )}
-        >
-          {busy ? (
-            <div className="bg-background/80 absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 backdrop-blur-sm">
-              <Loader2 className="text-muted-foreground size-9 animate-spin" />
-              <p className="text-muted-foreground text-sm">Genererer PDF …</p>
-            </div>
-          ) : null}
-          {pdfUrl && !error ? (
-            <iframe
-              key={pdfUrl}
-              title={`PDF: ${previewTitle}`}
-              src={pdfUrl}
-              className="block h-full min-h-0 w-full flex-1 border-0 bg-neutral-950 dark:bg-neutral-950"
-            />
-          ) : !error && !busy ? (
-            <div className="text-muted-foreground flex h-full min-h-[12rem] w-full flex-1 items-center justify-center px-6 text-center text-sm">
-              {(tab === "vurdering" || tab === "pdd") && noAssessments
-                ? "Opprett en vurdering først."
-                : tab === "ros" && noAnalyses
-                  ? "Opprett en ROS-analyse først."
-                  : "Velg dokument over. PDF vises her."}
-            </div>
-          ) : null}
-        </div>
-      </section>
     </div>
   );
 }

@@ -1,7 +1,6 @@
 "use client";
 
 import { api } from "@/convex/_generated/api";
-import { cn } from "@/lib/utils";
 import type { Id } from "@/convex/_generated/dataModel";
 import { useQuery } from "convex/react";
 import dynamic from "next/dynamic";
@@ -56,13 +55,6 @@ export function WorkspacePvvHub({ workspaceId, activeTab, initialOrgUnit }: Prop
     { workspaceId },
   );
 
-  const setTab = useCallback(
-    (next: PvvHubTab) => {
-      const q = next === "prosesser" ? "?fane=prosesser" : "";
-      router.replace(`/w/${workspaceId}/vurderinger${q}`, { scroll: false });
-    },
-    [router, workspaceId],
-  );
   const activeOrgUnitName = useMemo(() => {
     if (!initialOrgUnit) return null;
     return orgUnits?.find((u) => u._id === initialOrgUnit)?.name ?? null;
@@ -74,53 +66,15 @@ export function WorkspacePvvHub({ workspaceId, activeTab, initialOrgUnit }: Prop
 
   return (
     <div className="mx-auto max-w-5xl space-y-8 pb-10">
-      <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-        <div className="min-w-0 space-y-1">
-          <h1 className="font-heading text-3xl font-semibold tracking-tight text-foreground">
-            {activeTab === "vurderinger" ? "Vurderinger" : "Prosesser"}
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            {activeTab === "prosesser"
-              ? "Registeret for alt som skal vurderes, sikres og designes."
-              : "Prioriter, følg status og åpne den neste vurderingen."}
-          </p>
-        </div>
-        <div
-          className="inline-flex w-full shrink-0 rounded-full border border-border/50 bg-background p-1 sm:w-auto"
-          role="tablist"
-          aria-label="Vis vurderinger eller prosesser"
-        >
-          <button
-            id="tab-vurderinger"
-            type="button"
-            role="tab"
-            aria-selected={activeTab === "vurderinger"}
-            onClick={() => setTab("vurderinger")}
-            className={cn(
-              "flex h-10 min-h-[44px] flex-1 items-center justify-center rounded-full px-4 text-sm font-medium transition-colors sm:h-9 sm:min-h-0 sm:flex-initial",
-              activeTab === "vurderinger"
-                ? "bg-foreground text-background"
-                : "text-muted-foreground hover:text-foreground",
-            )}
-          >
-            Vurderinger
-          </button>
-          <button
-            id="tab-prosesser"
-            type="button"
-            role="tab"
-            aria-selected={activeTab === "prosesser"}
-            onClick={() => setTab("prosesser")}
-            className={cn(
-              "flex h-10 min-h-[44px] flex-1 items-center justify-center rounded-full px-4 text-sm font-medium transition-colors sm:h-9 sm:min-h-0 sm:flex-initial",
-              activeTab === "prosesser"
-                ? "bg-foreground text-background"
-                : "text-muted-foreground hover:text-foreground",
-            )}
-          >
-            Prosesser
-          </button>
-        </div>
+      <header className="min-w-0 space-y-1">
+        <h1 className="font-heading text-3xl font-semibold tracking-tight text-foreground">
+          {activeTab === "vurderinger" ? "Vurderinger" : "Prosesser"}
+        </h1>
+        <p className="text-sm text-muted-foreground">
+          {activeTab === "prosesser"
+            ? "Registeret for alt som skal vurderes, sikres og designes."
+            : "Prioriter, følg status og åpne den neste vurderingen."}
+        </p>
       </header>
 
       {initialOrgUnit ? (
@@ -141,14 +95,7 @@ export function WorkspacePvvHub({ workspaceId, activeTab, initialOrgUnit }: Prop
         </div>
       ) : null}
 
-      <div
-        role="tabpanel"
-        id={activeTab === "vurderinger" ? "panel-vurderinger" : "panel-prosesser"}
-        aria-labelledby={
-          activeTab === "vurderinger" ? "tab-vurderinger" : "tab-prosesser"
-        }
-        className="min-h-0"
-      >
+      <div className="min-h-0">
         {activeTab === "vurderinger" ? (
           <WorkspaceAssessmentsPanel
             workspaceId={workspaceId}

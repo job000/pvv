@@ -15,7 +15,7 @@ export default function WorkspaceSettingsPage() {
           Innstillinger
         </h1>
         <p className="text-sm text-muted-foreground">
-          Navn, tilgang og integrasjoner for arbeidsområdet.
+          Navn, detaljer og integrasjoner for arbeidsområdet.
         </p>
       </header>
       <WorkspaceSettingsPanel workspaceId={workspaceId} />

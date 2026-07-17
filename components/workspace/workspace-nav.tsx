@@ -2,7 +2,6 @@
 
 import type { ComponentType } from "react";
 import { cn } from "@/lib/utils";
-import { SearchInput } from "@/components/ui/search-input";
 import type { Id } from "@/convex/_generated/dataModel";
 import {
   Building2,
@@ -18,7 +17,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
-import { Suspense, useMemo, useState } from "react";
+import { Suspense } from "react";
 
 type NavKind = "default" | "vurderinger" | "prosesser" | "prosessdesign";
 
@@ -30,16 +29,29 @@ type NavItem = {
   kind: NavKind;
 };
 
-function navSections(wid: string): { heading: string; items: NavItem[] }[] {
+function navSections(wid: string): { heading: string | null; items: NavItem[] }[] {
   return [
     {
-      heading: "Oversikt",
+      heading: null,
       items: [
         {
           href: `/w/${wid}`,
-          label: "Dashboard",
+          label: "Hjem",
           icon: LayoutDashboard,
           exact: true,
+          kind: "default",
+        },
+      ],
+    },
+    {
+      // Rekkefølgen speiler arbeidsflyten: innsamling → register → vurdering → design → risiko.
+      heading: "Arbeidsflyt",
+      items: [
+        {
+          href: `/w/${wid}/skjemaer`,
+          label: "Skjemaer",
+          icon: FileText,
+          exact: false,
           kind: "default",
         },
         {
@@ -56,18 +68,6 @@ function navSections(wid: string): { heading: string; items: NavItem[] }[] {
           exact: false,
           kind: "vurderinger",
         },
-      ],
-    },
-    {
-      heading: "Dokumentasjon",
-      items: [
-        {
-          href: `/w/${wid}/ros`,
-          label: "Risiko (ROS)",
-          icon: Shield,
-          exact: false,
-          kind: "default",
-        },
         {
           href: `/w/${wid}/prosessdesign`,
           label: "Prosessdesign",
@@ -76,21 +76,21 @@ function navSections(wid: string): { heading: string; items: NavItem[] }[] {
           kind: "prosessdesign",
         },
         {
-          href: `/w/${wid}/pdf-forhandsvisning`,
-          label: "PDF-forhåndsvisning",
-          icon: Eye,
+          href: `/w/${wid}/ros`,
+          label: "Risiko (ROS)",
+          icon: Shield,
           exact: false,
           kind: "default",
         },
       ],
     },
     {
-      heading: "Admin",
+      heading: "Arbeidsområde",
       items: [
         {
-          href: `/w/${wid}/skjemaer`,
-          label: "Skjemaer",
-          icon: FileText,
+          href: `/w/${wid}/pdf-forhandsvisning`,
+          label: "PDF-eksport",
+          icon: Eye,
           exact: false,
           kind: "default",
         },
@@ -174,19 +174,6 @@ function WorkspaceNavInner({
   const wid = String(workspaceId);
   const sections = navSections(wid);
   const fane = searchParams.get("fane");
-  const [navQuery, setNavQuery] = useState("");
-  const navQueryNorm = navQuery.trim().toLowerCase();
-  const visibleSections = useMemo(() => {
-    if (!navQueryNorm) return sections;
-    return sections
-      .map((section) => ({
-        ...section,
-        items: section.items.filter((item) =>
-          item.label.toLowerCase().includes(navQueryNorm),
-        ),
-      }))
-      .filter((section) => section.items.length > 0);
-  }, [sections, navQueryNorm]);
 
   return (
     <nav
@@ -197,32 +184,19 @@ function WorkspaceNavInner({
       aria-label="Arbeidsområde"
     >
       <div className="shrink-0 border-b border-border/50 px-1 pb-3">
-        <p className="text-muted-foreground text-[0.65rem] font-semibold uppercase tracking-[0.12em]">
-          Arbeidsområde
-        </p>
-        <p className="mt-1.5 truncate font-heading text-sm font-semibold leading-tight tracking-tight">
+        <p className="truncate font-heading text-sm font-semibold leading-tight tracking-tight">
           {workspaceName ?? "…"}
         </p>
-        <SearchInput
-          value={navQuery}
-          onChange={(e) => setNavQuery(e.target.value)}
-          placeholder="Hopp til side …"
-          className="mt-2 h-9 rounded-full"
-          aria-label="Søk i arbeidsområdemeny"
-        />
       </div>
-      <ul className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto overflow-x-hidden py-2 [scrollbar-gutter:stable] [scrollbar-width:thin]">
-        {visibleSections.length === 0 ? (
-          <li className="px-3 py-2 text-xs text-muted-foreground">
-            Ingen treff i menyen.
-          </li>
-        ) : null}
-        {visibleSections.map((section) => (
-          <li key={section.heading}>
-            <div role="group" aria-label={section.heading}>
-              <p className="text-muted-foreground px-3 pb-1.5 text-[0.6rem] font-semibold uppercase tracking-[0.14em]">
-                {section.heading}
-              </p>
+      <ul className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto overflow-x-hidden py-2 [scrollbar-gutter:stable] [scrollbar-width:thin]">
+        {sections.map((section, sectionIdx) => (
+          <li key={section.heading ?? `section-${sectionIdx}`}>
+            <div role="group" aria-label={section.heading ?? undefined}>
+              {section.heading ? (
+                <p className="text-muted-foreground px-3 pb-1.5 text-[0.6rem] font-semibold uppercase tracking-[0.14em]">
+                  {section.heading}
+                </p>
+              ) : null}
               <ul className="flex flex-col gap-0.5">
                 {section.items.map(({ href, label, icon: Icon, exact, kind }) => {
                   const active = isActive(

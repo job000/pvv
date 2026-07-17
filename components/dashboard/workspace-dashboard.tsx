@@ -131,7 +131,7 @@ export function WorkspaceDashboardGrid({
                 onChange={(e) => setName(e.target.value)}
                 placeholder="F.eks. Klinikk, prosjekt eller avdeling"
                 autoFocus
-                className="h-11 w-full rounded-xl border border-border/50 bg-background px-3.5 text-sm outline-none transition-shadow focus:ring-2 focus:ring-foreground/15"
+                className="h-11 w-full rounded-full border border-border/50 bg-background px-4 text-sm outline-none transition-shadow focus:ring-2 focus:ring-foreground/15"
               />
             </label>
             <div className="flex gap-2">
@@ -165,14 +165,14 @@ export function WorkspaceDashboardGrid({
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
             <label className="relative min-w-0 flex-1">
               <Search
-                className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
+                className="pointer-events-none absolute left-4 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
                 aria-hidden
               />
               <input
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Søk i navn…"
-                className="h-10 w-full rounded-xl border border-border/50 bg-background pl-9 pr-3 text-sm outline-none focus:ring-2 focus:ring-foreground/15"
+                placeholder="Søk i navn"
+                className="h-11 w-full rounded-full border border-border/50 bg-background pl-10 pr-4 text-sm outline-none focus:ring-2 focus:ring-foreground/15"
               />
             </label>
             <select
@@ -188,7 +188,7 @@ export function WorkspaceDashboardGrid({
                     | "viewer",
                 )
               }
-              className="h-10 rounded-xl border border-border/50 bg-background px-3 text-sm"
+              className="h-11 rounded-full border border-border/50 bg-background px-4 text-sm"
             >
               <option value="all">Alle roller</option>
               <option value="owner">Eier</option>
@@ -202,7 +202,7 @@ export function WorkspaceDashboardGrid({
               onChange={(e) =>
                 setSortBy(e.target.value as "name_asc" | "name_desc" | "recent")
               }
-              className="h-10 rounded-xl border border-border/50 bg-background px-3 text-sm"
+              className="h-11 rounded-full border border-border/50 bg-background px-4 text-sm"
             >
               <option value="name_asc">Navn A–Å</option>
               <option value="name_desc">Navn Å–A</option>

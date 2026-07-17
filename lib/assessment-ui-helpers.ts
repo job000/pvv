@@ -3,31 +3,36 @@ import type { ComplianceStatusKey } from "@/lib/helsesector-labels";
 
 const rtf = new Intl.RelativeTimeFormat("nb-NO", { numeric: "auto" });
 
+/** Intl på nb-NO sier «døgn» for dager — «dager» er det folk faktisk sier. */
+function humanizeRelative(text: string): string {
+  return text.replace(/\bdøgn\b/g, "dager");
+}
+
 /** «Oppdatert for 2 timer siden» — kort og lesbart. */
 export function formatRelativeUpdatedAt(updatedAtMs: number): string {
   const now = Date.now();
   const diffSec = Math.round((now - updatedAtMs) / 1000);
   if (diffSec < 45) {
-    return rtf.format(-Math.max(1, diffSec), "second");
+    return humanizeRelative(rtf.format(-Math.max(1, diffSec), "second"));
   }
   const diffMin = Math.round(diffSec / 60);
   if (diffMin < 60) {
-    return rtf.format(-diffMin, "minute");
+    return humanizeRelative(rtf.format(-diffMin, "minute"));
   }
   const diffHour = Math.round(diffMin / 60);
   if (diffHour < 24) {
-    return rtf.format(-diffHour, "hour");
+    return humanizeRelative(rtf.format(-diffHour, "hour"));
   }
   const diffDay = Math.round(diffHour / 24);
   if (diffDay < 14) {
-    return rtf.format(-diffDay, "day");
+    return humanizeRelative(rtf.format(-diffDay, "day"));
   }
   const diffWeek = Math.round(diffDay / 7);
   if (diffWeek < 8) {
-    return rtf.format(-diffWeek, "week");
+    return humanizeRelative(rtf.format(-diffWeek, "week"));
   }
   const diffMonth = Math.round(diffDay / 30);
-  return rtf.format(-diffMonth, "month");
+  return humanizeRelative(rtf.format(-diffMonth, "month"));
 }
 
 function isComplianceSettled(s: ComplianceStatusKey): boolean {
