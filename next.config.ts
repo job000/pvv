@@ -46,7 +46,16 @@ const nextConfig: NextConfig = {
    * prosjektets `node_modules` kan bryte Next.js sin webpack-kjede for CSS
    * (mini-css-extract-plugin: «You forgot to add MiniCssExtractPlugin»).
    */
-  webpack: (config) => {
+  webpack: (config, { dev }) => {
+    /**
+     * pdfjs-dist (via react-pdf) krasjer i Next webpack-dev med eval-* source maps:
+     * «Object.defineProperty called on non-object».
+     * https://github.com/webpack/webpack/issues/20095
+     */
+    if (dev) {
+      config.devtool = "cheap-module-source-map";
+    }
+
     config.resolve = config.resolve ?? {};
     config.resolve.alias = {
       ...config.resolve.alias,

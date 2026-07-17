@@ -3,7 +3,7 @@
 import { BrandMark } from "@/components/brand-mark";
 import { ThemeModeToggle } from "@/components/theme-mode-toggle";
 import { Button, buttonVariants } from "@/components/ui/button";
-import { PdfBlobViewer } from "@/components/ui/pdf-blob-viewer";
+import { PdfBlobViewer } from "@/components/ui/pdf-blob-viewer-dynamic";
 import { buildAssessmentPdfBlob } from "@/lib/assessment-pdf";
 import { cn } from "@/lib/utils";
 import {

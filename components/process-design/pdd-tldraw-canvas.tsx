@@ -11,6 +11,7 @@ import {
 } from "@tldraw/tldraw";
 import type { ArrowShapeUtil, Editor } from "@tldraw/tldraw";
 import {
+  beginPddDiagramClear,
   endPddDiagramClear,
   isPddDiagramClearInProgress,
   resolvePddDiagramSnapshot,
@@ -63,12 +64,22 @@ function syncEditorViewport(editor: Editor) {
   editor.updateViewportScreenBounds(canvas ?? container);
 }
 
+function clearAllShapesOnPage(editor: Editor) {
+  try {
+    const ids = [...editor.getCurrentPageShapeIds()];
+    if (ids.length > 0) {
+      editor.deleteShapes(ids);
+    }
+    editor.selectNone();
+    editor.clearHistory();
+  } catch (err) {
+    console.error("[pdd-diagram] clearAllShapesOnPage failed", err);
+  }
+}
+
 /**
  * Concepts-lignende freehand: trykkfølsom blyant, palm rejection, lengre streker.
- * Apple Pencil aktiverer pen-modus og bytter til tegneverktøy fra select/hand.
- *
- * Merk: Apple Pencil «dobbelttrykk på pennen» (barrel) er ikke eksponert i Safari.
- * Vi støtter derfor dobbelttrykk med Pencil-spissen på lerretet → bytt blyant/viskelær.
+ * Dobbelttrykk med Pencil-spissen på lerretet bytter blyant/viskelær (Safari eksponerer ikke barrel-tap).
  */
 function configurePddFreehandDrawing(editor: Editor, readOnly: boolean) {
   const drawUtil = editor.getShapeUtil("draw") as DrawShapeUtil | undefined;
@@ -221,8 +232,7 @@ export function PddTldrawCanvas({
   instanceKey,
   diagramKind,
   layoutVariant = "embed",
-  /** Økes ved «Tøm diagram» — remounter hele canvas med tom store (samme effekt som fullskjerm). */
-  clearNonce = 0,
+  onClearNowReady,
   className,
 }: {
   snapshotJson: string | undefined;
@@ -231,26 +241,16 @@ export function PddTldrawCanvas({
   instanceKey: string;
   diagramKind?: "asIs" | "toBe";
   layoutVariant?: "embed" | "fullscreen";
-  clearNonce?: number;
+  /** Registrer funksjon som tømmer lerretet in-place (ingen remount). */
+  onClearNowReady?: (clearNow: (() => void) | null) => void;
   className?: string;
 }) {
-  /**
-   * Under tøm-remount: ikke flush gamle former fra forrige store-instans.
-   * Settes synkront i useMemo (før React cleanups).
-   */
   const suppressFlushRef = useRef(false);
 
   const store = useMemo(() => {
-    const clearing = clearNonce > 0;
-    if (clearing) {
-      suppressFlushRef.current = true;
-    }
-    // Ved tøm: ignorer live-cache/snapshot — alltid blank store
-    const source = clearing
-      ? undefined
-      : diagramKind
-        ? resolvePddDiagramSnapshot(instanceKey, diagramKind, snapshotJson)
-        : snapshotJson;
+    const source = diagramKind
+      ? resolvePddDiagramSnapshot(instanceKey, diagramKind, snapshotJson)
+      : snapshotJson;
     const snap = parsePddTldrawDocumentSnapshot(source);
     return createTLStore({
       shapeUtils: [
@@ -261,7 +261,7 @@ export function PddTldrawCanvas({
       ...(snap ? { snapshot: snap } : {}),
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [instanceKey, clearNonce]);
+  }, [instanceKey]);
 
   const licenseKey = process.env.NEXT_PUBLIC_TLDRAW_LICENSE_KEY;
 
@@ -276,17 +276,11 @@ export function PddTldrawCanvas({
   }, [readOnly]);
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const lastSentRef = useRef<string | null>(
-    clearNonce > 0 ? "" : (snapshotJson ?? null),
-  );
+  const lastSentRef = useRef<string | null>(snapshotJson ?? null);
 
   useEffect(() => {
-    if (clearNonce > 0) {
-      lastSentRef.current = "";
-      return;
-    }
     lastSentRef.current = snapshotJson ?? null;
-  }, [snapshotJson, clearNonce]);
+  }, [snapshotJson]);
 
   const writeLiveCache = useCallback(
     (json: string) => {
@@ -295,6 +289,47 @@ export function PddTldrawCanvas({
     },
     [diagramKind, instanceKey],
   );
+
+  const clearNow = useCallback(() => {
+    if (debounceRef.current) {
+      clearTimeout(debounceRef.current);
+      debounceRef.current = null;
+    }
+
+    if (diagramKind) {
+      beginPddDiagramClear(instanceKey, diagramKind);
+    }
+    suppressFlushRef.current = true;
+
+    const ed = editorRef.current;
+    if (ed) {
+      clearAllShapesOnPage(ed);
+      requestAnimationFrame(() => {
+        try {
+          syncEditorViewport(ed);
+        } catch {
+          /* ignore */
+        }
+      });
+    }
+
+    writeLiveCache("");
+    lastSentRef.current = "";
+    onSnapshotChange?.("");
+
+    suppressFlushRef.current = false;
+    if (diagramKind) {
+      // Kort delay: la eventuelle pending listen-callbacks falle gjennom suppress
+      window.setTimeout(() => {
+        endPddDiagramClear(instanceKey, diagramKind);
+      }, 100);
+    }
+  }, [diagramKind, instanceKey, onSnapshotChange, writeLiveCache]);
+
+  useEffect(() => {
+    onClearNowReady?.(clearNow);
+    return () => onClearNowReady?.(null);
+  }, [clearNow, onClearNowReady]);
 
   const flushToParent = useCallback(() => {
     if (!onSnapshotChange || readOnly) return;
@@ -347,13 +382,11 @@ export function PddTldrawCanvas({
         clearTimeout(debounceRef.current);
         debounceRef.current = null;
       }
-      // Kritisk: ved tøm må gamle former ALDRI skrives tilbake (også fra forrige React-instans)
-      const clearing =
+      if (
         suppressFlushRef.current ||
-        clearNonce > 0 ||
         (diagramKind != null &&
-          isPddDiagramClearInProgress(instanceKey, diagramKind));
-      if (clearing) {
+          isPddDiagramClearInProgress(instanceKey, diagramKind))
+      ) {
         writeLiveCache("");
         lastSentRef.current = "";
         return;
@@ -374,43 +407,24 @@ export function PddTldrawCanvas({
     onSnapshotChange,
     flushToParent,
     writeLiveCache,
-    clearNonce,
     diagramKind,
     instanceKey,
   ]);
 
   useEffect(() => {
     if (!diagramKind) return;
-    if (clearNonce > 0 || !snapshotJson?.trim()) {
+    if (!snapshotJson?.trim()) {
       setPddDiagramLiveSnapshot(instanceKey, diagramKind, "");
       return;
     }
-    if (suppressFlushRef.current) return;
-    writeLiveCache(snapshotJson);
-  }, [diagramKind, snapshotJson, instanceKey, writeLiveCache, clearNonce]);
-
-  // Etter tøm-remount: parent/cache blank, tillat tegning igjen
-  useLayoutEffect(() => {
-    if (clearNonce === 0) {
-      suppressFlushRef.current = false;
+    if (
+      suppressFlushRef.current ||
+      isPddDiagramClearInProgress(instanceKey, diagramKind)
+    ) {
       return;
     }
-    if (debounceRef.current) {
-      clearTimeout(debounceRef.current);
-      debounceRef.current = null;
-    }
-    writeLiveCache("");
-    lastSentRef.current = "";
-    onSnapshotChange?.("");
-    // Slip global + lokal suppress etter at gamle instansers cleanups er ferdige
-    const t = window.setTimeout(() => {
-      suppressFlushRef.current = false;
-      if (diagramKind) {
-        endPddDiagramClear(instanceKey, diagramKind);
-      }
-    }, 50);
-    return () => window.clearTimeout(t);
-  }, [clearNonce, onSnapshotChange, writeLiveCache, diagramKind, instanceKey]);
+    writeLiveCache(snapshotJson);
+  }, [diagramKind, snapshotJson, instanceKey, writeLiveCache]);
 
   useEffect(() => {
     const shell = containerRef.current;
@@ -587,8 +601,6 @@ export function PddTldrawCanvas({
       )}
     >
       <Tldraw
-        // clearNonce i key → destruer WebGL-canvas og bygg blankt på nytt
-        key={`${instanceKey}:c${clearNonce}`}
         licenseKey={licenseKey}
         store={store}
         shapeUtils={[PddDrawShapeUtil]}

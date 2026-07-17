@@ -2,7 +2,7 @@
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { PdfBlobViewer } from "@/components/ui/pdf-blob-viewer";
+import { PdfBlobViewer } from "@/components/ui/pdf-blob-viewer-dynamic";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import { formatRelativeUpdatedAt } from "@/lib/assessment-ui-helpers";

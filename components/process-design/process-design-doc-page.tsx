@@ -20,7 +20,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { PdfBlobViewer } from "@/components/ui/pdf-blob-viewer";
+import { PdfBlobViewer } from "@/components/ui/pdf-blob-viewer-dynamic";
 import { RichTextEditor } from "@/components/ui/rich-text-editor";
 import { SearchInput } from "@/components/ui/search-input";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
@@ -46,7 +46,6 @@ import {
   buildProcessDesignPdfPreviewUrl,
   downloadProcessDesignPdf,
 } from "@/lib/process-design-pdf";
-import { beginPddDiagramClear } from "@/lib/pdd-diagram-live-cache";
 import { cn } from "@/lib/utils";
 import { useMutation, useQuery } from "convex/react";
 import {
@@ -381,9 +380,11 @@ function ProcessTextDiagramBlock({
     [tabKey],
   );
   const [diagramFullscreen, setDiagramFullscreen] = useState(false);
-  /** clearNonce knyttes til instanceKey — ny revisjon starter på 0 uten ekstra effect. */
-  const [clearState, setClearState] = useState({ key: instanceKey, n: 0 });
-  const clearNonce = clearState.key === instanceKey ? clearState.n : 0;
+  const [clearConfirmOpen, setClearConfirmOpen] = useState(false);
+  const clearNowRef = useRef<(() => void) | null>(null);
+  const registerClearNow = useCallback((fn: (() => void) | null) => {
+    clearNowRef.current = fn;
+  }, []);
   const isMobileViewport = useSyncExternalStore(
     subscribeMobileViewport,
     getMobileViewport,
@@ -395,14 +396,21 @@ function ProcessTextDiagramBlock({
     setDiagramFullscreen((current) => !current);
   }, []);
 
-  const clearDiagram = useCallback(() => {
+  const requestClearDiagram = useCallback(() => {
     if (!canEdit) return;
-    if (!confirm("Slette alt i diagrammet?")) return;
-    // 1) Blokker flush fra gammel canvas  2) tøm parent  3) remount med tom store
-    beginPddDiagramClear(instanceKey, diagramKind);
-    onDiagramJson("");
-    setClearState({ key: instanceKey, n: clearNonce + 1 });
-  }, [canEdit, clearNonce, diagramKind, instanceKey, onDiagramJson]);
+    setClearConfirmOpen(true);
+  }, [canEdit]);
+
+  const confirmClearDiagram = useCallback(() => {
+    setClearConfirmOpen(false);
+    try {
+      // In-place sletting — ingen remount (remount + native confirm krasjet siden)
+      clearNowRef.current?.();
+      onDiagramJson("");
+    } catch (err) {
+      console.error("[pdd] Tøm diagram feilet", err);
+    }
+  }, [onDiagramJson]);
 
   useEffect(() => {
     if (mode !== "diagram") {
@@ -466,7 +474,7 @@ function ProcessTextDiagramBlock({
                   size="sm"
                   variant="ghost"
                   className="h-9 justify-center text-xs text-muted-foreground sm:h-8"
-                  onClick={clearDiagram}
+                  onClick={requestClearDiagram}
                 >
                   Tøm diagram
                 </Button>
@@ -498,13 +506,13 @@ function ProcessTextDiagramBlock({
               </div>
             ) : (
               <PddTldrawCanvas
-                key={`embed-${instanceKey}-c${clearNonce}`}
+                key={`embed-${instanceKey}`}
                 snapshotJson={diagramValue}
                 onSnapshotChange={onDiagramJson}
                 readOnly={!canEdit}
                 instanceKey={instanceKey}
                 diagramKind={diagramKind}
-                clearNonce={clearNonce}
+                onClearNowReady={registerClearNow}
                 layoutVariant="embed"
               />
             )}
@@ -516,6 +524,41 @@ function ProcessTextDiagramBlock({
           beskrivelse.
         </div>
       )}
+
+      <Dialog open={clearConfirmOpen} onOpenChange={setClearConfirmOpen}>
+        <DialogContent size="sm" titleId={`${instanceKey}-clear-diagram-title`}>
+          <DialogHeader>
+            <p
+              id={`${instanceKey}-clear-diagram-title`}
+              className="font-heading text-lg font-semibold"
+            >
+              Tøm diagram?
+            </p>
+            <p className="text-sm text-muted-foreground">
+              Alt innhold i diagrammet slettes. Dette kan ikke angres.
+            </p>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              className="rounded-lg"
+              onClick={() => setClearConfirmOpen(false)}
+            >
+              Avbryt
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              className="rounded-lg"
+              onClick={confirmClearDiagram}
+            >
+              Tøm diagram
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <Dialog
         open={diagramDialogOpen}
         onOpenChange={(open) => {
@@ -592,7 +635,7 @@ function ProcessTextDiagramBlock({
                           ? "h-9 sm:h-8"
                           : "h-10 sm:h-9",
                       )}
-                      onClick={clearDiagram}
+                      onClick={requestClearDiagram}
                     >
                       Tøm diagram
                     </Button>
@@ -634,13 +677,13 @@ function ProcessTextDiagramBlock({
               )}
             >
               <PddTldrawCanvas
-                key={`fs-${instanceKey}-c${clearNonce}`}
+                key={`fs-${instanceKey}`}
                 snapshotJson={diagramValue}
                 onSnapshotChange={onDiagramJson}
                 readOnly={!canEdit}
                 instanceKey={instanceKey}
                 diagramKind={diagramKind}
-                clearNonce={clearNonce}
+                onClearNowReady={registerClearNow}
                 layoutVariant="fullscreen"
                 className={cn(
                   "min-h-0 min-w-0 flex-1",
