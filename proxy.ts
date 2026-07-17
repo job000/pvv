@@ -43,8 +43,12 @@ export default convexAuthNextjsMiddleware(
       pathname.startsWith("/f/") ||
       pathname === "/manifest.webmanifest" ||
       pathname === "/sw.js" ||
+      pathname === "/favicon.ico" ||
       pathname === "/icon" ||
-      pathname === "/apple-icon";
+      pathname === "/icon.png" ||
+      pathname === "/apple-icon" ||
+      pathname === "/apple-icon.png" ||
+      pathname.startsWith("/icons/");
 
     if (!isAuth && !isPublicRoute) {
       if (IS_DEV) {
