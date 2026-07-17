@@ -5,9 +5,11 @@ import {
   ProductLoadingBlock,
 } from "@/components/product";
 import { buttonVariants } from "@/components/ui/button-variants";
+import { ListViewModeToggle } from "@/components/ui/list-view-mode-toggle";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import { formatRelativeUpdatedAt } from "@/lib/assessment-ui-helpers";
+import type { ListViewMode } from "@/lib/list-view-mode";
 import { orgSubtreeIds, orgUnitSearchLabel } from "@/lib/org-unit-filter";
 import { useStickyState } from "@/lib/use-sticky-state";
 import { cn } from "@/lib/utils";
@@ -18,10 +20,7 @@ import {
   ChevronLeft,
   ChevronRight,
   FileText,
-  LayoutGrid,
-  List,
   Search,
-  Table2,
 } from "lucide-react";
 import Link from "next/link";
 import { useParams, useSearchParams } from "next/navigation";
@@ -29,7 +28,6 @@ import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 
 type ActivityFilter = "all" | "7d" | "30d";
 type SortBy = "updated_desc" | "updated_asc" | "title_asc";
-type ViewMode = "cards" | "list" | "table";
 type PageSize = 6 | 10 | 20;
 
 const PAGE_SIZES: PageSize[] = [6, 10, 20];
@@ -72,7 +70,7 @@ function ProcessDesignHubBody() {
   );
   const [activityFilter, setActivityFilter] = useState<ActivityFilter>("all");
   const [sortBy, setSortBy] = useState<SortBy>("updated_desc");
-  const [viewMode, setViewMode] = useStickyState<ViewMode>(
+  const [viewMode, setViewMode] = useStickyState<ListViewMode>(
     `pdd-hub:${wid}:view`,
     "list",
   );
@@ -360,19 +358,7 @@ function ProcessDesignHubBody() {
               )}
 
               <div className="flex flex-wrap items-center gap-2">
-                <label className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <span className="sr-only sm:not-sr-only">Visning</span>
-                  <select
-                    aria-label="Visningsmodus"
-                    value={viewMode}
-                    onChange={(e) => setViewMode(e.target.value as ViewMode)}
-                    className={cn(selectClass, "min-w-[8.5rem]")}
-                  >
-                    <option value="cards">Kort</option>
-                    <option value="list">Liste</option>
-                    <option value="table">Tabell</option>
-                  </select>
-                </label>
+                <ListViewModeToggle value={viewMode} onChange={setViewMode} />
                 <label className="flex items-center gap-2 text-sm text-muted-foreground">
                   <span className="sr-only sm:not-sr-only">Per side</span>
                   <select
@@ -390,36 +376,6 @@ function ProcessDesignHubBody() {
                     ))}
                   </select>
                 </label>
-                <div
-                  className="hidden items-center gap-0.5 rounded-lg border border-border/50 bg-muted/30 p-1 sm:inline-flex"
-                  role="group"
-                  aria-label="Hurtigvisning"
-                >
-                  {(
-                    [
-                      { value: "cards" as const, label: "Kort", Icon: LayoutGrid },
-                      { value: "list" as const, label: "Liste", Icon: List },
-                      { value: "table" as const, label: "Tabell", Icon: Table2 },
-                    ] as const
-                  ).map(({ value, label, Icon }) => (
-                    <button
-                      key={value}
-                      type="button"
-                      title={label}
-                      aria-label={label}
-                      aria-pressed={viewMode === value}
-                      className={cn(
-                        "flex size-9 items-center justify-center rounded-md transition-colors",
-                        viewMode === value
-                          ? "bg-background text-foreground shadow-sm"
-                          : "text-muted-foreground hover:text-foreground",
-                      )}
-                      onClick={() => setViewMode(value)}
-                    >
-                      <Icon className="size-4" aria-hidden />
-                    </button>
-                  ))}
-                </div>
               </div>
             </div>
           </div>

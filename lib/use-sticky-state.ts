@@ -1,24 +1,52 @@
 import { useCallback, useState } from "react";
 
-const store = new Map<string, unknown>();
+const memoryStore = new Map<string, unknown>();
+const LS_PREFIX = "pvv-sticky:";
+
+function readStored<T>(key: string, defaultValue: T): T {
+  if (typeof window !== "undefined") {
+    try {
+      const raw = window.localStorage.getItem(LS_PREFIX + key);
+      if (raw != null) {
+        return JSON.parse(raw) as T;
+      }
+    } catch {
+      /* ignore corrupt storage */
+    }
+  }
+  if (memoryStore.has(key)) {
+    return memoryStore.get(key) as T;
+  }
+  return defaultValue;
+}
+
+function writeStored<T>(key: string, value: T) {
+  memoryStore.set(key, value);
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(LS_PREFIX + key, JSON.stringify(value));
+  } catch {
+    /* quota / private mode */
+  }
+}
 
 /**
- * Like useState but the value survives component unmount/remount within the
- * same browser session (stored in a module-level Map, not persisted to disk).
+ * Like useState, but remembers the value across remounts and page reloads
+ * (module Map + localStorage).
  */
 export function useStickyState<T>(
   key: string,
   defaultValue: T,
 ): [T, (next: T | ((prev: T) => T)) => void] {
-  const [value, setValueRaw] = useState<T>(
-    () => (store.get(key) as T | undefined) ?? defaultValue,
+  const [value, setValueRaw] = useState<T>(() =>
+    readStored(key, defaultValue),
   );
   const setValue = useCallback(
     (next: T | ((prev: T) => T)) => {
       setValueRaw((prev) => {
         const resolved =
           typeof next === "function" ? (next as (p: T) => T)(prev) : next;
-        store.set(key, resolved);
+        writeStored(key, resolved);
         return resolved;
       });
     },

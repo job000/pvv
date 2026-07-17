@@ -1,8 +1,10 @@
 "use client";
 
+import { ListViewModeToggle } from "@/components/ui/list-view-mode-toggle";
 import { WorkspaceDeleteDialog } from "@/components/workspace/workspace-delete-dialog";
 import { api } from "@/convex/_generated/api";
 import type { Doc, Id } from "@/convex/_generated/dataModel";
+import type { ListViewMode } from "@/lib/list-view-mode";
 import { useStickyState } from "@/lib/use-sticky-state";
 import { cn } from "@/lib/utils";
 import { useMutation } from "convex/react";
@@ -11,14 +13,11 @@ import {
   ArrowUpRight,
   ChevronLeft,
   ChevronRight,
-  LayoutGrid,
-  List,
   MoreHorizontal,
   Plus,
   Search,
   Settings,
   Star,
-  Table2,
   Trash2,
 } from "lucide-react";
 import Link from "next/link";
@@ -34,7 +33,6 @@ const ROLE_LABELS: Record<string, string> = {
 
 const PAGE_SIZES = [6, 10, 20] as const;
 type PageSize = (typeof PAGE_SIZES)[number];
-type ViewMode = "cards" | "list" | "table";
 
 type WorkspaceRow = {
   workspace: Doc<"workspaces">;
@@ -156,7 +154,7 @@ export function WorkspaceDashboardGrid({
   const [sortBy, setSortBy] = useState<"name_asc" | "name_desc" | "recent">(
     "name_asc",
   );
-  const [viewMode, setViewMode] = useStickyState<ViewMode>(
+  const [viewMode, setViewMode] = useStickyState<ListViewMode>(
     "dashboard-ws-view",
     "cards",
   );
@@ -372,19 +370,7 @@ export function WorkspaceDashboardGrid({
             )}
 
             <div className="flex flex-wrap items-center gap-2">
-              <label className="flex items-center gap-2 text-sm text-muted-foreground">
-                <span className="sr-only sm:not-sr-only">Visning</span>
-                <select
-                  aria-label="Visningsmodus"
-                  value={viewMode}
-                  onChange={(e) => setViewMode(e.target.value as ViewMode)}
-                  className={cn(selectClass, "min-w-[8.5rem]")}
-                >
-                  <option value="cards">Kort</option>
-                  <option value="list">Liste</option>
-                  <option value="table">Tabell</option>
-                </select>
-              </label>
+              <ListViewModeToggle value={viewMode} onChange={setViewMode} />
               <label className="flex items-center gap-2 text-sm text-muted-foreground">
                 <span className="sr-only sm:not-sr-only">Per side</span>
                 <select
@@ -402,36 +388,6 @@ export function WorkspaceDashboardGrid({
                   ))}
                 </select>
               </label>
-              <div
-                className="hidden items-center gap-0.5 rounded-2xl border border-border/50 bg-muted/30 p-1 sm:inline-flex"
-                role="group"
-                aria-label="Hurtigvisning"
-              >
-                {(
-                  [
-                    { value: "cards", label: "Kort", Icon: LayoutGrid },
-                    { value: "list", label: "Liste", Icon: List },
-                    { value: "table", label: "Tabell", Icon: Table2 },
-                  ] as const
-                ).map(({ value, label, Icon }) => (
-                  <button
-                    key={value}
-                    type="button"
-                    title={label}
-                    aria-label={label}
-                    aria-pressed={viewMode === value}
-                    className={cn(
-                      "flex size-9 items-center justify-center rounded-xl transition-colors",
-                      viewMode === value
-                        ? "bg-background text-foreground shadow-sm"
-                        : "text-muted-foreground hover:text-foreground",
-                    )}
-                    onClick={() => setViewMode(value)}
-                  >
-                    <Icon className="size-4" aria-hidden />
-                  </button>
-                ))}
-              </div>
             </div>
           </div>
         ) : null}

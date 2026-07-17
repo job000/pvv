@@ -15,6 +15,7 @@ import { NativeSelectField } from "@/components/ui/native-select-field";
 import { SearchInput } from "@/components/ui/search-input";
 import { FilterToolbar } from "@/components/ui/filter-toolbar";
 import { Label } from "@/components/ui/label";
+import { ListViewModeToggle } from "@/components/ui/list-view-mode-toggle";
 import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/lib/app-toast";
@@ -23,6 +24,7 @@ import type { Doc, Id } from "@/convex/_generated/dataModel";
 import { useAction, useMutation, useQuery } from "convex/react";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { ListViewMode } from "@/lib/list-view-mode";
 import { useStickyState } from "@/lib/use-sticky-state";
 
 import { InviteEmailSuggestInput } from "@/components/user/invite-email-suggest-input";
@@ -838,6 +840,10 @@ export function WorkspaceCandidatesPanel({
   const [orgUnitFilter, setOrgUnitFilter] = useStickyState<
     "" | Id<"orgUnits">
   >(`ws:${workspaceId}:processes:orgFilter`, initialOrgUnit ?? "");
+  const [viewMode, setViewMode] = useStickyState<ListViewMode>(
+    `ws:${workspaceId}:processes:view`,
+    "cards",
+  );
   const appliedOrgUnitRef = useRef(false);
 
   type GithubPreviewData = {
@@ -1874,11 +1880,8 @@ export function WorkspaceCandidatesPanel({
                 <h2 id="prosessregister-oversikt-heading" className="sr-only">
                   Prosesser
                 </h2>
-                {candidates.length + approvedIntakeForProcessregister.length >=
-                  4 ||
-                (orgUnits.length > 0 && candidates.length >= 2) ||
-                candidates.length >= 5 ? (
-                  <div className="flex flex-col gap-3.5 sm:flex-row sm:items-center">
+                <div className="flex flex-col gap-3.5 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+                  <div className="flex min-w-0 flex-1 flex-col gap-3.5 sm:flex-row sm:items-center">
                     {candidates.length +
                       approvedIntakeForProcessregister.length >=
                     4 ? (
@@ -1942,7 +1945,8 @@ export function WorkspaceCandidatesPanel({
                       </select>
                     ) : null}
                   </div>
-                ) : null}
+                  <ListViewModeToggle value={viewMode} onChange={setViewMode} />
+                </div>
               </>
             ) : (
               <h2
@@ -1979,25 +1983,131 @@ export function WorkspaceCandidatesPanel({
 
             {hubMode &&
             (approvedIntakeFiltered.length > 0 ||
-              candidatesFiltered.length > 0) ? (
-              <ul className="flex flex-col gap-4">
+              candidatesFiltered.length > 0) &&
+            viewMode === "table" ? (
+              <div className="overflow-hidden rounded-xl border border-border/50 bg-card">
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[30rem] text-left text-sm">
+                    <thead className="border-b border-border/50 bg-muted/25 text-xs font-medium text-muted-foreground">
+                      <tr>
+                        <th className="px-4 py-2.5 font-medium">Navn</th>
+                        <th className="px-4 py-2.5 font-medium">ID</th>
+                        <th className="px-4 py-2.5 font-medium">Status</th>
+                        <th className="px-4 py-2.5 text-right font-medium">
+                          Åpne
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {approvedIntakeFiltered.map((row) => (
+                        <tr
+                          key={row.submissionId}
+                          className="border-b border-border/40 last:border-0 hover:bg-muted/25"
+                        >
+                          <td className="px-4 py-3">
+                            <Link
+                              href={`/w/${workspaceId}/a/${row.approvedAssessmentId}`}
+                              className="font-medium hover:underline"
+                            >
+                              {row.title}
+                            </Link>
+                          </td>
+                          <td className="px-4 py-3 text-muted-foreground">
+                            Skjema
+                          </td>
+                          <td className="px-4 py-3 text-muted-foreground">
+                            Fra skjema
+                          </td>
+                          <td className="px-4 py-3 text-right">
+                            <Link
+                              href={`/w/${workspaceId}/a/${row.approvedAssessmentId}`}
+                              className="inline-flex size-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+                              aria-label={`Åpne ${row.title}`}
+                            >
+                              <ChevronRight className="size-4" aria-hidden />
+                            </Link>
+                          </td>
+                        </tr>
+                      ))}
+                      {candidatesFiltered.map((c) => {
+                        const orgLabel = candidateOrgUnitLabel(c, orgUnits);
+                        const cov = coverageByCandidateId.get(String(c._id));
+                        const bits = [
+                          orgLabel !== "—" ? orgLabel : null,
+                          (cov?.pvvCount ?? 0) > 0 ? "PVV" : null,
+                          (cov?.rosCount ?? 0) > 0 ? "ROS" : null,
+                        ].filter(Boolean);
+                        return (
+                          <tr
+                            key={c._id}
+                            className="cursor-pointer border-b border-border/40 last:border-0 hover:bg-muted/25"
+                            onClick={() => setEditCandidateId(c._id)}
+                          >
+                            <td className="px-4 py-3 font-medium">{c.name}</td>
+                            <td className="px-4 py-3 font-mono text-xs text-muted-foreground">
+                              {c.code}
+                            </td>
+                            <td className="px-4 py-3 text-muted-foreground">
+                              {bits.join(" · ") || "—"}
+                            </td>
+                            <td className="px-4 py-3 text-right">
+                              <ChevronRight
+                                className="ml-auto size-4 text-muted-foreground/50"
+                                aria-hidden
+                              />
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            ) : null}
+
+            {hubMode &&
+            (approvedIntakeFiltered.length > 0 ||
+              candidatesFiltered.length > 0) &&
+            viewMode !== "table" ? (
+              <ul
+                className={cn(
+                  viewMode === "cards"
+                    ? "grid gap-3 sm:grid-cols-2 xl:grid-cols-3"
+                    : "divide-y divide-border/40 overflow-hidden rounded-2xl border border-border/50 bg-card",
+                )}
+              >
                 {approvedIntakeFiltered.map((row) => (
                   <li key={row.submissionId}>
                     <Link
                       href={`/w/${workspaceId}/a/${row.approvedAssessmentId}`}
-                      className="group flex min-w-0 items-center gap-4 rounded-3xl border border-border/50 bg-card px-6 py-6 shadow-sm transition-colors hover:bg-muted/30 sm:gap-5 sm:px-7 sm:py-7"
+                      className={cn(
+                        "group flex min-w-0 items-center transition-colors",
+                        viewMode === "cards"
+                          ? "h-full gap-4 rounded-xl border border-border/50 bg-card p-4 shadow-sm hover:bg-muted/30 sm:gap-5 sm:p-5"
+                          : "gap-3 px-4 py-3.5 hover:bg-muted/25 sm:gap-4 sm:px-5",
+                      )}
                     >
                       <span
-                        className="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-muted text-sm font-semibold text-foreground"
+                        className={cn(
+                          "flex shrink-0 items-center justify-center bg-muted text-sm font-semibold text-foreground",
+                          viewMode === "cards"
+                            ? "size-12 rounded-2xl"
+                            : "size-9 rounded-lg",
+                        )}
                         aria-hidden
                       >
                         S
                       </span>
-                      <div className="min-w-0 flex-1 space-y-1.5">
-                        <p className="truncate text-base font-medium tracking-tight text-foreground">
+                      <div className="min-w-0 flex-1 space-y-1">
+                        <p
+                          className={cn(
+                            "truncate font-medium tracking-tight text-foreground",
+                            viewMode === "cards" ? "text-base" : "text-sm",
+                          )}
+                        >
                           {row.title}
                         </p>
-                        <p className="text-sm leading-relaxed text-muted-foreground">
+                        <p className="text-xs text-muted-foreground sm:text-sm">
                           Fra skjema
                           {row.githubRepoFullName?.trim() &&
                           row.githubIssueNumber != null
@@ -2006,7 +2116,7 @@ export function WorkspaceCandidatesPanel({
                         </p>
                       </div>
                       <ChevronRight
-                        className="size-5 shrink-0 text-muted-foreground/35 transition-transform group-hover:translate-x-0.5 group-hover:text-foreground"
+                        className="size-4 shrink-0 text-muted-foreground/35 transition-transform group-hover:translate-x-0.5 group-hover:text-foreground sm:size-5"
                         aria-hidden
                       />
                     </Link>
@@ -2037,7 +2147,12 @@ export function WorkspaceCandidatesPanel({
                       <div
                         role="button"
                         tabIndex={0}
-                        className="group flex min-w-0 cursor-pointer items-center gap-4 rounded-3xl border border-border/50 bg-card px-6 py-6 shadow-sm transition-colors hover:bg-muted/30 sm:gap-5 sm:px-7 sm:py-7"
+                        className={cn(
+                          "group flex min-w-0 cursor-pointer items-center transition-colors",
+                          viewMode === "cards"
+                            ? "h-full gap-4 rounded-xl border border-border/50 bg-card p-4 shadow-sm hover:bg-muted/30 sm:gap-5 sm:p-5"
+                            : "gap-3 px-4 py-3.5 hover:bg-muted/25 sm:gap-4 sm:px-5",
+                        )}
                         onClick={() => setEditCandidateId(c._id)}
                         onKeyDown={(e) => {
                           if (e.key === "Enter" || e.key === " ") {
@@ -2048,7 +2163,10 @@ export function WorkspaceCandidatesPanel({
                       >
                         <span
                           className={cn(
-                            "flex size-12 shrink-0 items-center justify-center rounded-2xl text-sm font-semibold",
+                            "flex shrink-0 items-center justify-center text-sm font-semibold",
+                            viewMode === "cards"
+                              ? "size-12 rounded-2xl"
+                              : "size-9 rounded-lg",
                             hasRos && hasPvv
                               ? "bg-foreground text-background"
                               : "bg-muted text-foreground",
@@ -2057,9 +2175,14 @@ export function WorkspaceCandidatesPanel({
                         >
                           {initial}
                         </span>
-                        <div className="min-w-0 flex-1 space-y-1.5">
+                        <div className="min-w-0 flex-1 space-y-1">
                           <div className="flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-1">
-                            <p className="truncate text-base font-medium tracking-tight text-foreground">
+                            <p
+                              className={cn(
+                                "truncate font-medium tracking-tight text-foreground",
+                                viewMode === "cards" ? "text-base" : "text-sm",
+                              )}
+                            >
                               {c.name}
                             </p>
                             <span className="shrink-0 font-mono text-xs text-muted-foreground">
@@ -2067,17 +2190,17 @@ export function WorkspaceCandidatesPanel({
                             </span>
                           </div>
                           {statusBits.length > 0 ? (
-                            <p className="truncate text-sm leading-relaxed text-muted-foreground">
+                            <p className="truncate text-xs text-muted-foreground sm:text-sm">
                               {statusBits.join(" · ")}
                             </p>
                           ) : null}
                         </div>
 
-                        <div className="flex shrink-0 items-center gap-2 pl-1">
+                        <div className="flex shrink-0 items-center gap-1 pl-1 sm:gap-2">
                           {canPreviewGh ? (
                             <button
                               type="button"
-                              className="flex size-11 items-center justify-center rounded-2xl text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                              className="flex size-9 items-center justify-center rounded-xl text-muted-foreground transition-colors hover:bg-muted hover:text-foreground sm:size-11 sm:rounded-2xl"
                               aria-label="Åpne GitHub"
                               onClick={(e) => {
                                 e.stopPropagation();
@@ -2097,7 +2220,7 @@ export function WorkspaceCandidatesPanel({
                               type="button"
                               variant="ghost"
                               size="icon"
-                              className="size-11 rounded-2xl text-muted-foreground hover:text-foreground"
+                              className="size-9 rounded-xl text-muted-foreground hover:text-foreground sm:size-11 sm:rounded-2xl"
                               disabled={rowGithubBusyId === c._id}
                               title="Legg til i GitHub"
                               onClick={(e) => {
@@ -2120,7 +2243,7 @@ export function WorkspaceCandidatesPanel({
                               type="button"
                               variant="ghost"
                               size="icon"
-                              className="size-11 rounded-2xl text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                              className="size-9 rounded-xl text-muted-foreground hover:bg-destructive/10 hover:text-destructive sm:size-11 sm:rounded-2xl"
                               disabled={overviewDeleteBusyId === c._id}
                               aria-label={`Slett ${c.code}`}
                               onClick={(e) => {
@@ -2139,7 +2262,7 @@ export function WorkspaceCandidatesPanel({
                             </Button>
                           ) : null}
                           <ChevronRight
-                            className="ml-1 size-5 text-muted-foreground/35 transition-transform group-hover:translate-x-0.5 group-hover:text-foreground"
+                            className="ml-1 size-4 text-muted-foreground/35 transition-transform group-hover:translate-x-0.5 group-hover:text-foreground sm:size-5"
                             aria-hidden
                           />
                         </div>
@@ -4061,6 +4184,10 @@ export function WorkspaceAssessmentsPanel({
   const [sortBy, setSortBy] = useStickyState<
     "priority" | "updated" | "ap" | "criticality" | "ease"
   >(`ws:${workspaceId}:assessments:sortBy`, "priority");
+  const [viewMode, setViewMode] = useStickyState<ListViewMode>(
+    `ws:${workspaceId}:assessments:view`,
+    "list",
+  );
 
   const appliedOrgUnitRef = useRef(false);
   useEffect(() => {
@@ -4262,76 +4389,81 @@ export function WorkspaceAssessmentsPanel({
           </h2>
         )}
 
-        {assessments.length >= 5 ? (
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-            <SearchInput
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Søk tittel eller enhet"
-              aria-label="Søk i vurderinger"
-              className="h-11 w-full min-w-0 rounded-full border-border/50 sm:max-w-sm"
-            />
-            {assessments.length >= 8 ? (
-              <>
-                {orgUnits.length > 0 ? (
+        {assessments.length > 0 ? (
+          <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+            <div className="flex min-w-0 flex-1 flex-col gap-2 sm:flex-row sm:items-center">
+              {assessments.length >= 5 ? (
+                <SearchInput
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Søk tittel eller enhet"
+                  aria-label="Søk i vurderinger"
+                  className="h-11 w-full min-w-0 rounded-full border-border/50 sm:max-w-sm"
+                />
+              ) : null}
+              {assessments.length >= 8 ? (
+                <>
+                  {orgUnits.length > 0 ? (
+                    <select
+                      className="border-input h-11 w-full rounded-full border border-border/50 bg-background px-4 text-sm sm:w-[12rem]"
+                      value={orgUnitFilter}
+                      onChange={(e) =>
+                        setOrgUnitFilter(
+                          e.target.value === ""
+                            ? ""
+                            : (e.target.value as Id<"orgUnits">),
+                        )
+                      }
+                      aria-label="Filtrer etter organisasjonsenhet"
+                    >
+                      <option value="">Alle enheter</option>
+                      {orgUnits.map((u) => (
+                        <option key={u._id} value={u._id}>
+                          {u.name}
+                        </option>
+                      ))}
+                    </select>
+                  ) : null}
                   <select
                     className="border-input h-11 w-full rounded-full border border-border/50 bg-background px-4 text-sm sm:w-[12rem]"
-                    value={orgUnitFilter}
+                    value={statusFilter}
                     onChange={(e) =>
-                      setOrgUnitFilter(
-                        e.target.value === ""
-                          ? ""
-                          : (e.target.value as Id<"orgUnits">),
-                      )
+                      setStatusFilter(e.target.value as PipelineStatus | "all")
                     }
-                    aria-label="Filtrer etter organisasjonsenhet"
+                    aria-label="Filtrer etter status"
                   >
-                    <option value="">Alle enheter</option>
-                    {orgUnits.map((u) => (
-                      <option key={u._id} value={u._id}>
-                        {u.name}
+                    <option value="all">Alle statuser</option>
+                    {PIPELINE_KANBAN_ORDER.map((s) => (
+                      <option key={s} value={s}>
+                        {PIPELINE_STATUS_LABELS[s]}
                       </option>
                     ))}
                   </select>
-                ) : null}
-                <select
-                  className="border-input h-11 w-full rounded-full border border-border/50 bg-background px-4 text-sm sm:w-[12rem]"
-                  value={statusFilter}
-                  onChange={(e) =>
-                    setStatusFilter(e.target.value as PipelineStatus | "all")
-                  }
-                  aria-label="Filtrer etter status"
-                >
-                  <option value="all">Alle statuser</option>
-                  {PIPELINE_KANBAN_ORDER.map((s) => (
-                    <option key={s} value={s}>
-                      {PIPELINE_STATUS_LABELS[s]}
-                    </option>
-                  ))}
-                </select>
-                <select
-                  className="border-input h-11 w-full rounded-full border border-border/50 bg-background px-4 text-sm sm:w-[11rem]"
-                  value={sortBy}
-                  onChange={(e) =>
-                    setSortBy(
-                      e.target.value as
-                        | "priority"
-                        | "updated"
-                        | "ap"
-                        | "criticality"
-                        | "ease",
-                    )
-                  }
-                  aria-label="Sorter vurderinger"
-                >
-                  <option value="priority">Prioritet</option>
-                  <option value="ap">Gevinst</option>
-                  <option value="criticality">Viktighet</option>
-                  <option value="ease">Implementering</option>
-                  <option value="updated">Sist endret</option>
-                </select>
-              </>
-            ) : null}
+                  <select
+                    className="border-input h-11 w-full rounded-full border border-border/50 bg-background px-4 text-sm sm:w-[11rem]"
+                    value={sortBy}
+                    onChange={(e) =>
+                      setSortBy(
+                        e.target.value as
+                          | "priority"
+                          | "updated"
+                          | "ap"
+                          | "criticality"
+                          | "ease",
+                      )
+                    }
+                    aria-label="Sorter vurderinger"
+                  >
+                    <option value="priority">Prioritet</option>
+                    <option value="ap">Gevinst</option>
+                    <option value="criticality">Viktighet</option>
+                    <option value="ease">Implementering</option>
+                    <option value="updated">Sist endret</option>
+                  </select>
+                </>
+              ) : null}
+            </div>
+            <ListViewModeToggle value={viewMode} onChange={setViewMode} />
           </div>
         ) : null}
 
@@ -4370,6 +4502,200 @@ export function WorkspaceAssessmentsPanel({
               Nullstill
             </button>
           </p>
+        ) : viewMode === "cards" ? (
+          <ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            {filteredAssessments.map((a) => {
+              const pipeline = normalizePipelineStatus(a.pipelineStatus);
+              const prio = effectiveAssessmentPriority(a);
+              const orgLine = orgUnitSearchLabel(
+                a.orgUnitId ?? undefined,
+                orgUnits,
+              );
+              const fromIntake = intakeAssessmentIdSet.has(a._id);
+              return (
+                <li key={a._id} className="min-w-0">
+                  <div className="group relative flex h-full flex-col rounded-xl border border-border/50 bg-card p-4 transition-colors hover:border-border hover:bg-muted/20">
+                    <Link
+                      href={`/w/${workspaceId}/a/${a._id}`}
+                      className="absolute inset-0 z-0 rounded-xl"
+                      aria-label={`Åpne vurdering: ${a.title}`}
+                    />
+                    <div className="pointer-events-none relative z-10 flex items-start justify-between gap-2">
+                      <span
+                        className={cn(
+                          "flex size-10 shrink-0 items-center justify-center rounded-xl text-sm font-semibold tabular-nums",
+                          prio >= 70
+                            ? "bg-foreground text-background"
+                            : "bg-muted text-foreground",
+                        )}
+                        aria-hidden
+                      >
+                        {prio.toFixed(0)}
+                      </span>
+                      <ChevronRight
+                        className="size-4 text-muted-foreground/40 transition-transform group-hover:translate-x-0.5 group-hover:text-foreground"
+                        aria-hidden
+                      />
+                    </div>
+                    <h3 className="pointer-events-none relative z-10 mt-3 line-clamp-2 text-sm font-semibold tracking-tight text-foreground">
+                      {a.title}
+                    </h3>
+                    <p className="pointer-events-none relative z-10 mt-1.5 text-xs text-muted-foreground">
+                      {[
+                        orgLine || null,
+                        fromIntake ? "Fra skjema" : null,
+                        formatRelativeUpdatedAt(a.updatedAt),
+                      ]
+                        .filter(Boolean)
+                        .join(" · ")}
+                    </p>
+                    <div className="pointer-events-auto relative z-10 mt-auto flex items-center justify-between gap-2 pt-4">
+                      {canEditPipeline ? (
+                        <PipelineStatusSelect
+                          assessmentId={a._id}
+                          value={pipeline}
+                          compact
+                        />
+                      ) : (
+                        <Badge
+                          variant="secondary"
+                          className="rounded-full text-[10px] font-medium"
+                        >
+                          {PIPELINE_STATUS_LABELS[pipeline]}
+                        </Badge>
+                      )}
+                      <button
+                        type="button"
+                        className="flex size-9 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+                        title="Slett vurdering"
+                        aria-label={`Slett vurdering ${a.title}`}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (
+                            !window.confirm(
+                              `Slette «${a.title}»?\n\nAlle data fjernes permanent.`,
+                            )
+                          ) {
+                            return;
+                          }
+                          void (async () => {
+                            try {
+                              await deleteAssessment({ assessmentId: a._id });
+                              toast.success("Vurdering slettet.");
+                            } catch (err) {
+                              toast.error(
+                                err instanceof Error
+                                  ? err.message
+                                  : "Kunne ikke slette vurderingen.",
+                              );
+                            }
+                          })();
+                        }}
+                      >
+                        <Trash2 className="size-3.5" aria-hidden />
+                      </button>
+                    </div>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        ) : viewMode === "table" ? (
+          <div className="overflow-hidden rounded-xl border border-border/50 bg-card">
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[32rem] text-left text-sm">
+                <thead className="border-b border-border/50 bg-muted/25 text-xs font-medium text-muted-foreground">
+                  <tr>
+                    <th className="px-4 py-2.5 font-medium">Pri</th>
+                    <th className="px-4 py-2.5 font-medium">Tittel</th>
+                    <th className="px-4 py-2.5 font-medium">Enhet</th>
+                    <th className="px-4 py-2.5 font-medium">Status</th>
+                    <th className="px-4 py-2.5 font-medium">Oppdatert</th>
+                    <th className="px-4 py-2.5 text-right font-medium"> </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredAssessments.map((a) => {
+                    const pipeline = normalizePipelineStatus(a.pipelineStatus);
+                    const prio = effectiveAssessmentPriority(a);
+                    const orgLine = orgUnitSearchLabel(
+                      a.orgUnitId ?? undefined,
+                      orgUnits,
+                    );
+                    return (
+                      <tr
+                        key={a._id}
+                        className="border-b border-border/40 last:border-0 transition-colors hover:bg-muted/25"
+                      >
+                        <td className="px-4 py-3 tabular-nums font-medium">
+                          {prio.toFixed(0)}
+                        </td>
+                        <td className="px-4 py-3">
+                          <Link
+                            href={`/w/${workspaceId}/a/${a._id}`}
+                            className="font-medium text-foreground hover:underline"
+                          >
+                            {a.title}
+                          </Link>
+                        </td>
+                        <td className="px-4 py-3 text-muted-foreground">
+                          {orgLine || "—"}
+                        </td>
+                        <td className="px-4 py-3">
+                          {canEditPipeline ? (
+                            <PipelineStatusSelect
+                              assessmentId={a._id}
+                              value={pipeline}
+                              compact
+                            />
+                          ) : (
+                            <span className="text-muted-foreground">
+                              {PIPELINE_STATUS_LABELS[pipeline]}
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 tabular-nums text-muted-foreground">
+                          {formatRelativeUpdatedAt(a.updatedAt)}
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          <button
+                            type="button"
+                            className="inline-flex size-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+                            aria-label={`Slett ${a.title}`}
+                            onClick={() => {
+                              if (
+                                !window.confirm(
+                                  `Slette «${a.title}»?\n\nAlle data fjernes permanent.`,
+                                )
+                              ) {
+                                return;
+                              }
+                              void (async () => {
+                                try {
+                                  await deleteAssessment({
+                                    assessmentId: a._id,
+                                  });
+                                  toast.success("Vurdering slettet.");
+                                } catch (err) {
+                                  toast.error(
+                                    err instanceof Error
+                                      ? err.message
+                                      : "Kunne ikke slette vurderingen.",
+                                  );
+                                }
+                              })();
+                            }}
+                          >
+                            <Trash2 className="size-3.5" aria-hidden />
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
         ) : (
           <ul className="divide-y divide-border/40 overflow-hidden rounded-2xl border border-border/50 bg-card">
             {filteredAssessments.map((a) => {

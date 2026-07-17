@@ -7,9 +7,11 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { NativeSelectField } from "@/components/ui/native-select-field";
+import { ListViewModeToggle } from "@/components/ui/list-view-mode-toggle";
 import { SearchInput } from "@/components/ui/search-input";
 import { api } from "@/convex/_generated/api";
 import type { Doc, Id } from "@/convex/_generated/dataModel";
+import type { ListViewMode } from "@/lib/list-view-mode";
 import {
   effectiveOrgForRosClient,
   orgSubtreeIds,
@@ -229,6 +231,10 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
   const [analysisSearch, setAnalysisSearch] = useState("");
   const [analysisOrgFilter, setAnalysisOrgFilter] = useStickyState<"" | Id<"orgUnits">>(`ros-ws:${workspaceId}:orgFilter`, rawOrgUnit ?? "");
   const [analysisSort, setAnalysisSort] = useStickyState<AnalysisSort>(`ros-ws:${workspaceId}:sort`, "updated");
+  const [viewMode, setViewMode] = useStickyState<ListViewMode>(
+    `ros-ws:${workspaceId}:view`,
+    "list",
+  );
   const activeAnalysisOrgName = useMemo(() => {
     if (!analysisOrgFilter) return null;
     return orgUnits?.find((u) => u._id === analysisOrgFilter)?.name ?? null;
@@ -791,52 +797,59 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
             </button>
           ) : null}
 
-          {analysesList.length > 5 ? (
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-              <SearchInput
-                value={analysisSearch}
-                onChange={(e) => setAnalysisSearch(e.target.value)}
-                placeholder="Søk …"
-                aria-label="Søk analyser"
-                className="h-10 rounded-xl sm:max-w-xs"
-              />
-              <FilterToolbar>
-                <NativeSelectField
-                  id="ros-ana-org"
-                  label="Enhet"
-                  value={analysisOrgFilter}
-                  onChange={(e) =>
-                    setAnalysisOrgFilter(
-                      e.target.value === ""
-                        ? ""
-                        : (e.target.value as Id<"orgUnits">),
-                    )
-                  }
-                  aria-label="Enhet"
-                  className="min-w-0 flex-1 sm:min-w-[min(100%,12rem)]"
-                >
-                  <option value="">Enhet</option>
-                  {(orgUnits ?? []).map((u) => (
-                    <option key={u._id} value={u._id}>
-                      {u.name}
-                    </option>
-                  ))}
-                </NativeSelectField>
-                <NativeSelectField
-                  id="ros-ana-sort"
-                  label="Sorter"
-                  value={analysisSort}
-                  onChange={(e) =>
-                    setAnalysisSort(e.target.value as AnalysisSort)
-                  }
-                  aria-label="Sorter"
-                  className="min-w-0 sm:w-[min(100%,10rem)]"
-                >
-                  <option value="updated">Nyeste</option>
-                  <option value="title">A–Å</option>
-                  <option value="candidate">Prosess</option>
-                </NativeSelectField>
-              </FilterToolbar>
+          {analysesList.length > 0 ? (
+            <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+              <div className="flex min-w-0 flex-1 flex-col gap-2 sm:flex-row sm:items-center">
+                {analysesList.length > 5 ? (
+                  <>
+                    <SearchInput
+                      value={analysisSearch}
+                      onChange={(e) => setAnalysisSearch(e.target.value)}
+                      placeholder="Søk …"
+                      aria-label="Søk analyser"
+                      className="h-10 rounded-xl sm:max-w-xs"
+                    />
+                    <FilterToolbar>
+                      <NativeSelectField
+                        id="ros-ana-org"
+                        label="Enhet"
+                        value={analysisOrgFilter}
+                        onChange={(e) =>
+                          setAnalysisOrgFilter(
+                            e.target.value === ""
+                              ? ""
+                              : (e.target.value as Id<"orgUnits">),
+                          )
+                        }
+                        aria-label="Enhet"
+                        className="min-w-0 flex-1 sm:min-w-[min(100%,12rem)]"
+                      >
+                        <option value="">Enhet</option>
+                        {(orgUnits ?? []).map((u) => (
+                          <option key={u._id} value={u._id}>
+                            {u.name}
+                          </option>
+                        ))}
+                      </NativeSelectField>
+                      <NativeSelectField
+                        id="ros-ana-sort"
+                        label="Sorter"
+                        value={analysisSort}
+                        onChange={(e) =>
+                          setAnalysisSort(e.target.value as AnalysisSort)
+                        }
+                        aria-label="Sorter"
+                        className="min-w-0 sm:w-[min(100%,10rem)]"
+                      >
+                        <option value="updated">Nyeste</option>
+                        <option value="title">A–Å</option>
+                        <option value="candidate">Prosess</option>
+                      </NativeSelectField>
+                    </FilterToolbar>
+                  </>
+                ) : null}
+              </div>
+              <ListViewModeToggle value={viewMode} onChange={setViewMode} />
             </div>
           ) : null}
 
@@ -855,6 +868,148 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
                 Nullstill
               </button>
             </p>
+          ) : viewMode === "cards" ? (
+            <ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+              {filteredSortedAnalyses.map((a) => {
+                const fromIntake = Boolean(
+                  (a as { fromIntake?: boolean }).fromIntake,
+                );
+                const flat = a.matrixValues
+                  .flat()
+                  .map((v) => Math.min(5, Math.max(0, Math.round(v))));
+                const maxLvl = Math.max(0, ...flat);
+                const riskLabel =
+                  maxLvl >= 5
+                    ? "Kritisk"
+                    : maxLvl >= 4
+                      ? "Høy"
+                      : maxLvl >= 3
+                        ? "Middels"
+                        : maxLvl >= 2
+                          ? "Lav"
+                          : "Ingen";
+                const dotClass =
+                  maxLvl >= 4
+                    ? "bg-red-500"
+                    : maxLvl >= 3
+                      ? "bg-amber-500"
+                      : maxLvl >= 1
+                        ? "bg-emerald-500"
+                        : "bg-muted-foreground/40";
+                return (
+                  <li key={a._id} className="min-w-0">
+                    <Link
+                      href={`/w/${workspaceId}/ros/a/${a._id}`}
+                      className="group flex h-full flex-col rounded-xl border border-border/50 bg-card p-4 transition-colors hover:border-border hover:bg-muted/20"
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <span
+                          className={cn(
+                            "mt-1 size-2.5 shrink-0 rounded-full",
+                            dotClass,
+                          )}
+                          aria-hidden
+                        />
+                        <span
+                          className={cn(
+                            "inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-xs font-semibold tabular-nums",
+                            cellRiskClass(maxLvl),
+                          )}
+                        >
+                          {maxLvl > 0 ? maxLvl : "—"} · {riskLabel}
+                        </span>
+                      </div>
+                      <p className="mt-3 line-clamp-2 text-sm font-semibold text-foreground">
+                        {a.title}
+                      </p>
+                      <p className="mt-1.5 text-xs text-muted-foreground">
+                        {[
+                          a.candidateName
+                            ? a.candidateName
+                            : fromIntake
+                              ? "PVV fra skjema"
+                              : "Frittstående",
+                          formatRelative(a.updatedAt),
+                        ].join(" · ")}
+                      </p>
+                    </Link>
+                  </li>
+                );
+              })}
+            </ul>
+          ) : viewMode === "table" ? (
+            <div className="overflow-hidden rounded-xl border border-border/50 bg-card">
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[30rem] text-left text-sm">
+                  <thead className="border-b border-border/50 bg-muted/25 text-xs font-medium text-muted-foreground">
+                    <tr>
+                      <th className="px-4 py-2.5 font-medium">Analyse</th>
+                      <th className="px-4 py-2.5 font-medium">Prosess</th>
+                      <th className="px-4 py-2.5 font-medium">Risiko</th>
+                      <th className="px-4 py-2.5 font-medium">Oppdatert</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredSortedAnalyses.map((a) => {
+                      const fromIntake = Boolean(
+                        (a as { fromIntake?: boolean }).fromIntake,
+                      );
+                      const flat = a.matrixValues
+                        .flat()
+                        .map((v) =>
+                          Math.min(5, Math.max(0, Math.round(v))),
+                        );
+                      const maxLvl = Math.max(0, ...flat);
+                      const riskLabel =
+                        maxLvl >= 5
+                          ? "Kritisk"
+                          : maxLvl >= 4
+                            ? "Høy"
+                            : maxLvl >= 3
+                              ? "Middels"
+                              : maxLvl >= 2
+                                ? "Lav"
+                                : "Ingen";
+                      return (
+                        <tr
+                          key={a._id}
+                          className="border-b border-border/40 last:border-0 hover:bg-muted/25"
+                        >
+                          <td className="px-4 py-3">
+                            <Link
+                              href={`/w/${workspaceId}/ros/a/${a._id}`}
+                              className="font-medium hover:underline"
+                            >
+                              {a.title}
+                            </Link>
+                          </td>
+                          <td className="px-4 py-3 text-muted-foreground">
+                            {a.candidateName
+                              ? a.candidateName
+                              : fromIntake
+                                ? "Fra skjema"
+                                : "Frittstående"}
+                          </td>
+                          <td className="px-4 py-3">
+                            <span
+                              className={cn(
+                                "inline-flex rounded-full px-2 py-0.5 text-xs font-semibold tabular-nums",
+                                cellRiskClass(maxLvl),
+                              )}
+                            >
+                              {maxLvl > 0 ? maxLvl : "—"} · {riskLabel}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 tabular-nums text-muted-foreground">
+                            {formatRelative(a.updatedAt)}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
           ) : (
             <ul className="divide-y divide-border/40 overflow-hidden rounded-2xl border border-border/50 bg-card">
               {filteredSortedAnalyses.map((a) => {

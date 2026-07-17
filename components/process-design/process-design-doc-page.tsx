@@ -212,7 +212,7 @@ function Field({
         rows <= 1 ? (
           <Input
             value={plainValue}
-            onValueChange={onChange}
+            onChange={(e) => onChange(e.target.value)}
             disabled={disabled}
             placeholder={placeholder}
             aria-label={label}
