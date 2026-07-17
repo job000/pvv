@@ -2624,9 +2624,15 @@ export const createRosTask = mutation({
       matrixPhase: hasRiskLink ? undefined : hasCell ? args.matrixPhase : undefined,
       riskTreatmentKind: args.riskTreatmentKind,
       residualRiskAcceptedAt:
-        args.riskTreatmentKind === "accept" ? now : undefined,
+        args.riskTreatmentKind === "accept" ||
+        args.riskTreatmentKind === "transfer" ||
+        args.riskTreatmentKind === "avoid"
+          ? now
+          : undefined,
       residualRiskAcceptedNote:
-        args.riskTreatmentKind === "accept"
+        args.riskTreatmentKind === "accept" ||
+        args.riskTreatmentKind === "transfer" ||
+        args.riskTreatmentKind === "avoid"
           ? args.residualRiskAcceptedNote?.trim() || undefined
           : undefined,
       dashboardRank: now,
@@ -2813,7 +2819,11 @@ export const updateRosTask = mutation({
         patch.residualRiskAcceptedNote = undefined;
       } else {
         patch.riskTreatmentKind = args.riskTreatmentKind;
-        if (args.riskTreatmentKind === "accept") {
+        if (
+          args.riskTreatmentKind === "accept" ||
+          args.riskTreatmentKind === "transfer" ||
+          args.riskTreatmentKind === "avoid"
+        ) {
           patch.residualRiskAcceptedAt =
             args.residualRiskAcceptedAt !== undefined
               ? args.residualRiskAcceptedAt === null

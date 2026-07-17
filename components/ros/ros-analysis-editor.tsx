@@ -75,6 +75,7 @@ import {
   buildRosTaskRiskLinkOptions,
   parseRosTaskRiskLink,
   riskTreatmentLabel,
+  riskTreatmentMeta,
   rosTaskRiskLinkValue,
   ROS_RISK_TREATMENT_OPTIONS,
   ROS_TASK_RISK_LINK_GROUP_LABELS,
@@ -971,6 +972,28 @@ export function RosAnalysisEditor({
       el?.scrollIntoView({ behavior: "smooth", block: "start" });
       el?.focus();
     });
+  }
+
+  /** Når strategi byttes til aksept/overføring/unngå — foreslå tittel om tom. */
+  function applyTreatmentKind(
+    kind: "mitigate" | "accept" | "transfer" | "avoid",
+  ) {
+    setTaskRiskTreatment(kind);
+    if (kind === "mitigate") return;
+    if (taskTitle.trim()) return;
+    const linked = taskRiskLink
+      ? linkedRiskLookup.get(taskRiskLink)
+      : undefined;
+    const riskBit = linked?.text.trim()
+      ? linked.text.trim().slice(0, 60)
+      : "risiko";
+    const prefix =
+      kind === "accept"
+        ? "Aksepterer"
+        : kind === "transfer"
+          ? "Overfører"
+          : "Unngår";
+    setTaskTitle(`${prefix}: ${riskBit}`);
   }
 
   /** Auto-lagring: ikke forsøk hvis skjema ville avvist manuell lagring (unngå støy). */
@@ -2462,12 +2485,28 @@ export function RosAnalysisEditor({
       toast.error("Ugyldig frist.");
       return;
     }
+    const treatmentKind = taskRiskTreatment;
+    const needsJustification =
+      treatmentKind === "accept" ||
+      treatmentKind === "transfer" ||
+      treatmentKind === "avoid";
+    if (needsJustification && !taskResidualNote.trim()) {
+      toast.error("Skriv en kort begrunnelse under strategien — deretter kan du lagre.");
+      requestAnimationFrame(() => {
+        document.getElementById("ros-treatment-justification")?.focus();
+      });
+      return;
+    }
     setTaskBusy(true);
     try {
+      const note = taskResidualNote.trim();
+      const desc =
+        taskDesc.trim() ||
+        (needsJustification && note ? note : undefined);
       await createRosTask({
         analysisId,
         title: t,
-        description: taskDesc.trim() || undefined,
+        description: desc,
         assigneeUserIds:
           taskAssignees.length > 0 ? taskAssignees : undefined,
         priority: taskPriority,
@@ -2475,11 +2514,10 @@ export function RosAnalysisEditor({
         linkedCellItemId: risk?.linkedCellItemId,
         linkedCellItemPhase: risk?.linkedCellItemPhase,
         riskTreatmentKind:
-          taskRiskTreatment === "" ? undefined : taskRiskTreatment,
-        residualRiskAcceptedNote:
-          taskRiskTreatment === "accept"
-            ? taskResidualNote.trim() || undefined
-            : undefined,
+          treatmentKind === "" ? undefined : treatmentKind,
+        residualRiskAcceptedNote: needsJustification
+          ? note || undefined
+          : undefined,
       });
       setTaskTitle("");
       setTaskDesc("");
@@ -2489,7 +2527,12 @@ export function RosAnalysisEditor({
       setTaskRiskTreatment("");
       setTaskResidualNote("");
       setTaskDueAt("");
-      toast.success("Tiltak opprettet.");
+      const savedAs = riskTreatmentMeta(treatmentKind);
+      toast.success(
+        treatmentKind === "mitigate" || treatmentKind === ""
+          ? "Tiltak opprettet."
+          : `${savedAs.label} er registrert for risikoen.`,
+      );
     } catch (e) {
       toast.error(
         e instanceof Error ? e.message : "Kunne ikke opprette tiltak.",
@@ -2943,23 +2986,50 @@ export function RosAnalysisEditor({
               <h2 className="text-foreground text-base font-semibold tracking-tight">
                 Tiltak
               </h2>
-              <p className="text-muted-foreground text-xs leading-relaxed">
-                Koble hvert tiltak til en risiko. Nivå beregnes som
-                sannsynlighet × konsekvens.
-              </p>
-            </div>
-            {tasks && tasks.length > 0 && (
-              <div className="flex flex-wrap gap-1.5">
-                <span className="inline-flex items-center gap-1 rounded-full bg-blue-500/10 px-2.5 py-1 text-[11px] font-semibold text-blue-700 ring-1 ring-blue-500/15 dark:text-blue-300">
-                  {tasks.filter((t) => t.status !== "done").length} åpne
-                </span>
-                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2.5 py-1 text-[11px] font-semibold text-emerald-700 ring-1 ring-emerald-500/15 dark:text-emerald-300">
-                  {tasks.filter((t) => t.status === "done").length} ferdig
-                </span>
-              </div>
-            )}
+            <p className="text-muted-foreground text-xs leading-relaxed">
+              Velg strategi for hver risiko, lag en plan, og følg den opp med
+              ansvarlig og frist (ISO 31000 / NS 5814).
+            </p>
           </div>
+          {tasks && tasks.length > 0 && (
+            <div className="flex flex-wrap gap-1.5">
+              <span className="inline-flex items-center gap-1 rounded-full bg-blue-500/10 px-2.5 py-1 text-[11px] font-semibold text-blue-700 ring-1 ring-blue-500/15 dark:text-blue-300">
+                {tasks.filter((t) => t.status !== "done").length} åpne
+              </span>
+              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2.5 py-1 text-[11px] font-semibold text-emerald-700 ring-1 ring-emerald-500/15 dark:text-emerald-300">
+                {tasks.filter((t) => t.status === "done").length} ferdig
+              </span>
+            </div>
+          )}
         </div>
+        <details className="group/plan mt-4 rounded-xl border border-border/40 bg-muted/10 px-3 py-2.5">
+          <summary className="text-muted-foreground hover:text-foreground flex cursor-pointer list-none items-center justify-between gap-2 text-[11px] font-semibold uppercase tracking-wider [&::-webkit-details-marker]:hidden">
+            Hva betyr strategiene?
+            <ChevronRight className="size-3.5 transition-transform group-open/plan:rotate-90" />
+          </summary>
+          <ul className="mt-3 space-y-2.5 border-t border-border/30 pt-3">
+            {ROS_RISK_TREATMENT_OPTIONS.filter((o) => o.value !== "").map(
+              (o) => (
+                <li key={o.value} className="text-xs leading-relaxed">
+                  <span className="text-foreground font-semibold">
+                    {o.label}:
+                  </span>{" "}
+                  <span className="text-muted-foreground">{o.planMeaning}</span>
+                </li>
+              ),
+            )}
+            <li className="text-muted-foreground text-[11px] leading-relaxed">
+              <span className="text-foreground font-semibold">
+                Person og dato:
+              </span>{" "}
+              Ja for alle strategier — men rollen er ulik. Ved{" "}
+              <span className="font-medium text-foreground/90">aksept</span> er
+              det godkjenner + neste gjennomgang. Ved reduser/overfør/unngå er
+              det utfører + ferdigdato.
+            </li>
+          </ul>
+        </details>
+      </div>
 
         {/* Varsel: risikoer i før-matrisen uten tiltak.
             NS 5814 / ISO 31000: alle høye/kritiske risikoer skal enten
@@ -3121,7 +3191,7 @@ export function RosAnalysisEditor({
                         onClick={() => startAddTaskForRisk(r.id)}
                       >
                         <Plus className="size-3" aria-hidden />
-                        Tiltak
+                        Behandle
                       </Button>
                     </li>
                   );
@@ -3136,41 +3206,41 @@ export function RosAnalysisEditor({
           );
         })()}
 
-        {/* Quick-add — risikokobling er førsteklasses (ISO 31000:
-            tiltak skal alltid være knyttet til en identifisert risiko). */}
+        {/* Behandling av risiko (ISO 31000 / NS 5814):
+            reduser · akseptere · overføre · unngå — ikke bare «tiltak». */}
         <form
           onSubmit={(e) => void onCreateTask(e)}
           className="space-y-4 rounded-2xl bg-card p-5 shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.06] sm:p-6"
         >
-          <div className="space-y-1">
-            <p className="text-foreground text-sm font-semibold">
-              Nytt tiltak
-            </p>
-            <p className="text-muted-foreground text-xs leading-relaxed">
-              Beskriv hva som settes i verk, og knytt det til risikoen det
-              reduserer.
-            </p>
-          </div>
+          {(() => {
+            const meta = riskTreatmentMeta(
+              taskRiskLink ? taskRiskTreatment || "mitigate" : "",
+            );
+            return (
+              <div className="space-y-1">
+                <p className="text-foreground text-sm font-semibold">
+                  {meta.formTitle}
+                </p>
+                <p className="text-muted-foreground text-xs leading-relaxed">
+                  {meta.formHint}
+                </p>
+              </div>
+            );
+          })()}
 
-          {/* Tittel + Legg til */}
-          <div className="flex gap-2">
-            <Input
-              id="ros-quick-task-title"
-              value={taskTitle}
-              onChange={(e) => setTaskTitle(e.target.value)}
-              placeholder="F.eks. «Kryptere personopplysninger ved overføring»"
-              className="h-10 flex-1 rounded-xl"
-              aria-label="Tittel på tiltaket"
-            />
-            <Button
-              type="submit"
-              disabled={taskBusy || !taskTitle.trim()}
-              className="h-10 shrink-0 gap-1.5 rounded-full px-4 font-semibold"
-            >
-              <Plus className="size-4" />
-              <span className="hidden sm:inline">Legg til</span>
-            </Button>
-          </div>
+          {/* Tittel — lagring skjer via knappen nederst (tydeligere for aksept/overføring/unngå). */}
+          <Input
+            id="ros-quick-task-title"
+            value={taskTitle}
+            onChange={(e) => setTaskTitle(e.target.value)}
+            placeholder={
+              riskTreatmentMeta(
+                taskRiskLink ? taskRiskTreatment || "mitigate" : "",
+              ).titlePlaceholder
+            }
+            className="h-10 w-full rounded-xl"
+            aria-label="Tittel"
+          />
 
           {/* Synlig bekreftelse av valgt risiko — gir brukeren tydelig
               tilbakemelding om HVILKEN risiko tiltaket faktisk knyttes til,
@@ -3203,7 +3273,7 @@ export function RosAnalysisEditor({
                 <div className="min-w-0 flex-1 space-y-0.5">
                   <p className="text-muted-foreground flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider">
                     <Link2 className="size-3" aria-hidden />
-                    Tiltak for denne risikoen
+                    Behandling for denne risikoen
                   </p>
                   <p className="text-foreground line-clamp-2 text-sm font-semibold leading-snug">
                     {linked.text.trim() || "(uten tekst)"}
@@ -3246,7 +3316,7 @@ export function RosAnalysisEditor({
               className="text-muted-foreground flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wider"
             >
               <Link2 className="size-3" aria-hidden />
-              {taskRiskLink ? "Bytt risiko" : "Hvilken risiko reduseres?"}
+              {taskRiskLink ? "Bytt risiko" : "Hvilken risiko gjelder dette?"}
             </Label>
             <RiskLinkSelect
               id="ros-quick-task-risk-link"
@@ -3279,12 +3349,11 @@ export function RosAnalysisEditor({
             </p>
           </div>
 
-          {/* Behandlingstype — segmented pill-control. Profesjonell ROS
-              krever at tiltak klassifiseres etter strategi. */}
+          {/* Behandlingsstrategi — ISO 31000: mitigate / accept / transfer / avoid */}
           {taskRiskLink && (
-            <div className="space-y-1.5">
+            <div className="space-y-2">
               <Label className="text-muted-foreground text-[11px] font-medium uppercase tracking-wider">
-                Behandlingsstrategi
+                Hvordan skal risikoen håndteres?
               </Label>
               <div className="bg-muted/30 ring-border/40 flex flex-wrap gap-1 rounded-full p-1 ring-1">
                 {ROS_RISK_TREATMENT_OPTIONS.filter((o) => o.value !== "").map(
@@ -3294,19 +3363,17 @@ export function RosAnalysisEditor({
                       type="button"
                       title={o.description}
                       onClick={() =>
-                        setTaskRiskTreatment(
-                          taskRiskTreatment === o.value
-                            ? ""
-                            : (o.value as
-                                | "mitigate"
-                                | "accept"
-                                | "transfer"
-                                | "avoid"),
+                        applyTreatmentKind(
+                          o.value as
+                            | "mitigate"
+                            | "accept"
+                            | "transfer"
+                            | "avoid",
                         )
                       }
                       className={cn(
-                        "h-7 rounded-full px-3 text-[11px] font-medium transition-colors",
-                        taskRiskTreatment === o.value
+                        "h-8 rounded-full px-3 text-[11px] font-medium transition-colors",
+                        (taskRiskTreatment || "mitigate") === o.value
                           ? "bg-primary text-primary-foreground shadow-sm"
                           : "text-muted-foreground hover:text-foreground",
                       )}
@@ -3316,38 +3383,94 @@ export function RosAnalysisEditor({
                   ),
                 )}
               </div>
-              {taskRiskTreatment === "accept" && (
-                <Textarea
-                  value={taskResidualNote}
-                  onChange={(e) => setTaskResidualNote(e.target.value)}
-                  rows={2}
-                  className="min-h-0 rounded-xl text-sm"
-                  placeholder="Grunnlag for aksept (f.eks. styrebeslutning, kost/nytte) …"
-                  aria-label="Grunnlag for aksept"
-                />
+              {(() => {
+                const meta = riskTreatmentMeta(
+                  taskRiskTreatment || "mitigate",
+                );
+                return (
+                  <div className="bg-muted/20 space-y-2 rounded-xl px-3 py-2.5 ring-1 ring-border/40">
+                    <p className="text-foreground text-xs font-semibold">
+                      {meta.label} — hva er planen?
+                    </p>
+                    <p className="text-muted-foreground text-[11px] leading-relaxed">
+                      {meta.planMeaning}
+                    </p>
+                    <p className="text-muted-foreground text-[11px] leading-relaxed">
+                      <span className="text-foreground/80 font-medium">
+                        {meta.personLabel} + {meta.dateLabel}:{" "}
+                      </span>
+                      {meta.accountabilityHint}
+                    </p>
+                  </div>
+                );
+              })()}
+              {(taskRiskTreatment === "accept" ||
+                taskRiskTreatment === "transfer" ||
+                taskRiskTreatment === "avoid") && (
+                <div className="space-y-1.5">
+                  <Label
+                    htmlFor="ros-treatment-justification"
+                    className="text-foreground flex items-center gap-1.5 text-[11px] font-semibold"
+                  >
+                    Begrunnelse / beslutningsgrunnlag
+                    <span className="rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700 dark:text-amber-300">
+                      Påkrevd
+                    </span>
+                  </Label>
+                  <Textarea
+                    id="ros-treatment-justification"
+                    value={taskResidualNote}
+                    onChange={(e) => setTaskResidualNote(e.target.value)}
+                    rows={2}
+                    className="min-h-0 rounded-xl text-sm"
+                    placeholder={
+                      taskRiskTreatment === "accept"
+                        ? "Hvem godkjenner, og hvorfor er restrisikoen akseptabel? …"
+                        : taskRiskTreatment === "transfer"
+                          ? "Hvem overtar hva? (forsikring, leverandør, avdeling) …"
+                          : "Hva stoppes eller endres, og fra når? …"
+                    }
+                    aria-label="Begrunnelse"
+                  />
+                </div>
               )}
             </div>
           )}
 
-          {/* Avanserte felt */}
-          {taskTitle.trim() && (
-            <details className="group/adv border-border/40 rounded-xl border">
+          {/* Oppfølging — feltetiketter følger strategi (godkjenner vs utfører). */}
+          {taskTitle.trim() &&
+            (() => {
+              const meta = riskTreatmentMeta(
+                taskRiskLink ? taskRiskTreatment || "mitigate" : "",
+              );
+              return (
+            <details className="group/adv border-border/40 rounded-xl border" open={meta.followUpRecommended}>
               <summary className="text-muted-foreground hover:text-foreground flex cursor-pointer list-none items-center justify-between gap-2 px-3 py-2 text-xs font-medium transition-colors [&::-webkit-details-marker]:hidden">
-                <span>Flere detaljer · ansvarlig, frist, prioritet</span>
+                <span>
+                  Oppfølging · {meta.personLabel.toLowerCase()},{" "}
+                  {meta.dateLabel.toLowerCase()}
+                  {meta.followUpRecommended ? " (anbefalt)" : ""}
+                </span>
                 <ChevronRight
                   className="size-3.5 transition-transform group-open/adv:rotate-90"
                   aria-hidden
                 />
               </summary>
               <div className="border-border/40 space-y-3 border-t p-3">
+                <p className="text-muted-foreground text-[11px] leading-relaxed">
+                  {meta.accountabilityHint}
+                </p>
                 <Textarea
                   value={taskDesc}
                   onChange={(e) => setTaskDesc(e.target.value)}
                   rows={2}
                   className="min-h-0 rounded-xl text-sm"
-                  placeholder="Utdypende beskrivelse (valgfritt)"
+                  placeholder="Utdypende plan (valgfritt)"
                 />
                 <div className="space-y-1.5">
+                  <Label className="text-muted-foreground text-[11px] font-medium">
+                    {meta.personLabel}
+                  </Label>
                   {taskAssignees.length > 0 ? (
                     <div className="flex flex-wrap gap-1">
                       {taskAssignees.map((uid) => {
@@ -3385,9 +3508,9 @@ export function RosAnalysisEditor({
                         setTaskAssignees((ids) => [...ids, uid]);
                       }
                     }}
-                    aria-label="Legg til ansvarlig"
+                    aria-label={meta.personLabel}
                   >
-                    <option value="">— Legg til ansvarlig —</option>
+                    <option value="">— Legg til {meta.personLabel.toLowerCase()} —</option>
                     {(members ?? [])
                       .filter((m) => !taskAssignees.includes(m.userId))
                       .map((m) => (
@@ -3421,20 +3544,21 @@ export function RosAnalysisEditor({
                   </div>
                   <div className="space-y-1">
                     <Label className="text-muted-foreground text-[11px]">
-                      Frist
+                      {meta.dateLabel}
                     </Label>
                     <Input
                       type="datetime-local"
                       value={taskDueAt}
                       onChange={(e) => setTaskDueAt(e.target.value)}
                       className="h-9 rounded-xl text-xs"
-                      aria-label="Frist"
+                      aria-label={meta.dateLabel}
                     />
                   </div>
                 </div>
               </div>
             </details>
-          )}
+              );
+            })()}
 
           {/* Tydelig handling-bar nederst i skjemaet. Brukere som scroller
               gjennom detaljer trenger en åpenbar «Lagre»-knapp i bunn — ikke
@@ -3462,18 +3586,37 @@ export function RosAnalysisEditor({
               >
                 Tøm skjema
               </button>
-              <Button
-                type="submit"
-                disabled={taskBusy || !taskTitle.trim()}
-                className="h-10 gap-1.5 rounded-full px-5 font-semibold shadow-sm"
-              >
-                {taskBusy ? (
-                  <Loader2 className="size-4 animate-spin" aria-hidden />
-                ) : (
-                  <Plus className="size-4" aria-hidden />
+              <div className="flex flex-col items-stretch gap-1.5 sm:items-end">
+                <Button
+                  type="submit"
+                  disabled={taskBusy || !taskTitle.trim()}
+                  className="h-10 gap-1.5 rounded-full px-5 font-semibold shadow-sm"
+                >
+                  {taskBusy ? (
+                    <Loader2 className="size-4 animate-spin" aria-hidden />
+                  ) : (
+                    <Plus className="size-4" aria-hidden />
+                  )}
+                  {taskBusy
+                    ? "Lagrer …"
+                    : riskTreatmentMeta(
+                        taskRiskLink ? taskRiskTreatment || "mitigate" : "",
+                      ).saveLabel}
+                </Button>
+                {(taskRiskTreatment === "accept" ||
+                  taskRiskTreatment === "transfer" ||
+                  taskRiskTreatment === "avoid") &&
+                  !taskResidualNote.trim() && (
+                    <p className="text-amber-700 dark:text-amber-300 text-[11px] font-medium">
+                      Fyll inn begrunnelsen over før lagring.
+                    </p>
+                  )}
+                {!taskTitle.trim() && (
+                  <p className="text-muted-foreground text-[11px]">
+                    Skriv en tittel først.
+                  </p>
                 )}
-                {taskBusy ? "Lagrer …" : "Lagre tiltak"}
-              </Button>
+              </div>
             </div>
           )}
         </form>
@@ -3553,8 +3696,9 @@ export function RosAnalysisEditor({
         {tasks === undefined ? (
           <p className="text-muted-foreground text-sm">Henter tiltak …</p>
         ) : tasks.length === 0 ? (
-          <p className="text-muted-foreground py-2 text-center text-xs">
-            Ingen tiltak lagt til ennå.
+          <p className="text-muted-foreground py-2 text-center text-xs leading-relaxed">
+            Ingen behandlinger ennå. Velg strategi for en risiko over —
+            reduser, aksepter, overfør eller unngå.
           </p>
         ) : (
           <ul className="space-y-2">
