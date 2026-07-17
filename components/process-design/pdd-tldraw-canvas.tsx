@@ -26,10 +26,7 @@ import {
   useLayoutEffect,
   useMemo,
   useRef,
-  useState,
 } from "react";
-import { Eraser, Pencil } from "lucide-react";
-import { toast } from "sonner";
 
 export { parsePddTldrawDocumentSnapshot } from "@/lib/pdd-diagram-snapshot";
 
@@ -66,6 +63,22 @@ function syncEditorViewport(editor: Editor) {
   editor.updateViewportScreenBounds(canvas ?? container);
 }
 
+/** Rydd «skygge» etter visking (stuck erasing-state / canvas lag). */
+function clearEraserArtifacts(editor: Editor) {
+  try {
+    editor.setErasingShapes([]);
+  } catch {
+    /* ignore */
+  }
+  try {
+    syncEditorViewport(editor);
+    const cam = editor.getCamera();
+    editor.setCamera({ ...cam });
+  } catch {
+    /* ignore */
+  }
+}
+
 function clearAllShapesOnPage(editor: Editor) {
   try {
     const ids = [...editor.getCurrentPageShapeIds()];
@@ -74,19 +87,15 @@ function clearAllShapesOnPage(editor: Editor) {
     }
     editor.selectNone();
     editor.clearHistory();
+    clearEraserArtifacts(editor);
   } catch (err) {
     console.error("[pdd-diagram] clearAllShapesOnPage failed", err);
   }
 }
 
 /**
- * Concepts-lignende freehand: trykkfølsom blyant, palm rejection, lengre streker.
- *
- * Viktig: Apple Pencil «dobbelttrykk på siden» / squeeze er systemgest og
- * eksponeres IKKE til nettlesere. Vi støtter:
- * 1) dobbelttrykk med spissen på lerretet
- * 2) bakside/viskelær-spiss (button 5) når OS sender det
- * 3) UI-knapp (se PenEraserToggle)
+ * Freehand: trykkfølsom blyant, palm rejection, lengre streker.
+ * Verktøybytte (blyant/viskelær) skjer via tldraw sin egen toolbar.
  */
 function configurePddFreehandDrawing(editor: Editor, readOnly: boolean) {
   const drawUtil = editor.getShapeUtil("draw") as DrawShapeUtil | undefined;
@@ -106,26 +115,16 @@ function configurePddFreehandDrawing(editor: Editor, readOnly: boolean) {
   container.classList.add("pdd-tldraw-pen-ready");
 
   let penStrokeActive = false;
-  let toolBeforeEraser: string | null = null;
-
-  let lastPenTapAt = 0;
-  let lastPenTapX = 0;
-  let lastPenTapY = 0;
-  let penDownAt = 0;
-  let penDownX = 0;
-  let penDownY = 0;
-  let penMovedFar = false;
-  let suppressNextTapUntil = 0;
+  let toolBeforeEraserTip: string | null = null;
 
   const isEventOnCanvas = (target: EventTarget | null) => {
     if (!(target instanceof Node)) return false;
-    // Ikke tell UI-knapper / menyer som lerret-tapp
     if (target instanceof Element) {
       if (
-        target.closest("[data-pdd-pen-toggle]") ||
         target.closest(".tlui-button") ||
         target.closest(".tlui-toolbar") ||
-        target.closest(".tlui-style-panel")
+        target.closest(".tlui-style-panel") ||
+        target.closest(".tlui-menu")
       ) {
         return false;
       }
@@ -138,24 +137,6 @@ function configurePddFreehandDrawing(editor: Editor, readOnly: boolean) {
     event.preventDefault();
   };
 
-  const togglePenEraser = () => {
-    if (readOnly) return;
-    const toolId = editor.getCurrentToolId();
-    if (toolId === "eraser") {
-      const restore =
-        toolBeforeEraser && toolBeforeEraser !== "eraser"
-          ? toolBeforeEraser
-          : "draw";
-      editor.setCurrentTool(restore);
-      toolBeforeEraser = null;
-      toast.message("Blyant", { duration: 1100 });
-    } else {
-      toolBeforeEraser = toolId === "eraser" ? "draw" : toolId;
-      editor.setCurrentTool("eraser");
-      toast.message("Viskelær", { duration: 1100 });
-    }
-  };
-
   const isEraserHardware = (event: PointerEvent) =>
     event.button === 5 ||
     (typeof event.buttons === "number" && (event.buttons & 32) !== 0);
@@ -165,102 +146,66 @@ function configurePddFreehandDrawing(editor: Editor, readOnly: boolean) {
     if (event.pointerType !== "pen") return;
     if (!isEventOnCanvas(event.target)) return;
 
+    penStrokeActive = true;
+
     if (!editor.getInstanceState().isPenMode) {
       editor.updateInstanceState({ isPenMode: true });
     }
 
+    // Bakside/viskelær-spiss når OS eksponerer den (ikke sidetrykk-gest)
     if (isEraserHardware(event)) {
-      penStrokeActive = true;
-      penMovedFar = true; // ikke tell som tipp-dobbelttrykk
       if (editor.getCurrentToolId() !== "eraser") {
-        toolBeforeEraser = editor.getCurrentToolId();
+        toolBeforeEraserTip = editor.getCurrentToolId();
         editor.setCurrentTool("eraser");
       }
       return;
     }
 
-    // Dobbelttrykk med spissen: oppdag på 2. pointerdown (mer pålitelig enn kun up)
-    const now = performance.now();
-    if (now >= suppressNextTapUntil) {
-      const dt = now - lastPenTapAt;
-      const dx = event.clientX - lastPenTapX;
-      const dy = event.clientY - lastPenTapY;
-      const near = dx * dx + dy * dy < 2500; // ~50px
-      if (lastPenTapAt > 0 && dt > 50 && dt < 550 && near) {
-        lastPenTapAt = 0;
-        suppressNextTapUntil = now + 500;
-        penStrokeActive = false;
-        togglePenEraser();
-        // Unngå at tldraw tegner et prikk-merke for gesten
-        event.preventDefault();
-        event.stopPropagation();
-        return;
-      }
-    }
-
-    penStrokeActive = true;
-    penDownAt = now;
-    penDownX = event.clientX;
-    penDownY = event.clientY;
-    penMovedFar = false;
-
+    // Ikke overstyr når bruker har valgt viskelær/andre verktøy i toolbar
     const toolId = editor.getCurrentToolId();
     if (toolId === "select" || toolId === "hand") {
       editor.setCurrentTool("draw");
     }
   };
 
-  const onPointerMove = (event: PointerEvent) => {
-    if (event.pointerType !== "pen") return;
-    if (!penStrokeActive) return;
-    const dx = event.clientX - penDownX;
-    const dy = event.clientY - penDownY;
-    if (dx * dx + dy * dy > 36) {
-      penMovedFar = true;
-    }
-  };
-
-  const endPenStroke = (event: PointerEvent) => {
-    if (event.pointerType !== "pen") return;
-    const wasActive = penStrokeActive;
-    penStrokeActive = false;
-    if (!wasActive || readOnly) return;
-    if (isEraserHardware(event)) return;
-
-    const duration = performance.now() - penDownAt;
-    const isTap = !penMovedFar && duration < 350;
-    if (!isTap) {
-      lastPenTapAt = 0;
+  const onPointerUpCapture = (event: PointerEvent) => {
+    if (event.pointerType !== "pen" && event.pointerType !== "touch") {
       return;
     }
+    penStrokeActive = false;
+    if (readOnly) return;
 
-    const now = performance.now();
-    if (now < suppressNextTapUntil) return;
+    // Etter visking: fjern halvtransparent «skygge» og tving canvas-oppdatering
+    if (editor.getCurrentToolId() === "eraser") {
+      requestAnimationFrame(() => {
+        clearEraserArtifacts(editor);
+        requestAnimationFrame(() => clearEraserArtifacts(editor));
+      });
+    }
 
-    lastPenTapAt = now;
-    lastPenTapX = event.clientX;
-    lastPenTapY = event.clientY;
+    if (isEraserHardware(event) && toolBeforeEraserTip) {
+      const restore = toolBeforeEraserTip;
+      toolBeforeEraserTip = null;
+      if (restore !== "eraser") {
+        editor.setCurrentTool(restore);
+      }
+    }
   };
 
   document.addEventListener("pointerdown", onPointerDownCapture, true);
-  document.addEventListener("pointermove", onPointerMove, true);
-  document.addEventListener("pointerup", endPenStroke, true);
-  document.addEventListener("pointercancel", endPenStroke, true);
+  document.addEventListener("pointerup", onPointerUpCapture, true);
+  document.addEventListener("pointercancel", onPointerUpCapture, true);
   container.addEventListener("touchmove", blockPageScroll, { passive: false });
   container.addEventListener("wheel", blockPageScroll, { passive: false });
 
-  return {
-    dispose: () => {
-      penStrokeActive = false;
-      container.classList.remove("pdd-tldraw-pen-ready");
-      document.removeEventListener("pointerdown", onPointerDownCapture, true);
-      document.removeEventListener("pointermove", onPointerMove, true);
-      document.removeEventListener("pointerup", endPenStroke, true);
-      document.removeEventListener("pointercancel", endPenStroke, true);
-      container.removeEventListener("touchmove", blockPageScroll);
-      container.removeEventListener("wheel", blockPageScroll);
-    },
-    togglePenEraser,
+  return () => {
+    penStrokeActive = false;
+    container.classList.remove("pdd-tldraw-pen-ready");
+    document.removeEventListener("pointerdown", onPointerDownCapture, true);
+    document.removeEventListener("pointerup", onPointerUpCapture, true);
+    document.removeEventListener("pointercancel", onPointerUpCapture, true);
+    container.removeEventListener("touchmove", blockPageScroll);
+    container.removeEventListener("wheel", blockPageScroll);
   };
 }
 
@@ -309,29 +254,10 @@ export function PddTldrawCanvas({
 
   const editorRef = useRef<Editor | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  const togglePenEraserRef = useRef<(() => void) | null>(null);
-  const [penToolIsEraser, setPenToolIsEraser] = useState(false);
-  const [showPenToggle, setShowPenToggle] = useState(false);
-
-  useEffect(() => {
-    setShowPenToggle(!readOnly && prefersPenFirstSurface());
-  }, [readOnly]);
 
   useEffect(() => {
     editorRef.current?.updateInstanceState({ isReadonly: readOnly });
   }, [readOnly]);
-
-  useEffect(() => {
-    const editor = editorRef.current;
-    if (!editor || !showPenToggle) return;
-    const sync = () => {
-      setPenToolIsEraser(editor.getCurrentToolId() === "eraser");
-    };
-    sync();
-    // Tool byttes i instance/session-state
-    const unsub = editor.store.listen(sync);
-    return () => unsub();
-  }, [showPenToggle, store]);
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastSentRef = useRef<string | null>(snapshotJson ?? null);
@@ -666,63 +592,20 @@ export function PddTldrawCanvas({
           editorRef.current = editor;
           editor.updateInstanceState({ isReadonly: readOnly });
           configurePddArrowBindings(editor);
-          const freehand = configurePddFreehandDrawing(editor, readOnly);
-          togglePenEraserRef.current = freehand.togglePenEraser;
-          setPenToolIsEraser(editor.getCurrentToolId() === "eraser");
+          const cleanupFreehand = configurePddFreehandDrawing(
+            editor,
+            readOnly,
+          );
           requestAnimationFrame(() => {
             syncEditorViewport(editor);
             requestAnimationFrame(() => syncEditorViewport(editor));
           });
           return () => {
-            freehand.dispose();
-            togglePenEraserRef.current = null;
+            cleanupFreehand();
             editorRef.current = null;
           };
         }}
       />
-      {showPenToggle ? (
-        <button
-          type="button"
-          data-pdd-pen-toggle
-          title={
-            penToolIsEraser
-              ? "Bytt til blyant (dobbelttrykk med spissen fungerer også)"
-              : "Bytt til viskelær (dobbelttrykk med spissen fungerer også)"
-          }
-          aria-label={
-            penToolIsEraser ? "Bytt til blyant" : "Bytt til viskelær"
-          }
-          aria-pressed={penToolIsEraser}
-          className={cn(
-            "absolute right-3 top-3 z-20 inline-flex h-11 min-w-11 touch-manipulation items-center justify-center gap-1.5 rounded-xl border px-3 text-sm font-medium shadow-sm backdrop-blur-sm transition-colors",
-            "sm:right-4 sm:top-4",
-            penToolIsEraser
-              ? "border-amber-500/40 bg-amber-500/15 text-foreground"
-              : "border-border/60 bg-background/90 text-foreground",
-          )}
-          onPointerDown={(e) => {
-            // Unngå at tldraw stjeler gesten
-            e.stopPropagation();
-          }}
-          onClick={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            togglePenEraserRef.current?.();
-            setPenToolIsEraser(
-              editorRef.current?.getCurrentToolId() === "eraser",
-            );
-          }}
-        >
-          {penToolIsEraser ? (
-            <Eraser className="size-4 shrink-0" aria-hidden />
-          ) : (
-            <Pencil className="size-4 shrink-0" aria-hidden />
-          )}
-          <span className="hidden sm:inline">
-            {penToolIsEraser ? "Viskelær" : "Blyant"}
-          </span>
-        </button>
-      ) : null}
     </div>
   );
 }

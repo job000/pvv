@@ -641,16 +641,14 @@ function ProcessTextDiagramBlock({
                   </p>
                   {isMobileViewport || diagramFullscreen ? (
                     <p className="text-[11px] leading-snug text-muted-foreground sm:text-xs">
-                      Pencil: tegn direkte. Bruk knappen øverst til høyre for
-                      blyant/viskelær (sidetrykk på Pencil virker ikke i
-                      nettleser). To fingre zoomer.
+                      Pencil: tegn direkte. Bytt blyant/viskelær i verktøylinjen
+                      under. To fingre zoomer.
                     </p>
                   ) : (
                     <p className="text-sm leading-relaxed text-muted-foreground">
-                      Apple Pencil: tegn direkte (håndflate ignoreres). Sidetrykk
-                      på Pencil er ikke tilgjengelig i nettleser — bruk knappen
-                      øverst til høyre, eller dobbelttrykk med spissen på
-                      lerretet. To fingre zoomer/panorerer.
+                      Apple Pencil: tegn direkte (håndflate ignoreres). Bytt
+                      blyant/viskelær i verktøylinjen under. To fingre
+                      zoomer/panorerer.
                     </p>
                   )}
                 </div>
@@ -2566,7 +2564,7 @@ export function ProcessDesignDocPage({
                 </div>
                 <ProcessTextDiagramBlock
                   sectionLabel="As-Is prosesskart"
-                  diagramHint="Tegn fritt med Blyant (Apple Pencil med trykk). Bytt blyant/viskelær med knappen øverst til høyre (sidetrykk på Pencil virker ikke i nettleser). Fullskjerm anbefales på iPad."
+                  diagramHint="Tegn fritt med Blyant (Apple Pencil med trykk). Bytt blyant/viskelær i verktøylinjen. Fullskjerm anbefales på iPad."
                   textRows={4}
                   textValue={payload.asIsProcessMap ?? ""}
                   onTextChange={(v) => setStr("asIsProcessMap", v)}
@@ -2619,7 +2617,7 @@ export function ProcessDesignDocPage({
               <AccordionContent className="space-y-5 border-t border-border/35 pt-4">
                 <ProcessTextDiagramBlock
                   sectionLabel="To-Be prosesskart"
-                  diagramHint="Tegn fremtidig flyt freehand med Blyant (Apple Pencil), eller bygg med bokser + Pil. Bytt blyant/viskelær med knappen øverst til høyre."
+                  diagramHint="Tegn fremtidig flyt freehand med Blyant (Apple Pencil), eller bygg med bokser + Pil. Bytt blyant/viskelær i verktøylinjen."
                   textRows={4}
                   textValue={payload.toBeMap ?? ""}
                   onTextChange={(v) => setStr("toBeMap", v)}
