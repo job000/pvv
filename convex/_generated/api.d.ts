@@ -41,6 +41,7 @@ import type * as lib_intakeSubmissionGithubBody from "../lib/intakeSubmissionGit
 import type * as lib_payloadSnapshot from "../lib/payloadSnapshot.js";
 import type * as lib_rosIntakePlacement from "../lib/rosIntakePlacement.js";
 import type * as lib_rpaScoring from "../lib/rpaScoring.js";
+import type * as lib_taskAssignment from "../lib/taskAssignment.js";
 import type * as lib_userSearch from "../lib/userSearch.js";
 import type * as notificationEmailInternal from "../notificationEmailInternal.js";
 import type * as notificationEmails from "../notificationEmails.js";
@@ -57,6 +58,7 @@ import type * as userInAppNotifications from "../userInAppNotifications.js";
 import type * as users from "../users.js";
 import type * as weeklyDigestInternal from "../weeklyDigestInternal.js";
 import type * as weeklyDraftDigest from "../weeklyDraftDigest.js";
+import type * as workspaceTasks from "../workspaceTasks.js";
 import type * as workspaceViewPrefs from "../workspaceViewPrefs.js";
 import type * as workspaces from "../workspaces.js";
 
@@ -100,6 +102,7 @@ declare const fullApi: ApiFromModules<{
   "lib/payloadSnapshot": typeof lib_payloadSnapshot;
   "lib/rosIntakePlacement": typeof lib_rosIntakePlacement;
   "lib/rpaScoring": typeof lib_rpaScoring;
+  "lib/taskAssignment": typeof lib_taskAssignment;
   "lib/userSearch": typeof lib_userSearch;
   notificationEmailInternal: typeof notificationEmailInternal;
   notificationEmails: typeof notificationEmails;
@@ -116,6 +119,7 @@ declare const fullApi: ApiFromModules<{
   users: typeof users;
   weeklyDigestInternal: typeof weeklyDigestInternal;
   weeklyDraftDigest: typeof weeklyDraftDigest;
+  workspaceTasks: typeof workspaceTasks;
   workspaceViewPrefs: typeof workspaceViewPrefs;
   workspaces: typeof workspaces;
 }>;

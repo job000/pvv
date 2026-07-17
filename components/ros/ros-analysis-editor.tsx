@@ -104,7 +104,7 @@ import {
   X,
 } from "lucide-react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useStickyState } from "@/lib/use-sticky-state";
 function tsToDatetimeLocal(ms: number): string {
@@ -609,6 +609,14 @@ export function RosAnalysisEditor({
   dirtyRef.current = dirty;
 
   const [rosSection, setRosSection] = useStickyState(`ros:${analysisId}:section`, ROS_MATRISE_SECTION_INDEX);
+  const searchParams = useSearchParams();
+
+  useEffect(() => {
+    const seksjon = searchParams.get("seksjon");
+    if (!seksjon) return;
+    const idx = ROS_EDITOR_SECTIONS.findIndex((s) => s.id === seksjon);
+    if (idx >= 0) setRosSection(idx);
+  }, [searchParams, setRosSection]);
 
   const [taskTitle, setTaskTitle] = useState("");
   const [taskDesc, setTaskDesc] = useState("");

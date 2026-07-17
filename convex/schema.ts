@@ -990,6 +990,27 @@ export default defineSchema({
     assigneeUserId: v.optional(v.id("users")),
     /** Alle ansvarlige brukere (erstatter assigneeUserId) */
     assigneeUserIds: v.optional(v.array(v.id("users"))),
+    /**
+     * Per-bruker status for tildeling (pending → accepted/declined → done).
+     * Eldre oppgaver uten felt behandles som accepted for nåværende ansvarlige.
+     */
+    assigneeStates: v.optional(
+      v.array(
+        v.object({
+          userId: v.id("users"),
+          status: v.union(
+            v.literal("pending"),
+            v.literal("accepted"),
+            v.literal("declined"),
+            v.literal("done"),
+          ),
+          /** Hvem som tildelte denne brukeren (brukes ved returnering). */
+          assignedByUserId: v.optional(v.id("users")),
+          note: v.optional(v.string()),
+          updatedAt: v.number(),
+        }),
+      ),
+    ),
     createdByUserId: v.id("users"),
     status: v.union(v.literal("open"), v.literal("done")),
     /** 1 = høyest … 5 = lavest (dashboard-kolonner) */
@@ -1407,6 +1428,27 @@ export default defineSchema({
     assigneeUserId: v.optional(v.id("users")),
     /** Alle ansvarlige brukere (erstatter assigneeUserId) */
     assigneeUserIds: v.optional(v.array(v.id("users"))),
+    /**
+     * Per-bruker status for tildeling (pending → accepted/declined → done).
+     * Eldre oppgaver uten felt behandles som accepted for nåværende ansvarlige.
+     */
+    assigneeStates: v.optional(
+      v.array(
+        v.object({
+          userId: v.id("users"),
+          status: v.union(
+            v.literal("pending"),
+            v.literal("accepted"),
+            v.literal("declined"),
+            v.literal("done"),
+          ),
+          /** Hvem som tildelte denne brukeren (brukes ved returnering). */
+          assignedByUserId: v.optional(v.id("users")),
+          note: v.optional(v.string()),
+          updatedAt: v.number(),
+        }),
+      ),
+    ),
     createdByUserId: v.id("users"),
     status: v.union(v.literal("open"), v.literal("done")),
     priority: v.optional(v.number()),

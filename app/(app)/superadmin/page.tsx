@@ -511,17 +511,21 @@ function CreateUserDialog({ open, setOpen }: { open: boolean; setOpen: Dispatch<
     }
     setSaving(true);
     try {
-      await createUser({
+      const result = await createUser({
         firstName: firstName.trim(),
         lastName: lastName.trim(),
         email: email.trim(),
         password,
         age: parsedAge,
       });
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
       reset();
       setOpen(false);
-    } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : "Noe gikk galt.");
+    } catch {
+      setError("Noe gikk galt. Prøv igjen.");
     } finally {
       setSaving(false);
     }

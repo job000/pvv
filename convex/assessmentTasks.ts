@@ -9,6 +9,7 @@ import {
   requireAssessmentRead,
   requireUserId,
 } from "./lib/access";
+import { buildAssigneeStates } from "./lib/taskAssignment";
 import { insertUserInAppNotification } from "./userInAppNotifications";
 
 function clampPriority(p: number | undefined): number {
@@ -174,6 +175,14 @@ export const create = mutation({
           ? [args.assigneeUserId]
           : [];
     const uniqueIds = [...new Set(allIds)];
+    const assigneeStates =
+      uniqueIds.length > 0
+        ? buildAssigneeStates({
+            assigneeIds: uniqueIds,
+            actorUserId: userId,
+            now,
+          })
+        : undefined;
     const taskId = await ctx.db.insert("assessmentTasks", {
       workspaceId: assessment.workspaceId,
       assessmentId: args.assessmentId,
@@ -181,6 +190,7 @@ export const create = mutation({
       description: args.description?.trim() || undefined,
       assigneeUserId: uniqueIds[0],
       assigneeUserIds: uniqueIds.length > 0 ? uniqueIds : undefined,
+      assigneeStates,
       createdByUserId: userId,
       status: "open",
       priority,
@@ -189,13 +199,14 @@ export const create = mutation({
       createdAt: now,
     });
     const atitle = assessment.title.trim() || "vurdering";
+    const tasksHref = `/w/${assessment.workspaceId}/oppgaver`;
     for (const uid of uniqueIds) {
       if (uid !== userId) {
         await insertUserInAppNotification(ctx, {
           userId: uid,
           title: `Du er tildelt oppgaven «${title}»`,
-          body: `På vurderingen «${atitle}».`,
-          href: `/w/${assessment.workspaceId}/a/${args.assessmentId}`,
+          body: `På vurderingen «${atitle}». Godta eller avslå under Oppgaver.`,
+          href: tasksHref,
         });
       }
     }
@@ -235,16 +246,26 @@ export const update = mutation({
         args.assigneeUserIds === null ? [] : [...new Set(args.assigneeUserIds)];
       patch.assigneeUserIds = newIds.length > 0 ? newIds : undefined;
       patch.assigneeUserId = newIds[0] ?? undefined;
+      patch.assigneeStates =
+        newIds.length > 0
+          ? buildAssigneeStates({
+              assigneeIds: newIds,
+              actorUserId: userId,
+              previous: row.assigneeStates,
+              now: Date.now(),
+            })
+          : undefined;
       const oldIds = new Set(resolveAssigneeIds(row));
       const added = newIds.filter((id) => !oldIds.has(id));
       const atitle = assessment.title.trim() || "vurdering";
+      const tasksHref = `/w/${assessment.workspaceId}/oppgaver`;
       for (const uid of added) {
         if (uid !== userId) {
           await insertUserInAppNotification(ctx, {
             userId: uid,
             title: `Du er tildelt oppgaven «${row.title}»`,
-            body: `På vurderingen «${atitle}».`,
-            href: `/w/${assessment.workspaceId}/a/${row.assessmentId}`,
+            body: `På vurderingen «${atitle}». Godta eller avslå under Oppgaver.`,
+            href: tasksHref,
           });
         }
       }
@@ -253,8 +274,15 @@ export const update = mutation({
         args.assigneeUserId === null ? undefined : args.assigneeUserId;
       if (args.assigneeUserId) {
         patch.assigneeUserIds = [args.assigneeUserId];
+        patch.assigneeStates = buildAssigneeStates({
+          assigneeIds: [args.assigneeUserId],
+          actorUserId: userId,
+          previous: row.assigneeStates,
+          now: Date.now(),
+        });
       } else {
         patch.assigneeUserIds = undefined;
+        patch.assigneeStates = undefined;
       }
     }
     if (args.priority !== undefined) {

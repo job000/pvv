@@ -12,6 +12,7 @@ import {
   requireUserId,
   requireWorkspaceMember,
 } from "./lib/access";
+import { buildAssigneeStates } from "./lib/taskAssignment";
 import { insertUserInAppNotification } from "./userInAppNotifications";
 import { loadIntakeApprovedDerivedIds } from "./lib/intakeDerivedIds";
 import { cascadeDeleteRosAnalysisData } from "./lib/cascadeDeletePvv";
@@ -2604,6 +2605,14 @@ export const createRosTask = mutation({
           ? [args.assigneeUserId]
           : [];
     const uniqueIds = [...new Set(allIds)];
+    const assigneeStates =
+      uniqueIds.length > 0
+        ? buildAssigneeStates({
+            assigneeIds: uniqueIds,
+            actorUserId: userId,
+            now,
+          })
+        : undefined;
     const taskId = await ctx.db.insert("rosTasks", {
       workspaceId: analysis.workspaceId,
       rosAnalysisId: args.analysisId,
@@ -2611,6 +2620,7 @@ export const createRosTask = mutation({
       description: args.description?.trim() || undefined,
       assigneeUserId: uniqueIds[0],
       assigneeUserIds: uniqueIds.length > 0 ? uniqueIds : undefined,
+      assigneeStates,
       createdByUserId: userId,
       status: "open",
       priority: clampRosPriority(args.priority),
@@ -2640,13 +2650,14 @@ export const createRosTask = mutation({
       updatedAt: now,
     });
     const rosTitle = analysis.title?.trim() || "ROS-analyse";
+    const tasksHref = `/w/${analysis.workspaceId}/oppgaver`;
     for (const uid of uniqueIds) {
       if (uid !== userId) {
         await insertUserInAppNotification(ctx, {
           userId: uid,
           title: `Du er tildelt ROS-oppgaven «${title}»`,
-          body: `På ROS-analysen «${rosTitle}».`,
-          href: `/w/${analysis.workspaceId}/ros/${args.analysisId}`,
+          body: `På ROS-analysen «${rosTitle}». Godta eller avslå under Oppgaver.`,
+          href: tasksHref,
         });
       }
     }
@@ -2707,16 +2718,26 @@ export const updateRosTask = mutation({
         args.assigneeUserIds === null ? [] : [...new Set(args.assigneeUserIds)];
       patch.assigneeUserIds = newIds.length > 0 ? newIds : undefined;
       patch.assigneeUserId = newIds[0] ?? undefined;
+      patch.assigneeStates =
+        newIds.length > 0
+          ? buildAssigneeStates({
+              assigneeIds: newIds,
+              actorUserId: userId,
+              previous: row.assigneeStates,
+              now: Date.now(),
+            })
+          : undefined;
       const oldIds = new Set(resolveRosTaskAssigneeIds(row));
       const added = newIds.filter((id) => !oldIds.has(id));
       const rosTitle = analysis.title?.trim() || "ROS-analyse";
+      const tasksHref = `/w/${analysis.workspaceId}/oppgaver`;
       for (const uid of added) {
         if (uid !== userId) {
           await insertUserInAppNotification(ctx, {
             userId: uid,
             title: `Du er tildelt ROS-oppgaven «${row.title}»`,
-            body: `På ROS-analysen «${rosTitle}».`,
-            href: `/w/${analysis.workspaceId}/ros/${row.rosAnalysisId}`,
+            body: `På ROS-analysen «${rosTitle}». Godta eller avslå under Oppgaver.`,
+            href: tasksHref,
           });
         }
       }
@@ -2725,8 +2746,15 @@ export const updateRosTask = mutation({
         args.assigneeUserId === null ? undefined : args.assigneeUserId;
       if (args.assigneeUserId) {
         patch.assigneeUserIds = [args.assigneeUserId];
+        patch.assigneeStates = buildAssigneeStates({
+          assigneeIds: [args.assigneeUserId],
+          actorUserId: userId,
+          previous: row.assigneeStates,
+          now: Date.now(),
+        });
       } else {
         patch.assigneeUserIds = undefined;
+        patch.assigneeStates = undefined;
       }
     }
     if (args.priority !== undefined) {

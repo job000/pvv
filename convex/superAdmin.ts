@@ -288,18 +288,29 @@ export const createUser = mutation({
     password: v.string(),
     age: v.optional(v.number()),
   },
+  returns: v.union(
+    v.object({ ok: v.literal(true), userId: v.id("users") }),
+    v.object({ ok: v.literal(false), error: v.string() }),
+  ),
   handler: async (ctx, args) => {
     await requireSuperAdmin(ctx);
     const email = args.email.trim().toLowerCase();
-    if (!email) throw new Error("E-post kan ikke være tom.");
+    if (!email) {
+      return { ok: false as const, error: "E-post kan ikke være tom." };
+    }
     if (args.password.length < 8) {
-      throw new Error("Passord må være minst 8 tegn.");
+      return { ok: false as const, error: "Passord må være minst 8 tegn." };
     }
     const existing = await ctx.db
       .query("users")
       .withIndex("email", (q) => q.eq("email", email))
       .unique();
-    if (existing) throw new Error(`Bruker med e-post «${email}» finnes allerede.`);
+    if (existing) {
+      return {
+        ok: false as const,
+        error: "En bruker med denne e-posten finnes allerede.",
+      };
+    }
 
     const fullName = [args.firstName, args.lastName].filter(Boolean).join(" ").trim() || undefined;
     const userId = await ctx.db.insert("users", { name: fullName, email });
@@ -319,7 +330,7 @@ export const createUser = mutation({
       age: args.age ?? undefined,
     });
 
-    return userId;
+    return { ok: true as const, userId };
   },
 });
 

@@ -3,6 +3,7 @@
 import { RosAnalysisEditor } from "@/components/ros/ros-analysis-editor";
 import type { Id } from "@/convex/_generated/dataModel";
 import { useParams } from "next/navigation";
+import { Suspense } from "react";
 
 export default function RosAnalysisPage() {
   const params = useParams();
@@ -11,7 +12,9 @@ export default function RosAnalysisPage() {
 
   return (
     <div className="mx-auto w-full max-w-6xl pb-12">
-      <RosAnalysisEditor workspaceId={workspaceId} analysisId={analysisId} />
+      <Suspense fallback={<p className="text-sm text-muted-foreground">Laster ROS …</p>}>
+        <RosAnalysisEditor workspaceId={workspaceId} analysisId={analysisId} />
+      </Suspense>
     </div>
   );
 }
