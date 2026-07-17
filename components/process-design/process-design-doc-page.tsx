@@ -21,9 +21,11 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PdfBlobViewer } from "@/components/ui/pdf-blob-viewer";
+import { RichTextEditor } from "@/components/ui/rich-text-editor";
 import { SearchInput } from "@/components/ui/search-input";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { Textarea } from "@/components/ui/textarea";
+import { isEmptyRichText } from "@/lib/rich-text";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import type { AssessmentPayload } from "@/lib/assessment-types";
@@ -44,6 +46,7 @@ import {
   buildProcessDesignPdfPreviewUrl,
   downloadProcessDesignPdf,
 } from "@/lib/process-design-pdf";
+import { setPddDiagramLiveSnapshot } from "@/lib/pdd-diagram-live-cache";
 import { cn } from "@/lib/utils";
 import { useMutation, useQuery } from "convex/react";
 import {
@@ -55,6 +58,7 @@ import {
   AlertTriangle,
   ArrowLeft,
   BookOpen,
+  CalendarDays,
   ChevronDown,
   ExternalLink,
   FileDown,
@@ -67,10 +71,12 @@ import {
   Maximize2,
   Minimize2,
   MoreHorizontal,
+  Paperclip,
   Plus,
   RefreshCw,
   Save,
   Sparkles,
+  StickyNote,
   Trash2,
   X,
 } from "lucide-react";
@@ -105,21 +111,13 @@ function getMobileViewport() {
 }
 
 function hasMeaningfulValue(value: unknown): boolean {
-  if (typeof value === "string") return value.trim().length > 0;
+  if (typeof value === "string") return !isEmptyRichText(value);
   if (Array.isArray(value)) return value.length > 0;
   return false;
 }
 
 function payloadHasMeaningfulContent(payload: ProcessDesignDocumentPayload): boolean {
   return Object.values(payload).some((value) => hasMeaningfulValue(value));
-}
-
-function textareaHeightClass(rows: number): string {
-  if (rows <= 1) return "min-h-[3.25rem] sm:min-h-[2.75rem]";
-  if (rows <= 2) return "min-h-[5.75rem] sm:min-h-[4.75rem]";
-  if (rows <= 4) return "min-h-[8.5rem] sm:min-h-[7rem]";
-  if (rows <= 6) return "min-h-[11rem] sm:min-h-[9rem]";
-  return "min-h-[14rem] sm:min-h-[11rem]";
 }
 
 const PDD_SOURCE_MAPPING_GROUPS = [
@@ -205,18 +203,14 @@ function Field({
       {description ? (
         <p className="text-xs leading-5 text-muted-foreground">{description}</p>
       ) : null}
-      <Textarea
+      <RichTextEditor
         value={value}
-        onChange={(e) => onChange(e.target.value)}
+        onChange={onChange}
         rows={rows}
         disabled={disabled}
         placeholder={placeholder}
-        className={cn(
-          "resize-y rounded-xl border-border/50 bg-muted/15 px-3.5 py-2.5 text-sm leading-6 transition-colors",
-          "placeholder:text-muted-foreground/55 focus-visible:border-foreground/20 focus-visible:bg-background focus-visible:ring-1 focus-visible:ring-foreground/10",
-          textareaHeightClass(rows),
-          className,
-        )}
+        aria-label={label}
+        className={className}
       />
     </div>
   );
@@ -387,6 +381,9 @@ function ProcessTextDiagramBlock({
     [tabKey],
   );
   const [diagramFullscreen, setDiagramFullscreen] = useState(false);
+  /** clearNonce knyttes til instanceKey — ny revisjon starter på 0 uten ekstra effect. */
+  const [clearState, setClearState] = useState({ key: instanceKey, n: 0 });
+  const clearNonce = clearState.key === instanceKey ? clearState.n : 0;
   const isMobileViewport = useSyncExternalStore(
     subscribeMobileViewport,
     getMobileViewport,
@@ -397,6 +394,14 @@ function ProcessTextDiagramBlock({
   const toggleDiagramFullscreen = useCallback(() => {
     setDiagramFullscreen((current) => !current);
   }, []);
+
+  const clearDiagram = useCallback(() => {
+    if (!canEdit) return;
+    if (!confirm("Slette alt i diagrammet?")) return;
+    setPddDiagramLiveSnapshot(instanceKey, diagramKind, "");
+    onDiagramJson("");
+    setClearState({ key: instanceKey, n: clearNonce + 1 });
+  }, [canEdit, clearNonce, diagramKind, instanceKey, onDiagramJson]);
 
   useEffect(() => {
     if (mode !== "diagram") {
@@ -439,18 +444,13 @@ function ProcessTextDiagramBlock({
         </button>
       </div>
       {mode === "beskrivelse" ? (
-        <Textarea
+        <RichTextEditor
           value={textValue}
-          onChange={(e) => onTextChange(e.target.value)}
+          onChange={onTextChange}
           rows={isMobileViewport ? Math.max(textRows, 8) : textRows}
           disabled={!canEdit}
-          className={cn(
-            "resize-y rounded-xl border-border/50 bg-muted/15 px-3.5 py-2.5 text-sm leading-6",
-            "focus-visible:border-foreground/20 focus-visible:bg-background focus-visible:ring-1 focus-visible:ring-foreground/10",
-            isMobileViewport
-              ? "min-h-[14rem]"
-              : textareaHeightClass(textRows),
-          )}
+          aria-label={sectionLabel}
+          placeholder="Beskriv flyten med tekst. Bruk fet, kursiv, gul markering eller sett inn bilde."
         />
       ) : !isMobileViewport ? (
         <div className="flex flex-col gap-3">
@@ -459,15 +459,13 @@ function ProcessTextDiagramBlock({
               {diagramHint}
             </p>
             <div className="flex shrink-0 flex-col gap-2 sm:flex-row sm:items-center">
-              {canEdit && diagramValue?.trim() ? (
+              {canEdit ? (
                 <Button
                   type="button"
                   size="sm"
                   variant="ghost"
                   className="h-9 justify-center text-xs text-muted-foreground sm:h-8"
-                  onClick={() => {
-                    if (confirm("Slette alt i diagrammet?")) onDiagramJson("");
-                  }}
+                  onClick={clearDiagram}
                 >
                   Tøm diagram
                 </Button>
@@ -476,7 +474,7 @@ function ProcessTextDiagramBlock({
                 type="button"
                 size="sm"
                 variant="outline"
-                className="h-10 touch-manipulation justify-center rounded-xl sm:h-9"
+                className="h-10 touch-manipulation justify-center rounded-lg sm:h-9"
                 onClick={toggleDiagramFullscreen}
               >
                 <Maximize2
@@ -504,6 +502,7 @@ function ProcessTextDiagramBlock({
                 readOnly={!canEdit}
                 instanceKey={instanceKey}
                 diagramKind={diagramKind}
+                clearNonce={clearNonce}
                 layoutVariant="embed"
               />
             )}
@@ -527,61 +526,71 @@ function ProcessTextDiagramBlock({
         <DialogContent
           size="7xl"
           titleId={`${instanceKey}-diagram-title`}
-          fillViewport={diagramFullscreen}
+          fillViewport={isMobileViewport || diagramFullscreen}
           className={
-            diagramFullscreen
+            isMobileViewport || diagramFullscreen
               ? "p-0"
-              : "h-[92dvh] max-w-[min(96vw,96rem)] p-0"
+              : "h-[min(92dvh,100svh)] max-h-[100dvh] w-[min(96vw,96rem)] max-w-none p-0"
           }
         >
-          <div className="flex min-h-0 flex-1 flex-col">
+          <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col">
             <DialogHeader
               className={cn(
-                diagramFullscreen
-                  ? "space-y-0 border-b px-3 py-2.5 sm:px-4 sm:py-3"
+                "shrink-0",
+                isMobileViewport || diagramFullscreen
+                  ? "space-y-0 border-b px-3 py-2 pt-[max(0.5rem,env(safe-area-inset-top))] sm:px-4 sm:py-3"
                   : "space-y-3",
               )}
             >
               <div
                 className={cn(
                   "flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between",
-                  diagramFullscreen && "gap-2 sm:items-center",
+                  (isMobileViewport || diagramFullscreen) && "gap-2 sm:items-center",
                 )}
               >
-                <div className={cn("space-y-1", diagramFullscreen && "min-w-0 flex-1")}>
+                <div
+                  className={cn(
+                    "space-y-1",
+                    (isMobileViewport || diagramFullscreen) && "min-w-0 flex-1",
+                  )}
+                >
                   <p
                     id={`${instanceKey}-diagram-title`}
                     className={cn(
                       "font-heading font-semibold",
-                      diagramFullscreen ? "truncate text-base sm:text-lg" : "text-lg",
+                      isMobileViewport || diagramFullscreen
+                        ? "truncate text-base sm:text-lg"
+                        : "text-lg",
                     )}
                   >
                     {sectionLabel}
                   </p>
-                  {!diagramFullscreen ? (
-                    <p className="text-sm leading-relaxed text-muted-foreground">
-                      Apple Pencil: tegn direkte (håndflate ignoreres). To fingre zoomer/panorerer;
-                      bytt til Pil for feste-koblinger mellom bokser.
+                  {isMobileViewport || diagramFullscreen ? (
+                    <p className="text-[11px] leading-snug text-muted-foreground sm:text-xs">
+                      Pencil: tegn direkte. Dobbelttrykk med spissen på lerretet
+                      bytter blyant/viskelær. To fingre zoomer.
                     </p>
                   ) : (
-                    <p className="sr-only">
-                      Apple Pencil tegner freehand med trykk. To fingre zoomer. Pil festes til bokser.
+                    <p className="text-sm leading-relaxed text-muted-foreground">
+                      Apple Pencil: tegn direkte (håndflate ignoreres).
+                      Dobbelttrykk med Pencil på lerretet bytter blyant/viskelær.
+                      To fingre zoomer/panorerer; Pil for faste koblinger.
                     </p>
                   )}
                 </div>
                 <div className="flex shrink-0 flex-col gap-2 sm:flex-row sm:items-center">
-                  {canEdit && diagramValue?.trim() ? (
+                  {canEdit ? (
                     <Button
                       type="button"
                       size="sm"
                       variant="ghost"
                       className={cn(
                         "justify-center",
-                        diagramFullscreen ? "h-9 sm:h-8" : "h-10 sm:h-9",
+                        isMobileViewport || diagramFullscreen
+                          ? "h-9 sm:h-8"
+                          : "h-10 sm:h-9",
                       )}
-                      onClick={() => {
-                        if (confirm("Slette alt i diagrammet?")) onDiagramJson("");
-                      }}
+                      onClick={clearDiagram}
                     >
                       Tøm diagram
                     </Button>
@@ -591,8 +600,10 @@ function ProcessTextDiagramBlock({
                     size="sm"
                     variant="outline"
                     className={cn(
-                      "touch-manipulation justify-center",
-                      diagramFullscreen ? "h-9 sm:h-8" : "h-10 sm:h-9",
+                      "touch-manipulation justify-center rounded-lg",
+                      isMobileViewport || diagramFullscreen
+                        ? "h-9 sm:h-8"
+                        : "h-10 sm:h-9",
                     )}
                     onClick={() => {
                       if (isMobileViewport) {
@@ -614,9 +625,9 @@ function ProcessTextDiagramBlock({
             </DialogHeader>
             <DialogBody
               className={cn(
-                "min-h-0 flex-1",
-                diagramFullscreen
-                  ? "overflow-hidden p-0 sm:p-0"
+                "flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden",
+                isMobileViewport || diagramFullscreen
+                  ? "p-0 pb-[env(safe-area-inset-bottom)] sm:p-0"
                   : "p-3 sm:p-4",
               )}
             >
@@ -626,11 +637,12 @@ function ProcessTextDiagramBlock({
                 readOnly={!canEdit}
                 instanceKey={instanceKey}
                 diagramKind={diagramKind}
+                clearNonce={clearNonce}
                 layoutVariant="fullscreen"
                 className={cn(
-                  "min-h-0 flex-1",
-                  diagramFullscreen
-                    ? "rounded-none border-0 border-t-0 shadow-none sm:rounded-none"
+                  "min-h-0 min-w-0 flex-1",
+                  isMobileViewport || diagramFullscreen
+                    ? "rounded-none border-0 shadow-none"
                     : "rounded-[1.25rem] sm:rounded-[1.5rem]",
                 )}
               />
@@ -704,34 +716,41 @@ function HukiEditor({
     onChange(rows.map((r, j) => (j === i ? { ...r, ...patch } : r)));
   };
 
-  const hasAnyData = rows.some(
-    (r) => r.h?.trim() || r.u?.trim() || r.k?.trim() || r.i?.trim(),
-  );
+  const addRow = () =>
+    onChange([...rows, { activity: "", h: "", u: "", k: "", i: "" }]);
 
   return (
     <div className="space-y-4">
       <div className="space-y-2">
-        <div className="flex items-center gap-2">
-          <Label className="text-[0.8rem] font-medium text-muted-foreground">
-            HUKI-matrise
-          </Label>
-        </div>
+        <Label className="text-[0.8rem] font-medium text-muted-foreground">
+          HUKI-matrise
+        </Label>
         <SourceHintBadges hints={sourceHints} />
+        <p className="text-xs leading-relaxed text-muted-foreground">
+          For hver aktivitet: skriv fullt navn til venstre, og roller/personer
+          under H, U, K og I.
+        </p>
+        {/* Full question legend — always visible, never truncated */}
+        <ul className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+          {HUKI_COLS.map((c) => (
+            <li
+              key={c.key}
+              className="rounded-lg border border-border/50 bg-muted/20 px-3 py-2"
+            >
+              <p className={`text-xs font-bold ${c.headerText}`}>
+                {c.letter} · {c.label}
+              </p>
+              <p className="mt-0.5 text-[11px] leading-snug text-muted-foreground">
+                {c.full}
+              </p>
+            </li>
+          ))}
+        </ul>
       </div>
-      {/* Empty state */}
+
       {rows.length === 0 && (
-        <div className="flex flex-col items-center gap-3 rounded-2xl border border-dashed border-border/60 bg-muted/20 py-10 text-center">
-          <div className="flex gap-1.5">
-            {HUKI_COLS.map((c) => (
-              <span
-                key={c.key}
-                className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold ${c.badge}`}
-              >
-                {c.letter}
-              </span>
-            ))}
-          </div>
-          <p className="max-w-xs text-sm text-muted-foreground">
+        <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed border-border/60 bg-muted/20 py-10 text-center">
+          <p className="max-w-sm text-sm text-muted-foreground">
             Kartlegg hvem som Høres, Utfører, Kontrollerer og Informeres for
             hver aktivitet i prosessen.
           </p>
@@ -739,10 +758,8 @@ function HukiEditor({
             type="button"
             size="sm"
             disabled={disabled}
-            className="gap-1.5"
-            onClick={() =>
-              onChange([{ activity: "", h: "", u: "", k: "", i: "" }])
-            }
+            className="gap-1.5 rounded-lg"
+            onClick={addRow}
           >
             <Plus className="size-3.5" aria-hidden />
             Legg til aktivitet
@@ -752,9 +769,17 @@ function HukiEditor({
 
       {rows.length > 0 && (
         <>
-          {/* ── Matrix table (desktop) ── */}
-          <div className="hidden overflow-hidden rounded-xl border border-border/60 sm:block">
-            <table className="w-full text-sm">
+          {/* Desktop / tablet matrix — activity column gets room to wrap */}
+          <div className="hidden overflow-x-auto rounded-xl border border-border/60 md:block">
+            <table className="w-full min-w-[44rem] table-fixed text-sm">
+              <colgroup>
+                <col className="w-[34%]" />
+                <col className="w-[15%]" />
+                <col className="w-[15%]" />
+                <col className="w-[15%]" />
+                <col className="w-[15%]" />
+                <col className="w-[6%]" />
+              </colgroup>
               <thead>
                 <tr>
                   <th className="border-b border-border/40 bg-muted/30 px-3 py-2.5 text-left text-xs font-semibold text-muted-foreground">
@@ -763,70 +788,76 @@ function HukiEditor({
                   {HUKI_COLS.map((c) => (
                     <th
                       key={c.key}
-                      className={`border-b border-border/40 px-3 py-2.5 text-center ${c.headerBg}`}
+                      className={`border-b border-border/40 px-2 py-2.5 text-center ${c.headerBg}`}
+                      title={c.full}
                     >
                       <span
                         className={`block text-xs font-bold ${c.headerText}`}
                       >
                         {c.letter}
                       </span>
-                      <span className="block text-[10px] font-medium text-muted-foreground">
+                      <span className="mt-0.5 block text-[10px] font-medium leading-tight text-muted-foreground">
                         {c.label}
                       </span>
                     </th>
                   ))}
-                  <th className="w-9 border-b border-border/40 bg-muted/30" />
+                  <th className="border-b border-border/40 bg-muted/30" />
                 </tr>
               </thead>
               <tbody>
                 {rows.map((r, idx) => (
                   <tr
                     key={idx}
-                    className="group/row border-b border-border/20 last:border-b-0 transition-colors hover:bg-muted/20"
+                    className="group/row border-b border-border/20 align-top last:border-b-0 hover:bg-muted/15"
                   >
-                    <td className="px-3 py-2">
-                      <div className="flex items-center gap-2">
-                        <span className="flex size-5 shrink-0 items-center justify-center rounded text-[10px] font-bold text-muted-foreground">
+                    <td className="px-2 py-2">
+                      <div className="flex items-start gap-2">
+                        <span className="mt-2 flex size-5 shrink-0 items-center justify-center text-[10px] font-bold text-muted-foreground">
                           {idx + 1}.
                         </span>
-                        <Input
+                        <Textarea
                           value={r.activity}
                           disabled={disabled}
                           placeholder="Navn på aktivitet"
+                          rows={2}
                           onChange={(e) =>
                             update(idx, { activity: e.target.value })
                           }
-                          className="h-8 border-0 bg-transparent px-1 text-sm font-medium shadow-none focus-visible:ring-1"
+                          className="min-h-[3.25rem] flex-1 resize-y rounded-lg border-border/40 bg-background/60 px-2 py-1.5 text-sm font-medium leading-snug shadow-none"
                         />
                       </div>
                     </td>
                     {HUKI_COLS.map((c) => (
-                      <td key={c.key} className="px-2 py-2">
-                        <Input
+                      <td key={c.key} className="px-1.5 py-2">
+                        <Textarea
                           value={(r[c.key] as string) ?? ""}
                           disabled={disabled}
                           placeholder="—"
+                          rows={2}
+                          aria-label={`${c.letter} ${c.label}: ${c.full}`}
                           onChange={(e) =>
                             update(idx, { [c.key]: e.target.value })
                           }
-                          className={`h-8 text-center text-sm ${
+                          className={cn(
+                            "min-h-[3.25rem] w-full resize-y rounded-lg border-border/40 bg-background/60 px-1.5 py-1.5 text-center text-xs leading-snug shadow-none",
                             (r[c.key] as string)?.trim()
-                              ? "font-medium"
-                              : "text-muted-foreground"
-                          }`}
+                              ? "font-medium text-foreground"
+                              : "text-muted-foreground",
+                          )}
                         />
                       </td>
                     ))}
-                    <td className="px-1 py-2">
+                    <td className="px-1 py-2 text-center">
                       <Button
                         type="button"
                         variant="ghost"
                         size="icon-xs"
                         disabled={disabled}
-                        className="text-muted-foreground opacity-0 transition-opacity hover:text-destructive group-hover/row:opacity-100"
+                        className="mt-1 text-muted-foreground opacity-70 transition-opacity hover:text-destructive group-hover/row:opacity-100"
                         onClick={() =>
                           onChange(rows.filter((_, j) => j !== idx))
                         }
+                        aria-label={`Fjern aktivitet ${idx + 1}`}
                       >
                         <Trash2 className="size-3" />
                       </Button>
@@ -837,53 +868,59 @@ function HukiEditor({
             </table>
           </div>
 
-          {/* ── Mobile cards ── */}
-          <ul className="space-y-3 sm:hidden">
+          {/* Phone / narrow: stacked cards with full labels */}
+          <ul className="space-y-3 md:hidden">
             {rows.map((r, idx) => (
               <li
                 key={idx}
-                className="group/huki overflow-hidden rounded-xl border border-border/60"
+                className="rounded-xl border border-border/60 bg-muted/10"
               >
-                <div className="flex items-center gap-2 bg-muted/30 px-3 py-2.5">
-                  <span className="text-xs font-bold text-muted-foreground">
+                <div className="flex items-start gap-2 border-b border-border/40 px-3 py-3">
+                  <span className="mt-1.5 text-xs font-bold text-muted-foreground">
                     {idx + 1}.
                   </span>
-                  <Input
+                  <Textarea
                     value={r.activity}
                     disabled={disabled}
                     placeholder="Navn på aktivitet"
+                    rows={2}
                     onChange={(e) =>
                       update(idx, { activity: e.target.value })
                     }
-                    className="h-7 border-0 bg-transparent px-0 text-sm font-semibold shadow-none focus-visible:ring-0"
+                    className="min-h-[3rem] flex-1 resize-y rounded-lg border-border/40 bg-background/70 px-2.5 py-2 text-sm font-semibold leading-snug"
                   />
                   <Button
                     type="button"
                     variant="ghost"
                     size="icon-xs"
                     disabled={disabled}
-                    className="shrink-0 text-muted-foreground hover:text-destructive"
+                    className="mt-1 shrink-0 text-muted-foreground hover:text-destructive"
                     onClick={() =>
                       onChange(rows.filter((_, j) => j !== idx))
                     }
+                    aria-label={`Fjern aktivitet ${idx + 1}`}
                   >
                     <Trash2 className="size-3" />
                   </Button>
                 </div>
-                <div className="divide-y divide-border/20">
+                <div className="divide-y divide-border/25">
                   {HUKI_COLS.map((c) => (
-                    <div
-                      key={c.key}
-                      className="flex items-center gap-3 px-3 py-2"
-                    >
-                      <span
-                        className={`flex size-6 shrink-0 items-center justify-center rounded-md text-xs font-bold ${c.badge}`}
-                      >
-                        {c.letter}
-                      </span>
-                      <span className="w-20 shrink-0 text-xs font-medium text-muted-foreground">
-                        {c.label}
-                      </span>
+                    <div key={c.key} className="space-y-1.5 px-3 py-2.5">
+                      <div className="flex items-baseline gap-2">
+                        <span
+                          className={`inline-flex size-6 shrink-0 items-center justify-center rounded-md text-xs font-bold ${c.badge}`}
+                        >
+                          {c.letter}
+                        </span>
+                        <div className="min-w-0">
+                          <p className="text-xs font-semibold text-foreground">
+                            {c.label}
+                          </p>
+                          <p className="text-[11px] leading-snug text-muted-foreground">
+                            {c.full}
+                          </p>
+                        </div>
+                      </div>
                       <Input
                         value={(r[c.key] as string) ?? ""}
                         disabled={disabled}
@@ -891,7 +928,7 @@ function HukiEditor({
                         onChange={(e) =>
                           update(idx, { [c.key]: e.target.value })
                         }
-                        className="h-7 flex-1 text-sm"
+                        className="h-9 rounded-lg text-sm"
                       />
                     </div>
                   ))}
@@ -900,44 +937,46 @@ function HukiEditor({
             ))}
           </ul>
 
-          {/* Add row */}
           <Button
             type="button"
             variant="outline"
             size="sm"
             disabled={disabled}
-            className="w-full gap-1.5"
-            onClick={() =>
-              onChange([
-                ...rows,
-                { activity: "", h: "", u: "", k: "", i: "" },
-              ])
-            }
+            className="w-full gap-1.5 rounded-lg"
+            onClick={addRow}
           >
             <Plus className="size-3.5" aria-hidden />
             Legg til aktivitet
           </Button>
 
-          {/* ── Summary read-only view (when data present) ── */}
-          {hasAnyData && (
+          {/* Compact overview — wraps, no truncation */}
+          {rows.some(
+            (r) =>
+              r.activity.trim() ||
+              r.h?.trim() ||
+              r.u?.trim() ||
+              r.k?.trim() ||
+              r.i?.trim(),
+          ) ? (
             <div className="space-y-2">
               <p className="text-xs font-semibold text-muted-foreground">
                 Matriseoversikt
               </p>
               <div className="overflow-x-auto rounded-xl border border-border/40 bg-muted/10">
-                <table className="w-full text-xs">
+                <table className="w-full min-w-[28rem] text-xs">
                   <thead>
                     <tr>
-                      <th className="whitespace-nowrap px-3 py-2 text-left font-semibold text-muted-foreground">
+                      <th className="px-3 py-2 text-left font-semibold text-muted-foreground">
                         #
                       </th>
-                      <th className="whitespace-nowrap px-3 py-2 text-left font-semibold text-foreground">
+                      <th className="px-3 py-2 text-left font-semibold text-foreground">
                         Aktivitet
                       </th>
                       {HUKI_COLS.map((c) => (
                         <th
                           key={c.key}
-                          className={`whitespace-nowrap px-3 py-2 text-center font-bold ${c.headerText}`}
+                          className={`px-2 py-2 text-center font-bold ${c.headerText}`}
+                          title={c.full}
                         >
                           {c.letter}
                         </th>
@@ -946,27 +985,22 @@ function HukiEditor({
                   </thead>
                   <tbody>
                     {rows.map((r, idx) => (
-                      <tr
-                        key={idx}
-                        className="border-t border-border/20"
-                      >
-                        <td className="px-3 py-1.5 font-medium text-muted-foreground">
+                      <tr key={idx} className="border-t border-border/20 align-top">
+                        <td className="px-3 py-2 font-medium text-muted-foreground">
                           {idx + 1}
                         </td>
-                        <td className="max-w-[12rem] truncate px-3 py-1.5 font-medium text-foreground">
-                          {r.activity || (
-                            <span className="text-muted-foreground/50">
-                              –
-                            </span>
+                        <td className="max-w-[16rem] whitespace-normal break-words px-3 py-2 font-medium leading-snug text-foreground">
+                          {r.activity.trim() || (
+                            <span className="text-muted-foreground/50">–</span>
                           )}
                         </td>
                         {HUKI_COLS.map((c) => {
                           const val = (r[c.key] as string)?.trim();
                           return (
-                            <td key={c.key} className="px-2 py-1.5 text-center">
+                            <td key={c.key} className="px-2 py-2 text-center">
                               {val ? (
                                 <span
-                                  className={`inline-block max-w-[7rem] truncate rounded-full px-2 py-0.5 text-[10px] font-semibold ${c.badge}`}
+                                  className={`inline-block max-w-[9rem] whitespace-normal break-words rounded-md px-1.5 py-0.5 text-[10px] font-semibold leading-snug ${c.badge}`}
                                 >
                                   {val}
                                 </span>
@@ -984,7 +1018,7 @@ function HukiEditor({
                 </table>
               </div>
             </div>
-          )}
+          ) : null}
         </>
       )}
     </div>
@@ -1546,29 +1580,29 @@ export function ProcessDesignDocPage({
     return {
       overview: Boolean(
         payload.processTitle?.trim() ||
-          payload.shortDescription?.trim() ||
-          payload.executiveSummary?.trim(),
+          !isEmptyRichText(payload.shortDescription) ||
+          !isEmptyRichText(payload.executiveSummary),
       ),
       asis: Boolean(
-        payload.asIsShortDescription?.trim() ||
+        !isEmptyRichText(payload.asIsShortDescription) ||
           (payload.asIsApplications?.length ?? 0) > 0,
       ),
       tobe: Boolean(
-        payload.toBeSteps?.trim() ||
-          payload.toBeMap?.trim(),
+        !isEmptyRichText(payload.toBeSteps) ||
+          !isEmptyRichText(payload.toBeMap),
       ),
       huki: Boolean((payload.hukiRows?.length ?? 0) > 0),
       risk: Boolean(
         (payload.businessExceptionsKnown?.length ?? 0) > 0 ||
-          payload.businessExceptionsUnknown?.trim() ||
+          !isEmptyRichText(payload.businessExceptionsUnknown) ||
           (payload.appErrorsKnown?.length ?? 0) > 0 ||
-          payload.appErrorsUnknown?.trim(),
+          !isEmptyRichText(payload.appErrorsUnknown),
       ),
       extra: Boolean(
-        payload.otherObservations?.trim() ||
-          payload.additionalSources?.trim() ||
-          payload.targetTimeline?.trim() ||
-          payload.appendix?.trim(),
+        !isEmptyRichText(payload.otherObservations) ||
+          !isEmptyRichText(payload.additionalSources) ||
+          !isEmptyRichText(payload.targetTimeline) ||
+          !isEmptyRichText(payload.appendix),
       ),
     };
   }, [payload]);
@@ -2397,7 +2431,7 @@ export function ProcessDesignDocPage({
                 </div>
                 <ProcessTextDiagramBlock
                   sectionLabel="As-Is prosesskart"
-                  diagramHint="Tegn fritt med Blyant (Apple Pencil støttes med trykk). Sett bokser med form-verktøyet, koble med Pil — eller skisser flyt freehand. Fullskjerm gir best arbeidsflate på iPad."
+                  diagramHint="Tegn fritt med Blyant (Apple Pencil med trykk). Dobbelttrykk med Pencil på lerretet bytter blyant/viskelær. Fullskjerm anbefales på iPad — fungerer i portrett og landskap."
                   textRows={4}
                   textValue={payload.asIsProcessMap ?? ""}
                   onTextChange={(v) => setStr("asIsProcessMap", v)}
@@ -2450,7 +2484,7 @@ export function ProcessDesignDocPage({
               <AccordionContent className="space-y-5 border-t border-border/35 pt-4">
                 <ProcessTextDiagramBlock
                   sectionLabel="To-Be prosesskart"
-                  diagramHint="Tegn fremtidig flyt freehand med Blyant (Apple Pencil), eller bygg med bokser + Pil for faste koblinger."
+                  diagramHint="Tegn fremtidig flyt freehand med Blyant (Apple Pencil), eller bygg med bokser + Pil. Dobbelttrykk med Pencil på lerretet bytter blyant/viskelær."
                   textRows={4}
                   textValue={payload.toBeMap ?? ""}
                   onTextChange={(v) => setStr("toBeMap", v)}
@@ -2674,41 +2708,115 @@ export function ProcessDesignDocPage({
                 label="Tilleggsinformasjon"
                 done={sectionCompletion.extra}
               />
-              <AccordionContent className="space-y-5 border-t border-border/35 pt-4">
-                <Field
-                  label="Andre observasjoner"
-                  value={payload.otherObservations ?? ""}
-                  onChange={(v) => setStr("otherObservations", v)}
-                  rows={5}
-                  disabled={!canEdit}
-                  description="Samle supplerende observasjoner, driftsnotater og viktige avklaringer."
-                  sourceHint="Kan hentes fra ROS og vurdering"
-                />
-                <Field
-                  label="Tilleggskilder / SOP / video"
-                  value={payload.additionalSources ?? ""}
-                  onChange={(v) => setStr("additionalSources", v)}
-                  rows={5}
-                  disabled={!canEdit}
-                  description="Lenker, notater, skjemaer og andre kilder som støtter prosessdesignet."
-                  sourceHint="Kan hentes fra prosessregister og inntak"
-                />
-                <Field
-                  label="Tidsplan og milepæler"
-                  value={payload.targetTimeline ?? ""}
-                  onChange={(v) => setStr("targetTimeline", v)}
-                  rows={5}
-                  disabled={!canEdit}
-                  description="Skisser ønsket fremdrift fra design og test til drift."
-                />
-                <Field
-                  label="Vedlegg"
-                  value={payload.appendix ?? ""}
-                  onChange={(v) => setStr("appendix", v)}
-                  rows={4}
-                  disabled={!canEdit}
-                  description="Noter vedlegg, filnavn eller referanser som hører til dokumentet."
-                />
+              <AccordionContent className="space-y-4 border-t border-border/35 pt-4">
+                <div className="rounded-xl border border-border/45 bg-muted/15 px-4 py-3">
+                  <p className="text-sm font-medium text-foreground">
+                    Tillegg til dokumentasjonen
+                  </p>
+                  <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                    Bruk feltene under til det som ikke naturlig hører hjemme i
+                    Oversikt, As-Is, To-Be eller Risiko. Du kan formatere tekst
+                    (fet, kursiv, understrek, gul markering) og sette inn bilder
+                    direkte i notatene.
+                  </p>
+                </div>
+
+                <div className="space-y-4">
+                  <div className="rounded-xl border border-border/50 bg-background p-3.5 sm:p-4">
+                    <div className="mb-3 flex items-start gap-2.5">
+                      <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground">
+                        <StickyNote className="size-4" aria-hidden />
+                      </span>
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium">Andre observasjoner</p>
+                        <p className="text-xs leading-relaxed text-muted-foreground">
+                          Driftsnotater, avklaringer og funn som bør følge
+                          dokumentet.
+                        </p>
+                      </div>
+                    </div>
+                    <RichTextEditor
+                      value={payload.otherObservations ?? ""}
+                      onChange={(v) => setStr("otherObservations", v)}
+                      rows={5}
+                      disabled={!canEdit}
+                      aria-label="Andre observasjoner"
+                      placeholder="Skriv observasjoner, beslutninger eller åpne spørsmål…"
+                    />
+                  </div>
+
+                  <div className="rounded-xl border border-border/50 bg-background p-3.5 sm:p-4">
+                    <div className="mb-3 flex items-start gap-2.5">
+                      <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground">
+                        <BookOpen className="size-4" aria-hidden />
+                      </span>
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium">
+                          Tilleggskilder / SOP / video
+                        </p>
+                        <p className="text-xs leading-relaxed text-muted-foreground">
+                          Lenker, skjemaer, videoer og andre kilder som støtter
+                          designet.
+                        </p>
+                      </div>
+                    </div>
+                    <RichTextEditor
+                      value={payload.additionalSources ?? ""}
+                      onChange={(v) => setStr("additionalSources", v)}
+                      rows={5}
+                      disabled={!canEdit}
+                      aria-label="Tilleggskilder"
+                      placeholder="Lim inn lenker, eller beskriv hvor SOP/video finnes…"
+                    />
+                  </div>
+
+                  <div className="rounded-xl border border-border/50 bg-background p-3.5 sm:p-4">
+                    <div className="mb-3 flex items-start gap-2.5">
+                      <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground">
+                        <CalendarDays className="size-4" aria-hidden />
+                      </span>
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium">
+                          Tidsplan og milepæler
+                        </p>
+                        <p className="text-xs leading-relaxed text-muted-foreground">
+                          Skisser fremdrift fra design og test til drift.
+                        </p>
+                      </div>
+                    </div>
+                    <RichTextEditor
+                      value={payload.targetTimeline ?? ""}
+                      onChange={(v) => setStr("targetTimeline", v)}
+                      rows={5}
+                      disabled={!canEdit}
+                      aria-label="Tidsplan og milepæler"
+                      placeholder="F.eks. design ferdig · pilot · produksjon…"
+                    />
+                  </div>
+
+                  <div className="rounded-xl border border-border/50 bg-background p-3.5 sm:p-4">
+                    <div className="mb-3 flex items-start gap-2.5">
+                      <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground">
+                        <Paperclip className="size-4" aria-hidden />
+                      </span>
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium">Vedlegg</p>
+                        <p className="text-xs leading-relaxed text-muted-foreground">
+                          Filnavn, referanser eller små skjermbilder som hører
+                          til dokumentet.
+                        </p>
+                      </div>
+                    </div>
+                    <RichTextEditor
+                      value={payload.appendix ?? ""}
+                      onChange={(v) => setStr("appendix", v)}
+                      rows={4}
+                      disabled={!canEdit}
+                      aria-label="Vedlegg"
+                      placeholder="List vedlegg, eller sett inn bilde her…"
+                    />
+                  </div>
+                </div>
               </AccordionContent>
             </AccordionItem>
             ) : null}
@@ -3272,14 +3380,16 @@ function ExceptionRowsEditor({
               disabled={disabled}
               onChange={(e) => update(i, { name: e.target.value })}
             />
-            <Textarea
-              placeholder="Handling / tiltak"
-              value={r.action}
-              disabled={disabled}
-              rows={2}
-              className="mt-2"
-              onChange={(e) => update(i, { action: e.target.value })}
-            />
+            <div className="mt-2">
+              <RichTextEditor
+                placeholder="Handling / tiltak"
+                value={r.action}
+                disabled={disabled}
+                rows={2}
+                aria-label="Handling / tiltak"
+                onChange={(v) => update(i, { action: v })}
+              />
+            </div>
             <div className="mt-2 flex justify-end">
               <Button
                 type="button"
@@ -3370,30 +3480,29 @@ function StepsEditor({
                 {r.stepNo || i + 1}
               </div>
               <div className="min-w-0 flex-1 space-y-2">
-                <Textarea
+                <RichTextEditor
                   placeholder="Beskrivelse"
                   value={r.description}
                   disabled={disabled}
                   rows={2}
-                  onChange={(e) =>
-                    update(i, { description: e.target.value })
-                  }
+                  aria-label="Stegbeskrivelse"
+                  onChange={(v) => update(i, { description: v })}
                 />
-                <Textarea
+                <RichTextEditor
                   placeholder="Inndata"
                   value={r.input ?? ""}
                   disabled={disabled}
-                  rows={1}
-                  onChange={(e) => update(i, { input: e.target.value })}
+                  rows={2}
+                  aria-label="Inndata"
+                  onChange={(v) => update(i, { input: v })}
                 />
-                <Textarea
+                <RichTextEditor
                   placeholder="Unntak / feilhåndtering"
                   value={r.exception ?? ""}
                   disabled={disabled}
-                  rows={1}
-                  onChange={(e) =>
-                    update(i, { exception: e.target.value })
-                  }
+                  rows={2}
+                  aria-label="Unntak / feilhåndtering"
+                  onChange={(v) => update(i, { exception: v })}
                 />
               </div>
             </div>

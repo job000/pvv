@@ -11,6 +11,11 @@ import {
   bodyLineHeightMm,
   PDF_CORPORATE_THEME,
 } from "@/lib/pdf-corporate";
+import {
+  extractHtmlDataImages,
+  htmlToPlainText,
+  isEmptyRichText,
+} from "@/lib/rich-text";
 
 const T = PDF_CORPORATE_THEME;
 
@@ -85,9 +90,26 @@ function buildProcessDesignPdfDocument(
     doc.setTextColor(0);
   };
 
+  const addInlineDataImage = (dataUrl: string) => {
+    const maxW = contentW();
+    const maxH = 70;
+    // Approximate aspect from data URL size isn't available — use a sensible box.
+    let drawW = Math.min(maxW, 120);
+    let drawH = Math.min(maxH, 55);
+    ensureSpace(drawH + 8);
+    try {
+      const format = dataUrl.includes("image/png") ? "PNG" : "JPEG";
+      doc.addImage(dataUrl, format, margin, cursor, drawW, drawH);
+      cursor += drawH + 6;
+    } catch {
+      /* bilde hoppes over hvis format ikke støttes */
+    }
+  };
+
   const addFieldBlock = (fieldLabel: string, body: string | undefined) => {
-    const t = body?.trim();
-    if (!t) return;
+    if (isEmptyRichText(body)) return;
+    const plain = htmlToPlainText(body);
+    const images = extractHtmlDataImages(body ?? "");
     ensureSpace(14);
     doc.setFontSize(10);
     doc.setFont("helvetica", "bold");
@@ -96,12 +118,17 @@ function buildProcessDesignPdfDocument(
     cursor += 5;
     doc.setFont("helvetica", "normal");
     doc.setFontSize(10);
-    const lh = bodyLineHeightMm(10);
-    const lines = doc.splitTextToSize(t, contentW());
-    ensureSpace(lines.length * lh + 6);
-    doc.setTextColor(T.slate800[0], T.slate800[1], T.slate800[2]);
-    doc.text(lines, margin, cursor);
-    cursor += lines.length * lh + 4;
+    if (plain) {
+      const lh = bodyLineHeightMm(10);
+      const lines = doc.splitTextToSize(plain, contentW());
+      ensureSpace(lines.length * lh + 6);
+      doc.setTextColor(T.slate800[0], T.slate800[1], T.slate800[2]);
+      doc.text(lines, margin, cursor);
+      cursor += lines.length * lh + 4;
+    }
+    for (const img of images.slice(0, 8)) {
+      addInlineDataImage(img.dataUrl);
+    }
     doc.setTextColor(0);
   };
 
@@ -303,10 +330,13 @@ function buildProcessDesignPdfDocument(
     doc.setFont("helvetica", "normal");
     for (const s of p.asIsSteps) {
       const head = s.stepNo ? `Trinn ${s.stepNo}` : "Trinn";
+      const desc = htmlToPlainText(s.description);
+      const input = htmlToPlainText(s.input);
+      const exception = htmlToPlainText(s.exception);
       const body = [
-        s.description,
-        s.input ? `Inndata: ${s.input}` : "",
-        s.exception ? `Unntak: ${s.exception}` : "",
+        desc,
+        input ? `Inndata: ${input}` : "",
+        exception ? `Unntak: ${exception}` : "",
       ]
         .filter(Boolean)
         .join("\n");
@@ -365,7 +395,12 @@ function buildProcessDesignPdfDocument(
     cursor += 6;
     doc.setFont("helvetica", "normal");
     for (const e of p.businessExceptionsKnown) {
-      const body = [e.step && `Steg: ${e.step}`, e.params, `Tiltak: ${e.action}`]
+      const action = htmlToPlainText(e.action);
+      const body = [
+        e.step && `Steg: ${e.step}`,
+        e.params,
+        action ? `Tiltak: ${action}` : "",
+      ]
         .filter(Boolean)
         .join("\n");
       addFieldBlock(e.name, body);
@@ -381,7 +416,12 @@ function buildProcessDesignPdfDocument(
     cursor += 6;
     doc.setFont("helvetica", "normal");
     for (const e of p.appErrorsKnown) {
-      const body = [e.step && `Steg: ${e.step}`, e.params, `Handling: ${e.action}`]
+      const action = htmlToPlainText(e.action);
+      const body = [
+        e.step && `Steg: ${e.step}`,
+        e.params,
+        action ? `Handling: ${action}` : "",
+      ]
         .filter(Boolean)
         .join("\n");
       addFieldBlock(e.name, body);

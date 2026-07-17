@@ -139,7 +139,8 @@ export function DialogContent({
         className={cn(
           "bg-background relative z-10 flex w-full min-h-0 flex-col overflow-hidden border shadow-2xl",
           fillViewport
-            ? "h-dvh max-h-dvh max-w-none rounded-none border-border/60 shadow-none sm:rounded-none"
+            ? // 100dvh/svh: stabil høyde på iPad ved rotasjon / dynamisk nettleser-chrome
+              "h-[100dvh] max-h-[100dvh] min-h-[100svh] w-[100vw] max-w-none rounded-none border-border/60 shadow-none supports-[height:100svh]:min-h-[100svh] sm:rounded-none"
             : cn(
                 // 100dvh minus overlay-padding + safe areas — unngår at toppen klippes på mobil
                 "border-border/80 max-h-[calc(100dvh-1.5rem-env(safe-area-inset-top,0px)-env(safe-area-inset-bottom,0px))] rounded-t-2xl rounded-b-2xl sm:max-h-[min(92vh,56rem)] sm:rounded-3xl",
