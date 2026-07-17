@@ -12,6 +12,8 @@ const nextConfig: NextConfig = {
     "tldraw",
     "@tldraw/editor",
     "@tldraw/store",
+    "react-pdf",
+    "pdfjs-dist",
   ],
   /** Reduser XSS-/clickjacking-risiko på offentlige skjemasider (/f/…). */
   async headers() {

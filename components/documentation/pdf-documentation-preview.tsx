@@ -3,6 +3,7 @@
 import { BrandMark } from "@/components/brand-mark";
 import { ThemeModeToggle } from "@/components/theme-mode-toggle";
 import { Button, buttonVariants } from "@/components/ui/button";
+import { PdfBlobViewer } from "@/components/ui/pdf-blob-viewer";
 import { buildAssessmentPdfBlob } from "@/lib/assessment-pdf";
 import { cn } from "@/lib/utils";
 import {
@@ -248,10 +249,10 @@ export function PdfDocumentationPreview() {
             </div>
           )}
           {previewUrl && !error && (
-            <iframe
+            <PdfBlobViewer
+              url={previewUrl}
               title={`Forhåndsvisning: ${TABS.find((x) => x.id === tab)?.label ?? "PDF"}`}
-              src={`${previewUrl}#toolbar=0`}
-              className="size-full min-h-[min(70vh,720px)] border-0"
+              className="size-full min-h-[min(70vh,720px)]"
             />
           )}
         </div>

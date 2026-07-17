@@ -2,6 +2,7 @@
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PdfBlobViewer } from "@/components/ui/pdf-blob-viewer";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import { formatRelativeUpdatedAt } from "@/lib/assessment-ui-helpers";
@@ -669,11 +670,12 @@ export default function PdfForhandsvisningPage() {
               </div>
             ) : null}
             {pdfUrl && !error ? (
-              <iframe
+              <PdfBlobViewer
                 key={pdfUrl}
+                url={pdfUrl}
                 title={`PDF: ${previewTitle}`}
-                src={pdfUrl}
-                className="block h-full min-h-0 w-full flex-1 border-0 bg-neutral-950 dark:bg-neutral-950"
+                showOpenInTab={false}
+                className="h-full min-h-0 w-full flex-1"
               />
             ) : !error && !busy ? (
               <div className="text-muted-foreground flex h-full min-h-[12rem] w-full flex-1 items-center justify-center px-6 text-center text-sm">

@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { PdfBlobViewer } from "@/components/ui/pdf-blob-viewer";
 import { SearchInput } from "@/components/ui/search-input";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { Textarea } from "@/components/ui/textarea";
@@ -2821,9 +2822,9 @@ export function ProcessDesignDocPage({
         }}
       >
         <DialogContent
-          size="2xl"
+          size="4xl"
           titleId="pdd-pdf-preview-title"
-          className="max-h-[min(95vh,58rem)]"
+          className="max-h-[min(96dvh,60rem)]"
         >
           <DialogHeader>
             <p
@@ -2833,19 +2834,20 @@ export function ProcessDesignDocPage({
               Forhåndsvis PDF
             </p>
             <p className="text-sm leading-relaxed text-muted-foreground">
-              Slik ser eksporten ut nå basert på gjeldende innhold i dokumentet.
+              Alle sider vises under — scroll på mobil/iPad. Slik ser eksporten
+              ut basert på gjeldende innhold.
             </p>
           </DialogHeader>
-          <DialogBody className="space-y-3">
-            <div className="overflow-hidden rounded-2xl border border-border/60 bg-muted/20">
+          <DialogBody className="flex min-h-0 flex-1 flex-col overflow-hidden p-0 sm:p-0">
+            <div className="flex min-h-0 flex-1 flex-col overflow-hidden sm:mx-6 sm:mb-2 sm:mt-4 sm:rounded-xl sm:border sm:border-border/60">
               {pdfPreviewUrl ? (
-                <iframe
-                  src={pdfPreviewUrl}
+                <PdfBlobViewer
+                  url={pdfPreviewUrl}
                   title="PDD PDF-forhåndsvisning"
-                  className="h-[min(72vh,48rem)] w-full bg-background"
+                  className="h-[min(68dvh,44rem)] min-h-[18rem] sm:h-[min(70dvh,46rem)]"
                 />
               ) : (
-                <div className="flex h-[min(72vh,48rem)] items-center justify-center text-sm text-muted-foreground">
+                <div className="flex h-[min(68dvh,44rem)] items-center justify-center text-sm text-muted-foreground">
                   Ingen forhåndsvisning tilgjengelig.
                 </div>
               )}
@@ -2855,12 +2857,14 @@ export function ProcessDesignDocPage({
             <Button
               type="button"
               variant="outline"
+              className="rounded-lg"
               onClick={() => setPdfPreviewOpen(false)}
             >
               Lukk
             </Button>
             <Button
               type="button"
+              className="rounded-lg"
               onClick={() => void exportPdf()}
               disabled={pdfExporting}
             >
