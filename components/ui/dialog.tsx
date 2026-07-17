@@ -115,7 +115,11 @@ export function DialogContent({
         "fixed inset-0 z-[200] flex",
         fillViewport
           ? "items-stretch justify-stretch p-0"
-          : "items-end justify-center p-3 sm:items-center sm:p-6",
+          : [
+              "items-end justify-center sm:items-center",
+              // Safe area + padding — dialog max-height må trekke fra dette
+              "px-3 pt-[max(0.75rem,env(safe-area-inset-top))] pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:p-6",
+            ].join(" "),
         portalClassName,
       )}
     >
@@ -133,11 +137,12 @@ export function DialogContent({
         aria-labelledby={titleId}
         aria-describedby={descriptionId}
         className={cn(
-          "bg-background relative z-10 flex w-full flex-col overflow-hidden border shadow-2xl",
+          "bg-background relative z-10 flex w-full min-h-0 flex-col overflow-hidden border shadow-2xl",
           fillViewport
-            ? "min-h-0 h-dvh max-h-dvh max-w-none rounded-none border-border/60 shadow-none sm:rounded-none"
+            ? "h-dvh max-h-dvh max-w-none rounded-none border-border/60 shadow-none sm:rounded-none"
             : cn(
-                "border-border/80 max-h-[min(92vh,56rem)] rounded-2xl sm:rounded-3xl",
+                // 100dvh minus overlay-padding + safe areas — unngår at toppen klippes på mobil
+                "border-border/80 max-h-[calc(100dvh-1.5rem-env(safe-area-inset-top,0px)-env(safe-area-inset-bottom,0px))] rounded-t-2xl rounded-b-2xl sm:max-h-[min(92vh,56rem)] sm:rounded-3xl",
                 maxW,
               ),
           className,
@@ -161,6 +166,8 @@ export function DialogHeader({
     <div
       className={cn(
         "border-border/60 bg-muted/15 shrink-0 border-b px-5 py-4 sm:px-8 sm:py-5",
+        // Hold header kompakt på mobil så body/footer får plass
+        "max-sm:px-4 max-sm:py-3.5",
         className,
       )}
     >
@@ -177,7 +184,13 @@ export function DialogBody({
   children: React.ReactNode;
 }) {
   return (
-    <div className={cn("min-h-0 flex-1 overflow-y-auto px-5 py-4 sm:px-8 sm:py-6", className)}>
+    <div
+      className={cn(
+        "min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-4 sm:px-8 sm:py-6",
+        "max-sm:px-4",
+        className,
+      )}
+    >
       {children}
     </div>
   );
@@ -193,7 +206,7 @@ export function DialogFooter({
   return (
     <div
       className={cn(
-        "border-border/60 bg-muted/10 flex shrink-0 flex-wrap items-center justify-end gap-2 border-t px-5 py-3 sm:px-8 sm:py-4",
+        "border-border/60 bg-muted/10 flex shrink-0 flex-col gap-2 border-t px-5 py-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end sm:px-8 sm:py-4",
         className,
       )}
     >

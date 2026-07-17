@@ -164,7 +164,7 @@ export function WorkspaceTaskPreviewDialog({
               {STATUS_LABEL[task.myStatus]}
             </span>
           </div>
-          <h2 className="mt-2 text-lg font-semibold tracking-tight">
+          <h2 className="mt-2 text-lg font-semibold tracking-tight break-words">
             {task.title}
           </h2>
           <p className="text-sm text-muted-foreground">
@@ -337,26 +337,27 @@ export function WorkspaceTaskPreviewDialog({
           ) : null}
         </DialogBody>
 
-        <DialogFooter className="justify-between gap-3 sm:justify-between">
+        <DialogFooter className="gap-3 sm:flex-row sm:items-center sm:justify-between">
           <Link
             href={task.work.workHref}
             onClick={() => onOpenChange(false)}
             className={cn(
               buttonVariants({ variant: "outline", size: "sm" }),
-              "gap-1.5",
+              "h-11 w-full justify-center gap-1.5 sm:h-9 sm:w-auto",
             )}
           >
             {task.work.workLabel}
             <ArrowUpRight className="size-4" aria-hidden />
           </Link>
 
-          <div className="flex flex-wrap justify-end gap-2">
+          <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:justify-end">
             {mode === "decline" ? (
               <>
                 <Button
                   variant="outline"
                   size="sm"
                   disabled={busy}
+                  className="h-11 w-full sm:h-9 sm:w-auto"
                   onClick={() => setMode("main")}
                 >
                   Avbryt
@@ -365,7 +366,7 @@ export function WorkspaceTaskPreviewDialog({
                   variant="destructive"
                   size="sm"
                   disabled={busy}
-                  className="gap-1.5"
+                  className="h-11 w-full gap-1.5 sm:h-9 sm:w-auto"
                   onClick={() =>
                     void onAction("decline", { note: declineNote })
                   }
@@ -383,7 +384,7 @@ export function WorkspaceTaskPreviewDialog({
                         size="sm"
                         variant="outline"
                         disabled={busy}
-                        className="gap-1.5"
+                        className="h-11 w-full gap-1.5 sm:h-9 sm:w-auto"
                         onClick={() => void onAction("accept")}
                       >
                         <Check className="size-4" />
@@ -393,7 +394,7 @@ export function WorkspaceTaskPreviewDialog({
                     <Button
                       size="sm"
                       disabled={busy || justMissing}
-                      className="gap-1.5"
+                      className="h-11 w-full gap-1.5 sm:h-9 sm:w-auto"
                       onClick={() => void complete()}
                     >
                       <Check className="size-4" />
@@ -403,7 +404,7 @@ export function WorkspaceTaskPreviewDialog({
                       size="sm"
                       variant="outline"
                       disabled={busy}
-                      className="gap-1.5"
+                      className="h-11 w-full gap-1.5 sm:h-9 sm:w-auto"
                       onClick={() => setMode("decline")}
                     >
                       <X className="size-4" />
@@ -418,7 +419,7 @@ export function WorkspaceTaskPreviewDialog({
                       <Button
                         size="sm"
                         disabled={busy}
-                        className="gap-1.5"
+                        className="h-11 w-full gap-1.5 sm:h-9 sm:w-auto"
                         onClick={() => void onAction("accept")}
                       >
                         <Check className="size-4" />
@@ -428,7 +429,7 @@ export function WorkspaceTaskPreviewDialog({
                       <Button
                         size="sm"
                         disabled={busy}
-                        className="gap-1.5"
+                        className="h-11 w-full gap-1.5 sm:h-9 sm:w-auto"
                         onClick={() => void complete()}
                       >
                         <Check className="size-4" />
@@ -439,7 +440,7 @@ export function WorkspaceTaskPreviewDialog({
                       size="sm"
                       variant="outline"
                       disabled={busy}
-                      className="gap-1.5"
+                      className="h-11 w-full gap-1.5 sm:h-9 sm:w-auto"
                       onClick={() => setMode("decline")}
                     >
                       <X className="size-4" />
@@ -449,15 +450,15 @@ export function WorkspaceTaskPreviewDialog({
                 ) : null}
 
                 {task.myStatus === "done" ? (
-                  <div className="flex flex-col items-end gap-1.5 sm:flex-row sm:items-center">
-                    <p className="text-xs text-muted-foreground max-w-[16rem] text-right">
+                  <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center sm:justify-end">
+                    <p className="text-xs text-muted-foreground sm:max-w-[16rem] sm:text-right">
                       Feil registrering? Angre — begrunnelse beholdes som utkast.
                     </p>
                     <Button
                       size="sm"
                       variant="outline"
                       disabled={busy}
-                      className="gap-1.5"
+                      className="h-11 w-full gap-1.5 sm:h-9 sm:w-auto"
                       onClick={() => void onAction("reopen")}
                     >
                       <RotateCcw className="size-4" />
