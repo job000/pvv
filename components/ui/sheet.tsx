@@ -46,10 +46,20 @@ export function SheetContent({
   }
   const { open, onOpenChange } = ctx;
   const [mounted, setMounted] = React.useState(false);
+  const [visible, setVisible] = React.useState(false);
 
   React.useEffect(() => {
     setMounted(true);
   }, []);
+
+  React.useEffect(() => {
+    if (!open) {
+      setVisible(false);
+      return;
+    }
+    const id = requestAnimationFrame(() => setVisible(true));
+    return () => cancelAnimationFrame(id);
+  }, [open]);
 
   React.useEffect(() => {
     if (!open) return;
@@ -71,23 +81,33 @@ export function SheetContent({
 
   return createPortal(
     <div
-      className={cn(
-        "fixed inset-0 z-50",
-        !showOnDesktop && "md:hidden",
-      )}
+      className={cn("fixed inset-0 z-50", !showOnDesktop && "md:hidden")}
     >
       <button
         type="button"
         aria-label="Lukk meny"
-        className="absolute inset-0 bg-black/40"
+        className={cn(
+          "absolute inset-0 bg-black/45 backdrop-blur-[2px] transition-opacity duration-200",
+          visible ? "opacity-100" : "opacity-0",
+        )}
         onClick={() => onOpenChange(false)}
       />
       <div
         role="dialog"
         aria-modal="true"
         className={cn(
-          "absolute inset-y-0 flex w-[min(20rem,88vw)] flex-col border-r bg-background pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] shadow-xl",
-          side === "left" ? "left-0" : "right-0",
+          "absolute inset-y-0 flex w-[min(19.5rem,90vw)] flex-col bg-background shadow-2xl",
+          "pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]",
+          "transition-transform duration-200 ease-out will-change-transform",
+          side === "left"
+            ? cn(
+                "left-0 border-r border-border/50 rounded-r-2xl",
+                visible ? "translate-x-0" : "-translate-x-full",
+              )
+            : cn(
+                "right-0 border-l border-border/50 rounded-l-2xl",
+                visible ? "translate-x-0" : "translate-x-full",
+              ),
           className,
         )}
       >

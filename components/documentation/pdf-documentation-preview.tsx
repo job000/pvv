@@ -145,12 +145,10 @@ export function PdfDocumentationPreview() {
         <div className="mx-auto flex h-14 max-w-5xl items-center justify-between gap-3 px-4 sm:px-6">
           <Link
             href="/"
-            className="text-foreground flex min-w-0 items-center gap-2 rounded-lg font-semibold tracking-tight outline-none ring-offset-background focus-visible:ring-2 focus-visible:ring-ring"
+            className="text-foreground flex min-w-0 items-center rounded-lg outline-none ring-offset-background focus-visible:ring-2 focus-visible:ring-ring"
+            aria-label="Zorlin — forsiden"
           >
-            <BrandMark size={28} />
-            <span className="font-heading truncate text-base sm:text-lg">
-              Zorlin
-            </span>
+            <BrandMark size={28} decorative />
           </Link>
           <div className="flex shrink-0 items-center gap-2">
             <ThemeModeToggle />

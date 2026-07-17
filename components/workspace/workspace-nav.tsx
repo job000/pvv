@@ -15,6 +15,7 @@ import {
   Share2,
   Shield,
   Users,
+  X,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
@@ -52,7 +53,6 @@ function navSections(wid: string): { heading: string | null; items: NavItem[] }[
       ],
     },
     {
-      // Rekkefølgen speiler arbeidsflyten: innsamling → register → vurdering → design → risiko.
       heading: "Arbeidsflyt",
       items: [
         {
@@ -93,7 +93,7 @@ function navSections(wid: string): { heading: string | null; items: NavItem[] }[
       ],
     },
     {
-      heading: "Arbeidsområde",
+      heading: "Område",
       items: [
         {
           href: `/w/${wid}/pdf-forhandsvisning`,
@@ -170,11 +170,13 @@ function WorkspaceNavInner({
   workspaceId,
   workspaceName,
   onNavigate,
+  onClose,
   className,
 }: {
   workspaceId: Id<"workspaces">;
   workspaceName?: string;
   onNavigate?: () => void;
+  onClose?: () => void;
   className?: string;
 }) {
   const pathname = usePathname();
@@ -186,22 +188,38 @@ function WorkspaceNavInner({
   return (
     <nav
       className={cn(
-        "flex h-full min-h-0 flex-col gap-1 overflow-hidden p-3",
+        "flex h-full min-h-0 flex-col overflow-hidden",
         className,
       )}
       aria-label="Arbeidsområde"
     >
-      <div className="shrink-0 border-b border-border/50 px-1 pb-3">
-        <p className="truncate font-heading text-sm font-semibold leading-tight tracking-tight">
-          {workspaceName ?? "…"}
-        </p>
+      <div className="flex shrink-0 items-start gap-2 border-b border-border/40 px-4 pb-3 pt-4">
+        <div className="min-w-0 flex-1">
+          <p className="text-muted-foreground text-[0.65rem] font-semibold uppercase tracking-[0.14em]">
+            Arbeidsområde
+          </p>
+          <p className="font-heading mt-0.5 truncate text-base font-semibold tracking-tight">
+            {workspaceName ?? "…"}
+          </p>
+        </div>
+        {onClose ? (
+          <button
+            type="button"
+            onClick={onClose}
+            className="text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:ring-ring -mr-1 inline-flex size-9 shrink-0 items-center justify-center rounded-xl transition-colors focus-visible:outline-none focus-visible:ring-2 md:hidden"
+            aria-label="Lukk meny"
+          >
+            <X className="size-4" aria-hidden />
+          </button>
+        ) : null}
       </div>
-      <ul className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto overflow-x-hidden py-2 [scrollbar-gutter:stable] [scrollbar-width:thin]">
+
+      <ul className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto overflow-x-hidden px-3 py-4 [scrollbar-gutter:stable] [scrollbar-width:thin]">
         {sections.map((section, sectionIdx) => (
           <li key={section.heading ?? `section-${sectionIdx}`}>
             <div role="group" aria-label={section.heading ?? undefined}>
               {section.heading ? (
-                <p className="text-muted-foreground px-3 pb-1.5 text-[0.6rem] font-semibold uppercase tracking-[0.14em]">
+                <p className="text-muted-foreground px-3 pb-2 text-[0.65rem] font-semibold uppercase tracking-[0.14em]">
                   {section.heading}
                 </p>
               ) : null}
@@ -221,13 +239,25 @@ function WorkspaceNavInner({
                         href={href}
                         onClick={() => onNavigate?.()}
                         className={cn(
-                          "flex min-h-11 items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-200 md:min-h-10",
+                          "relative flex min-h-11 items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors duration-150 md:min-h-10",
                           active
-                            ? "bg-foreground text-background shadow-md ring-1 ring-foreground/10"
-                            : "text-muted-foreground hover:bg-background/80 hover:text-foreground hover:shadow-sm active:bg-muted/60",
+                            ? "bg-primary/12 text-foreground shadow-sm ring-1 ring-primary/15"
+                            : "text-muted-foreground hover:bg-muted/70 hover:text-foreground active:bg-muted",
                         )}
                       >
-                        <Icon className="size-4 shrink-0 opacity-90" aria-hidden />
+                        {active ? (
+                          <span
+                            className="bg-primary absolute inset-y-2 left-1 w-0.5 rounded-full"
+                            aria-hidden
+                          />
+                        ) : null}
+                        <Icon
+                          className={cn(
+                            "size-4 shrink-0",
+                            active ? "text-primary" : "opacity-80",
+                          )}
+                          aria-hidden
+                        />
                         <span className="min-w-0 leading-snug">{label}</span>
                       </Link>
                     </li>
@@ -246,6 +276,7 @@ export function WorkspaceNav(props: {
   workspaceId: Id<"workspaces">;
   workspaceName?: string;
   onNavigate?: () => void;
+  onClose?: () => void;
   className?: string;
 }) {
   return (
@@ -253,12 +284,12 @@ export function WorkspaceNav(props: {
       fallback={
         <nav
           className={cn(
-            "flex h-full min-h-0 flex-col gap-1 overflow-hidden p-3",
+            "flex h-full min-h-0 flex-col overflow-hidden p-4",
             props.className,
           )}
           aria-label="Arbeidsområde"
         >
-          <div className="text-muted-foreground px-3 py-2 text-sm">Laster …</div>
+          <div className="text-muted-foreground text-sm">Laster …</div>
         </nav>
       }
     >

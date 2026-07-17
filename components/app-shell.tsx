@@ -1,15 +1,18 @@
 "use client";
 
+import { BrandMark } from "@/components/brand-mark";
+import { ThemeModeToggle } from "@/components/theme-mode-toggle";
 import { Button } from "@/components/ui/button";
 import { InAppNotificationMenu } from "@/components/user/in-app-notification-menu";
 import { UserAvatarNav } from "@/components/user/user-avatar-nav";
 import { useWorkspaceChromeOptional } from "@/components/workspace/workspace-chrome-context";
+import { WorkspaceSwitcher } from "@/components/workspace/workspace-switcher";
 import { api } from "@/convex/_generated/api";
+import { PRODUCT_NAME } from "@/lib/brand";
 import { cn } from "@/lib/utils";
 import { useAuthActions } from "@convex-dev/auth/react";
 import { useConvexAuth, useMutation } from "convex/react";
-import { LogOut, Menu, Moon, Sun } from "lucide-react";
-import { useTheme } from "next-themes";
+import { LogOut, PanelLeft, PanelLeftClose } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useSyncExternalStore } from "react";
@@ -22,10 +25,6 @@ function subscribeMediaQuery(callback: () => void) {
 
 function getMediaQueryDesktop() {
   return window.matchMedia("(min-width: 768px)").matches;
-}
-
-function subscribeNoop() {
-  return () => {};
 }
 
 export function AppShell({
@@ -45,15 +44,15 @@ export function AppShell({
     getMediaQueryDesktop,
     () => false,
   );
-  const isClient = useSyncExternalStore(subscribeNoop, () => true, () => false);
-  const { resolvedTheme, setTheme } = useTheme();
   const patchUserSettings = useMutation(api.users.patchMyUserSettings);
 
   useEffect(() => {
     if (!requireAuth || isLoading) return;
     if (!isAuthenticated) {
       const timeout = setTimeout(() => {
-        router.replace(`/sign-in?next=${encodeURIComponent(pathname || "/dashboard")}`);
+        router.replace(
+          `/sign-in?next=${encodeURIComponent(pathname || "/dashboard")}`,
+        );
       }, 1500);
       return () => clearTimeout(timeout);
     }
@@ -62,7 +61,7 @@ export function AppShell({
   if (requireAuth && (isLoading || !isAuthenticated)) {
     return (
       <div className="flex min-h-[50vh] flex-col items-center justify-center gap-2 px-4">
-        <div className="size-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+        <div className="border-primary size-8 animate-spin rounded-full border-2 border-t-transparent" />
         <p suppressHydrationWarning className="text-muted-foreground text-sm">
           Laster ...
         </p>
@@ -70,136 +69,96 @@ export function AppShell({
     );
   }
 
-  const workspacesNavActive =
-    pathname === "/dashboard" || (pathname?.startsWith("/w/") ?? false);
+  const inWorkspace = Boolean(workspaceChrome?.hasWorkspace);
+  const menuOpen = isDesktop
+    ? !workspaceChrome?.sidebarCollapsed
+    : Boolean(workspaceChrome?.mobileOpen);
 
   return (
-    <div className="flex min-h-full flex-col bg-background">
+    <div className="bg-background flex min-h-full flex-col">
       <header className="sticky top-0 z-40 pt-[env(safe-area-inset-top)]">
-        <div className="border-border/50 from-background/98 via-background/92 to-muted/15 bg-gradient-to-b border-b shadow-[var(--shadow-elevated)] backdrop-blur-xl supports-[backdrop-filter]:backdrop-saturate-150 dark:shadow-[0_8px_32px_-12px_rgba(0,0,0,0.45)]">
-          <div className="mx-auto flex w-full max-w-[100rem] flex-col px-[var(--spacing-page-x,1rem)] sm:px-6">
-            <div className="flex min-h-[var(--app-header-height,3.5rem)] items-center justify-between gap-3 py-2 sm:gap-4">
-            <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-3">
-              {workspaceChrome?.hasWorkspace ? (
+        <div
+          className={cn(
+            "border-border/40 bg-background/80 border-b backdrop-blur-xl",
+            "supports-[backdrop-filter]:bg-background/70",
+          )}
+        >
+          <div className="mx-auto flex h-[var(--app-header-height,3.5rem)] w-full max-w-[100rem] items-center gap-2 px-3 sm:gap-3 sm:px-5">
+            {/* Left: menu + brand + workspace */}
+            <div className="flex min-w-0 flex-1 items-center gap-1.5 sm:gap-2">
+              {inWorkspace ? (
                 <Button
                   type="button"
                   variant="ghost"
                   size="icon"
-                  className="text-muted-foreground hover:bg-muted/80 hover:text-foreground size-10 shrink-0 rounded-xl"
+                  className={cn(
+                    "text-muted-foreground hover:text-foreground size-10 shrink-0 rounded-xl",
+                    menuOpen && "bg-muted text-foreground",
+                  )}
                   aria-label={
                     isDesktop
-                      ? workspaceChrome.sidebarCollapsed
-                        ? "Vis arbeidsområde-meny"
-                        : "Skjul arbeidsområde-meny"
-                      : workspaceChrome.mobileOpen
+                      ? menuOpen
+                        ? "Skjul meny"
+                        : "Vis meny"
+                      : menuOpen
                         ? "Lukk meny"
                         : "Åpne meny"
                   }
-                  aria-expanded={
-                    isDesktop
-                      ? !workspaceChrome.sidebarCollapsed
-                      : workspaceChrome.mobileOpen
-                  }
-                  onClick={() => workspaceChrome.toggleMenu()}
+                  aria-expanded={menuOpen}
+                  onClick={() => workspaceChrome?.toggleMenu()}
                 >
-                  <Menu className="size-[1.35rem]" strokeWidth={2} />
+                  {menuOpen && isDesktop ? (
+                    <PanelLeftClose className="size-5" strokeWidth={1.75} />
+                  ) : (
+                    <PanelLeft className="size-5" strokeWidth={1.75} />
+                  )}
                 </Button>
               ) : null}
-              <nav
-                className="flex min-w-0 shrink-0 items-center gap-1.5 sm:gap-2"
-                aria-label="Hovednavigasjon"
+
+              <Link
+                href="/dashboard?oversikt=1"
+                className="focus-visible:ring-ring inline-flex shrink-0 rounded-xl p-0.5 transition-transform active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2"
+                aria-label={`${PRODUCT_NAME} — oversikt`}
               >
-                <Link
-                  href="/dashboard?oversikt=1"
-                  className={cn(
-                    "font-heading focus-visible:ring-ring shrink-0 rounded-xl px-2.5 py-1.5 text-sm font-semibold tracking-tight shadow-sm ring-1 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2",
-                    workspacesNavActive
-                      ? "bg-primary/10 text-primary hover:bg-primary/[0.14] ring-primary/15"
-                      : "bg-muted/50 text-muted-foreground hover:bg-muted/70 hover:text-foreground ring-border/55",
-                  )}
-                  aria-label="Til arbeidsområde-oversikt"
-                >
-                  Zorlin
-                </Link>
-              </nav>
-              {workspaceChrome?.hasWorkspace ? (
-                <span
-                  className="border-border/55 bg-muted/35 text-muted-foreground hidden min-w-0 max-w-[min(100%,14rem)] truncate rounded-full border px-2.5 py-1 text-xs font-medium md:inline-flex md:items-center"
-                  title={workspaceChrome.workspaceName}
-                >
-                  {workspaceChrome.workspaceName}
+                <BrandMark size={30} decorative className="shadow-sm" />
+              </Link>
+
+              {inWorkspace && workspaceChrome?.workspaceName ? (
+                <WorkspaceSwitcher
+                  workspaceName={workspaceChrome.workspaceName}
+                />
+              ) : (
+                <span className="text-muted-foreground hidden truncate text-sm font-medium sm:inline">
+                  Oversikt
                 </span>
-              ) : null}
+              )}
             </div>
 
-            <div className="flex shrink-0 items-center gap-2 sm:gap-3">
-              <div className="border-border/55 bg-muted/25 flex items-center gap-0.5 rounded-2xl border p-1 shadow-inner">
-                <UserAvatarNav />
-                <InAppNotificationMenu />
-                {isClient ? (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="text-muted-foreground hover:bg-background/90 size-10 shrink-0 rounded-xl"
-                    aria-label={
-                      resolvedTheme === "dark"
-                        ? "Bytt til lyst tema"
-                        : "Bytt til mørkt tema"
-                    }
-                    onClick={() => {
-                      const next = resolvedTheme === "dark" ? "light" : "dark";
-                      setTheme(next);
-                      void patchUserSettings({ themePreference: next });
-                    }}
-                  >
-                    {resolvedTheme === "dark" ? (
-                      <Sun className="size-[1.2rem]" />
-                    ) : (
-                      <Moon className="size-[1.2rem]" />
-                    )}
-                  </Button>
-                ) : (
-                  <span className="size-10 shrink-0" aria-hidden />
-                )}
-              </div>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="text-muted-foreground hover:text-foreground hidden h-10 gap-2 rounded-xl px-3 font-medium sm:inline-flex"
-                onClick={() => void signOut()}
-              >
-                <LogOut className="size-4 opacity-70" aria-hidden />
-                Logg ut
-              </Button>
+            {/* Right: actions */}
+            <div className="flex shrink-0 items-center gap-0.5 sm:gap-1">
+              <UserAvatarNav />
+              <InAppNotificationMenu />
+              <ThemeModeToggle
+                className="size-10 rounded-xl"
+                onThemeChange={(value) => {
+                  void patchUserSettings({ themePreference: value });
+                }}
+              />
               <Button
                 variant="ghost"
                 size="icon"
-                className="text-muted-foreground hover:text-foreground size-10 rounded-xl sm:hidden"
+                className="text-muted-foreground hover:text-foreground size-10 rounded-xl"
                 aria-label="Logg ut"
+                title="Logg ut"
                 onClick={() => void signOut()}
               >
                 <LogOut className="size-[1.15rem]" aria-hidden />
               </Button>
             </div>
-            </div>
-
-            {workspaceChrome?.hasWorkspace && !isDesktop ? (
-              <div
-                className="border-border/40 max-w-full border-t px-1 py-2 md:hidden"
-                title={workspaceChrome.workspaceName}
-              >
-                <span className="text-[0.65rem] font-semibold uppercase tracking-wider text-muted-foreground">
-                  Aktivt område
-                </span>
-                <span className="mt-0.5 block truncate text-sm font-medium text-foreground">
-                  {workspaceChrome.workspaceName}
-                </span>
-              </div>
-            ) : null}
           </div>
         </div>
       </header>
+
       <main className="flex min-h-0 w-full flex-1 flex-col pb-[env(safe-area-inset-bottom)]">
         {children}
       </main>

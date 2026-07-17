@@ -59,11 +59,20 @@ export const getMyProfile = query({
   },
 });
 
+const genderValidator = v.union(
+  v.literal("female"),
+  v.literal("male"),
+  v.literal("other"),
+  v.literal("prefer_not"),
+  v.null(),
+);
+
 export const patchMyUserSettings = mutation({
   args: {
     firstName: v.optional(v.string()),
     lastName: v.optional(v.string()),
     age: v.optional(v.union(v.number(), v.null())),
+    gender: v.optional(genderValidator),
     themePreference: v.optional(
       v.union(
         v.literal("light"),
@@ -104,6 +113,9 @@ export const patchMyUserSettings = mutation({
         }
         patch.age = args.age;
       }
+    }
+    if (args.gender !== undefined) {
+      patch.gender = args.gender;
     }
     if (args.themePreference !== undefined) {
       patch.themePreference = args.themePreference;

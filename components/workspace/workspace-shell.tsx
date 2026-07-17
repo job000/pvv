@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import { useQuery } from "convex/react";
+import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo } from "react";
 
@@ -40,13 +41,16 @@ export function WorkspaceShell({
     <div
       className={cn(
         "relative flex min-h-0 flex-1 flex-col",
-        showDesktopSidebar && "md:ml-[15.5rem]",
+        showDesktopSidebar && "md:ml-[16rem]",
       )}
     >
       {showDesktopSidebar ? (
         <aside
-          className="fixed left-0 top-14 z-30 hidden h-[calc(100vh-3.5rem)] w-[15.5rem] flex-col overflow-hidden border-r border-border/60 bg-card md:flex"
-          aria-hidden={false}
+          className={cn(
+            "fixed left-0 top-[var(--app-header-height,3.5rem)] z-30 hidden h-[calc(100dvh-var(--app-header-height,3.5rem))] w-64 flex-col overflow-hidden md:flex",
+            "border-border/40 bg-card/40 border-r backdrop-blur-md",
+          )}
+          aria-label="Arbeidsområde-meny"
         >
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
             <WorkspaceNav
@@ -54,34 +58,46 @@ export function WorkspaceShell({
               workspaceName={workspace === null ? undefined : name}
             />
           </div>
-          <div className="shrink-0 border-t border-border/60 bg-card p-2">
+          <div className="shrink-0 border-t border-border/40 p-3">
             <Link
               href="/dashboard?oversikt=1"
-              className="text-muted-foreground hover:text-foreground flex min-h-11 items-center rounded-xl px-3 text-sm font-medium transition-colors"
+              className={cn(
+                "text-muted-foreground hover:text-foreground hover:bg-muted/70",
+                "flex min-h-11 items-center gap-2 rounded-xl px-3 text-sm font-medium transition-colors",
+              )}
             >
-              Alle arbeidsområder
+              <ArrowLeft className="size-4 opacity-70" aria-hidden />
+              Alle områder
             </Link>
           </div>
         </aside>
       ) : null}
 
       <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
-        <SheetContent side="left" className="border-border/60 bg-background p-0 shadow-2xl">
+        <SheetContent
+          side="left"
+          className="bg-background/95 border-border/40 p-0 backdrop-blur-xl"
+        >
           <div className="flex h-full max-h-[100dvh] flex-col overflow-hidden">
             <div className="min-h-0 flex-1 overflow-hidden">
               <WorkspaceNav
                 workspaceId={workspaceId}
                 workspaceName={workspace === null ? undefined : name}
                 onNavigate={() => setMobileOpen(false)}
+                onClose={() => setMobileOpen(false)}
               />
             </div>
-            <div className="shrink-0 border-t border-border/60 bg-card p-3">
+            <div className="shrink-0 border-t border-border/40 p-3">
               <Link
                 href="/dashboard?oversikt=1"
                 onClick={() => setMobileOpen(false)}
-                className="text-muted-foreground hover:text-foreground flex min-h-11 items-center text-sm font-medium transition-colors"
+                className={cn(
+                  "text-muted-foreground hover:text-foreground hover:bg-muted/70",
+                  "flex min-h-11 items-center gap-2 rounded-xl px-3 text-sm font-medium transition-colors",
+                )}
               >
-                Alle arbeidsområder
+                <ArrowLeft className="size-4 opacity-70" aria-hidden />
+                Alle områder
               </Link>
             </div>
           </div>

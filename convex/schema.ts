@@ -642,6 +642,16 @@ export default defineSchema({
     lastName: v.optional(v.string()),
     /** Valgfritt — brukes bare i profil/visning. null = fjernet eksplisitt. */
     age: v.optional(v.union(v.number(), v.null())),
+    /** Valgfritt — profil. null = fjernet eksplisitt. */
+    gender: v.optional(
+      v.union(
+        v.literal("female"),
+        v.literal("male"),
+        v.literal("other"),
+        v.literal("prefer_not"),
+        v.null(),
+      ),
+    ),
     /** Synkroniseres med next-themes når innlogget. */
     themePreference: v.optional(
       v.union(v.literal("light"), v.literal("dark"), v.literal("system")),

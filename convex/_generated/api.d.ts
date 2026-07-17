@@ -8,6 +8,7 @@
  * @module
  */
 
+import type * as ResendOTPPasswordReset from "../ResendOTPPasswordReset.js";
 import type * as assessmentNotes from "../assessmentNotes.js";
 import type * as assessmentShareLinks from "../assessmentShareLinks.js";
 import type * as assessmentTasks from "../assessmentTasks.js";
@@ -39,6 +40,7 @@ import type * as lib_intakePublicScreening from "../lib/intakePublicScreening.js
 import type * as lib_intakePublicSecurity from "../lib/intakePublicSecurity.js";
 import type * as lib_intakeSubmissionGithubBody from "../lib/intakeSubmissionGithubBody.js";
 import type * as lib_payloadSnapshot from "../lib/payloadSnapshot.js";
+import type * as lib_resendEnv from "../lib/resendEnv.js";
 import type * as lib_rosIntakePlacement from "../lib/rosIntakePlacement.js";
 import type * as lib_rpaScoring from "../lib/rpaScoring.js";
 import type * as lib_taskAssignment from "../lib/taskAssignment.js";
@@ -69,6 +71,7 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  ResendOTPPasswordReset: typeof ResendOTPPasswordReset;
   assessmentNotes: typeof assessmentNotes;
   assessmentShareLinks: typeof assessmentShareLinks;
   assessmentTasks: typeof assessmentTasks;
@@ -100,6 +103,7 @@ declare const fullApi: ApiFromModules<{
   "lib/intakePublicSecurity": typeof lib_intakePublicSecurity;
   "lib/intakeSubmissionGithubBody": typeof lib_intakeSubmissionGithubBody;
   "lib/payloadSnapshot": typeof lib_payloadSnapshot;
+  "lib/resendEnv": typeof lib_resendEnv;
   "lib/rosIntakePlacement": typeof lib_rosIntakePlacement;
   "lib/rpaScoring": typeof lib_rpaScoring;
   "lib/taskAssignment": typeof lib_taskAssignment;

@@ -5,6 +5,7 @@ export const runtime = "edge";
 export const size = { width: 32, height: 32 };
 export const contentType = "image/png";
 
+/** Tab-favicon — forenklet Zorlin-merke. */
 export default function Icon() {
   return new ImageResponse(
     (
@@ -15,22 +16,62 @@ export default function Icon() {
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          background: "linear-gradient(145deg, #0f172a 0%, #0d9488 100%)",
-          borderRadius: 6,
+          background: "linear-gradient(145deg, #020617 0%, #0f172a 45%, #0f766e 100%)",
+          borderRadius: 7,
+          position: "relative",
         }}
       >
-        <span
+        {/* Top bar */}
+        <div
           style={{
-            color: "#f8fafc",
-            fontSize: 12,
-            fontWeight: 800,
-            letterSpacing: "-0.04em",
-            fontFamily:
-              "ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, sans-serif",
+            position: "absolute",
+            top: 6,
+            left: 5,
+            width: 18,
+            height: 5,
+            background: "#f1f5f9",
+            transform: "skewX(-18deg)",
+            borderRadius: 1,
           }}
-        >
-          ZL
-        </span>
+        />
+        {/* Diagonal */}
+        <div
+          style={{
+            position: "absolute",
+            top: 11,
+            left: 13,
+            width: 5,
+            height: 12,
+            background: "linear-gradient(180deg, #f8fafc 0%, #5eead4 100%)",
+            transform: "skewX(-28deg)",
+            borderRadius: 1,
+          }}
+        />
+        {/* Bottom bar */}
+        <div
+          style={{
+            position: "absolute",
+            bottom: 6,
+            left: 9,
+            width: 18,
+            height: 5,
+            background: "#5eead4",
+            transform: "skewX(-18deg)",
+            borderRadius: 1,
+          }}
+        />
+        {/* Priority node */}
+        <div
+          style={{
+            position: "absolute",
+            top: 13,
+            right: 7,
+            width: 5,
+            height: 5,
+            borderRadius: 999,
+            background: "#5eead4",
+          }}
+        />
       </div>
     ),
     { ...size },
