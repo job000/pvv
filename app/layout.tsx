@@ -3,6 +3,7 @@ import { ConvexClientProvider } from "@/components/providers/convex-provider";
 import { ThemeProvider } from "@/components/providers/theme-provider";
 import { UserPreferencesSync } from "@/components/user/user-preferences-sync";
 import { PwaClient } from "@/components/pwa-client";
+import { PRODUCT_NAME, PRODUCT_TITLE } from "@/lib/brand";
 import { ConvexAuthNextjsServerProvider } from "@convex-dev/auth/nextjs/server";
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
@@ -34,17 +35,17 @@ export const viewport = {
 
 export const metadata: Metadata = {
   metadataBase: new URL(appUrl),
-  applicationName: "FRO",
+  applicationName: PRODUCT_NAME,
   title: {
-    default: "FRO — prioriter og utfør",
-    template: "%s · FRO",
+    default: PRODUCT_TITLE,
+    template: `%s · ${PRODUCT_NAME}`,
   },
   description:
     "Prioriter oppgaver, prosessvurderinger og ROS — samarbeid i arbeidsområder.",
   manifest: "/manifest.webmanifest",
   appleWebApp: {
     capable: true,
-    title: "FRO",
+    title: PRODUCT_NAME,
     statusBarStyle: "default",
   },
   formatDetection: {

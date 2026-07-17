@@ -8,7 +8,7 @@ import {
   type RosCellItem,
   type RosCellItemMatrix,
 } from "./ros-cell-items";
-import { positionRiskLevel } from "./ros-defaults";
+import { resolveCellRiskLevel } from "./ros-defaults";
 
 export type RiskRegisterPhase = "before" | "after";
 
@@ -60,10 +60,17 @@ export function buildRiskRegisterRows(input: {
   const { phase, rowLabels, colLabels, matrixValues, cellItems } = input;
   const out: RiskRegisterRow[] = [];
   const rows = matrixValues.length;
+  const totalCols = matrixValues[0]?.length ?? colLabels.length;
   for (let i = 0; i < rows; i++) {
     const cols = matrixValues[i]?.length ?? 0;
     for (let j = 0; j < cols; j++) {
-      const level = matrixValues[i]?.[j] ?? 0;
+      const level = resolveCellRiskLevel(
+        matrixValues,
+        i,
+        j,
+        rows,
+        totalCols,
+      );
       const items = cellItems[i]?.[j];
       const itemTexts = cellItemTexts(items);
       if (level <= 0 && itemTexts.length === 0) continue;
@@ -108,12 +115,25 @@ export function buildPairedRiskRegisterRows(input: {
   } = input;
   const out: PairedRiskRegisterRow[] = [];
   const rows = matrixBefore.length;
+  const colsCount = matrixBefore[0]?.length ?? colLabels.length;
 
   for (let i = 0; i < rows; i++) {
     const cols = matrixBefore[i]?.length ?? 0;
     for (let j = 0; j < cols; j++) {
-      const bLevel = matrixBefore[i]?.[j] ?? 0;
-      const aLevel = matrixAfter[i]?.[j] ?? 0;
+      const bLevel = resolveCellRiskLevel(
+        matrixBefore,
+        i,
+        j,
+        rows,
+        colsCount,
+      );
+      const aLevel = resolveCellRiskLevel(
+        matrixAfter,
+        i,
+        j,
+        matrixAfter.length,
+        matrixAfter[0]?.length ?? colsCount,
+      );
       const bItems = cellItemsBefore[i]?.[j] ?? [];
       const aItems = cellItemsAfter[i]?.[j] ?? [];
       const bTexts = cellItemTexts(bItems);
@@ -229,8 +249,8 @@ export type MatrixItemStats = {
 };
 
 /**
- * Bruker samme logikk som tidligere «RiskSummaryBar»: nivå fra celleposisjon (sannsynlighet × konsekvens),
- * restrisiko fra punktets etter-plassering eller samme celle.
+ * Nivå fra lagret matriseverdi hvis satt, ellers P×K-posisjon.
+ * Restrisiko fra punktets etter-plassering (eller samme celle) mot etter-matrisen.
  */
 export function computeMatrixItemStats(
   cellItemsMatrix: RosCellItemMatrix,
@@ -238,6 +258,8 @@ export function computeMatrixItemStats(
   colLabels: string[],
   afterRowLabels: string[],
   afterColLabels: string[],
+  matrixBefore?: number[][],
+  matrixAfter?: number[][],
 ): MatrixItemStats {
   let textItemCount = 0;
   let highOrCriticalBefore = 0;
@@ -258,14 +280,14 @@ export function computeMatrixItemStats(
       for (const it of cell) {
         if (!it.text.trim()) continue;
         textItemCount++;
-        const bLvl = positionRiskLevel(r, c, br, bc);
+        const bLvl = resolveCellRiskLevel(matrixBefore, r, c, br, bc);
         if (bLvl >= 4) highOrCriticalBefore++;
         if (bLvl >= 5) criticalBefore++;
         const hasFlag = it.flags?.includes(ROS_CELL_FLAG_REQUIRES_ACTION);
         if (bLvl >= 4 && !hasFlag) needsAction++;
         const aRow = it.afterRow ?? r;
         const aCol = it.afterCol ?? c;
-        const aLvl = positionRiskLevel(aRow, aCol, ar, ac);
+        const aLvl = resolveCellRiskLevel(matrixAfter, aRow, aCol, ar, ac);
         if (aLvl >= 4) highAfter++;
       }
     }

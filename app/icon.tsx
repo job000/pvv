@@ -22,14 +22,14 @@ export default function Icon() {
         <span
           style={{
             color: "#f8fafc",
-            fontSize: 9,
+            fontSize: 12,
             fontWeight: 800,
             letterSpacing: "-0.04em",
             fontFamily:
               "ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, sans-serif",
           }}
         >
-          FRO
+          ZL
         </span>
       </div>
     ),

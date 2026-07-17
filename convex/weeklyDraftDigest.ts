@@ -1,5 +1,6 @@
 import { internalAction } from "./_generated/server";
 import { internal } from "./_generated/api";
+import { PRODUCT_NAME } from "../lib/brand";
 import { escapeHtml } from "./lib/emailHtml";
 
 export const runWeeklyDraftDigest = internalAction({
@@ -12,7 +13,7 @@ export const runWeeklyDraftDigest = internalAction({
   > => {
     const key = process.env.RESEND_API_KEY;
     const from =
-      process.env.RESEND_FROM_EMAIL ?? "FRO <onboarding@resend.dev>";
+      process.env.RESEND_FROM_EMAIL ?? `${PRODUCT_NAME} <onboarding@resend.dev>`;
     const publicUrl = (process.env.PUBLIC_APP_URL ?? "http://localhost:3000").replace(
       /\/$/,
       "",
@@ -26,7 +27,7 @@ export const runWeeklyDraftDigest = internalAction({
 
     if (!key) {
       console.log(
-        `[FRO] ukentlig utkast-sammendrag: ${targets.length} mottakere (RESEND_API_KEY mangler)`,
+        `[Zorlin] ukentlig utkast-sammendrag: ${targets.length} mottakere (RESEND_API_KEY mangler)`,
       );
       return { sent: 0, recipients: targets.length, reason: "no_api_key" };
     }
@@ -43,7 +44,7 @@ export const runWeeklyDraftDigest = internalAction({
         .join("");
       const more =
         t.items.length > 40
-          ? `<p>… og ${t.items.length - 40} flere (åpne FRO for full liste).</p>`
+          ? `<p>… og ${t.items.length - 40} flere (åpne Zorlin for full liste).</p>`
           : "";
 
       const res = await fetch("https://api.resend.com/emails", {
@@ -55,13 +56,13 @@ export const runWeeklyDraftDigest = internalAction({
         body: JSON.stringify({
           from,
           to: [t.email],
-          subject: `[FRO] Ukentlig oversikt: ${t.items.length} åpne vurderinger`,
+          subject: `[Zorlin] Ukentlig oversikt: ${t.items.length} åpne vurderinger`,
           html: `<p>Hei,</p>
 <p>Du har <strong>${t.items.length}</strong> vurdering(er) som ikke er markert som ferdig. Her er en rask liste:</p>
 <ul>${lines}</ul>
 ${more}
 <p>Du får denne e-posten fordi du er satt som eier (eller oppretter) av vurderingene. Den sendes omtrent én gang i uken når du har åpne saker.</p>
-<p><a href="${publicUrl}/dashboard">Åpne FRO</a> · <a href="${publicUrl}/bruker/innstillinger">Varslingsinnstillinger</a></p>`,
+<p><a href="${publicUrl}/dashboard">Åpne Zorlin</a> · <a href="${publicUrl}/bruker/innstillinger">Varslingsinnstillinger</a></p>`,
         }),
       });
       if (!res.ok) {

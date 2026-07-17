@@ -1,10 +1,11 @@
+import { PRODUCT_NAME, PRODUCT_TITLE } from "@/lib/brand";
 import type { MetadataRoute } from "next";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
     id: "/",
-    name: "FRO — prioriter og utfør",
-    short_name: "FRO",
+    name: PRODUCT_TITLE,
+    short_name: PRODUCT_NAME,
     description:
       "Prioriter oppgaver, prosessvurderinger og ROS — samarbeid i arbeidsområder.",
     start_url: "/",
@@ -19,13 +20,13 @@ export default function manifest(): MetadataRoute.Manifest {
     dir: "ltr",
     icons: [
       {
-        src: "/icons/fro-mark.svg",
+        src: "/icons/zorlin-mark.svg",
         sizes: "512x512",
         type: "image/svg+xml",
         purpose: "any",
       },
       {
-        src: "/icons/fro-mark.svg",
+        src: "/icons/zorlin-mark.svg",
         sizes: "512x512",
         type: "image/svg+xml",
         purpose: "maskable",

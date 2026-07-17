@@ -115,7 +115,7 @@ export function RosMethodologyGuide({
           I mange grovanalyser beskrives{" "}
           <strong className="text-foreground">sannsynlighet</strong> og{" "}
           <strong className="text-foreground">konsekvens</strong> med tekst per nivå
-          (frekvens, omfang, IKT osv.). I FRO ligger et{" "}
+          (frekvens, omfang, IKT osv.). I Zorlin ligger et{" "}
           <strong className="text-foreground">konfigurerbart utgangspunkt</strong> du
           kan sammenligne med — åpne{" "}
           {workspaceId ? (

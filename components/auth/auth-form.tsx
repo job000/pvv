@@ -88,8 +88,8 @@ export function AuthForm({
             </h1>
             <p className="text-muted-foreground mt-1 text-sm">
               {isSignUp
-                ? "Kom i gang med FRO på sekunder"
-                : "Logg inn for å fortsette til FRO"}
+                ? "Kom i gang med Zorlin på sekunder"
+                : "Logg inn for å fortsette til Zorlin"}
             </p>
           </div>
         </div>

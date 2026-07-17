@@ -1,3 +1,5 @@
+import { resolveCellRiskLevel } from "./ros-defaults";
+
 /**
  * Flere risiko-/begrunnelse-punkter per matrise-celle (før/etter ROS).
  * Bakoverkompatibel med enkelt `cellNotes`-streng per celle.
@@ -122,13 +124,15 @@ export function maxRiskAmongDocumentedCells(
 ): { max: number; highOrCriticalCells: number } {
   let max = 0;
   let highOrCriticalCells = 0;
+  const totalRows = matrix.length;
+  const totalCols = matrix[0]?.length ?? 0;
   for (let r = 0; r < matrix.length; r++) {
     const rowM = matrix[r];
     const rowItems = cellItems[r];
     if (!rowM) continue;
     for (let c = 0; c < rowM.length; c++) {
       if (!cellHasFilledRosItems(rowItems?.[c])) continue;
-      const v = rowM[c] ?? 0;
+      const v = resolveCellRiskLevel(matrix, r, c, totalRows, totalCols);
       if (v > max) max = v;
       if (v >= 4) highOrCriticalCells += 1;
     }

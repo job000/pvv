@@ -52,7 +52,7 @@ export function sampleDocumentationRosPdfInput(): RosPdfInput {
     afterColAxisTitle: "Sikkerhets- og personverndimensjoner",
     afterSeparateLayout: false,
     analysisNotes:
-      "Dette er et illustrasjonsdokument. Tall og vurderinger er fiktive og viser hvordan en full ROS-PDF kan se ut i FRO.",
+      "Dette er et illustrasjonsdokument. Tall og vurderinger er fiktive og viser hvordan en full ROS-PDF kan se ut i Zorlin.",
     summaryLines: [
       "Før tiltak: én celle i høyeste risikobånd (tilgjengelighet under behandling).",
       "Etter tiltak: redusert samlet eksponering; gjenstående oppfølging på tilgangsstyring.",
@@ -210,7 +210,7 @@ function samplePddPayload(): ProcessDesignDocumentPayload {
   return {
     processTitle: "Leverandørfaktura — mottak og kontering",
     shortDescription:
-      "Illustrasjon av RPA prosessdesign-dokument (PDD) slik det kan eksporteres fra FRO. Diagrammer vises kun når de finnes i dokumentet; her er tekstseksjoner fylt ut.",
+      "Illustrasjon av RPA prosessdesign-dokument (PDD) slik det kan eksporteres fra Zorlin. Diagrammer vises kun når de finnes i dokumentet; her er tekstseksjoner fylt ut.",
     executiveSummary:
       "Prosessen digitaliseres stegvis: først strukturert mottak, deretter automatisk match der reglene er entydige.",
     purpose: "Sikre korrekt bokføring og sporbarhet.",

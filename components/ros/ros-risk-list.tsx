@@ -21,7 +21,10 @@ import {
   newRosCellItemId,
   type RosCellItemMatrix,
 } from "@/lib/ros-cell-items";
-import { positionRiskLevel } from "@/lib/ros-defaults";
+import {
+  resolveCellRiskLevel,
+  riskProduct,
+} from "@/lib/ros-defaults";
 import { cellRiskClass } from "@/lib/ros-risk-colors";
 import { cn } from "@/lib/utils";
 import { useMutation, useQuery } from "convex/react";
@@ -118,6 +121,41 @@ function riskLevelLabel(level: number): string {
     case 4: return "Høy";
     case 5: return "Kritisk";
     default: return "";
+  }
+}
+
+/** Endring før→etter: nivå først, deretter rå P×K-poeng innen samme nivåbånd. */
+function riskChange(
+  beforeLevel: number,
+  afterLevel: number,
+  beforeProduct: number,
+  afterProduct: number,
+): "level_down" | "level_up" | "score_down" | "score_up" | "unchanged" {
+  if (afterLevel < beforeLevel) return "level_down";
+  if (afterLevel > beforeLevel) return "level_up";
+  if (afterProduct < beforeProduct) return "score_down";
+  if (afterProduct > beforeProduct) return "score_up";
+  return "unchanged";
+}
+
+function riskChangeLabel(
+  change: ReturnType<typeof riskChange>,
+  beforeLevel: number,
+  afterLevel: number,
+  beforeProduct: number,
+  afterProduct: number,
+): string {
+  switch (change) {
+    case "level_down":
+      return `Reduseres med ${beforeLevel - afterLevel}`;
+    case "level_up":
+      return `Øker med ${afterLevel - beforeLevel}`;
+    case "score_down":
+      return `Lavere poeng (${beforeProduct}→${afterProduct})`;
+    case "score_up":
+      return `Høyere poeng (${beforeProduct}→${afterProduct})`;
+    case "unchanged":
+      return "Samme nivå";
   }
 }
 
@@ -331,14 +369,26 @@ export function RosRiskList({
 
   const beforeLevel = useCallback(
     (r: number, c: number) =>
-      positionRiskLevel(r, c, rowLabels.length, colLabels.length),
-    [rowLabels.length, colLabels.length],
+      resolveCellRiskLevel(
+        matrixValues,
+        r,
+        c,
+        rowLabels.length,
+        colLabels.length,
+      ),
+    [matrixValues, rowLabels.length, colLabels.length],
   );
 
   const afterLevel = useCallback(
     (r: number, c: number) =>
-      positionRiskLevel(r, c, afterRowLabels.length, afterColLabels.length),
-    [afterRowLabels.length, afterColLabels.length],
+      resolveCellRiskLevel(
+        matrixAfter,
+        r,
+        c,
+        afterRowLabels.length,
+        afterColLabels.length,
+      ),
+    [matrixAfter, afterRowLabels.length, afterColLabels.length],
   );
 
   const isHighlighted = useCallback(
@@ -437,10 +487,18 @@ export function RosRiskList({
           {sortedRisks.map((risk) => {
             const bLvl = beforeLevel(risk.beforeRow, risk.beforeCol);
             const aLvl = afterLevel(risk.afterRow, risk.afterCol);
+            const bProduct = riskProduct(risk.beforeRow, risk.beforeCol);
+            const aProduct = riskProduct(risk.afterRow, risk.afterCol);
+            const change = riskChange(bLvl, aLvl, bProduct, aProduct);
+            const improved = change === "level_down" || change === "score_down";
+            const worsened = change === "level_up" || change === "score_up";
             const expanded = expandedId === risk.id;
             const highlighted = isHighlighted(risk);
             const linkedRosTasksForRisk =
               rosTasks?.filter((t) => t.linkedCellItemId === risk.id) ?? [];
+            const afterMoved =
+              risk.afterRow !== risk.beforeRow ||
+              risk.afterCol !== risk.beforeCol;
 
             return (
               <li
@@ -463,11 +521,15 @@ export function RosRiskList({
                 >
                   <div className="flex shrink-0 flex-col items-center gap-1">
                     {levelBadge(bLvl)}
-                    {(risk.afterRow !== risk.beforeRow || risk.afterCol !== risk.beforeCol) ? (
+                    {afterMoved ? (
                       <div className="flex flex-col items-center">
                         <span className={cn(
                           "text-[9px] font-bold",
-                          aLvl < bLvl ? "text-emerald-600 dark:text-emerald-400" : aLvl > bLvl ? "text-red-500" : "text-muted-foreground",
+                          improved
+                            ? "text-emerald-600 dark:text-emerald-400"
+                            : worsened
+                              ? "text-red-500"
+                              : "text-muted-foreground",
                         )}>↓</span>
                         {levelBadge(aLvl, "sm")}
                       </div>
@@ -487,6 +549,13 @@ export function RosRiskList({
                     <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
                       <span className="text-muted-foreground text-[10px]">
                         {riskLevelLabel(bLvl)} risiko
+                      </span>
+                      <span className="text-muted-foreground/40 text-[10px]">·</span>
+                      <span className="text-muted-foreground text-[10px] tabular-nums">
+                        {risk.beforeRow + 1} × {risk.beforeCol + 1} ={" "}
+                        {riskProduct(risk.beforeRow, risk.beforeCol)}
+                        {" → "}
+                        nivå {bLvl}
                       </span>
                       <span className="text-muted-foreground/40 text-[10px]">·</span>
                       <span className="text-muted-foreground text-[10px]">
@@ -684,24 +753,29 @@ export function RosRiskList({
                             ))}
                           </select>
                         </div>
-                        <div className="col-span-2 flex items-center gap-1.5 sm:col-span-1">
-                          {levelBadge(bLvl, "sm")}
-                          <span className="text-muted-foreground text-[11px]">
-                            {riskLevelLabel(bLvl)}
+                        <div className="col-span-2 flex min-w-0 flex-col gap-0.5 sm:col-span-1">
+                          <div className="flex items-center gap-1.5">
+                            {levelBadge(bLvl, "sm")}
+                            <span className="text-[11px] font-medium text-foreground">
+                              {riskLevelLabel(bLvl)}
+                            </span>
+                          </div>
+                          <span className="text-[10px] tabular-nums text-muted-foreground">
+                            {risk.beforeRow + 1}×{risk.beforeCol + 1}=
+                            {riskProduct(risk.beforeRow, risk.beforeCol)}
                           </span>
                         </div>
                         <span className="hidden sm:block" aria-hidden />
                       </div>
 
-                      {/* «Pil» mellom rader: viser endringen og blir
-                          fargesatt etter delta-retning. */}
+                      {/* «Pil» mellom rader: nivåendring, ellers P×K-poeng. */}
                       <div className="border-border/30 flex items-center gap-2 border-y border-dashed bg-background/40 px-3 py-1.5">
-                        {aLvl < bLvl ? (
+                        {improved ? (
                           <ArrowDown
                             className="size-3.5 text-emerald-500"
                             aria-hidden
                           />
-                        ) : aLvl > bLvl ? (
+                        ) : worsened ? (
                           <ArrowDown
                             className="size-3.5 rotate-180 text-red-500"
                             aria-hidden
@@ -715,18 +789,22 @@ export function RosRiskList({
                         <span
                           className={cn(
                             "text-[10px] font-semibold uppercase tracking-wider",
-                            aLvl < bLvl
+                            improved
                               ? "text-emerald-600 dark:text-emerald-400"
-                              : aLvl > bLvl
+                              : worsened
                                 ? "text-red-600 dark:text-red-400"
                                 : "text-muted-foreground",
                           )}
                         >
-                          {aLvl < bLvl
-                            ? `Reduseres med ${bLvl - aLvl}`
-                            : aLvl > bLvl
-                              ? `Øker med ${aLvl - bLvl}`
-                              : "Ingen endring ennå"}
+                          {!afterMoved
+                            ? "Ingen endring ennå"
+                            : riskChangeLabel(
+                                change,
+                                bLvl,
+                                aLvl,
+                                bProduct,
+                                aProduct,
+                              )}
                         </span>
                       </div>
 
@@ -734,9 +812,9 @@ export function RosRiskList({
                       <div
                         className={cn(
                           "grid items-center gap-2 px-3 py-2.5 sm:grid-cols-[8.5rem_1fr_1fr_5.5rem_2rem] sm:gap-3",
-                          aLvl < bLvl
+                          improved
                             ? "bg-emerald-500/[0.05]"
-                            : aLvl > bLvl
+                            : worsened
                               ? "bg-red-500/[0.05]"
                               : undefined,
                         )}
@@ -745,9 +823,9 @@ export function RosRiskList({
                           <span
                             className={cn(
                               "text-[11px] font-semibold",
-                              aLvl < bLvl
+                              improved
                                 ? "text-emerald-700 dark:text-emerald-400"
-                                : aLvl > bLvl
+                                : worsened
                                   ? "text-red-700 dark:text-red-400"
                                   : "text-foreground/90",
                             )}
@@ -794,19 +872,25 @@ export function RosRiskList({
                             ))}
                           </select>
                         </div>
-                        <div className="col-span-2 flex items-center gap-1.5 sm:col-span-1">
-                          {levelBadge(aLvl, "sm")}
-                          <span
-                            className={cn(
-                              "text-[11px]",
-                              aLvl < bLvl
-                                ? "text-emerald-600 dark:text-emerald-400"
-                                : aLvl > bLvl
-                                  ? "text-red-600 dark:text-red-400"
-                                  : "text-muted-foreground",
-                            )}
-                          >
-                            {riskLevelLabel(aLvl)}
+                        <div className="col-span-2 flex min-w-0 flex-col gap-0.5 sm:col-span-1">
+                          <div className="flex items-center gap-1.5">
+                            {levelBadge(aLvl, "sm")}
+                            <span
+                              className={cn(
+                                "text-[11px] font-medium",
+                                improved
+                                  ? "text-emerald-600 dark:text-emerald-400"
+                                  : worsened
+                                    ? "text-red-600 dark:text-red-400"
+                                    : "text-foreground",
+                              )}
+                            >
+                              {riskLevelLabel(aLvl)}
+                            </span>
+                          </div>
+                          <span className="text-[10px] tabular-nums text-muted-foreground">
+                            {risk.afterRow + 1}×{risk.afterCol + 1}=
+                            {aProduct}
                           </span>
                         </div>
                         <span className="hidden sm:block" aria-hidden />

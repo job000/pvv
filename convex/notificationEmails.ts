@@ -1,12 +1,13 @@
 import { v } from "convex/values";
 import { internalAction } from "./_generated/server";
 import { internal } from "./_generated/api";
+import { PRODUCT_NAME } from "../lib/brand";
 import { escapeHtml } from "./lib/emailHtml";
 
 function resendEnv() {
   const key = process.env.RESEND_API_KEY;
   const from =
-    process.env.RESEND_FROM_EMAIL ?? "FRO <onboarding@resend.dev>";
+    process.env.RESEND_FROM_EMAIL ?? `${PRODUCT_NAME} <onboarding@resend.dev>`;
   const publicUrl = process.env.PUBLIC_APP_URL ?? "http://localhost:3000";
   return { key, from, publicUrl: publicUrl.replace(/\/$/, "") };
 }
@@ -24,7 +25,7 @@ export const sendPendingWorkspaceInvite = internalAction({
     }
     if (!key) {
       console.log(
-        `[FRO] workspace-invite e-post til ${payload.toEmail} hoppet over (RESEND_API_KEY mangler)`,
+        `[Zorlin] workspace-invite e-post til ${payload.toEmail} hoppet over (RESEND_API_KEY mangler)`,
       );
       return { ok: false as const, reason: "no_api_key" as const };
     }
@@ -40,11 +41,11 @@ export const sendPendingWorkspaceInvite = internalAction({
       body: JSON.stringify({
         from,
         to: [payload.toEmail],
-        subject: `[FRO] Invitasjon til arbeidsområdet ${payload.workspaceName}`,
+        subject: `[Zorlin] Invitasjon til arbeidsområdet ${payload.workspaceName}`,
         html: `<p>Hei,</p>
 <p><strong>${safeInviter}</strong> har invitert deg til arbeidsområdet <strong>${safeWs}</strong> med rollen <strong>${escapeHtml(payload.roleLabel)}</strong>.</p>
-<p>Logg inn i FRO med <strong>denne e-postadressen</strong>. Under <strong>Oversikt</strong> kan du godta eller avslå invitasjonen.</p>
-<p><a href="${dashboardUrl}">Åpne FRO</a></p>
+<p>Logg inn i Zorlin med <strong>denne e-postadressen</strong>. Under <strong>Oversikt</strong> kan du godta eller avslå invitasjonen.</p>
+<p><a href="${dashboardUrl}">Åpne Zorlin</a></p>
 <p>Hvis du ikke forventet denne invitasjonen, kan du avslå i appen eller se bort fra e-posten.</p>`,
       }),
     });
@@ -89,12 +90,12 @@ export const sendWorkspaceUserInviteEmail = internalAction({
       body: JSON.stringify({
         from,
         to: [payload.toEmail],
-        subject: `[FRO] Invitasjon til ${payload.workspaceName}`,
+        subject: `[Zorlin] Invitasjon til ${payload.workspaceName}`,
         html: `<p>Hei,</p>
 <p>Du er invitert til arbeidsområdet <strong>${safeWs}</strong> som <strong>${escapeHtml(payload.roleLabel)}</strong>.</p>
 <p>Logg inn og gå til <strong>Oversikt</strong> for å <strong>godta</strong> eller <strong>avslå</strong>.</p>
-<p><a href="${dashboardUrl}">Åpne FRO</a></p>
-<p>Du kan skru av slike varsler under Varslinger i FRO.</p>`,
+<p><a href="${dashboardUrl}">Åpne Zorlin</a></p>
+<p>Du kan skru av slike varsler under Varslinger i Zorlin.</p>`,
       }),
     });
     if (!res.ok) {
@@ -118,7 +119,7 @@ export const sendPendingAssessmentInvite = internalAction({
     }
     if (!key) {
       console.log(
-        `[FRO] vurderings-invitasjon til ${payload.toEmail} hoppet over (RESEND_API_KEY mangler)`,
+        `[Zorlin] vurderings-invitasjon til ${payload.toEmail} hoppet over (RESEND_API_KEY mangler)`,
       );
       return { ok: false as const, reason: "no_api_key" as const };
     }
@@ -135,10 +136,10 @@ export const sendPendingAssessmentInvite = internalAction({
       body: JSON.stringify({
         from,
         to: [payload.toEmail],
-        subject: `[FRO] Invitasjon til vurdering: ${payload.assessmentTitle}`,
+        subject: `[Zorlin] Invitasjon til vurdering: ${payload.assessmentTitle}`,
         html: `<p>Hei,</p>
 <p><strong>${safeInviter}</strong> har invitert deg til vurderingen <strong>${safeTitle}</strong> i <strong>${safeWs}</strong> med rollen <strong>${escapeHtml(payload.roleLabel)}</strong>.</p>
-<p>Logg inn i FRO med <strong>denne e-postadressen</strong> for å godta:</p>
+<p>Logg inn i Zorlin med <strong>denne e-postadressen</strong> for å godta:</p>
 <p><a href="${link}">Åpne vurderingen</a></p>
 <p>Hvis du ikke forventet denne invitasjonen, kan du se bort fra e-posten.</p>`,
       }),
@@ -179,11 +180,11 @@ export const sendWorkspaceDirectAddEmail = internalAction({
       body: JSON.stringify({
         from,
         to: [payload.toEmail],
-        subject: `[FRO] Du er lagt til i ${payload.workspaceName}`,
+        subject: `[Zorlin] Du er lagt til i ${payload.workspaceName}`,
         html: `<p>Hei,</p>
 <p>Du er nå medlem av arbeidsområdet <strong>${safeWs}</strong>.</p>
 <p><a href="${link}">Åpne arbeidsområdet</a></p>
-<p>Du kan skru av slike varsler under Varslinger i FRO.</p>`,
+<p>Du kan skru av slike varsler under Varslinger i Zorlin.</p>`,
       }),
     });
     if (!res.ok) {
@@ -222,11 +223,11 @@ export const sendAssessmentDirectAddEmail = internalAction({
       body: JSON.stringify({
         from,
         to: [payload.toEmail],
-        subject: `[FRO] Du er invitert til vurdering: ${payload.assessmentTitle}`,
+        subject: `[Zorlin] Du er invitert til vurdering: ${payload.assessmentTitle}`,
         html: `<p>Hei,</p>
 <p>Du er lagt til på vurderingen <strong>${safeTitle}</strong>.</p>
 <p><a href="${link}">Åpne vurderingen</a></p>
-<p>Du kan skru av slike varsler under Varslinger i FRO.</p>`,
+<p>Du kan skru av slike varsler under Varslinger i Zorlin.</p>`,
       }),
     });
     if (!res.ok) {

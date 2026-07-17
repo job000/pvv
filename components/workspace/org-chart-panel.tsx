@@ -703,15 +703,6 @@ function OrgBranch({
     }
   }
 
-  const depthAccentPalette = [
-    "border-l-primary/55",
-    "border-l-sky-400/30",
-    "border-l-emerald-400/30",
-    "border-l-violet-400/30",
-    "border-l-amber-400/30",
-  ] as const;
-  const depthAccent = depthAccentPalette[depth % depthAccentPalette.length];
-
   return (
     <div
       className="flex flex-col items-center"
@@ -728,9 +719,7 @@ function OrgBranch({
         ref={cardShellRef}
         data-org-chart-card
         className={cn(
-          "w-full overflow-hidden rounded-xl border border-border/40 bg-card/90 shadow-sm backdrop-blur-sm transition-[box-shadow,transform,border-color] duration-200 hover:border-border/60 hover:shadow-md dark:bg-card/95 dark:border-white/[0.06]",
-          "border-l-2",
-          depthAccent,
+          "w-full overflow-hidden rounded-2xl border border-border/50 bg-card shadow-sm transition-[box-shadow,border-color] duration-200 hover:border-border hover:shadow-md dark:border-white/[0.08]",
           orgChartCtx &&
             "cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary",
           orgChartCtx?.highlightedUnitId === unit._id &&
@@ -1078,7 +1067,7 @@ function OrgBranch({
         <>
           <div
             className={cn(
-              "w-0.5 shrink-0 rounded-full bg-foreground/38 ring-2 ring-muted/90 dark:bg-foreground/48 dark:ring-muted",
+              "w-px shrink-0 bg-foreground/20",
               kids.length === 1 ? "h-8" : "h-5",
             )}
             aria-hidden
@@ -1091,8 +1080,7 @@ function OrgBranch({
             <div
               className={cn(
                 "grid w-full gap-x-3 gap-y-5",
-                kids.length > 1 &&
-                  "border-t-2 border-foreground/25 pt-5 dark:border-foreground/32",
+                kids.length > 1 && "border-t border-foreground/20 pt-5",
                 kids.length === 1 && "justify-items-center",
               )}
               style={{
@@ -1106,7 +1094,7 @@ function OrgBranch({
                 >
                   {kids.length > 1 ? (
                     <div
-                      className="mb-0 h-3 w-0.5 shrink-0 rounded-full bg-foreground/38 ring-2 ring-muted/90 dark:bg-foreground/48 dark:ring-muted"
+                      className="mb-0 h-3 w-px shrink-0 bg-foreground/20"
                       aria-hidden
                     />
                   ) : null}
@@ -2329,328 +2317,175 @@ export function OrgChartPanel({
         <div
           ref={chartHostRef}
           className={cn(
-            "border-border/50 bg-muted/5 flex flex-col gap-3 rounded-2xl border p-4 shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.06]",
-            "[&:fullscreen]:border-0 [&:fullscreen]:bg-background [&:fullscreen]:p-3 [&:fullscreen]:shadow-none [&:fullscreen]:ring-0",
-            "[&:fullscreen]:fixed [&:fullscreen]:inset-0 [&:fullscreen]:z-[100] [&:fullscreen]:h-[100dvh] [&:fullscreen]:max-h-[100dvh] [&:fullscreen]:min-h-0 [&:fullscreen]:flex-col [&:fullscreen]:overflow-x-hidden",
-            "[&:fullscreen]:p-2 [&:fullscreen]:pt-[max(0.5rem,env(safe-area-inset-top))] [&:fullscreen]:pb-[max(0.5rem,env(safe-area-inset-bottom))] sm:[&:fullscreen]:p-3",
+            "border-border/50 relative isolate overflow-hidden rounded-2xl border bg-background",
+            "[&:fullscreen]:fixed [&:fullscreen]:inset-0 [&:fullscreen]:z-[100] [&:fullscreen]:h-[100dvh] [&:fullscreen]:max-h-[100dvh] [&:fullscreen]:rounded-none [&:fullscreen]:border-0",
           )}
         >
           <div
+            ref={chartViewportRef}
             className={cn(
-              "flex flex-col gap-3",
-              chartIsFullscreen && "min-h-0 flex-1",
+              "max-h-[min(82vh,56rem)] min-h-[26rem] overflow-auto overscroll-contain touch-pan-x touch-pan-y pb-24 pt-[4.75rem]",
+              // Prikk-rutenett som canvas-bakgrunn — signaliserer «flate du kan dra og zoome i».
+              "bg-[radial-gradient(color-mix(in_oklab,var(--border)_75%,transparent)_1px,transparent_1px)] [background-size:22px_22px]",
+              chartPanMode && !chartIsPanning && "cursor-grab",
+              chartIsPanning && "cursor-grabbing select-none",
+              chartIsFullscreen && "h-[100dvh] max-h-none",
             )}
+            role="tree"
+            aria-label="Organisasjonstre"
           >
-            {chartIsFullscreen ? (
-              <div className="relative z-20 flex min-w-0 shrink-0 flex-row flex-wrap items-center gap-2 overflow-visible border-b border-border/40 pb-2">
-                <div
-                  ref={orgSearchWrapRef}
-                  className="relative z-30 min-w-0 max-w-none flex-1 overflow-visible sm:max-w-[min(100%,28rem)]"
-                >
-                  <SearchInput
-                    value={orgSearch}
-                    onChange={(e) => setOrgSearch(e.target.value)}
-                    placeholder="Søk etter enhet eller kode …"
-                    aria-label="Søk i organisasjonskartet"
-                    aria-controls="org-chart-search-results"
-                    aria-expanded={
-                      orgSearch.trim().length > 0 && orgSearchMatches.length > 0
-                    }
-                  />
-                  {orgSearch.trim().length > 0 && orgSearchMatches.length > 0 ? (
-                    <ul
-                      id="org-chart-search-results"
-                      role="listbox"
-                      className="border-border/60 bg-card absolute left-0 right-0 top-full z-[200] mt-1.5 max-h-60 overflow-auto rounded-xl border py-1 shadow-lg ring-1 ring-black/[0.06] dark:ring-white/[0.08]"
-                    >
-                      {orgSearchMatches.slice(0, 14).map((u) => (
-                        <li key={u._id} role="presentation">
-                          <button
-                            type="button"
-                            role="option"
-                            className="hover:bg-muted/80 flex w-full items-baseline gap-2 px-3 py-2.5 text-left text-sm transition-colors"
-                            onClick={() => {
-                              onCardSurfaceActivate(u._id);
-                              setOrgSearch("");
-                            }}
-                          >
-                            <span className="text-foreground min-w-0 flex-1 font-medium leading-snug">
-                              {u.name}
-                            </span>
-                            {u.localCode?.trim() ? (
-                              <span className="text-muted-foreground shrink-0 font-mono text-[11px] tabular-nums">
-                                {u.localCode.trim()}
-                              </span>
-                            ) : null}
-                          </button>
-                        </li>
-                      ))}
-                    </ul>
-                  ) : orgSearch.trim().length > 0 && orgSearchMatches.length === 0 ? (
-                    <p className="border-border/60 bg-card text-muted-foreground absolute left-0 right-0 top-full z-[200] mt-1.5 rounded-xl border px-3 py-2.5 text-xs shadow-lg ring-1 ring-black/[0.06]">
-                      Ingen treff — prøv et annet søkeord.
-                    </p>
-                  ) : null}
-                </div>
-                <div
-                  className="bg-muted/30 border-border/60 inline-flex min-w-0 shrink-0 flex-wrap items-center gap-0.5 overflow-x-auto rounded-xl border p-0.5 shadow-inner [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-                  role="toolbar"
-                  aria-label="Visning og zoom"
-                >
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="size-10 min-h-10 min-w-10 shrink-0 touch-manipulation rounded-lg px-0"
-                    onClick={() => void toggleChartFullscreen()}
-                    aria-pressed={chartIsFullscreen}
-                    aria-label="Avslutt fullskjerm for kart"
-                    title="Avslutt fullskjerm"
-                  >
-                    <Minimize2 className="mx-auto size-4" aria-hidden />
-                  </Button>
-                  <div className="bg-border mx-0.5 h-6 w-px shrink-0 self-center" aria-hidden />
-                  <Button
-                    type="button"
-                    variant={chartPanMode ? "secondary" : "ghost"}
-                    size="sm"
-                    className="size-10 min-h-10 min-w-10 shrink-0 touch-manipulation rounded-lg px-0"
-                    onClick={() => setChartPanMode((v) => !v)}
-                    aria-pressed={chartPanMode}
-                    aria-label="Dra for å flytte kartet"
-                    title="Dra-kart: dra i bakgrunnen utenfor kort, eller hold Alt og dra. Midtklikk panorerer også."
-                  >
-                    <Hand className="mx-auto size-4" aria-hidden />
-                  </Button>
-                  <div className="bg-border mx-0.5 h-6 w-px shrink-0 self-center" aria-hidden />
-                  <div className="flex items-center gap-0.5" role="group" aria-label="Zoom">
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="size-10 min-h-10 min-w-10 touch-manipulation rounded-lg px-0"
-                      onClick={zoomOut}
-                      disabled={chartZoom <= ORG_CHART_ZOOM_MIN + 1e-6}
-                      aria-label="Zoom ut"
-                      title="Zoom ut"
-                    >
-                      <Minus className="mx-auto size-4" aria-hidden />
-                    </Button>
-                    <span
-                      className="text-muted-foreground tabular-nums min-w-[2.75rem] px-0.5 text-center text-[11px] font-semibold"
-                      aria-live="polite"
-                    >
-                      {Math.round(chartZoom * 100)}%
-                    </span>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="size-10 min-h-10 min-w-10 touch-manipulation rounded-lg px-0"
-                      onClick={zoomIn}
-                      disabled={chartZoom >= ORG_CHART_ZOOM_MAX - 1e-6}
-                      aria-label="Zoom inn"
-                      title="Zoom inn"
-                    >
-                      <Plus className="mx-auto size-4" aria-hidden />
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      size="sm"
-                      className="h-10 min-h-10 min-w-[2.75rem] shrink-0 touch-manipulation rounded-lg px-1.5 text-[11px] font-semibold"
-                      onClick={resetZoom}
-                      title={`Tilbakestill til standardvisning (${Math.round(ORG_CHART_ZOOM_INITIAL * 100)} %)`}
-                      aria-label={`Tilbakestill zoom til standardvisning ${Math.round(ORG_CHART_ZOOM_INITIAL * 100)} prosent`}
-                    >
-                      Std
-                    </Button>
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <div className="flex flex-col gap-3">
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
-                  <div
-                    ref={orgSearchWrapRef}
-                    className="relative w-full min-w-0 shrink-0 lg:max-w-[min(100%,22rem)]"
-                  >
-                    <SearchInput
-                      value={orgSearch}
-                      onChange={(e) => setOrgSearch(e.target.value)}
-                      placeholder="Søk etter enhet eller kode …"
-                      aria-label="Søk i organisasjonskartet"
-                      aria-controls="org-chart-search-results"
-                      aria-expanded={
-                        orgSearch.trim().length > 0 && orgSearchMatches.length > 0
-                      }
-                    />
-                    {orgSearch.trim().length > 0 && orgSearchMatches.length > 0 ? (
-                      <ul
-                        id="org-chart-search-results"
-                        role="listbox"
-                        className="border-border/60 bg-card absolute left-0 right-0 top-full z-[200] mt-1.5 max-h-60 overflow-auto rounded-xl border py-1 shadow-lg ring-1 ring-black/[0.06] dark:ring-white/[0.08]"
-                      >
-                        {orgSearchMatches.slice(0, 14).map((u) => (
-                          <li key={u._id} role="presentation">
-                            <button
-                              type="button"
-                              role="option"
-                              className="hover:bg-muted/80 flex w-full items-baseline gap-2 px-3 py-2.5 text-left text-sm transition-colors"
-                              onClick={() => {
-                                onCardSurfaceActivate(u._id);
-                                setOrgSearch("");
-                              }}
-                            >
-                              <span className="text-foreground min-w-0 flex-1 font-medium leading-snug">
-                                {u.name}
-                              </span>
-                              {u.localCode?.trim() ? (
-                                <span className="text-muted-foreground shrink-0 font-mono text-[11px] tabular-nums">
-                                  {u.localCode.trim()}
-                                </span>
-                              ) : null}
-                            </button>
-                          </li>
-                        ))}
-                      </ul>
-                    ) : orgSearch.trim().length > 0 && orgSearchMatches.length === 0 ? (
-                      <p className="border-border/60 bg-card text-muted-foreground absolute left-0 right-0 top-full z-[200] mt-1.5 rounded-xl border px-3 py-2.5 text-xs shadow-lg ring-1 ring-black/[0.06]">
-                        Ingen treff — prøv et annet søkeord.
-                      </p>
-                    ) : null}
-                  </div>
-                </div>
-
-                <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
-                  <div
-                    className="bg-muted/30 border-border/60 inline-flex flex-wrap items-center gap-0.5 rounded-2xl border p-1 shadow-inner"
-                    role="toolbar"
-                    aria-label="Visning og zoom"
-                  >
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="h-11 min-h-11 touch-manipulation gap-2 rounded-xl px-3 sm:h-10 sm:min-h-10"
-                      onClick={() => void toggleChartFullscreen()}
-                      aria-pressed={chartIsFullscreen}
-                      aria-label="Fullskjerm for kart"
-                      title="Vis kart i fullskjerm"
-                    >
-                      <Maximize2 className="size-4 shrink-0" aria-hidden />
-                      <span className="max-w-[9rem] truncate text-xs font-medium sm:inline">
-                        Fullskjerm
-                      </span>
-                    </Button>
-                    <Button
-                      type="button"
-                      variant={chartPanMode ? "secondary" : "ghost"}
-                      size="sm"
-                      className="h-11 min-h-11 touch-manipulation gap-1.5 rounded-xl px-2.5 sm:h-10 sm:min-h-10 sm:px-3"
-                      onClick={() => setChartPanMode((v) => !v)}
-                      aria-pressed={chartPanMode}
-                      aria-label="Dra for å flytte kartet"
-                      title="Dra i bakgrunnen utenfor kort, eller Alt + dra / midtklikk"
-                    >
-                      <Hand className="size-4 shrink-0" aria-hidden />
-                      <span className="max-w-[5.5rem] truncate text-xs font-medium sm:inline">
-                        Dra kart
-                      </span>
-                    </Button>
-                    <div
-                      className="bg-border mx-0.5 hidden h-7 w-px self-center sm:block"
-                      aria-hidden
-                    />
-                    <div
-                      className="flex flex-wrap items-center gap-0.5"
-                      role="group"
-                      aria-label="Zoom"
-                    >
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className="size-11 min-h-11 min-w-11 touch-manipulation rounded-xl sm:size-10 sm:min-h-10 sm:min-w-10"
-                        onClick={zoomOut}
-                        disabled={chartZoom <= ORG_CHART_ZOOM_MIN + 1e-6}
-                        aria-label="Zoom ut"
-                        title="Zoom ut"
-                      >
-                        <Minus className="size-5 sm:size-4" aria-hidden />
-                      </Button>
-                      <span
-                        className="text-muted-foreground tabular-nums min-w-[3.5rem] px-1 text-center text-xs font-semibold"
-                        aria-live="polite"
-                      >
-                        {Math.round(chartZoom * 100)}%
-                      </span>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className="size-11 min-h-11 min-w-11 touch-manipulation rounded-xl sm:size-10 sm:min-h-10 sm:min-w-10"
-                        onClick={zoomIn}
-                        disabled={chartZoom >= ORG_CHART_ZOOM_MAX - 1e-6}
-                        aria-label="Zoom inn"
-                        title="Zoom inn"
-                      >
-                        <Plus className="size-5 sm:size-4" aria-hidden />
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="secondary"
-                        size="sm"
-                        className="h-11 min-h-11 touch-manipulation rounded-xl px-3 text-xs font-semibold sm:h-10 sm:min-h-10"
-                        onClick={resetZoom}
-                        title={`Tilbakestill til standardvisning (${Math.round(ORG_CHART_ZOOM_INITIAL * 100)} %)`}
-                        aria-label={`Tilbakestill zoom til standardvisning ${Math.round(ORG_CHART_ZOOM_INITIAL * 100)} prosent`}
-                      >
-                        Std
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
             <div
-              ref={chartViewportRef}
-              className={cn(
-                "border-border/50 from-muted/15 to-muted/5 max-h-[min(85vh,56rem)] overflow-auto rounded-2xl border bg-gradient-to-b py-5 shadow-inner ring-1 ring-inset ring-foreground/[0.07] overscroll-contain touch-pan-x touch-pan-y",
-                "transition-[box-shadow] duration-200",
-                chartPanMode && !chartIsPanning && "cursor-grab",
-                chartIsPanning && "cursor-grabbing select-none",
-                chartIsFullscreen && "relative z-0 max-h-none min-h-0 flex-1",
-              )}
-              role="tree"
-              aria-label="Organisasjonstre"
+              className="flex min-w-min flex-wrap justify-center gap-8 px-6 sm:gap-10"
+              style={{
+                zoom: chartZoom,
+                transition: "zoom 0.2s cubic-bezier(0.25, 0.1, 0.25, 1)",
+              }}
             >
-              <div
-                className="flex min-w-min flex-wrap justify-center gap-8 px-5 pb-2 sm:gap-10 sm:px-6"
-                style={{
-                  zoom: chartZoom,
-                  transition: "zoom 0.2s cubic-bezier(0.25, 0.1, 0.25, 1)",
-                }}
-              >
-                {roots.map((u) => (
-                  <OrgBranch
-                    key={u._id}
-                    workspaceId={workspaceId}
-                    unit={u}
-                    parentOfUnit={null}
-                    childrenByParent={childrenByParent}
-                    allOrgUnits={rows ?? []}
-                    contactsByUnit={contactsByUnit}
-                    rosByUnit={rosRollup?.byOrgUnitId}
-                    depth={0}
-                    canEdit={!!canEdit}
-                    isAdmin={!!isAdmin}
-                    onRemove={handleRemoveOrgUnit}
-                    onMove={handleMoveOrgUnit}
-                  />
-                ))}
-              </div>
+              {roots.map((u) => (
+                <OrgBranch
+                  key={u._id}
+                  workspaceId={workspaceId}
+                  unit={u}
+                  parentOfUnit={null}
+                  childrenByParent={childrenByParent}
+                  allOrgUnits={rows ?? []}
+                  contactsByUnit={contactsByUnit}
+                  rosByUnit={rosRollup?.byOrgUnitId}
+                  depth={0}
+                  canEdit={!!canEdit}
+                  isAdmin={!!isAdmin}
+                  onRemove={handleRemoveOrgUnit}
+                  onMove={handleMoveOrgUnit}
+                />
+              ))}
             </div>
+          </div>
+
+          {/* Flytende søk oppå kartet — samme mønster som kartverktøy (Figma, Maps). */}
+          <div
+            ref={orgSearchWrapRef}
+            className="absolute left-3 z-20 w-[min(19rem,calc(100%-1.5rem))] top-[max(0.75rem,env(safe-area-inset-top))]"
+          >
+            <SearchInput
+              value={orgSearch}
+              onChange={(e) => setOrgSearch(e.target.value)}
+              placeholder="Søk etter enhet eller kode"
+              aria-label="Søk i organisasjonskartet"
+              aria-controls="org-chart-search-results"
+              aria-expanded={
+                orgSearch.trim().length > 0 && orgSearchMatches.length > 0
+              }
+              inputClassName="rounded-full border-border/50 bg-background/95 shadow-md backdrop-blur-sm"
+            />
+            {orgSearch.trim().length > 0 && orgSearchMatches.length > 0 ? (
+              <ul
+                id="org-chart-search-results"
+                role="listbox"
+                className="border-border/60 bg-card absolute left-0 right-0 top-full z-[200] mt-1.5 max-h-60 overflow-auto rounded-xl border py-1 shadow-lg ring-1 ring-black/[0.06] dark:ring-white/[0.08]"
+              >
+                {orgSearchMatches.slice(0, 14).map((u) => (
+                  <li key={u._id} role="presentation">
+                    <button
+                      type="button"
+                      role="option"
+                      className="hover:bg-muted/80 flex w-full items-baseline gap-2 px-3 py-2.5 text-left text-sm transition-colors"
+                      onClick={() => {
+                        onCardSurfaceActivate(u._id);
+                        setOrgSearch("");
+                      }}
+                    >
+                      <span className="text-foreground min-w-0 flex-1 font-medium leading-snug">
+                        {u.name}
+                      </span>
+                      {u.localCode?.trim() ? (
+                        <span className="text-muted-foreground shrink-0 font-mono text-[11px] tabular-nums">
+                          {u.localCode.trim()}
+                        </span>
+                      ) : null}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            ) : orgSearch.trim().length > 0 && orgSearchMatches.length === 0 ? (
+              <p className="border-border/60 bg-card text-muted-foreground absolute left-0 right-0 top-full z-[200] mt-1.5 rounded-xl border px-3 py-2.5 text-xs shadow-lg ring-1 ring-black/[0.06]">
+                Ingen treff — prøv et annet søkeord.
+              </p>
+            ) : null}
+          </div>
+
+          {/* Flytende verktøylinje: panorering, zoom og fullskjerm — kun ikoner. */}
+          <div
+            className="border-border/50 bg-background/95 absolute right-3 z-20 flex items-center gap-0.5 rounded-full border p-1 shadow-lg backdrop-blur-sm bottom-[max(0.75rem,env(safe-area-inset-bottom))]"
+            role="toolbar"
+            aria-label="Visning og zoom"
+          >
+            <Button
+              type="button"
+              variant={chartPanMode ? "secondary" : "ghost"}
+              size="sm"
+              className="size-9 min-h-9 min-w-9 touch-manipulation rounded-full px-0"
+              onClick={() => setChartPanMode((v) => !v)}
+              aria-pressed={chartPanMode}
+              aria-label="Dra for å flytte kartet"
+              title="Dra-kart: dra i bakgrunnen utenfor kort, eller hold Alt og dra. Midtklikk panorerer også."
+            >
+              <Hand className="mx-auto size-4" aria-hidden />
+            </Button>
+            <div className="bg-border/70 mx-0.5 h-5 w-px shrink-0 self-center" aria-hidden />
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="size-9 min-h-9 min-w-9 touch-manipulation rounded-full px-0"
+              onClick={zoomOut}
+              disabled={chartZoom <= ORG_CHART_ZOOM_MIN + 1e-6}
+              aria-label="Zoom ut"
+              title="Zoom ut"
+            >
+              <Minus className="mx-auto size-4" aria-hidden />
+            </Button>
+            <button
+              type="button"
+              onClick={resetZoom}
+              className="text-muted-foreground hover:text-foreground min-w-[2.75rem] touch-manipulation rounded-full px-1 py-1.5 text-center text-[11px] font-semibold tabular-nums transition-colors"
+              title={`Tilbakestill til standardvisning (${Math.round(ORG_CHART_ZOOM_INITIAL * 100)} %)`}
+              aria-label={`Tilbakestill zoom til standardvisning ${Math.round(ORG_CHART_ZOOM_INITIAL * 100)} prosent`}
+            >
+              <span aria-live="polite">{Math.round(chartZoom * 100)}%</span>
+            </button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="size-9 min-h-9 min-w-9 touch-manipulation rounded-full px-0"
+              onClick={zoomIn}
+              disabled={chartZoom >= ORG_CHART_ZOOM_MAX - 1e-6}
+              aria-label="Zoom inn"
+              title="Zoom inn"
+            >
+              <Plus className="mx-auto size-4" aria-hidden />
+            </Button>
+            <div className="bg-border/70 mx-0.5 h-5 w-px shrink-0 self-center" aria-hidden />
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="size-9 min-h-9 min-w-9 touch-manipulation rounded-full px-0"
+              onClick={() => void toggleChartFullscreen()}
+              aria-pressed={chartIsFullscreen}
+              aria-label={
+                chartIsFullscreen
+                  ? "Avslutt fullskjerm for kart"
+                  : "Fullskjerm for kart"
+              }
+              title={chartIsFullscreen ? "Avslutt fullskjerm" : "Fullskjerm"}
+            >
+              {chartIsFullscreen ? (
+                <Minimize2 className="mx-auto size-4" aria-hidden />
+              ) : (
+                <Maximize2 className="mx-auto size-4" aria-hidden />
+              )}
+            </Button>
           </div>
         </div>
         </OrgChartInteractionContext.Provider>

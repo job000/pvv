@@ -11,11 +11,12 @@ import { HfRequirementsSection } from "@/components/assessment-wizard/hf-require
 import { ProcessProfileSection } from "@/components/assessment-wizard/process-profile-section";
 import { AssessmentPortfolioSummarySection } from "@/components/assessment-wizard/assessment-portfolio-summary-section";
 import { AssessmentProcessSimpleStep } from "@/components/assessment-wizard/assessment-process-simple-step";
+import { AssessmentResultStep } from "@/components/assessment-wizard/assessment-result-step";
 import { AssessmentValueImpactStep } from "@/components/assessment-wizard/assessment-value-impact-step";
 import { AssessmentWizardSchemaHelp } from "@/components/assessment-wizard/assessment-wizard-schema-help";
 import { AssessmentWizardMeta } from "@/components/assessment-wizard/assessment-wizard-meta";
 import { LikertField } from "@/components/rpa-assessment/likert-field";
-import { Button, buttonVariants } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
   Accordion,
@@ -37,11 +38,6 @@ import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import type { AssessmentPayload } from "@/lib/assessment-types";
 import {
-  buildGovernanceReadinessSummary,
-  readinessLabelFromScore,
-  type DecisionReadinessStatus,
-} from "@/lib/assessment-governance";
-import {
   derivedBaselineHoursFromPayload,
   syncWorkloadDerivedFields,
 } from "@/lib/assessment-workload-sync";
@@ -58,7 +54,6 @@ import { clampLikert5, computeAllResults } from "@/lib/rpa-assessment/scoring";
 import { useMutation, useQuery } from "convex/react";
 import useEmblaCarousel from "embla-carousel-react";
 import { ChevronLeft, ChevronRight, Trash2 } from "lucide-react";
-import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useStickyState } from "@/lib/use-sticky-state";
@@ -1498,30 +1493,28 @@ export function AssessmentWizard({ assessmentId }: Props) {
             </Slide>
 
             <Slide>
-              <div className="space-y-1">
-                <h2 className="text-foreground text-xl font-semibold sm:text-2xl">
-                  Resultat
-                </h2>
-                <p className="text-muted-foreground text-sm">
-                  En enkel oppsummering. Tallene under er fra det dere har svart — ikke en
-                  fasit.
-                </p>
-              </div>
-              <div className="space-y-6">
-                {computed ? (
-                  <QuickResultHero
-                    computed={computed}
-                    workspaceId={assessment.workspaceId}
-                    title={titleDraft.trim() || assessment.title}
-                    payload={payload}
-                  />
-                ) : null}
-                <AssessmentDecisionReadinessPanel
+              {computed ? (
+                <AssessmentResultStep
+                  computed={computed}
                   payload={payload}
+                  workspaceId={assessment.workspaceId}
+                  title={titleDraft.trim() || assessment.title}
                   assessment={assessment}
-                  hasProcessDesignDocument={Boolean(processDesignData?.document)}
+                  hasProcessDesignDocument={Boolean(
+                    processDesignData?.document,
+                  )}
                 />
-              </div>
+              ) : (
+                <div className="space-y-1">
+                  <h2 className="text-foreground text-xl font-semibold sm:text-2xl">
+                    Resultat
+                  </h2>
+                  <p className="text-muted-foreground text-sm">
+                    Fyll inn stegene over for å se prioritet, gevinster og
+                    RPA-anbefaling.
+                  </p>
+                </div>
+              )}
             </Slide>
 
             <Slide>
@@ -2015,250 +2008,6 @@ export function AssessmentWizard({ assessmentId }: Props) {
           )}
         </div>
       </div>
-    </div>
-  );
-}
-
-function riskLevelLabel(criticality: number): "Høy" | "Middels" | "Lav" {
-  if (criticality >= 60) return "Høy";
-  if (criticality >= 38) return "Middels";
-  return "Lav";
-}
-
-function readinessTone(status: DecisionReadinessStatus): string {
-  switch (status) {
-    case "ready":
-      return "bg-emerald-500/10 text-emerald-900 dark:text-emerald-100";
-    case "in_progress":
-      return "bg-amber-500/10 text-amber-950 dark:text-amber-100";
-    case "missing":
-      return "bg-muted text-foreground";
-  }
-}
-
-function formatCurrencyShort(value: number): string {
-  return `${Math.round(value).toLocaleString("nb-NO")} kr`;
-}
-
-function QuickResultHero({
-  computed,
-  workspaceId,
-  title,
-  payload,
-}: {
-  computed: NonNullable<ReturnType<typeof computeAllResults>>;
-  workspaceId: Id<"workspaces">;
-  title: string;
-  payload: AssessmentPayload;
-}) {
-  const potensialBand: "Høy" | "Middels" | "Lav" =
-    computed.priorityScore >= 60 ? "Høy" : computed.priorityScore >= 35 ? "Middels" : "Lav";
-
-  const tier =
-    potensialBand === "Høy"
-      ? {
-          headline: "Høy prioritet",
-          hint: "Mye manuelt arbeid og/eller sterk nytte i forhold til hvor enkel jobben er å automatisere.",
-          action: "Gå videre til ROS",
-          tone:
-            "from-emerald-500/[0.14] via-background to-primary/[0.08] ring-emerald-500/20",
-        }
-      : potensialBand === "Middels"
-        ? {
-            headline: "Middels prioritet",
-            hint: "Kan være verdt å se nærmere på — avklar gjerne volum og hvor stabilt opplegget er.",
-            action: "Gå videre til ROS",
-            tone:
-              "from-amber-500/[0.14] via-background to-primary/[0.06] ring-amber-500/20",
-          }
-        : {
-            headline: "Lav prioritet",
-            hint: "Ifølge det dere har svart, ligger andre saker ofte foran i køen.",
-            action: "Vent eller vurder på nytt senere",
-            tone:
-              "from-slate-500/[0.12] via-background to-muted/30 ring-black/[0.06] dark:ring-white/[0.06]",
-          };
-
-  const summaryLine =
-    payload.processDescription?.trim() || payload.processName?.trim() || title;
-  const hoursSaved = Math.max(0, Math.round(computed.benH));
-  const risk = riskLevelLabel(computed.criticality);
-  const readinessSummary = buildGovernanceReadinessSummary({
-    payload,
-    rosStatus: undefined,
-    pddStatus: undefined,
-    hasProcessDesignDocument: false,
-  });
-
-  return (
-    <div
-      className={cn(
-        "rounded-3xl bg-gradient-to-br p-5 shadow-sm ring-1 sm:p-6",
-        tier.tone,
-      )}
-    >
-      <div className="space-y-5">
-        <div className="space-y-2">
-          <p className="font-heading text-2xl font-semibold tracking-tight text-foreground">
-            {tier.headline}
-          </p>
-          <p className="text-muted-foreground text-sm leading-relaxed">
-            {tier.hint}
-            {!computed.feasible ? " Stabilitet i prosess/system bør avklares før dere starter." : ""}
-          </p>
-          <p className="text-foreground/90 text-sm font-medium">{summaryLine}</p>
-        </div>
-
-        <div className="grid gap-3 sm:grid-cols-2">
-          <div className="rounded-2xl bg-background/85 px-4 py-4 shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.08]">
-            <p className="text-muted-foreground text-xs font-semibold">Potensial</p>
-            <p className="font-heading mt-1 text-2xl font-semibold text-foreground">
-              {potensialBand}
-            </p>
-          </div>
-          <div className="rounded-2xl bg-background/85 px-4 py-4 shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.08]">
-            <p className="text-muted-foreground text-xs font-semibold">Timer spart (ca.)</p>
-            <p className="font-heading mt-1 text-2xl font-semibold tabular-nums text-foreground">
-              {hoursSaved} <span className="text-base font-medium">t/år</span>
-            </p>
-          </div>
-          <div className="rounded-2xl bg-background/85 px-4 py-4 shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.08]">
-            <p className="text-muted-foreground text-xs font-semibold">Risiko og viktighet</p>
-            <p className="font-heading mt-1 text-2xl font-semibold text-foreground">{risk}</p>
-            <p className="text-muted-foreground mt-1 text-[11px]">Fra gevinst og konsekvens av feil</p>
-          </div>
-          <div className="rounded-2xl bg-background/85 px-4 py-4 shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.08]">
-            <p className="text-muted-foreground text-xs font-semibold">Automasjonspotensial</p>
-            <p className="font-heading mt-1 text-2xl font-semibold tabular-nums text-foreground">
-              {computed.ap.toFixed(0)}%
-            </p>
-            <p className="text-muted-foreground mt-1 text-[11px]">Hvor mye som kan automatiseres av dagens manuelle tid</p>
-          </div>
-          <div className="rounded-2xl bg-background/85 px-4 py-4 shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.08]">
-            <p className="text-muted-foreground text-xs font-semibold">Økonomisk case</p>
-            <p className="font-heading mt-1 text-2xl font-semibold text-foreground">
-              {readinessLabelFromScore(computed.economicCaseScore)}
-            </p>
-            <p className="text-muted-foreground mt-1 text-[11px]">
-              Netto {formatCurrencyShort(computed.netBenefitAnnual)} per år
-            </p>
-          </div>
-          <div className="rounded-2xl bg-background/85 px-4 py-4 shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.08]">
-            <p className="text-muted-foreground text-xs font-semibold">Leveranse</p>
-            <p className="font-heading mt-1 text-2xl font-semibold text-foreground">
-              {readinessLabelFromScore(computed.deliveryConfidence)}
-            </p>
-            <p className="text-muted-foreground mt-1 text-[11px]">
-              Gjennomføring og trygg drift
-            </p>
-          </div>
-          <div className="rounded-2xl bg-background/85 px-4 py-4 shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.08]">
-            <p className="text-muted-foreground text-xs font-semibold">Beslutningsklarhet</p>
-            <p className="font-heading mt-1 text-2xl font-semibold text-foreground">
-              {readinessSummary.readyCount}/{readinessSummary.totalCount}
-            </p>
-            <p className="text-muted-foreground mt-1 text-[11px]">
-              {readinessSummary.readinessLabel} readiness
-            </p>
-          </div>
-        </div>
-
-        <p className="text-muted-foreground text-[11px]">
-          Prioritetsscore (internt): {computed.priorityScore.toFixed(0)} av 100 — brukes til
-          sortering, ikke som eneste beslutning.
-        </p>
-
-        {computed.priorityScore >= 35 ? (
-          <Link
-            href={`/w/${workspaceId}/ros`}
-            className={cn(
-              buttonVariants({ size: "default" }),
-              "h-12 w-full rounded-xl text-base sm:w-auto",
-            )}
-          >
-            {tier.action}
-          </Link>
-        ) : (
-          <div className="rounded-2xl bg-background/85 px-4 py-3 text-center text-sm font-semibold text-foreground shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.08]">
-            {tier.action}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function AssessmentDecisionReadinessPanel({
-  payload,
-  assessment,
-  hasProcessDesignDocument,
-}: {
-  payload: AssessmentPayload;
-  assessment: {
-    rosStatus?: string | null;
-    pddStatus?: string | null;
-  };
-  hasProcessDesignDocument: boolean;
-}) {
-  const summary = buildGovernanceReadinessSummary({
-    payload,
-    rosStatus: assessment.rosStatus,
-    pddStatus: assessment.pddStatus,
-    hasProcessDesignDocument,
-  });
-
-  return (
-    <div className="space-y-4 rounded-2xl bg-muted/10 p-5 ring-1 ring-black/[0.04] dark:ring-white/[0.06]">
-      <div className="space-y-1">
-        <h3 className="text-base font-semibold text-foreground">Beslutningsklarhet</h3>
-        <p className="text-sm leading-relaxed text-muted-foreground">
-          Ett samlet bilde av hva som mangler før saken er klar for prioritering,
-          styring og videre leveranse.
-        </p>
-      </div>
-      <div className="grid gap-3 sm:grid-cols-3">
-        <div className="rounded-xl bg-background/85 px-4 py-3 shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.08]">
-          <p className="text-xs font-semibold text-muted-foreground">Readiness</p>
-          <p className="mt-1 text-2xl font-semibold text-foreground">{summary.readinessLabel}</p>
-        </div>
-        <div className="rounded-xl bg-background/85 px-4 py-3 shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.08]">
-          <p className="text-xs font-semibold text-muted-foreground">Score</p>
-          <p className="mt-1 text-2xl font-semibold text-foreground">{summary.readinessScore}</p>
-        </div>
-        <div className="rounded-xl bg-background/85 px-4 py-3 shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.08]">
-          <p className="text-xs font-semibold text-muted-foreground">Klare områder</p>
-          <p className="mt-1 text-2xl font-semibold text-foreground">
-            {summary.readyCount}/{summary.totalCount}
-          </p>
-        </div>
-      </div>
-      <ul className="grid gap-3 sm:grid-cols-2">
-        {summary.requirements.map((item) => (
-          <li
-            key={item.key}
-            className="rounded-xl border border-border/50 bg-background/75 p-4"
-          >
-            <div className="flex items-center justify-between gap-3">
-              <p className="text-sm font-semibold text-foreground">{item.label}</p>
-              <span
-                className={cn(
-                  "rounded-full px-2.5 py-1 text-[10px] font-semibold",
-                  readinessTone(item.status),
-                )}
-              >
-                {item.status === "ready"
-                  ? "Klar"
-                  : item.status === "in_progress"
-                    ? "Pågår"
-                    : "Mangler"}
-              </span>
-            </div>
-            <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
-              {item.description}
-            </p>
-          </li>
-        ))}
-      </ul>
     </div>
   );
 }

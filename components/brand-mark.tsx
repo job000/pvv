@@ -1,9 +1,10 @@
 import Image from "next/image";
+import { PRODUCT_NAME, PRODUCT_SHORT } from "@/lib/brand";
 import { cn } from "@/lib/utils";
 
-const MARK_SRC = "/icons/fro-mark.svg";
+const MARK_SRC = "/icons/zorlin-mark.svg";
 
-/** Merke: FRO (tekst i SVG). */
+/** Merke: Zorlin (ZL i SVG). */
 export function BrandMark({
   size = 48,
   className,
@@ -16,7 +17,7 @@ export function BrandMark({
   return (
     <Image
       src={MARK_SRC}
-      alt="FRO"
+      alt={`${PRODUCT_NAME} (${PRODUCT_SHORT})`}
       width={size}
       height={size}
       priority={priority}

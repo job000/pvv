@@ -41,6 +41,7 @@ import {
   DEFAULT_ROS_COL_LABELS,
   DEFAULT_ROS_ROW_LABELS,
   positionRiskLevel,
+  resolveCellRiskLevel,
   RISK_LEVEL_HINTS,
 } from "@/lib/ros-defaults";
 import {
@@ -304,6 +305,8 @@ function RiskSummaryBar({
       colLabels,
       afterRowLabels,
       afterColLabels,
+      matrixValues,
+      matrixAfter,
     );
     const maxBefore = maxRiskAmongDocumentedCells(
       matrixValues,
@@ -835,7 +838,13 @@ export function RosAnalysisEditor({
             rowLabel: data.rowLabels[r] ?? `R${r + 1}`,
             colLabel: data.colLabels[c] ?? `K${c + 1}`,
             phase: "before",
-            level: matrix[r]?.[c] ?? 0,
+            level: resolveCellRiskLevel(
+              matrix,
+              r,
+              c,
+              data.rowLabels.length,
+              data.colLabels.length,
+            ),
           });
         }
       }
@@ -853,7 +862,13 @@ export function RosAnalysisEditor({
             rowLabel: effectiveAfterRowLabels[r] ?? `R${r + 1}`,
             colLabel: effectiveAfterColLabels[c] ?? `K${c + 1}`,
             phase: "after",
-            level: matrixAfter[r]?.[c] ?? 0,
+            level: resolveCellRiskLevel(
+              matrixAfter,
+              r,
+              c,
+              effectiveAfterRowLabels.length,
+              effectiveAfterColLabels.length,
+            ),
           });
         }
       }
@@ -912,7 +927,13 @@ export function RosAnalysisEditor({
       for (let c = 0; c < row.length; c++) {
         const cell = row[c];
         if (!cell) continue;
-        const lvl = matrix[r]?.[c] ?? 0;
+        const lvl = resolveCellRiskLevel(
+          matrix,
+          r,
+          c,
+          data.rowLabels.length,
+          data.colLabels.length,
+        );
         for (const it of cell) {
           if (covered.has(it.id)) continue;
           out.push({
@@ -2916,6 +2937,30 @@ export function RosAnalysisEditor({
       {/* === Section 1: Tiltak === */}
       {rosSection === 1 && (
       <div className="space-y-5">
+        <div className="rounded-2xl bg-card p-5 shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.06] sm:p-6">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="min-w-0 space-y-1">
+              <h2 className="text-foreground text-base font-semibold tracking-tight">
+                Tiltak
+              </h2>
+              <p className="text-muted-foreground text-xs leading-relaxed">
+                Koble hvert tiltak til en risiko. Nivå beregnes som
+                sannsynlighet × konsekvens.
+              </p>
+            </div>
+            {tasks && tasks.length > 0 && (
+              <div className="flex flex-wrap gap-1.5">
+                <span className="inline-flex items-center gap-1 rounded-full bg-blue-500/10 px-2.5 py-1 text-[11px] font-semibold text-blue-700 ring-1 ring-blue-500/15 dark:text-blue-300">
+                  {tasks.filter((t) => t.status !== "done").length} åpne
+                </span>
+                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2.5 py-1 text-[11px] font-semibold text-emerald-700 ring-1 ring-emerald-500/15 dark:text-emerald-300">
+                  {tasks.filter((t) => t.status === "done").length} ferdig
+                </span>
+              </div>
+            )}
+          </div>
+        </div>
+
         {/* Varsel: risikoer i før-matrisen uten tiltak.
             NS 5814 / ISO 31000: alle høye/kritiske risikoer skal enten
             behandles eller formelt aksepteres. Vi viser de mest alvorlige
@@ -3095,16 +3140,15 @@ export function RosAnalysisEditor({
             tiltak skal alltid være knyttet til en identifisert risiko). */}
         <form
           onSubmit={(e) => void onCreateTask(e)}
-          className="bg-card ring-border/40 space-y-3 rounded-2xl p-4 shadow-sm ring-1 sm:p-5"
+          className="space-y-4 rounded-2xl bg-card p-5 shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.06] sm:p-6"
         >
           <div className="space-y-1">
             <p className="text-foreground text-sm font-semibold">
               Nytt tiltak
             </p>
             <p className="text-muted-foreground text-xs leading-relaxed">
-              Beskriv hva som settes i verk og hvilken risiko det
-              behandler. Tiltak kan lagres i biblioteket for gjenbruk
-              senere.
+              Beskriv hva som settes i verk, og knytt det til risikoen det
+              reduserer.
             </p>
           </div>
 
@@ -3723,27 +3767,28 @@ export function RosAnalysisEditor({
       {/* === Section 2: Oversikt === */}
       {rosSection === 2 && (
       <div className="space-y-5">
-        <div className="space-y-1">
-          <h2 className="text-foreground text-base font-semibold tracking-tight">
-            Oversikt over risikoene
-          </h2>
-          <p className="text-muted-foreground text-xs leading-relaxed">
-            Hele risikoregisteret samlet — før og etter tiltak side om side.
-            Bruk dette som dokumentasjon ved eksport eller revisjon.
-          </p>
-        </div>
-
-        {data.rosSummary.suggestedLinkFlags.length > 0 && (
-          <div className="ring-amber-500/15 flex items-start gap-2 rounded-2xl bg-amber-500/[0.06] px-4 py-3 ring-1">
-            <Sparkles className="mt-0.5 size-4 shrink-0 text-amber-600 dark:text-amber-400" />
-            <p className="text-foreground/90 text-xs leading-relaxed">
-              <span className="font-semibold">Foreslåtte PVV-flagg:</span>{" "}
-              <span className="text-muted-foreground">
-                {data.rosSummary.suggestedLinkFlags.join(", ")}
-              </span>
+        <div className="rounded-2xl bg-card p-5 shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.06] sm:p-6">
+          <div className="space-y-1">
+            <h2 className="text-foreground text-base font-semibold tracking-tight">
+              Oversikt
+            </h2>
+            <p className="text-muted-foreground text-xs leading-relaxed">
+              Før og etter tiltak side om side. Nivå = sannsynlighet ×
+              konsekvens.
             </p>
           </div>
-        )}
+          {data.rosSummary.suggestedLinkFlags.length > 0 && (
+            <div className="mt-4 flex items-start gap-2 rounded-xl bg-amber-500/[0.06] px-3 py-2.5 ring-1 ring-amber-500/15">
+              <Sparkles className="mt-0.5 size-4 shrink-0 text-amber-600 dark:text-amber-400" />
+              <p className="text-foreground/90 text-xs leading-relaxed">
+                <span className="font-semibold">Foreslåtte PVV-flagg:</span>{" "}
+                <span className="text-muted-foreground">
+                  {data.rosSummary.suggestedLinkFlags.join(", ")}
+                </span>
+              </p>
+            </div>
+          )}
+        </div>
 
         {(() => {
           const hasAnyRisk =
@@ -3757,25 +3802,26 @@ export function RosAnalysisEditor({
           return (
         <div id="ros-risk-register" className="scroll-mt-24">
           {riskRegisterSnapshot && hasAnyRisk ? (
-            <RosRiskRegisterTable
-              sameLayout={data.rosSummary.sameLayout}
-              rowAxisTitle={data.rowAxisTitle}
-              colAxisTitle={data.colAxisTitle}
-              before={riskRegisterSnapshot.before}
-              after={riskRegisterSnapshot.after}
-            />
+            <div className="rounded-2xl bg-card p-4 shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.06] sm:p-5">
+              <RosRiskRegisterTable
+                sameLayout={data.rosSummary.sameLayout}
+                rowAxisTitle={data.rowAxisTitle}
+                colAxisTitle={data.colAxisTitle}
+                before={riskRegisterSnapshot.before}
+                after={riskRegisterSnapshot.after}
+              />
+            </div>
           ) : (
-            <div className="border-border/40 flex flex-col items-center gap-3 rounded-3xl border bg-card px-6 py-10 text-center shadow-sm">
+            <div className="flex flex-col items-center gap-3 rounded-2xl bg-card px-6 py-10 text-center shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.06]">
               <div className="bg-primary/15 ring-primary/20 flex size-12 items-center justify-center rounded-2xl ring-1">
                 <Shield className="text-primary size-6" />
               </div>
               <div className="space-y-1">
                 <p className="text-foreground text-sm font-semibold">
-                  Ingen risikoer registrert ennå
+                  Ingen risikoer ennå
                 </p>
                 <p className="text-muted-foreground mx-auto max-w-xs text-xs leading-relaxed">
-                  Gå til <span className="font-medium">Risikoer</span> og legg
-                  inn punkter — så bygges oversikten her automatisk.
+                  Legg inn risikoer først — oversikten bygges automatisk.
                 </p>
               </div>
               <Button
@@ -3799,61 +3845,62 @@ export function RosAnalysisEditor({
       {/* === Section 3: PVV === */}
       {rosSection === 3 && (
       <div className="space-y-5">
-        <div className="space-y-1">
-          <h2 className="text-foreground text-base font-semibold tracking-tight">
-            Koble PVV-vurderinger
-          </h2>
-          <p className="text-muted-foreground text-xs leading-relaxed">
-            Koble personvernvurderinger til denne ROS-analysen for å spore
-            samsvar mellom risiko, vurdering og prosessdesign.
-          </p>
-        </div>
-
-        {pddAlignmentHint && (
-          <div className="ring-amber-500/15 flex items-start gap-2 rounded-2xl bg-amber-500/[0.06] px-3 py-2.5 ring-1">
-            <ShieldAlert className="mt-0.5 size-4 shrink-0 text-amber-600 dark:text-amber-400" />
-            <p className="text-foreground/90 text-xs leading-relaxed">
-              <span className="font-semibold">Samsvar ROS og PDD:</span>{" "}
-              <span className="text-muted-foreground">
-                {ROS_PDD_ALIGNMENT_HINT_NB}
-              </span>
+        <div className="rounded-2xl bg-card p-5 shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.06] sm:p-6">
+          <div className="space-y-1">
+            <h2 className="text-foreground text-base font-semibold tracking-tight">
+              PVV-koblinger
+            </h2>
+            <p className="text-muted-foreground text-xs leading-relaxed">
+              Koble personvernvurderinger for å spore samsvar mellom risiko og
+              prosessdesign.
             </p>
           </div>
-        )}
 
-        {/* Koble ny PVV-vurdering — øverst, kompakt chip-form */}
-        {addableAssessments.length > 0 && (
-          <div className="bg-card ring-border/40 flex gap-2 rounded-2xl p-3 shadow-sm ring-1">
-            <select
-              className="border-input bg-background h-9 min-w-0 flex-1 rounded-full border px-3 text-xs"
-              value={addPvId}
-              onChange={(e) =>
-                setAddPvId(
-                  e.target.value === ""
-                    ? ""
-                    : (e.target.value as Id<"assessments">),
-                )
-              }
-              aria-label="Velg PVV-vurdering å koble"
-            >
-              <option value="">— Velg PVV-vurdering å koble —</option>
-              {addableAssessments.map((a) => (
-                <option key={a._id} value={a._id}>
-                  {a.title}
-                </option>
-              ))}
-            </select>
-            <Button
-              type="button"
-              disabled={addPvId === ""}
-              onClick={() => void onAddPv()}
-              className="h-9 shrink-0 gap-1.5 rounded-full px-4 font-semibold"
-            >
-              <Plus className="size-4" />
-              <span className="hidden sm:inline">Koble</span>
-            </Button>
-          </div>
-        )}
+          {pddAlignmentHint && (
+            <div className="mt-4 flex items-start gap-2 rounded-xl bg-amber-500/[0.06] px-3 py-2.5 ring-1 ring-amber-500/15">
+              <ShieldAlert className="mt-0.5 size-4 shrink-0 text-amber-600 dark:text-amber-400" />
+              <p className="text-foreground/90 text-xs leading-relaxed">
+                <span className="font-semibold">Samsvar ROS og PDD:</span>{" "}
+                <span className="text-muted-foreground">
+                  {ROS_PDD_ALIGNMENT_HINT_NB}
+                </span>
+              </p>
+            </div>
+          )}
+
+          {addableAssessments.length > 0 && (
+            <div className="mt-4 flex gap-2">
+              <select
+                className="border-input bg-background h-10 min-w-0 flex-1 rounded-xl border px-3 text-sm"
+                value={addPvId}
+                onChange={(e) =>
+                  setAddPvId(
+                    e.target.value === ""
+                      ? ""
+                      : (e.target.value as Id<"assessments">),
+                  )
+                }
+                aria-label="Velg PVV-vurdering å koble"
+              >
+                <option value="">— Velg PVV-vurdering —</option>
+                {addableAssessments.map((a) => (
+                  <option key={a._id} value={a._id}>
+                    {a.title}
+                  </option>
+                ))}
+              </select>
+              <Button
+                type="button"
+                disabled={addPvId === ""}
+                onClick={() => void onAddPv()}
+                className="h-10 shrink-0 gap-1.5 rounded-full px-4 font-semibold"
+              >
+                <Plus className="size-4" />
+                <span className="hidden sm:inline">Koble</span>
+              </Button>
+            </div>
+          )}
+        </div>
 
         {data.legacyAssessmentId && (
           <div className="bg-muted/20 ring-border/40 flex flex-col gap-3 rounded-2xl px-4 py-3 ring-1 sm:flex-row sm:items-center sm:justify-between">
@@ -3886,7 +3933,7 @@ export function RosAnalysisEditor({
         )}
 
         {data.linkedAssessments.length === 0 ? (
-          <div className="border-border/40 flex flex-col items-center gap-3 rounded-3xl border bg-card px-6 py-10 text-center shadow-sm">
+          <div className="flex flex-col items-center gap-3 rounded-2xl bg-card px-6 py-10 text-center shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.06]">
             <div className="bg-primary/15 ring-primary/20 flex size-12 items-center justify-center rounded-2xl ring-1">
               <Link2 className="text-primary size-6" />
             </div>
@@ -3896,27 +3943,29 @@ export function RosAnalysisEditor({
               </p>
               <p className="text-muted-foreground mx-auto max-w-xs text-xs leading-relaxed">
                 {addableAssessments.length > 0
-                  ? "Velg en vurdering i feltet over for å koble den."
-                  : "Opprett en personvernvurdering først, så kan du koble den hit."}
+                  ? "Velg en vurdering over for å koble den."
+                  : "Opprett en personvernvurdering først."}
               </p>
             </div>
           </div>
         ) : (
-          <ul className="bg-card/80 ring-border/40 divide-y divide-border/40 overflow-hidden rounded-2xl shadow-sm ring-1">
+          <ul className="space-y-2">
             {data.linkedAssessments.map((l) => {
               const status = (l.pddStatus ?? "not_started") as ComplianceStatusKey;
               return (
-                <li key={l.linkId} className="group/pvv">
-                  <div className="flex items-start gap-3 px-4 py-3 sm:px-5">
-                    <Link2
-                      className="text-primary mt-1 size-4 shrink-0"
-                      aria-hidden
-                    />
+                <li
+                  key={l.linkId}
+                  className="group/pvv overflow-hidden rounded-2xl bg-card shadow-sm ring-1 ring-black/[0.04] transition-all duration-200 hover:shadow-md dark:ring-white/[0.06]"
+                >
+                  <div className="flex items-start gap-3 px-4 py-3.5 sm:px-5">
+                    <span className="bg-primary/10 text-primary mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-xl">
+                      <Link2 className="size-4" aria-hidden />
+                    </span>
                     <div className="min-w-0 flex-1 space-y-1.5">
                       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
                         <Link
                           href={`/w/${workspaceId}/a/${l.assessmentId}`}
-                          className="text-primary truncate text-sm font-semibold hover:underline"
+                          className="text-foreground truncate text-sm font-semibold hover:underline"
                         >
                           {l.title}
                         </Link>
@@ -3959,7 +4008,7 @@ export function RosAnalysisEditor({
                     </div>
                     <button
                       type="button"
-                      className="text-muted-foreground hover:bg-destructive/10 hover:text-destructive size-8 shrink-0 rounded-full p-0 opacity-0 transition-all group-hover/pvv:opacity-100"
+                      className="text-muted-foreground hover:bg-destructive/10 hover:text-destructive size-8 shrink-0 rounded-full p-0 opacity-100 transition-all sm:opacity-0 sm:group-hover/pvv:opacity-100"
                       onClick={() => void onUnlink(l.linkId)}
                       aria-label="Fjern kobling"
                     >
@@ -3967,14 +4016,14 @@ export function RosAnalysisEditor({
                     </button>
                   </div>
                   <details className="group/pvv-fields border-border/30 border-t">
-                    <summary className="text-muted-foreground hover:text-foreground flex cursor-pointer list-none items-center justify-between gap-2 px-4 py-2 text-[11px] font-medium transition-colors [&::-webkit-details-marker]:hidden sm:px-5">
+                    <summary className="text-muted-foreground hover:text-foreground flex cursor-pointer list-none items-center justify-between gap-2 px-4 py-2.5 text-[11px] font-medium transition-colors [&::-webkit-details-marker]:hidden sm:px-5">
                       <span>Flagg, notater og vekting</span>
                       <ChevronRight
                         className="size-3.5 transition-transform group-open/pvv-fields:rotate-90"
                         aria-hidden
                       />
                     </summary>
-                    <div className="px-4 pb-3 pt-1 sm:px-5">
+                    <div className="px-4 pb-4 pt-1 sm:px-5">
                       <RosPvvLinkFields
                         linkId={l.linkId}
                         flags={l.flags}
@@ -4001,18 +4050,19 @@ export function RosAnalysisEditor({
       {/* === Section 4: Innstillinger === */}
       {rosSection === 4 && (
       <div className="space-y-5">
-        <div className="space-y-1">
-          <h2 className="text-foreground text-base font-semibold tracking-tight">
-            Innstillinger
-          </h2>
-          <p className="text-muted-foreground text-xs leading-relaxed">
-            Tittel, notater og avansert oppsett. Revisjon og varsling ligger øverst;
-            «Detaljer» under — resten er valgfritt.
-          </p>
+        <div className="rounded-2xl bg-card p-5 shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.06] sm:p-6">
+          <div className="space-y-1">
+            <h2 className="text-foreground text-base font-semibold tracking-tight">
+              Innstillinger
+            </h2>
+            <p className="text-muted-foreground text-xs leading-relaxed">
+              Revisjon, tittel og avansert oppsett — det viktigste først.
+            </p>
+          </div>
         </div>
 
         {/* Revisjon og varsling — planlagt oppfølging etter ROS (ISO 31000 / NS 5814) */}
-        <div className="ring-border/40 space-y-4 rounded-2xl bg-card p-4 shadow-sm ring-1 sm:p-5">
+        <div className="space-y-4 rounded-2xl bg-card p-5 shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.06] sm:p-6">
           <div className="flex items-start gap-2.5">
             <Calendar
               className="text-primary mt-0.5 size-4 shrink-0"
@@ -4023,9 +4073,7 @@ export function RosAnalysisEditor({
                 Revisjon og varsling
               </p>
               <p className="text-muted-foreground text-[11px] leading-relaxed">
-                Sett når ROS skal gjennomgås på nytt etter at arbeidet er utført.
-                Du kan legge hendelsen i kalender (.ics), velge gjentakelse, og slå
-                av e-postvarsler uten å fjerne selve fristen.
+                Sett neste gjennomgang, kalenderhendelse og e-postvarsel.
               </p>
             </div>
           </div>

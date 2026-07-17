@@ -77,10 +77,37 @@ export const RISK_LEVEL_HINTS: Record<number, string> = {
 };
 
 /**
- * Beregner risikonivå (1-5) fra celleposisjon i matrisen.
- * Basert på produktet (rad+1)*(kol+1) normalisert mot matrisestørrelsen.
+ * Risikopoeng = sannsynlighet × konsekvens (1-basert akseindeks).
+ * Standardmetode i ROS (ISO 31000 / NS 5814-praksis) — ikke sum.
+ */
+export function riskProduct(row: number, col: number): number {
+  return (row + 1) * (col + 1);
+}
+
+/**
+ * Mapper produktet P×K til risikonivå 1–5.
+ * Normaliserer mot matrisens maksprodukt slik at 3×3 / 4×4 / 5×5 får
+ * samme relative heatmap: grønn (lav P×K) → rød (høy P×K).
+ * Tersklene følger kvadratiske bånd (≈ 0.25² … 0.8²) på produkt/maks.
+ */
+export function productToRiskLevel(
+  product: number,
+  totalRows: number,
+  totalCols: number,
+): number {
+  if (product <= 0 || totalRows <= 0 || totalCols <= 0) return 0;
+  const maxProduct = totalRows * totalCols;
+  const ratio = product / maxProduct;
+  if (ratio <= 0.06) return 1;
+  if (ratio <= 0.16) return 2;
+  if (ratio <= 0.36) return 3;
+  if (ratio <= 0.64) return 4;
+  return 5;
+}
+
+/**
+ * Beregner risikonivå (1–5) fra celleposisjon: nivå = f(P × K).
  * Rad 0 = lavest sannsynlighet (vises nederst), rad N-1 = høyest (vises øverst).
- * Gir klassisk risiko-heatmap: grønn (nedre venstre) → rød (øvre høyre).
  */
 export function positionRiskLevel(
   row: number,
@@ -89,14 +116,23 @@ export function positionRiskLevel(
   totalCols: number,
 ): number {
   if (totalRows <= 0 || totalCols <= 0) return 0;
-  const product = (row + 1) * (col + 1);
-  const maxProduct = totalRows * totalCols;
-  const ratio = product / maxProduct;
-  if (ratio <= 0.06) return 1;
-  if (ratio <= 0.16) return 2;
-  if (ratio <= 0.36) return 3;
-  if (ratio <= 0.64) return 4;
-  return 5;
+  return productToRiskLevel(riskProduct(row, col), totalRows, totalCols);
+}
+
+/**
+ * Effektivt risikonivå for en celle: bruk lagret matriseverdi hvis satt (> 0),
+ * ellers automatisk P×K. Slik følger kort/KPI samme logikk som malens heatmap.
+ */
+export function resolveCellRiskLevel(
+  matrix: number[][] | undefined | null,
+  row: number,
+  col: number,
+  totalRows: number,
+  totalCols: number,
+): number {
+  const stored = matrix?.[row]?.[col] ?? 0;
+  if (stored > 0) return stored;
+  return positionRiskLevel(row, col, totalRows, totalCols);
 }
 
 export function emptyMatrix(rows: number, cols: number): number[][] {

@@ -65,7 +65,7 @@ export function HomeLanding({
           <Link
             href="/"
             className="font-heading text-foreground flex items-center gap-2.5 rounded-lg text-lg font-semibold tracking-tight outline-none ring-offset-background focus-visible:ring-2 focus-visible:ring-ring"
-            aria-label="FRO — forsiden"
+            aria-label="Zorlin — forsiden"
           >
             <BrandMark size={28} />
           </Link>
@@ -290,7 +290,7 @@ export function HomeLanding({
       <footer className="border-border/40 mt-auto border-t py-10">
         <div className="text-muted-foreground mx-auto flex max-w-6xl flex-col items-center justify-between gap-4 px-4 text-sm sm:flex-row sm:px-6">
           <p>
-            © {new Date().getFullYear()} FRO · prioriter og utfør
+            © {new Date().getFullYear()} Zorlin · prioriter og utfør
           </p>
           <div className="flex gap-6">
             {isAuthenticated ? (

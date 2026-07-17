@@ -11,6 +11,7 @@ import {
 } from "@/lib/ros-risk-register";
 import type { RosCellItemMatrix } from "@/lib/ros-cell-items";
 import { ROS_CELL_FLAG_REQUIRES_ACTION } from "@/lib/ros-cell-items";
+import { riskProduct } from "@/lib/ros-defaults";
 import { cn } from "@/lib/utils";
 import {
   ArrowDown,
@@ -242,6 +243,8 @@ function OverviewKpis({
     before.colLabels,
     after.rowLabels,
     after.colLabels,
+    before.matrixValues,
+    after.matrixValues,
   );
   const maxBefore = maxMatrixLevel(before.matrixValues);
   const maxAfter = maxMatrixLevel(after.matrixValues);
@@ -268,7 +271,7 @@ function OverviewKpis({
             Risikopunkter
           </p>
           <p className="text-muted-foreground mt-0.5 text-xs leading-relaxed">
-            Tall basert på beskrevne punkter i matrisen (samme som under «Risikoer»).
+            Basert på beskrevne punkter · nivå = P × K
           </p>
         </div>
         <div className="grid grid-cols-1 gap-3 min-[420px]:grid-cols-2 lg:grid-cols-4">
@@ -431,10 +434,18 @@ function RiskCard({ row }: { row: PairedRiskRegisterRow }) {
         {/* Risk info */}
         <div className="min-w-0 w-full flex-1 sm:w-auto">
           <p className="text-muted-foreground text-[10px] font-semibold uppercase tracking-wide">
-            Plassering (rad × kolonne)
+            Plassering
           </p>
           <p className="mt-0.5 break-words text-sm font-medium leading-snug">
             {row.rowLabel} × {row.colLabel}
+          </p>
+          <p className="text-muted-foreground mt-0.5 text-[10px] tabular-nums">
+            {row.row + 1}×{row.col + 1}={riskProduct(row.row, row.col)}
+            {" · "}
+            nivå {row.beforeLevel}
+            {row.afterLevel !== row.beforeLevel && (
+              <> → {row.afterLevel}</>
+            )}
           </p>
           <div className="mt-1 flex flex-wrap items-center gap-1.5">
             <DeltaIndicator row={row} />

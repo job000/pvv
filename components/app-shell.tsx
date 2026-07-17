@@ -119,7 +119,7 @@ export function AppShell({
                   )}
                   aria-label="Til arbeidsområde-oversikt"
                 >
-                  FRO
+                  Zorlin
                 </Link>
               </nav>
               {workspaceChrome?.hasWorkspace ? (

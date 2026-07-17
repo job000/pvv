@@ -22,14 +22,14 @@ export default function AppleIcon() {
         <span
           style={{
             color: "#fafafa",
-            fontSize: 46,
+            fontSize: 58,
             fontWeight: 800,
             letterSpacing: "-0.03em",
             fontFamily:
               "ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, sans-serif",
           }}
         >
-          FRO
+          ZL
         </span>
       </div>
     ),

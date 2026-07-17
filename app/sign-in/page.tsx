@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 
 export const metadata: Metadata = {
   title: "Innlogging",
-  description: "Logg inn på FRO med e-post og passord.",
+  description: "Logg inn på Zorlin med e-post og passord.",
 };
 
 export default function SignInPage() {

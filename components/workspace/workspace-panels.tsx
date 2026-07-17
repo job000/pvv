@@ -535,7 +535,7 @@ export function WorkspaceTeamPanel({
           ) : null}
           {invitePreview?.kind === "invite_email" ? (
             <p className="text-muted-foreground mt-2 text-xs leading-relaxed">
-              Ingen bruker med denne e-posten i FRO ennå. Etter innlogging kan vedkommende godta eller
+              Ingen bruker med denne e-posten i Zorlin ennå. Etter innlogging kan vedkommende godta eller
               avslå under Oversikt.
             </p>
           ) : null}

@@ -116,12 +116,12 @@ export function PdfDocumentationPreview() {
     try {
       if (tab === "ros") {
         const blob = buildRosAnalysisPdfBlob(sampleDocumentationRosPdfInput());
-        triggerBlobDownload(blob, "FRO-ROS-eksempel.pdf");
+        triggerBlobDownload(blob, "Zorlin-ROS-eksempel.pdf");
       } else if (tab === "assessment") {
         const blob = buildAssessmentPdfBlob(
           sampleDocumentationAssessmentPdfInput(),
         );
-        triggerBlobDownload(blob, "FRO-PVV-eksempel.pdf");
+        triggerBlobDownload(blob, "Zorlin-PVV-eksempel.pdf");
       } else {
         const { downloadProcessDesignPdf } = await import(
           "@/lib/process-design-pdf"
@@ -149,7 +149,7 @@ export function PdfDocumentationPreview() {
           >
             <BrandMark size={28} />
             <span className="font-heading truncate text-base sm:text-lg">
-              FRO
+              Zorlin
             </span>
           </Link>
           <div className="flex shrink-0 items-center gap-2">
@@ -174,7 +174,7 @@ export function PdfDocumentationPreview() {
             PDF-forhåndsvisning
           </h1>
           <p className="text-muted-foreground max-w-2xl text-base leading-relaxed">
-            Her vises eksempel-PDF-er slik de eksporteres fra FRO — uten å åpne
+            Her vises eksempel-PDF-er slik de eksporteres fra Zorlin — uten å åpne
             en ekte sak. Innholdet er fiktivt og kun til illustrasjon. Du kan
             laste ned om du trenger å dele layout med andre.
           </p>
