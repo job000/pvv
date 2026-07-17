@@ -4,7 +4,6 @@ import { api } from "@/convex/_generated/api";
 import { cn } from "@/lib/utils";
 import type { Id } from "@/convex/_generated/dataModel";
 import { useQuery } from "convex/react";
-import { ClipboardList, Users } from "lucide-react";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { useCallback, useMemo } from "react";
@@ -18,7 +17,7 @@ const WorkspaceAssessmentsPanel = dynamic(
     ssr: false,
     loading: () => (
       <div className="flex min-h-[20vh] items-center justify-center">
-        <div className="size-7 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+        <div className="size-7 animate-spin rounded-full border-2 border-foreground border-t-transparent" />
       </div>
     ),
   },
@@ -33,7 +32,7 @@ const WorkspaceCandidatesPanel = dynamic(
     ssr: false,
     loading: () => (
       <div className="flex min-h-[20vh] items-center justify-center">
-        <div className="size-7 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+        <div className="size-7 animate-spin rounded-full border-2 border-foreground border-t-transparent" />
       </div>
     ),
   },
@@ -74,13 +73,20 @@ export function WorkspacePvvHub({ workspaceId, activeTab, initialOrgUnit }: Prop
   }, [activeTab, router, workspaceId]);
 
   return (
-    <div className="space-y-5 pb-6">
-      <header className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <h1 className="font-heading text-xl font-semibold tracking-tight text-foreground">
-          {activeTab === "vurderinger" ? "Vurderinger" : "Prosesser"}
-        </h1>
+    <div className="mx-auto max-w-5xl space-y-8 pb-10">
+      <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <div className="min-w-0 space-y-1">
+          <h1 className="font-heading text-3xl font-semibold tracking-tight text-foreground">
+            {activeTab === "vurderinger" ? "Vurderinger" : "Prosesser"}
+          </h1>
+          <p className="text-sm text-muted-foreground">
+            {activeTab === "prosesser"
+              ? "Registeret for alt som skal vurderes, sikres og designes."
+              : "Prioriter, følg status og åpne den neste vurderingen."}
+          </p>
+        </div>
         <div
-          className="flex w-full shrink-0 gap-1 rounded-xl border border-border/50 bg-card p-1 sm:w-auto"
+          className="inline-flex w-full shrink-0 rounded-full border border-border/50 bg-background p-1 sm:w-auto"
           role="tablist"
           aria-label="Vis vurderinger eller prosesser"
         >
@@ -91,13 +97,12 @@ export function WorkspacePvvHub({ workspaceId, activeTab, initialOrgUnit }: Prop
             aria-selected={activeTab === "vurderinger"}
             onClick={() => setTab("vurderinger")}
             className={cn(
-              "flex h-10 min-h-[44px] flex-1 items-center justify-center gap-2 rounded-lg px-3 text-sm font-medium transition-colors sm:h-9 sm:min-h-0 sm:flex-initial sm:px-4",
+              "flex h-10 min-h-[44px] flex-1 items-center justify-center rounded-full px-4 text-sm font-medium transition-colors sm:h-9 sm:min-h-0 sm:flex-initial",
               activeTab === "vurderinger"
-                ? "bg-background text-foreground shadow-sm ring-1 ring-border/50"
+                ? "bg-foreground text-background"
                 : "text-muted-foreground hover:text-foreground",
             )}
           >
-            <ClipboardList className="size-4 shrink-0 opacity-80" aria-hidden />
             Vurderinger
           </button>
           <button
@@ -107,29 +112,29 @@ export function WorkspacePvvHub({ workspaceId, activeTab, initialOrgUnit }: Prop
             aria-selected={activeTab === "prosesser"}
             onClick={() => setTab("prosesser")}
             className={cn(
-              "flex h-10 min-h-[44px] flex-1 items-center justify-center gap-2 rounded-lg px-3 text-sm font-medium transition-colors sm:h-9 sm:min-h-0 sm:flex-initial sm:px-4",
+              "flex h-10 min-h-[44px] flex-1 items-center justify-center rounded-full px-4 text-sm font-medium transition-colors sm:h-9 sm:min-h-0 sm:flex-initial",
               activeTab === "prosesser"
-                ? "bg-background text-foreground shadow-sm ring-1 ring-border/50"
+                ? "bg-foreground text-background"
                 : "text-muted-foreground hover:text-foreground",
             )}
           >
-            <Users className="size-4 shrink-0 opacity-80" aria-hidden />
             Prosesser
           </button>
         </div>
       </header>
+
       {initialOrgUnit ? (
-        <div className="flex flex-wrap items-center gap-2 rounded-xl border border-border/40 bg-card/60 px-3 py-2 text-xs">
+        <div className="flex flex-wrap items-center gap-2 text-sm">
           <span className="text-muted-foreground">
-            Filtrert på enhet:
-            <span className="ml-1 font-medium text-foreground">
-              {activeOrgUnitName ?? "Valgt enhet"}
+            Filtrert på{" "}
+            <span className="font-medium text-foreground">
+              {activeOrgUnitName ?? "valgt enhet"}
             </span>
           </span>
           <button
             type="button"
             onClick={clearOrgFilter}
-            className="rounded-full border border-border/50 px-2 py-0.5 text-muted-foreground transition-colors hover:text-foreground"
+            className="font-medium text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
           >
             Fjern filter
           </button>
@@ -139,7 +144,9 @@ export function WorkspacePvvHub({ workspaceId, activeTab, initialOrgUnit }: Prop
       <div
         role="tabpanel"
         id={activeTab === "vurderinger" ? "panel-vurderinger" : "panel-prosesser"}
-        aria-labelledby={activeTab === "vurderinger" ? "tab-vurderinger" : "tab-prosesser"}
+        aria-labelledby={
+          activeTab === "vurderinger" ? "tab-vurderinger" : "tab-prosesser"
+        }
         className="min-h-0"
       >
         {activeTab === "vurderinger" ? (

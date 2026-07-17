@@ -6,11 +6,10 @@ import { DashboardLayout } from "@/components/dashboard/dashboard-layout";
 import { TasksBoard } from "@/components/dashboard/tasks-board";
 import { WorkspaceDashboardGrid } from "@/components/dashboard/workspace-dashboard";
 import { ProductLoadingBlock } from "@/components/product";
-import { Badge } from "@/components/ui/badge";
 import { api } from "@/convex/_generated/api";
 import { PIPELINE_STATUS_LABELS } from "@/lib/assessment-pipeline";
 import { useMutation, useQuery } from "convex/react";
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, ArrowUpRight } from "lucide-react";
 import Link from "next/link";
 import { Suspense, useEffect } from "react";
 
@@ -47,7 +46,12 @@ export default function DashboardPage() {
   }, [ensureDefault, acceptInvites, acceptWorkspaceInvites]);
 
   if (workspaces === undefined) {
-    return <ProductLoadingBlock label="Henter arbeidsområder …" className="min-h-[50vh]" />;
+    return (
+      <ProductLoadingBlock
+        label="Henter arbeidsområder …"
+        className="min-h-[50vh]"
+      />
+    );
   }
 
   const defaultId = settings?.defaultWorkspaceId ?? null;
@@ -58,6 +62,7 @@ export default function DashboardPage() {
   const ownerOrAdminCount = workspaces.filter(
     (w) => w.role === "owner" || w.role === "admin",
   ).length;
+  const priorityCount = priorityHighlights?.length ?? 0;
 
   return (
     <DashboardLayout workspaces={workspaces} defaultWorkspaceId={defaultId}>
@@ -65,148 +70,137 @@ export default function DashboardPage() {
         <DashboardEntryRedirect />
       </Suspense>
 
-      <div className="mx-auto max-w-6xl space-y-6 px-4 pb-16 pt-5 sm:px-8 lg:px-10">
-        {/* Header */}
-        <header className="rounded-2xl border border-border/50 bg-card p-3.5 shadow-sm sm:p-5">
-          <h1 className="font-heading text-2xl font-semibold tracking-tight">
-            Oversikt
-          </h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Ett sted for arbeidsområder, oppgaver og prioriteringer.
+      <div className="mx-auto max-w-5xl space-y-10 px-4 pb-20 pt-6 sm:px-8 lg:px-10">
+        <header className="space-y-5">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+            <div className="min-w-0 space-y-1">
+              <h1 className="font-heading text-3xl font-semibold tracking-tight text-foreground">
+                Oversikt
+              </h1>
+              <p className="text-sm text-muted-foreground">
+                Velg arbeidsområde og fortsett der du slapp.
+              </p>
+            </div>
             {defaultWorkspace ? (
-              <>
-                {" "}
-                Sist brukt:{" "}
-                <Link
-                  href={`/w/${defaultWorkspace._id}`}
-                  className="font-medium text-primary hover:underline"
-                >
-                  {defaultWorkspace.name}
-                </Link>
-                .
-              </>
+              <Link
+                href={`/w/${defaultWorkspace._id}`}
+                className="inline-flex h-11 items-center justify-center gap-2 rounded-full bg-foreground px-5 text-sm font-semibold text-background transition-opacity hover:opacity-90"
+              >
+                Fortsett i {defaultWorkspace.name}
+                <ArrowUpRight className="size-4" aria-hidden />
+              </Link>
             ) : null}
-          </p>
-          <div className="mt-3 grid gap-2 sm:grid-cols-3">
-            <div className="rounded-xl border border-border/50 bg-muted/20 px-3 py-2">
-              <p className="text-[11px] text-muted-foreground">Arbeidsområder</p>
-              <p className="text-base font-semibold tabular-nums text-foreground">
-                {workspaces.length}
-              </p>
-            </div>
-            <div className="rounded-xl border border-border/50 bg-muted/20 px-3 py-2">
-              <p className="text-[11px] text-muted-foreground">Eier eller admin</p>
-              <p className="text-base font-semibold tabular-nums text-foreground">
-                {ownerOrAdminCount}
-              </p>
-            </div>
-            <div className="rounded-xl border border-border/50 bg-muted/20 px-3 py-2">
-              <p className="text-[11px] text-muted-foreground">Vurderinger i fokus</p>
-              <p className="text-base font-semibold tabular-nums text-foreground">
-                {priorityHighlights?.length ?? 0}
-              </p>
-            </div>
           </div>
+
+          <dl className="flex flex-wrap gap-x-8 gap-y-2 border-y border-border/50 py-3 text-sm">
+            <div className="flex items-baseline gap-2">
+              <dt className="text-muted-foreground">Områder</dt>
+              <dd className="font-semibold tabular-nums text-foreground">
+                {workspaces.length}
+              </dd>
+            </div>
+            <div className="flex items-baseline gap-2">
+              <dt className="text-muted-foreground">Eier/admin</dt>
+              <dd className="font-semibold tabular-nums text-foreground">
+                {ownerOrAdminCount}
+              </dd>
+            </div>
+            <div className="flex items-baseline gap-2">
+              <dt className="text-muted-foreground">I fokus</dt>
+              <dd className="font-semibold tabular-nums text-foreground">
+                {priorityCount}
+              </dd>
+            </div>
+          </dl>
         </header>
 
         <PendingWorkspaceInvitesBanner />
 
-        {/* Arbeidsområder */}
-        <section
-          id="arbeidsområder"
-            className="scroll-mt-24 space-y-3 rounded-2xl border border-border/50 bg-card p-3.5 shadow-sm sm:p-5"
-        >
-          <div>
-            <h2 className="text-base font-semibold tracking-tight">Arbeidsområder</h2>
-            <p className="mt-0.5 text-xs text-muted-foreground">
-              Velg et område for å jobbe med prosesser, vurderinger og dokumentasjon.
-            </p>
-          </div>
-          <WorkspaceDashboardGrid
-            workspaces={workspaces}
-            defaultWorkspaceId={defaultId}
-          />
-        </section>
+        <WorkspaceDashboardGrid
+          workspaces={workspaces}
+          defaultWorkspaceId={defaultId}
+        />
 
-        {/* Oppgaver */}
         <TasksBoard />
 
-        {/* I fokus */}
-        {priorityHighlights !== undefined && priorityHighlights.length > 0 && (
-          <section
-            id="prioriteringer"
-            className="scroll-mt-24 space-y-3 rounded-2xl border border-border/50 bg-card p-3.5 shadow-sm sm:p-5"
-          >
+        {priorityHighlights !== undefined && priorityHighlights.length > 0 ? (
+          <section id="prioriteringer" className="scroll-mt-24 space-y-3">
             <div className="flex items-baseline justify-between gap-3">
-              <h2 className="text-base font-semibold tracking-tight">I fokus</h2>
-              {(defaultWorkspace || priorityHighlights[0]) && (
-                <Link
-                  href={
-                    defaultWorkspace
-                      ? `/w/${defaultWorkspace._id}/vurderinger`
-                      : `/w/${priorityHighlights[0]!.workspaceId}/vurderinger`
-                  }
-                  className="text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
-                >
-                  Alle vurderinger
-                </Link>
-              )}
+              <h2 className="text-base font-semibold tracking-tight text-foreground">
+                I fokus
+              </h2>
+              <Link
+                href={
+                  defaultWorkspace
+                    ? `/w/${defaultWorkspace._id}/vurderinger`
+                    : `/w/${priorityHighlights[0]!.workspaceId}/vurderinger`
+                }
+                className="text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
+              >
+                Alle vurderinger
+              </Link>
             </div>
-            <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+            <ul className="divide-y divide-border/40 overflow-hidden rounded-2xl border border-border/50 bg-card">
               {priorityHighlights.map((row) => (
-                <Link
-                  key={row.assessment._id}
-                  href={`/w/${row.workspaceId}/a/${row.assessment._id}`}
-                  className="group flex w-full min-w-0 flex-col overflow-hidden rounded-xl border border-border/40 bg-card/60 p-4 transition-all hover:border-border/60 hover:bg-card/80"
-                >
-                  <p className="line-clamp-2 break-words text-sm font-medium leading-snug group-hover:text-primary">
-                    {row.assessment.title}
-                  </p>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    {row.workspaceName}
-                  </p>
-                  <div className="mt-3 flex flex-wrap gap-1.5">
-                    <Badge variant="secondary" className="text-[10px] font-medium">
-                      {row.effectivePriority.toFixed(0)} poeng
-                    </Badge>
-                    <Badge variant="outline" className="text-[10px] font-normal">
-                      {PIPELINE_STATUS_LABELS[row.pipelineStatus]}
-                    </Badge>
-                  </div>
-                </Link>
+                <li key={row.assessment._id}>
+                  <Link
+                    href={`/w/${row.workspaceId}/a/${row.assessment._id}`}
+                    className="group flex w-full min-w-0 items-center gap-3 px-4 py-3.5 transition-colors hover:bg-muted/30 sm:px-5"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-medium text-foreground">
+                        {row.assessment.title}
+                      </p>
+                      <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                        {row.workspaceName}
+                        {" · "}
+                        {PIPELINE_STATUS_LABELS[row.pipelineStatus]}
+                      </p>
+                    </div>
+                    <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
+                      {row.effectivePriority.toFixed(0)}
+                    </span>
+                    <ArrowRight
+                      className="size-4 shrink-0 text-muted-foreground/35 transition-transform group-hover:translate-x-0.5 group-hover:text-foreground"
+                      aria-hidden
+                    />
+                  </Link>
+                </li>
               ))}
-            </div>
+            </ul>
           </section>
-        )}
+        ) : null}
 
-        {/* Delte med deg */}
-        {mineAssessments && mineAssessments.length > 0 && (
-          <section className="space-y-3 rounded-2xl border border-border/50 bg-card p-3.5 shadow-sm sm:p-5">
-            <h2 className="text-base font-semibold tracking-tight">Delte med deg</h2>
-            <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+        {mineAssessments && mineAssessments.length > 0 ? (
+          <section className="space-y-3">
+            <h2 className="text-base font-semibold tracking-tight text-foreground">
+              Delte med deg
+            </h2>
+            <ul className="divide-y divide-border/40 overflow-hidden rounded-2xl border border-border/50 bg-card">
               {mineAssessments.map(({ assessment, role }) => (
-                <Link
-                  key={assessment._id}
-                  href={`/w/${assessment.workspaceId}/a/${assessment._id}`}
-                  className="group flex w-full min-w-0 items-center justify-between gap-3 overflow-hidden rounded-xl border border-border/40 bg-card/60 p-3.5 transition-all hover:border-border/60 hover:bg-card/80"
-                >
-                  <div className="min-w-0 flex-1 overflow-hidden">
-                    <p className="truncate break-words text-sm font-medium group-hover:text-primary">
-                      {assessment.title}
-                    </p>
-                    <p className="mt-0.5 text-xs text-muted-foreground">
-                      {SHARED_ROLE_LABELS[role] ?? role}
-                    </p>
-                  </div>
-                  <ArrowRight
-                    className="size-4 shrink-0 text-muted-foreground/30 transition-colors group-hover:text-primary"
-                    aria-hidden
-                  />
-                </Link>
+                <li key={assessment._id}>
+                  <Link
+                    href={`/w/${assessment.workspaceId}/a/${assessment._id}`}
+                    className="group flex w-full min-w-0 items-center gap-3 px-4 py-3.5 transition-colors hover:bg-muted/30 sm:px-5"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-medium text-foreground">
+                        {assessment.title}
+                      </p>
+                      <p className="mt-0.5 text-xs text-muted-foreground">
+                        {SHARED_ROLE_LABELS[role] ?? role}
+                      </p>
+                    </div>
+                    <ArrowRight
+                      className="size-4 shrink-0 text-muted-foreground/35 transition-transform group-hover:translate-x-0.5 group-hover:text-foreground"
+                      aria-hidden
+                    />
+                  </Link>
+                </li>
               ))}
-            </div>
+            </ul>
           </section>
-        )}
+        ) : null}
       </div>
     </DashboardLayout>
   );

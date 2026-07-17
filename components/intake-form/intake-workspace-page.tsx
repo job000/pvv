@@ -3,13 +3,6 @@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import {
   Dialog,
   DialogBody,
   DialogContent,
@@ -278,46 +271,47 @@ function IntakeSubmissionQueueCard({
   const hint = intakeSubmissionReviewHint(submission.status);
 
   return (
-    <div
-      className={cn(
-        "rounded-2xl border border-border/50 bg-card shadow-sm transition-[border-color,box-shadow]",
-        "hover:border-primary/35 hover:shadow-md",
-      )}
-    >
+    <div className="overflow-hidden rounded-2xl border border-border/50 bg-card transition-colors hover:border-border">
       <button
         type="button"
         className={cn(
-          "group w-full cursor-pointer rounded-t-2xl p-4 text-left transition-colors",
-          "hover:bg-muted/15",
+          "group w-full cursor-pointer p-4 text-left transition-colors sm:px-5",
+          "hover:bg-muted/25",
           "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
         )}
         onClick={() => void onOpenReview()}
         aria-label={`Gjennomgå forslag: ${title}`}
       >
-        <div className="flex gap-3 sm:gap-4">
-          <div className="min-w-0 flex-1 space-y-2">
+        <div className="flex items-start gap-3 sm:gap-4">
+          <div className="min-w-0 flex-1 space-y-1.5">
             <div className="flex flex-wrap items-start justify-between gap-2">
-              <p className="text-foreground text-sm font-semibold sm:text-base">{title}</p>
+              <p className="text-[15px] font-medium tracking-tight text-foreground">
+                {title}
+              </p>
               <IntakeSubmissionStatusBadge status={submission.status} />
             </div>
-            <p className="text-muted-foreground text-xs sm:text-sm">{subtitle}</p>
+            <p className="text-xs text-muted-foreground">{subtitle}</p>
             {extraBadges ? (
-              <div className="flex flex-wrap items-center gap-2 pt-0.5">{extraBadges}</div>
+              <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                {extraBadges}
+              </div>
             ) : null}
-            <p className="text-primary pt-1 text-xs font-medium sm:text-sm">{hint}</p>
+            <p className="pt-0.5 text-xs font-medium text-muted-foreground">
+              {hint}
+            </p>
           </div>
           <ChevronRight
-            className="text-muted-foreground mt-1 size-5 shrink-0 transition-transform group-hover:translate-x-0.5 group-hover:text-foreground sm:mt-2 sm:size-6"
+            className="mt-1 size-4 shrink-0 text-muted-foreground/30 transition-transform group-hover:translate-x-0.5 group-hover:text-foreground"
             aria-hidden
           />
         </div>
       </button>
-      <div className="border-border/50 flex flex-wrap items-center justify-end gap-2 border-t bg-muted/[0.06] px-3 py-2.5">
+      <div className="flex flex-wrap items-center justify-end gap-1.5 border-t border-border/40 px-3 py-2">
         <Button
           type="button"
-          variant="outline"
+          variant="ghost"
           size="sm"
-          className="rounded-xl"
+          className="rounded-full text-sm font-medium"
           onClick={() => void onOpenReview()}
         >
           Gjennomgå
@@ -326,12 +320,12 @@ function IntakeSubmissionQueueCard({
           <Button
             type="button"
             variant="ghost"
-            size="sm"
-            className="rounded-lg text-muted-foreground hover:text-destructive"
+            size="icon"
+            className="size-9 rounded-full text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+            aria-label="Slett forslag"
             onClick={onDelete}
           >
             <Trash2 className="size-4" />
-            Slett
           </Button>
         ) : null}
       </div>
@@ -2003,60 +1997,49 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
   }
 
   return (
-    <div className="space-y-6 pb-6">
-      <header className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+    <div className="mx-auto max-w-5xl space-y-8 pb-6">
+      <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div className="min-w-0 space-y-1">
-          <h1 className="font-heading text-xl font-semibold tracking-tight">
+          <h1 className="font-heading text-2xl font-semibold tracking-tight sm:text-3xl">
             Skjemaer
           </h1>
-          <p className="text-muted-foreground text-sm">
-            {forms.length} skjemaer{pendingCount > 0 ? ` · ${pendingCount} ventende svar` : ""}
+          <p className="text-sm text-muted-foreground">
+            Samle inn forslag og gjør dem om til prosesser.
           </p>
         </div>
-        <Button type="button" className="h-11 shrink-0 rounded-xl" onClick={handleCreateForm}>
+        <Button
+          type="button"
+          className="h-11 shrink-0 gap-2 rounded-full bg-foreground px-5 text-sm font-semibold text-background transition-opacity hover:opacity-90"
+          onClick={handleCreateForm}
+        >
           <Plus className="size-4" />
           Nytt skjema
         </Button>
       </header>
-      <div className="rounded-2xl border border-border/40 bg-card/60 p-3">
-        <p className="text-xs font-medium text-foreground">Start raskt etter rolle</p>
-        <div className="mt-2 flex flex-wrap gap-2 text-[11px]">
-          <Link
-            href={`/w/${workspaceId}/skjemaer`}
-            className="rounded-full border border-border/50 px-2.5 py-1 text-muted-foreground hover:text-foreground"
-          >
-            Koordinator: behandle innsendte forslag
-          </Link>
-          <Link
-            href={`/w/${workspaceId}/vurderinger`}
-            className="rounded-full border border-border/50 px-2.5 py-1 text-muted-foreground hover:text-foreground"
-          >
-            Teamleder: åpne vurderinger
-          </Link>
-          <Link
-            href={`/w/${workspaceId}/vurderinger?fane=prosesser`}
-            className="rounded-full border border-border/50 px-2.5 py-1 text-muted-foreground hover:text-foreground"
-          >
-            Prosessdesigner: gå til prosesser
-          </Link>
-          <Link
-            href={`/w/${workspaceId}/ros?fane=analyser`}
-            className="rounded-full border border-border/50 px-2.5 py-1 text-muted-foreground hover:text-foreground"
-          >
-            Utvikler: gå til ROS
-          </Link>
-        </div>
-      </div>
 
-      <section className="grid gap-5 xl:grid-cols-[1.1fr_0.9fr]">
-        <Card className="rounded-3xl">
-          <CardHeader className="gap-1 pb-2">
-            <CardTitle>Dine skjemaer</CardTitle>
-            <CardDescription>
-              Velg et skjema for å redigere, dele lenke eller behandle svar.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
+      <dl className="flex flex-wrap gap-x-8 gap-y-2 border-y border-border/50 py-3.5 text-sm">
+        <div className="flex items-baseline gap-2">
+          <dt className="text-muted-foreground">Skjemaer</dt>
+          <dd className="font-semibold tabular-nums text-foreground">
+            {forms.length}
+          </dd>
+        </div>
+        {pendingCount > 0 ? (
+          <div className="flex items-baseline gap-2">
+            <dt className="text-muted-foreground">Ventende svar</dt>
+            <dd className="font-semibold tabular-nums text-foreground">
+              {pendingCount}
+            </dd>
+          </div>
+        ) : null}
+      </dl>
+
+      <section className="grid gap-8 xl:grid-cols-[1.1fr_0.9fr] xl:gap-5">
+        <section className="space-y-3">
+          <h2 className="text-base font-semibold tracking-tight text-foreground">
+            Dine skjemaer
+          </h2>
+          <div className="space-y-3">
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <SearchInput
                 value={formSearch}
@@ -2418,18 +2401,14 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
                 </p>
               </div>
             ) : null}
-          </CardContent>
-        </Card>
+          </div>
+        </section>
 
-        <Card className="rounded-3xl">
-          <CardHeader className="pb-2">
-            <CardTitle>Alle innsendte forslag</CardTitle>
-            <CardDescription className="mt-1">
-              Samlet kø på tvers av skjemaer. Trykk på et kort eller «Gjennomgå» for å åpne
-              gjennomgang — der godkjenner eller avslår du forslaget.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
+        <section className="space-y-3">
+          <h2 className="text-base font-semibold tracking-tight text-foreground">
+            Innsendte forslag
+          </h2>
+          <div className="space-y-3">
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex flex-wrap gap-1.5">
                 <button
@@ -2577,8 +2556,8 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
                 </div>
               ))
             )}
-          </CardContent>
-        </Card>
+          </div>
+        </section>
       </section>
 
       <Dialog

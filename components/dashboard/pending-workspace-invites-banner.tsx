@@ -63,40 +63,40 @@ export function PendingWorkspaceInvitesBanner({
   return (
     <section
       aria-label="Ventende invitasjoner til arbeidsområder"
-      className={cn(
-        "border-border/60 bg-card space-y-3 rounded-2xl border p-4 shadow-sm sm:p-5",
-        className,
-      )}
+      className={cn("space-y-3", className)}
     >
-      <div className="flex items-center gap-2">
-        <Building2 className="text-primary size-5 shrink-0" aria-hidden />
-        <h2 className="font-heading text-base font-semibold tracking-tight">
-          Invitasjoner til arbeidsområder
-        </h2>
-      </div>
-      <p className="text-muted-foreground text-sm leading-relaxed">
-        Noen har invitert deg inn. Godta hvis du vil bli med, eller avslå hvis du ikke ønsker
-        tilgang.
-      </p>
-      <ul className="space-y-3">
+      <h2 className="text-base font-semibold tracking-tight text-foreground">
+        Invitasjoner
+      </h2>
+      <ul className="divide-y divide-border/40 overflow-hidden rounded-2xl border border-border/50 bg-card">
         {rows.map((row) => {
           const loading = busyId === row._id;
           return (
             <li
               key={row._id}
-              className="border-border/50 flex flex-col gap-3 rounded-xl border bg-muted/20 p-3 sm:flex-row sm:items-center sm:justify-between"
+              className="flex flex-col gap-3 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-5"
             >
-              <div className="min-w-0">
-                <p className="font-medium">{row.workspaceName}</p>
-                <p className="text-muted-foreground mt-0.5 text-xs">
-                  Rolle: {ROLE_NB[row.role] ?? row.role} · Fra {row.inviterName}
-                </p>
+              <div className="flex min-w-0 items-center gap-4">
+                <span
+                  className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-muted"
+                  aria-hidden
+                >
+                  <Building2 className="size-4 text-foreground" />
+                </span>
+                <div className="min-w-0">
+                  <p className="truncate text-[15px] font-medium tracking-tight text-foreground">
+                    {row.workspaceName}
+                  </p>
+                  <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                    {ROLE_NB[row.role] ?? row.role} · Invitert av {row.inviterName}
+                  </p>
+                </div>
               </div>
-              <div className="flex shrink-0 flex-wrap items-center gap-2">
+              <div className="flex shrink-0 items-center gap-2">
                 <Button
                   type="button"
                   size="sm"
-                  className="rounded-xl"
+                  className="h-10 rounded-full bg-foreground px-4 text-sm font-semibold text-background transition-opacity hover:opacity-90"
                   disabled={loading}
                   onClick={() => void onAccept(row._id)}
                 >
@@ -108,13 +108,13 @@ export function PendingWorkspaceInvitesBanner({
                 </Button>
                 <Button
                   type="button"
-                  variant="outline"
+                  variant="ghost"
                   size="sm"
-                  className="rounded-xl"
+                  className="h-10 rounded-full px-4 text-sm text-muted-foreground hover:text-foreground"
                   disabled={loading}
                   onClick={() => void onDecline(row._id)}
                 >
-                  <X className="size-4" />
+                  <X className="size-4" aria-hidden />
                   Avslå
                 </Button>
               </div>

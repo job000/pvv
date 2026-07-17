@@ -4,7 +4,7 @@ import { api } from "@/convex/_generated/api";
 import { toast } from "@/lib/app-toast";
 import { cn } from "@/lib/utils";
 import { useMutation, useQuery } from "convex/react";
-import { Bell, FileText, Mail, ShieldAlert } from "lucide-react";
+import { FileText, Mail, ShieldAlert } from "lucide-react";
 import { useCallback, useState } from "react";
 
 function NotificationToggle({
@@ -27,18 +27,16 @@ function NotificationToggle({
   return (
     <div
       className={cn(
-        "flex items-center gap-4 rounded-2xl bg-card px-5 py-4 shadow-sm ring-1 ring-black/[0.04] transition-all dark:ring-white/[0.06]",
-        disabled ? "opacity-60" : "hover:shadow-md",
+        "flex items-center gap-4 px-4 py-3.5 sm:px-5",
+        disabled && "opacity-60",
       )}
     >
-      <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10">
-        <Icon className="size-5 text-primary" aria-hidden />
-      </div>
+      <Icon className="size-4 shrink-0 text-muted-foreground" aria-hidden />
       <div className="min-w-0 flex-1">
-        <label htmlFor={id} className="text-sm font-medium">
+        <label htmlFor={id} className="text-sm font-medium text-foreground">
           {title}
         </label>
-        <p className="text-muted-foreground mt-0.5 text-xs">{description}</p>
+        <p className="mt-0.5 text-xs text-muted-foreground">{description}</p>
       </div>
       <label className="relative inline-flex cursor-pointer items-center">
         <input
@@ -115,26 +113,23 @@ export default function WorkspaceNotificationsPage() {
   }
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="font-heading text-lg font-semibold tracking-tight sm:text-xl">
+    <div className="mx-auto max-w-5xl space-y-8 pb-12">
+      <header className="space-y-1">
+        <h1 className="font-heading text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
           Varslinger
         </h1>
-        <p className="text-muted-foreground mt-1 text-sm">
-          Velg hvilke e-postvarsler du ønsker. Du kan endre dette når som helst.
+        <p className="text-sm text-muted-foreground">
+          Velg hvilke e-postvarsler du ønsker.
         </p>
-      </div>
+      </header>
 
-      <div className="space-y-3">
-        <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-          E-postvarsler
-        </p>
-        <div className="space-y-2">
+      <section className="space-y-3">
+        <div className="divide-y divide-border/40 overflow-hidden rounded-2xl border border-border/50 bg-card">
           <NotificationToggle
             id="notify-invites"
             icon={Mail}
             title="Ny invitasjon"
-            description="E-post når du blir lagt inn i et arbeidsområde eller en vurdering. Invitasjoner til e-postadresser uten konto sendes alltid (med lenke/logg inn-info)."
+            description="Når noen legger deg til i et arbeidsområde eller en vurdering."
             checked={settings.notifyEmailInvitations}
             disabled={busyKey !== null}
             onCheckedChange={(v) => void patch("invites", v)}
@@ -142,8 +137,8 @@ export default function WorkspaceNotificationsPage() {
           <NotificationToggle
             id="notify-draft"
             icon={FileText}
-            title="Ukentlig sammendrag av åpne vurderinger"
-            description="Omtrent én gang i uken: liste over vurderinger du eier som ikke er markert som ferdig. Krever at FRO er konfigurert med e-post (Resend) på serveren."
+            title="Ukentlig sammendrag"
+            description="Åpne vurderinger du eier."
             checked={settings.notifyEmailDraftSummaryWeekly}
             disabled={busyKey !== null}
             onCheckedChange={(v) => void patch("draft", v)}
@@ -152,33 +147,16 @@ export default function WorkspaceNotificationsPage() {
             id="notify-security"
             icon={ShieldAlert}
             title="Sikkerhetsvarsler"
-            description="Vi lagrer valget ditt nå. E-post ved mistenkelig aktivitet eller ny enhet kommer i en senere oppdatering."
+            description="Ved mistenkelig aktivitet på kontoen."
             checked={settings.notifyEmailSecurityAlerts}
             disabled={busyKey !== null}
             onCheckedChange={(v) => void patch("security", v)}
           />
         </div>
-      </div>
-
-      <div className="flex items-start gap-3 rounded-2xl bg-muted/20 px-5 py-4 ring-1 ring-black/[0.04] dark:ring-white/[0.06]">
-        <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10">
-          <Bell className="size-5 text-primary" aria-hidden />
-        </div>
-        <div>
-          <p className="text-sm font-medium">Slik fungerer det</p>
-          <ul className="text-muted-foreground mt-2 list-inside list-disc space-y-1 text-xs leading-relaxed">
-            <li>
-              Varsler gjelder hele kontoen din, ikke bare dette arbeidsområdet.
-            </li>
-            <li>
-              Uten <code className="text-foreground rounded bg-muted px-1 py-0.5 text-[0.7rem]">
-                RESEND_API_KEY
-              </code>{" "}
-              på serveren sendes ingen e-post — innstillingene lagres likevel.
-            </li>
-          </ul>
-        </div>
-      </div>
+        <p className="text-xs text-muted-foreground">
+          Varslene gjelder hele kontoen din.
+        </p>
+      </section>
     </div>
   );
 }

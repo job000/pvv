@@ -1,6 +1,5 @@
 "use client";
 
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -40,14 +39,11 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { useMutation, useQuery } from "convex/react";
 import {
-  Building2,
-  Calendar,
   GripVertical,
   LayoutGrid,
   List,
   Pencil,
   Trash2,
-  User,
 } from "lucide-react";
 import Link from "next/link";
 import { useMemo, useState } from "react";
@@ -81,11 +77,22 @@ function DraggableTaskCard({
     opacity: isDragging ? 0.5 : 1,
   };
 
+  const metaBits = [
+    task.workspaceName,
+    `P${clampP(task.priority)}`,
+    (task.assignees ?? []).length > 0
+      ? task.assignees.length <= 2
+        ? task.assignees.map((a) => a.name).join(", ")
+        : `${task.assignees[0].name} +${task.assignees.length - 1}`
+      : null,
+    task.dueAt ? new Date(task.dueAt).toLocaleDateString("nb-NO") : null,
+  ].filter(Boolean);
+
   return (
     <div
       ref={setNodeRef}
       style={style}
-      className="bg-card flex gap-2 rounded-xl border p-3 shadow-sm"
+      className="flex gap-3 bg-card px-4 py-3.5 transition-colors hover:bg-muted/25 sm:px-5"
     >
       <button
         type="button"
@@ -97,38 +104,20 @@ function DraggableTaskCard({
         <GripVertical className="size-4" />
       </button>
       <div className="min-w-0 flex-1">
-        <p className="font-medium leading-snug">{task.title}</p>
+        <p className="text-[15px] font-medium leading-snug tracking-tight">
+          {task.title}
+        </p>
         {task.description ? (
-          <p className="text-muted-foreground mt-1 line-clamp-2 text-xs">
+          <p className="text-muted-foreground mt-0.5 line-clamp-2 text-xs">
             {task.description}
           </p>
         ) : null}
-        <div className="mt-2 flex flex-wrap items-center gap-1.5 text-xs">
-          <Badge variant="outline" className="gap-0.5 font-normal">
-            <Building2 className="size-3" aria-hidden />
-            {task.workspaceName}
-          </Badge>
-          <Badge variant="secondary" className="font-normal">
-            P{clampP(task.priority)}
-          </Badge>
-          {(task.assignees ?? []).length > 0 ? (
-            <span className="text-muted-foreground inline-flex items-center gap-0.5">
-              <User className="size-3" aria-hidden />
-              {task.assignees.length <= 2
-                ? task.assignees.map((a) => a.name).join(", ")
-                : `${task.assignees[0].name} +${task.assignees.length - 1}`}
-            </span>
-          ) : null}
-          {task.dueAt ? (
-            <span className="text-muted-foreground inline-flex items-center gap-0.5">
-              <Calendar className="size-3" aria-hidden />
-              {new Date(task.dueAt).toLocaleDateString("nb-NO")}
-            </span>
-          ) : null}
-        </div>
+        <p className="text-muted-foreground mt-1 truncate text-xs">
+          {metaBits.join(" · ")}
+        </p>
         <Link
           href={`/w/${task.workspaceId}/a/${task.assessmentId}`}
-          className="text-primary mt-2 inline-block text-xs font-medium hover:underline"
+          className="mt-1 inline-block text-xs font-medium text-foreground underline-offset-4 hover:underline"
         >
           {task.assessmentTitle} →
         </Link>
@@ -138,7 +127,7 @@ function DraggableTaskCard({
           type="button"
           variant="ghost"
           size="icon"
-          className="size-8"
+          className="size-9 rounded-full text-muted-foreground hover:text-foreground"
           aria-label="Rediger"
           onClick={() => onEdit(task)}
         >
@@ -432,12 +421,12 @@ export function TasksBoard() {
           >
             Oppgaver
           </h2>
-          <p className="text-muted-foreground mt-0.5 text-xs">
-            Dra kort for å endre prioritet eller kolonne.
+          <p className="text-muted-foreground mt-0.5 text-sm">
+            Dra for å endre prioritet.
           </p>
         </div>
         <div
-          className="inline-flex shrink-0 rounded-2xl border border-border/45 bg-card/75 p-1 shadow-sm"
+          className="inline-flex shrink-0 rounded-full border border-border/50 bg-background p-1"
           role="group"
           aria-label="Visning"
         >
@@ -465,11 +454,10 @@ export function TasksBoard() {
       </div>
 
       {tasks.length === 0 ? (
-        <div className="rounded-3xl border border-dashed border-border/50 bg-card/45 px-6 py-12 text-center shadow-sm">
-          <List className="text-muted-foreground mx-auto mb-2 size-8 opacity-50" aria-hidden />
-          <p className="text-foreground text-sm font-medium">Ingen oppgaver</p>
-          <p className="text-muted-foreground mx-auto mt-1 max-w-sm text-xs leading-relaxed">
-            Opprett under en vurdering (Samarbeid), eller få tildelt av andre.
+        <div className="rounded-2xl border border-dashed border-border/60 px-6 py-10 text-center">
+          <p className="text-sm font-medium text-foreground">Ingen oppgaver</p>
+          <p className="mx-auto mt-1 max-w-sm text-sm text-muted-foreground">
+            Opprett under en vurdering, eller få tildelt av andre.
           </p>
         </div>
       ) : view === "list" ? (
@@ -491,7 +479,7 @@ export function TasksBoard() {
               items={openIds}
               strategy={verticalListSortingStrategy}
             >
-              <div className="space-y-2">
+              <div className="divide-y divide-border/40 self-start overflow-hidden rounded-2xl border border-border/50 bg-card">
                 {openTasks.map((t) => (
                   <DraggableTaskCard key={t._id} task={t} onEdit={openEdit} />
                 ))}
@@ -688,61 +676,72 @@ function DoneDropList({
     <div>
       <div
         ref={setNodeRef}
-        className={`rounded-xl border-2 border-dashed p-4 transition-colors ${
-          isOver ? "border-primary bg-primary/10" : "border-muted bg-muted/20"
+        className={`rounded-2xl border border-dashed px-4 py-5 text-center transition-colors ${
+          isOver
+            ? "border-foreground/50 bg-muted/50"
+            : "border-border/60 bg-transparent"
         }`}
       >
-        <p className="text-center text-sm font-medium">Slipp her for ferdig</p>
-        <p className="text-muted-foreground mt-1 text-center text-xs">
-          Dra åpne oppgaver hit fra listen
+        <p className="text-sm font-medium text-foreground">Ferdig</p>
+        <p className="text-muted-foreground mt-0.5 text-xs">
+          Dra oppgaver hit
         </p>
       </div>
-      <div className="mt-4 space-y-2">
-        <p className="text-muted-foreground text-xs font-medium">
-          Fullført ({tasks.length})
-        </p>
-        {tasks.map((t) => (
-          <div
-            key={t._id}
-            className="bg-card flex items-start justify-between gap-2 rounded-lg border p-2 text-sm"
-          >
-            <div className="min-w-0">
-              <p className="text-muted-foreground line-through">{t.title}</p>
-              <p className="text-muted-foreground text-[0.65rem]">
-                {t.workspaceName}
-              </p>
-            </div>
-            <div className="flex shrink-0 gap-1">
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={() => onReopen(t._id)}
+      {tasks.length > 0 ? (
+        <div className="mt-4 space-y-2">
+          <p className="text-muted-foreground text-xs font-medium">
+            Fullført ({tasks.length})
+          </p>
+          <div className="divide-y divide-border/40 overflow-hidden rounded-2xl border border-border/50 bg-card">
+            {tasks.map((t) => (
+              <div
+                key={t._id}
+                className="group/done flex items-center justify-between gap-2 px-3 py-2.5 text-sm"
               >
-                Gjenåpne
-              </Button>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="size-8"
-                onClick={() => onEdit(t)}
-              >
-                <Pencil className="size-4" />
-              </Button>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="text-destructive size-8"
-                onClick={() => onRemove(t._id)}
-              >
-                <Trash2 className="size-4" />
-              </Button>
-            </div>
+                <div className="min-w-0">
+                  <p className="truncate text-muted-foreground line-through">
+                    {t.title}
+                  </p>
+                  <p className="text-muted-foreground/70 truncate text-[11px]">
+                    {t.workspaceName}
+                  </p>
+                </div>
+                <div className="flex shrink-0 gap-0.5 opacity-100 transition-opacity sm:opacity-0 sm:group-hover/done:opacity-100">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="rounded-full text-xs"
+                    onClick={() => onReopen(t._id)}
+                  >
+                    Gjenåpne
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="size-8 rounded-full text-muted-foreground hover:text-foreground"
+                    aria-label="Rediger"
+                    onClick={() => onEdit(t)}
+                  >
+                    <Pencil className="size-4" />
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="size-8 rounded-full text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                    aria-label="Slett"
+                    onClick={() => onRemove(t._id)}
+                  >
+                    <Trash2 className="size-4" />
+                  </Button>
+                </div>
+              </div>
+            ))}
           </div>
-        ))}
-      </div>
+        </div>
+      ) : null}
     </div>
   );
 }

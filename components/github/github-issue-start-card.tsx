@@ -420,68 +420,41 @@ export function GithubIssueStartCard({
     variant === "assessment" && existingAssessment
       ? "Fortsett vurdering"
       : actionLabel;
-  const heading = variant === "assessment" ? "Ny vurdering" : "Start ny ROS";
-  const intro =
-    variant === "assessment"
-      ? "Start fra prosess, GitHub eller en egen tittel."
-      : "Velg mal først, og start deretter fra prosess, GitHub eller en ny tittel.";
+  const heading = variant === "assessment" ? "Ny vurdering" : "Ny ROS";
 
   const tabs: { id: StartTab; icon: React.ReactNode; label: string; desc: string }[] = [
     {
       id: "process",
       icon: <FileStack className="size-4" aria-hidden />,
-      label: "Fra prosess",
-      desc: "Velg en registrert prosess",
+      label: "Prosess",
+      desc: "Fra registrert prosess",
     },
     {
       id: "github",
       icon: <GitBranch className="size-4" aria-hidden />,
-      label: "Fra GitHub",
-      desc: "Importer fra issue-lenke",
+      label: "GitHub",
+      desc: "Fra issue-lenke",
     },
     {
       id: "new",
       icon: <Plus className="size-4" aria-hidden />,
-      label: "Opprett ny",
-      desc: "Start med egendefinert tittel",
+      label: "Ny",
+      desc: "Egen tittel",
     },
   ];
 
   return (
     <section
-      className={cn(
-        "rounded-3xl border p-4 shadow-sm sm:p-5",
-        variant === "ros"
-          ? "border-border/60 bg-card/85 ring-1 ring-black/[0.04] dark:ring-white/[0.06]"
-          : "border-border/50 bg-muted/15",
-      )}
+      className="rounded-2xl border border-border/50 bg-card p-3 sm:p-4"
       aria-labelledby={`start-${variant}-heading`}
     >
-      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div className="min-w-0 space-y-1">
-          <h2
-            id={`start-${variant}-heading`}
-            className="font-heading text-foreground text-base font-semibold tracking-tight sm:text-lg"
-          >
-            {heading}
-          </h2>
-          <p className="text-muted-foreground text-sm leading-relaxed">
-            {intro}
-          </p>
-        </div>
-        {variant === "ros" ? (
-          <div className="inline-flex items-center rounded-full border border-border/60 bg-muted/30 px-3 py-1 text-xs font-medium text-muted-foreground">
-            1. Velg mal  2. Velg kilde  3. Start analyse
-          </div>
-        ) : null}
-      </div>
+      <h2 id={`start-${variant}-heading`} className="sr-only">
+        {heading}
+      </h2>
       <div
-        className={cn(
-          "mb-4 flex gap-1 rounded-2xl p-1",
-          variant === "ros" ? "bg-muted/35" : "bg-muted/50",
-        )}
+        className="mb-3 inline-flex w-full gap-1 rounded-full border border-border/50 bg-background p-1"
         role="tablist"
-        aria-label="Opprett fra prosess, GitHub eller blanke ark"
+        aria-label="Startkilde"
       >
         {tabs.map((t) => (
           <button
@@ -491,10 +464,10 @@ export function GithubIssueStartCard({
             aria-selected={activeTab === t.id}
             aria-label={`${t.label}. ${t.desc}`}
             className={cn(
-              "flex flex-1 items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-150 sm:px-3.5",
+              "flex h-9 flex-1 items-center justify-center gap-1.5 rounded-full px-2 text-sm font-medium transition-colors",
               activeTab === t.id
-                ? "bg-background text-foreground shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.06]"
-                : "text-muted-foreground hover:bg-background/60 hover:text-foreground",
+                ? "bg-foreground text-background"
+                : "text-muted-foreground hover:text-foreground",
             )}
             onClick={() => setActiveTab(t.id)}
           >

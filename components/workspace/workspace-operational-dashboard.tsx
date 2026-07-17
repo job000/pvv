@@ -18,7 +18,6 @@ import {
   PlayCircle,
   ShieldAlert,
   ShieldPlus,
-  Workflow,
 } from "lucide-react";
 import Link from "next/link";
 
@@ -62,13 +61,10 @@ function FocusActionCard({
   detail,
   href,
   cta,
-  icon: Icon,
-  tone = "default",
   navigationTarget,
 }: {
   eyebrow: string;
   title: string;
-  /** Valgfri — skjul når tom for mindre tekstmasse */
   detail: string;
   href: string;
   cta: string;
@@ -78,78 +74,27 @@ function FocusActionCard({
 }) {
   const linkTitle = focusCardLinkTitle(navigationTarget);
 
-  /** Tone styrer visuell prioritet uten sterke signalfarger.
-   * Målet er profesjonell, rolig flate med tydelig hierarki. */
-  const surface =
-    tone === "warning"
-      ? "bg-card border-border/60"
-      : tone === "action"
-        ? "bg-card border-primary/30"
-        : "bg-card border-border/60";
-  const iconBubble =
-    tone === "warning"
-      ? "bg-muted text-foreground ring-border/60"
-      : tone === "action"
-        ? "bg-primary/10 text-primary ring-primary/30"
-        : "bg-muted text-foreground ring-border/60";
-  const ctaTone =
-    tone === "warning"
-      ? "bg-foreground text-background hover:opacity-90"
-      : tone === "action"
-        ? "bg-primary text-primary-foreground hover:bg-primary/90"
-        : "bg-foreground text-background hover:opacity-90";
-  const eyebrowChip =
-    tone === "warning"
-      ? "bg-muted text-muted-foreground"
-      : tone === "action"
-        ? "bg-primary/12 text-primary"
-        : "bg-muted text-muted-foreground";
-
   return (
     <Link
       href={href}
       title={linkTitle}
-      className={cn(
-        "group relative flex gap-4 overflow-hidden rounded-2xl border p-4 shadow-sm transition-all duration-200 hover:shadow-md sm:gap-5 sm:p-5",
-        surface,
-      )}
+      className="group flex flex-col gap-3 rounded-2xl border border-border/50 bg-card px-4 py-4 transition-colors hover:bg-muted/25 sm:flex-row sm:items-center sm:justify-between sm:px-5"
     >
-      <div
-        className={cn(
-          "flex size-11 shrink-0 items-center justify-center rounded-xl shadow-sm ring-1 sm:size-12",
-          iconBubble,
-        )}
-        aria-hidden
-      >
-        <Icon className="size-5 sm:size-6" />
-      </div>
-      <div className="min-w-0 flex-1">
-        <span
-          className={cn(
-            "inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-medium",
-            eyebrowChip,
-          )}
-        >
-          {eyebrow}
-        </span>
-        <p className="font-heading mt-2 text-lg font-semibold leading-snug tracking-tight text-foreground sm:text-xl">
+      <div className="min-w-0">
+        <p className="text-xs font-medium text-muted-foreground">{eyebrow}</p>
+        <p className="mt-1 truncate text-base font-semibold tracking-tight text-foreground sm:text-lg">
           {title}
         </p>
         {detail ? (
-          <p className="mt-2 line-clamp-2 text-sm leading-relaxed text-muted-foreground">
+          <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">
             {detail}
           </p>
         ) : null}
-        <div
-          className={cn(
-            "mt-4 inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-sm font-semibold transition-opacity duration-200 group-hover:opacity-90",
-            ctaTone,
-          )}
-        >
-          {cta}
-          <ArrowRight className="size-3.5" />
-        </div>
       </div>
+      <span className="inline-flex h-10 shrink-0 items-center justify-center gap-1.5 rounded-full bg-foreground px-4 text-sm font-semibold text-background transition-opacity group-hover:opacity-90">
+        {cta}
+        <ArrowRight className="size-3.5" aria-hidden />
+      </span>
     </Link>
   );
 }
@@ -328,57 +273,59 @@ export function WorkspaceOperationalDashboard({
             tone={primarySpec.tone}
             navigationTarget={primarySpec.navigationTarget}
           />
-          <div className="flex flex-wrap gap-2" aria-label="Snarveier">
+          <dl className="flex flex-wrap gap-x-8 gap-y-2 border-y border-border/50 py-3 text-sm">
+            <div className="flex items-baseline gap-2">
+              <dt className="text-muted-foreground">Uten ROS</dt>
+              <dd className="font-semibold tabular-nums text-foreground">
+                {withoutRosLinkCount}
+              </dd>
+            </div>
+            <div className="flex items-baseline gap-2">
+              <dt className="text-muted-foreground">Oppfølging</dt>
+              <dd className="font-semibold tabular-nums text-foreground">
+                {followUpCount}
+              </dd>
+            </div>
+            <div className="flex items-baseline gap-2">
+              <dt className="text-muted-foreground">I prioritering</dt>
+              <dd className="font-semibold tabular-nums text-foreground">
+                {priorityTop.length}
+              </dd>
+            </div>
+          </dl>
+          <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm" aria-label="Snarveier">
             {primarySpec.key !== "ros" && withoutRosLinkCount > 0 && rosTarget ? (
-              <ShortcutChip
+              <Link
                 href={`/w/${wid}?kobleRos=1&assessmentId=${rosTarget.assessmentId}`}
-                icon={ShieldPlus}
-                tone="warning"
-                label={`Uten ROS (${withoutRosLinkCount})`}
-              />
+                className="font-medium text-muted-foreground transition-colors hover:text-foreground"
+              >
+                Koble ROS
+              </Link>
             ) : null}
             {primarySpec.key !== "followup" && followUpCount > 0 ? (
-              <ShortcutChip
+              <Link
                 href={
                   followUpRow
                     ? `/w/${wid}/a/${followUpRow.assessmentId}`
                     : `/w/${wid}/vurderinger`
                 }
-                icon={PlayCircle}
-                tone="action"
-                label={`Oppfølging (${followUpCount})`}
-              />
+                className="font-medium text-muted-foreground transition-colors hover:text-foreground"
+              >
+                Oppfølging
+              </Link>
             ) : null}
-            <ShortcutChip
-              href={`/w/${wid}/vurderinger`}
-              icon={ClipboardList}
-              label="Alle vurderinger"
-            />
-            <ShortcutChip
+            <Link
               href={`/w/${wid}/vurderinger?fane=prosesser`}
-              icon={Workflow}
-              label="Prosesser"
-            />
-          </div>
-          <div className="grid gap-2 rounded-2xl border border-border/50 bg-card p-3 sm:grid-cols-3">
-            <div className="rounded-xl border border-border/50 bg-muted/20 px-3 py-2">
-              <p className="text-[11px] text-muted-foreground">Uten ROS</p>
-              <p className="text-base font-semibold tabular-nums text-foreground">
-                {withoutRosLinkCount}
-              </p>
-            </div>
-            <div className="rounded-xl border border-border/50 bg-muted/20 px-3 py-2">
-              <p className="text-[11px] text-muted-foreground">Oppfølging</p>
-              <p className="text-base font-semibold tabular-nums text-foreground">
-                {followUpCount}
-              </p>
-            </div>
-            <div className="rounded-xl border border-border/50 bg-muted/20 px-3 py-2">
-              <p className="text-[11px] text-muted-foreground">Totalt i prioritering</p>
-              <p className="text-base font-semibold tabular-nums text-foreground">
-                {priorityTop.length}
-              </p>
-            </div>
+              className="font-medium text-muted-foreground transition-colors hover:text-foreground"
+            >
+              Prosesser
+            </Link>
+            <Link
+              href={`/w/${wid}/ros`}
+              className="font-medium text-muted-foreground transition-colors hover:text-foreground"
+            >
+              ROS
+            </Link>
           </div>
         </section>
       ) : null}
@@ -478,8 +425,8 @@ export function WorkspaceOperationalDashboard({
             {list.length === 0 ? (
               <EmptyState wid={wid} />
             ) : (
-              <div className="overflow-hidden rounded-2xl bg-card shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.06]">
-                <div className="text-muted-foreground hidden grid-cols-[minmax(0,2fr)_9rem_8rem_5.5rem_2.5rem] items-center gap-3 border-b border-border/50 bg-muted/20 px-5 py-2 text-[11px] font-medium sm:grid">
+              <div className="overflow-hidden rounded-2xl border border-border/50 bg-card">
+                <div className="text-muted-foreground hidden grid-cols-[minmax(0,2fr)_9rem_8rem_5.5rem_2.5rem] items-center gap-3 border-b border-border/50 px-5 py-2 text-[11px] font-medium sm:grid">
                   <span>Vurdering</span>
                   <span>Status</span>
                   <span>Sist oppdatert</span>
@@ -504,69 +451,27 @@ export function WorkspaceOperationalDashboard({
 
 function EmptyState({ wid }: { wid: string }) {
   return (
-    <div className="rounded-2xl border border-border/50 bg-card px-4 py-10 text-center">
-      <div className="mx-auto flex size-10 items-center justify-center rounded-full bg-muted text-muted-foreground">
-        <ClipboardList className="size-5" aria-hidden />
-      </div>
-      <p className="mt-3 text-sm font-medium text-foreground">
-        Ingen vurderinger ennå
-      </p>
-      <p className="text-muted-foreground mt-1 text-xs">
+    <div className="rounded-2xl border border-dashed border-border/60 px-6 py-10 text-center">
+      <p className="text-sm font-medium text-foreground">Ingen vurderinger ennå</p>
+      <p className="mt-1 text-sm text-muted-foreground">
         Start fra en prosess eller opprett en ny vurdering.
       </p>
       <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
         <Link
           href={`/w/${wid}/vurderinger`}
-          className="inline-flex items-center gap-1.5 rounded-full bg-foreground px-4 py-2 text-sm font-semibold text-background shadow-sm transition-all hover:shadow-md hover:opacity-90"
+          className="inline-flex h-10 items-center gap-1.5 rounded-full bg-foreground px-4 text-sm font-semibold text-background"
         >
-          Start ny vurdering
-          <ArrowRight className="size-3.5" />
+          Start vurdering
+          <ArrowRight className="size-3.5" aria-hidden />
         </Link>
         <Link
           href={`/w/${wid}/vurderinger?fane=prosesser`}
-          className="inline-flex items-center gap-1.5 rounded-full border border-border/60 bg-card/60 px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-card"
+          className="inline-flex h-10 items-center gap-1.5 rounded-full border border-border/60 px-4 text-sm font-medium text-foreground transition-colors hover:bg-muted/40"
         >
           Se prosesser
         </Link>
       </div>
     </div>
-  );
-}
-
-function ShortcutChip({
-  href,
-  icon: Icon,
-  label,
-  tone = "neutral",
-}: {
-  href: string;
-  icon: ComponentType<{ className?: string }>;
-  label: string;
-  tone?: "neutral" | "warning" | "action";
-}) {
-  const toneClass =
-    tone === "warning"
-      ? "border-border/60 bg-card/60 text-foreground hover:bg-card hover:border-border"
-      : tone === "action"
-        ? "border-primary/25 bg-primary/[0.08] text-foreground hover:bg-primary/[0.12] hover:border-primary/35"
-        : "border-border/60 bg-card/60 text-muted-foreground hover:bg-card hover:text-foreground hover:border-border backdrop-blur-sm";
-  const iconClass =
-    tone === "warning"
-      ? "text-muted-foreground group-hover:text-foreground"
-      : tone === "action"
-        ? "text-primary"
-        : "text-muted-foreground/80 group-hover:text-foreground";
-  return (
-    <Link
-      href={href}
-      className={cn(
-        "group inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium shadow-xs transition-all duration-200 hover:shadow-sm",
-        toneClass,
-      )}
-    >
-      <Icon className={cn("size-3.5 transition-colors", iconClass)} aria-hidden />
-      {label}
-    </Link>
   );
 }
 

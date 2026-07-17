@@ -57,7 +57,7 @@ import { ASSESSMENT_COLLAB_ROLE_LABEL_NB } from "@/lib/role-labels-nb";
 import { clampLikert5, computeAllResults } from "@/lib/rpa-assessment/scoring";
 import { useMutation, useQuery } from "convex/react";
 import useEmblaCarousel from "embla-carousel-react";
-import { ChevronLeft, ChevronRight, Share2, Trash2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -1013,10 +1013,8 @@ export function AssessmentWizard({ assessmentId }: Props) {
         </Alert>
       ) : null}
 
-      {/* Hero: tittel + lett meta-strimmel i ett luftig kort.
-          Subtilt gradient-bakgrunn for å gi siden et moderne anker øverst,
-          uten ekstra knapper eller badges som drukner det viktigste. */}
-      <div className="rounded-3xl border border-border/40 bg-card p-5 shadow-sm sm:p-6">
+      {/* Flat header: tittel + én stille meta-linje — ingen hero-kort. */}
+      <header className="space-y-1.5">
         {canEdit ? (
           <Input
             id="assessment-display-title"
@@ -1034,36 +1032,21 @@ export function AssessmentWizard({ assessmentId }: Props) {
           </h1>
         )}
         <p
-          className="text-muted-foreground mt-2 flex flex-wrap items-center gap-1.5 text-[11px] sm:text-xs"
+          className="text-sm text-muted-foreground"
           title="Endringer lagres automatisk."
         >
-          <span className="inline-flex items-center gap-1 rounded-full bg-card/70 px-2 py-0.5 ring-1 ring-border/40">
-            {canEdit ? "Lagrer automatisk" : "Kun visning"}
-          </span>
-          {access?.shareWithWorkspace ? (
-            <span className="inline-flex items-center gap-1 rounded-full bg-card/70 px-2 py-0.5 ring-1 ring-border/40">
-              <Share2 className="size-3" aria-hidden /> Delt
-            </span>
-          ) : null}
-          {access?.collaboratorRole ? (
-            <span className="inline-flex items-center gap-1 rounded-full bg-card/70 px-2 py-0.5 ring-1 ring-border/40">
-              {ASSESSMENT_COLLAB_ROLE_LABEL_NB[access.collaboratorRole] ??
-                access.collaboratorRole}
-            </span>
-          ) : null}
+          {[
+            canEdit ? "Lagrer automatisk" : "Kun visning",
+            access?.shareWithWorkspace ? "Delt med arbeidsområdet" : null,
+            access?.collaboratorRole
+              ? (ASSESSMENT_COLLAB_ROLE_LABEL_NB[access.collaboratorRole] ??
+                access.collaboratorRole)
+              : null,
+          ]
+            .filter(Boolean)
+            .join(" · ")}
         </p>
-        <div className="mt-3 flex flex-wrap gap-2" aria-label="Rollehjelp">
-          <span className="rounded-full border border-border/50 bg-card px-3 py-1 text-xs text-muted-foreground">
-            Koordinator - Følg steg og status
-          </span>
-          <span className="rounded-full border border-border/50 bg-card px-3 py-1 text-xs text-muted-foreground">
-            Prosessdesigner - Kvalitetssikre prosessdata
-          </span>
-          <span className="rounded-full border border-border/50 bg-card px-3 py-1 text-xs text-muted-foreground">
-            Utvikler - Fortsett via ROS-lenken
-          </span>
-        </div>
-      </div>
+      </header>
 
       {rosContext !== undefined ? (
         <AssessmentObjectHeader
@@ -1171,30 +1154,38 @@ export function AssessmentWizard({ assessmentId }: Props) {
                   aria-current={slide === i ? "step" : undefined}
                   onClick={() => emblaApi?.scrollTo(i)}
                   className={cn(
-                    "flex w-full min-w-0 items-center gap-1.5 rounded-full px-2.5 py-1.5 text-left transition sm:min-w-0 sm:flex-1 sm:basis-0",
+                    "flex w-full min-w-0 items-center gap-1.5 rounded-full px-2.5 py-1.5 text-left transition-colors sm:min-w-0 sm:flex-1 sm:basis-0",
                     i === slide
-                      ? "bg-primary/12 ring-2 ring-primary/30 shadow-sm"
-                      : i < slide
-                        ? "bg-primary/[0.06] hover:bg-primary/12"
-                        : "bg-muted/40 hover:bg-muted/70",
+                      ? "bg-foreground"
+                      : "hover:bg-muted/60",
                   )}
                 >
                   <span
                     className={cn(
                       "flex size-6 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold tabular-nums sm:size-7 sm:text-xs",
                       i === slide
-                        ? "bg-primary text-primary-foreground shadow-sm"
+                        ? "bg-background/20 text-background"
                         : i < slide
-                          ? "bg-primary/25 text-primary"
-                          : "bg-card text-muted-foreground ring-1 ring-border/50",
+                          ? "bg-foreground/10 text-foreground"
+                          : "bg-muted text-muted-foreground",
                     )}
                   >
                     {i + 1}
                   </span>
-                  <span className="text-foreground min-w-0 text-xs font-medium leading-snug sm:hidden">
+                  <span
+                    className={cn(
+                      "min-w-0 text-xs font-medium leading-snug sm:hidden",
+                      i === slide ? "text-background" : "text-foreground",
+                    )}
+                  >
                     {compactStepLabel(label)}
                   </span>
-                  <span className="text-foreground hidden min-w-0 text-xs font-medium leading-snug sm:inline">
+                  <span
+                    className={cn(
+                      "hidden min-w-0 text-xs font-medium leading-snug sm:inline",
+                      i === slide ? "text-background" : "text-foreground",
+                    )}
+                  >
                     {label}
                   </span>
                 </button>
@@ -2005,8 +1996,7 @@ export function AssessmentWizard({ assessmentId }: Props) {
           {slide >= stepLabels.length - 1 ? (
             <Button
               type="button"
-              className="gap-1.5 rounded-xl px-5 shadow-sm"
-              size="sm"
+              className="h-10 gap-1.5 rounded-full bg-foreground px-5 text-sm font-semibold text-background transition-opacity hover:opacity-90"
               disabled={leavingBusy}
               onClick={() => void saveDraftAndMaybeOpenLeaveDialog()}
             >
@@ -2016,8 +2006,7 @@ export function AssessmentWizard({ assessmentId }: Props) {
           ) : (
             <Button
               type="button"
-              className="gap-1.5 rounded-xl px-5 shadow-sm"
-              size="sm"
+              className="h-10 gap-1.5 rounded-full bg-foreground px-5 text-sm font-semibold text-background transition-opacity hover:opacity-90"
               onClick={() => emblaApi?.scrollNext()}
             >
               Neste

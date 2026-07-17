@@ -1,7 +1,6 @@
 "use client";
 
 import { PipelineStatusSelect } from "@/components/assessment/pipeline-status-select";
-import { Badge } from "@/components/ui/badge";
 import type { Id } from "@/convex/_generated/dataModel";
 import {
   PIPELINE_STATUS_LABELS,
@@ -11,9 +10,7 @@ import { cn } from "@/lib/utils";
 import {
   AlertCircle,
   ExternalLink,
-  FileText,
   GitBranch,
-  Link2,
   Shield,
 } from "lucide-react";
 import Link from "next/link";
@@ -73,80 +70,68 @@ export function AssessmentObjectHeader({
   return (
     <section
       aria-label="Vurderingens kontekst"
-      className={cn(
-        "rounded-2xl bg-card/60 px-3 py-2.5 ring-1 ring-border/40 sm:px-4",
-        className,
-      )}
+      className={cn("space-y-2 border-y border-border/50 py-3", className)}
     >
-      <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
         {canEditPipeline && assessmentId ? (
           <PipelineStatusSelect
             assessmentId={assessmentId}
             value={pipelineStatus}
           />
         ) : (
-          <Badge
-            variant="secondary"
-            className="rounded-full font-medium"
-          >
+          <span className="font-medium text-foreground">
             {PIPELINE_STATUS_LABELS[pipelineStatus]}
-          </Badge>
+          </span>
         )}
-        {hasRosAnalysisLink ? (
-          <Badge
-            variant="outline"
-            className="gap-1 rounded-full border-emerald-600/30 bg-emerald-500/[0.08] text-emerald-900 dark:text-emerald-100"
-          >
-            <Shield className="size-3" aria-hidden />
-            ROS koblet
-          </Badge>
-        ) : (
-          <Badge
-            variant="outline"
-            className="gap-1 rounded-full border-amber-500/40 bg-amber-500/[0.08] text-amber-950 dark:text-amber-100"
-          >
-            <AlertCircle className="size-3" aria-hidden />
-            ROS mangler
-          </Badge>
-        )}
+        <span
+          className={cn(
+            "inline-flex items-center gap-1.5",
+            hasRosAnalysisLink ? "text-muted-foreground" : "text-foreground",
+          )}
+        >
+          {hasRosAnalysisLink ? (
+            <Shield className="size-3.5" aria-hidden />
+          ) : (
+            <AlertCircle className="size-3.5" aria-hidden />
+          )}
+          {hasRosAnalysisLink ? "ROS koblet" : "ROS mangler"}
+        </span>
         {evaluationContext?.kind === "candidate" && githubIssueHref ? (
           <a
             href={githubIssueHref}
             target="_blank"
             rel="noopener noreferrer"
-            className="text-muted-foreground hover:bg-muted hover:text-foreground inline-flex items-center gap-1 rounded-full bg-muted/60 px-2 py-0.5 text-[11px] font-medium transition-colors"
+            className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 font-medium underline-offset-4 transition-colors hover:underline"
             title="Åpne GitHub-saken"
           >
-            <GitBranch className="size-3" aria-hidden />
+            <GitBranch className="size-3.5" aria-hidden />
             #{evaluationContext.githubIssueNumber}
             <ExternalLink className="size-3 opacity-70" aria-hidden />
           </a>
         ) : null}
 
-        <div className="ml-auto flex flex-wrap items-center gap-1.5 text-xs">
+        <div className="ml-auto flex flex-wrap items-center gap-x-4 gap-y-2">
           {processDesignHref ? (
             <Link
               href={processDesignHref}
-              className="text-muted-foreground hover:bg-muted hover:text-foreground inline-flex items-center gap-1 rounded-full px-2 py-1 font-medium transition-colors"
+              className="text-muted-foreground hover:text-foreground font-medium underline-offset-4 transition-colors hover:underline"
             >
-              <FileText className="size-3.5" aria-hidden />
               Prosessdesign
             </Link>
           ) : null}
           <Link
             href={rosHref}
-            className="text-muted-foreground hover:bg-muted hover:text-foreground inline-flex items-center gap-1 rounded-full px-2 py-1 font-medium transition-colors"
+            className="font-medium text-foreground underline-offset-4 hover:underline"
           >
-            <Link2 className="size-3.5" aria-hidden />
             {hasRosAnalysisLink ? "Åpne ROS" : "Gå til ROS"}
           </Link>
         </div>
       </div>
 
       {evaluationContext?.kind === "loading" ? (
-        <div className="bg-muted/40 mt-2 h-4 w-64 max-w-full animate-pulse rounded-full" />
+        <div className="bg-muted/40 h-4 w-64 max-w-full animate-pulse rounded-full" />
       ) : evaluationContext?.kind === "candidate" ? (
-        <p className="text-foreground mt-1.5 truncate text-[13px] leading-snug">
+        <p className="text-foreground truncate text-[13px] leading-snug">
           <span className="text-muted-foreground font-mono text-[11px]">
             {evaluationContext.code}
           </span>{" "}
@@ -154,13 +139,13 @@ export function AssessmentObjectHeader({
         </p>
       ) : evaluationContext?.kind === "draft_only" ? (
         <p
-          className="text-foreground mt-1.5 truncate text-[13px] leading-snug"
+          className="text-foreground truncate text-[13px] leading-snug"
           title="Koble til prosess fra registeret under steget «Prosess» (valgfritt)."
         >
           <span className="font-medium">{evaluationContext.processName}</span>
         </p>
       ) : evaluationContext?.kind === "unset" ? (
-        <p className="text-muted-foreground mt-1.5 text-[11px]">
+        <p className="text-muted-foreground text-xs">
           Ingen prosess valgt — velg under steget «Prosess».
         </p>
       ) : null}

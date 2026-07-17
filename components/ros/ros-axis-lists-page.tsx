@@ -1,13 +1,6 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -64,110 +57,132 @@ export function RosAxisListsPage({ workspaceId }: { workspaceId: Id<"workspaces"
   );
 
   return (
-    <div className="mx-auto w-full max-w-3xl space-y-6 pb-10">
-      <header className="border-border/60 border-b pb-3">
+    <div className="mx-auto w-full max-w-3xl space-y-8 pb-10">
+      <header className="space-y-1">
         <Link
           href={`/w/${workspaceId}/ros`}
-          className="text-muted-foreground hover:text-foreground mb-2 inline-flex text-sm"
+          className="text-muted-foreground hover:text-foreground mb-1 inline-flex text-sm transition-colors"
         >
-          ← Tilbake til ROS
+          ← ROS
         </Link>
-        <h1 className="font-heading text-lg font-semibold tracking-tight text-foreground sm:text-xl">
-          ROS-akser og etiketter
+        <h1 className="font-heading text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
+          Akser og etiketter
         </h1>
+        <p className="text-sm text-muted-foreground">
+          Skalaene som brukes i risikomatrisen.
+        </p>
       </header>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Ny liste</CardTitle>
-          <CardDescription>
-            Navn er påkrevd. Kode genereres automatisk (kan endres under redigering).
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={(e) => void onCreate(e)} className="flex flex-col gap-3">
-            <div className="space-y-2">
-              <Label htmlFor="axis-new-name">Navn</Label>
-              <Input
-                id="axis-new-name"
-                value={newName}
-                onChange={(e) => setNewName(e.target.value)}
-                placeholder="F.eks. Konsekvens (helse)"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="axis-new-desc">Beskrivelse (valgfritt)</Label>
-              <Textarea
-                id="axis-new-desc"
-                value={newDesc}
-                onChange={(e) => setNewDesc(e.target.value)}
-                rows={2}
-                className="min-h-0"
-              />
-            </div>
-            <Button type="submit" disabled={busy || !newName.trim()}>
-              <Plus className="mr-2 size-4" />
-              Opprett liste
-            </Button>
-          </form>
-        </CardContent>
-      </Card>
+      <details className="group overflow-hidden rounded-2xl border border-border/50 bg-card">
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3.5 text-sm font-medium transition-colors hover:bg-muted/30 [&::-webkit-details-marker]:hidden sm:px-5">
+          <span className="inline-flex items-center gap-2">
+            <Plus className="size-4 shrink-0 text-muted-foreground" aria-hidden />
+            <span className="font-semibold text-foreground">Ny liste</span>
+          </span>
+          <ChevronDown className="size-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180" aria-hidden />
+        </summary>
+        <form
+          onSubmit={(e) => void onCreate(e)}
+          className="flex flex-col gap-3 border-t border-border/40 px-4 py-4 sm:px-5"
+        >
+          <div className="space-y-2">
+            <Label htmlFor="axis-new-name">Navn</Label>
+            <Input
+              id="axis-new-name"
+              value={newName}
+              onChange={(e) => setNewName(e.target.value)}
+              placeholder="F.eks. Konsekvens (helse)"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="axis-new-desc">Beskrivelse (valgfritt)</Label>
+            <Textarea
+              id="axis-new-desc"
+              value={newDesc}
+              onChange={(e) => setNewDesc(e.target.value)}
+              rows={2}
+              className="min-h-0"
+            />
+          </div>
+          <Button
+            type="submit"
+            className="self-start rounded-full bg-foreground px-5 text-sm font-semibold text-background transition-opacity hover:opacity-90"
+            disabled={busy || !newName.trim()}
+          >
+            Opprett liste
+          </Button>
+        </form>
+      </details>
 
       {lists === undefined ? (
         <p className="text-muted-foreground text-sm">Henter lister …</p>
       ) : lists.length === 0 ? (
-        <p className="text-muted-foreground text-sm">Ingen lister ennå.</p>
+        <div className="rounded-2xl border border-dashed border-border/60 px-6 py-12 text-center">
+          <p className="text-sm text-muted-foreground">
+            Ingen lister ennå. Opprett den første over.
+          </p>
+        </div>
       ) : (
-        <ul className="space-y-3">
+        <ul className="divide-y divide-border/40 overflow-hidden rounded-2xl border border-border/50 bg-card">
           {lists.map((L) => (
             <li key={L._id}>
-              <Card>
-                <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-2 space-y-0">
-                  <div>
-                    <CardTitle className="text-base">{L.name}</CardTitle>
-                    <CardDescription className="font-mono text-xs">
-                      {L.code}
-                      {L.description ? ` · ${L.description}` : ""}
-                    </CardDescription>
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      onClick={() =>
-                        setOpenId((id) => (id === L._id ? null : L._id))
-                      }
-                    >
-                      {openId === L._id ? "Skjul punkter" : "Vis punkter"}
-                    </Button>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="ghost"
-                      className="text-destructive"
-                      onClick={() => {
-                        if (
-                          typeof window !== "undefined" &&
-                          window.confirm(
-                            `Slette listen «${L.name}» og alle punkter?`,
-                          )
-                        ) {
-                          void removeList({ listId: L._id });
-                          if (openId === L._id) setOpenId(null);
-                        }
-                      }}
-                    >
-                      <Trash2 className="size-4" />
-                    </Button>
-                  </div>
-                </CardHeader>
-                {openId === L._id ? (
-                  <CardContent className="border-t pt-4">
-                    <AxisListDetail listId={L._id} />
-                  </CardContent>
-                ) : null}
-              </Card>
+              <div
+                role="button"
+                tabIndex={0}
+                className="flex cursor-pointer items-center gap-4 px-4 py-4 transition-colors hover:bg-muted/25 sm:px-5"
+                onClick={() => setOpenId((id) => (id === L._id ? null : L._id))}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    setOpenId((id) => (id === L._id ? null : L._id));
+                  }
+                }}
+                aria-expanded={openId === L._id}
+              >
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-[15px] font-medium tracking-tight text-foreground">
+                    {L.name}
+                  </p>
+                  <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                    <span className="font-mono">{L.code}</span>
+                    {L.description ? ` · ${L.description}` : ""}
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="size-9 shrink-0 rounded-full text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                  aria-label={`Slett listen ${L.name}`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (
+                      typeof window !== "undefined" &&
+                      window.confirm(
+                        `Slette listen «${L.name}» og alle punkter?`,
+                      )
+                    ) {
+                      void removeList({ listId: L._id });
+                      if (openId === L._id) setOpenId(null);
+                    }
+                  }}
+                >
+                  <Trash2 className="size-4" />
+                </Button>
+                <ChevronDown
+                  className={
+                    openId === L._id
+                      ? "size-4 shrink-0 rotate-180 text-foreground transition-transform"
+                      : "size-4 shrink-0 text-muted-foreground/40 transition-transform"
+                  }
+                  aria-hidden
+                />
+              </div>
+              {openId === L._id ? (
+                <div className="border-t border-border/40 bg-muted/[0.06] px-4 py-4 sm:px-5">
+                  <AxisListDetail listId={L._id} />
+                </div>
+              ) : null}
             </li>
           ))}
         </ul>
@@ -312,7 +327,7 @@ function AxisListDetail({ listId }: { listId: Id<"rosAxisLists"> }) {
         </Button>
       </form>
 
-      <ul className="space-y-2">
+      <ul className="divide-y divide-border/40 overflow-hidden rounded-xl border border-border/40 bg-card">
         {items.map((it, idx) => (
           <AxisListItemRow
             key={it._id}
@@ -360,7 +375,7 @@ function AxisListItemRow({
   const [saving, setSaving] = useState(false);
 
   return (
-    <li className="flex flex-col gap-2 rounded-lg border bg-muted/10 p-3 sm:flex-row sm:items-start">
+    <li className="flex flex-col gap-2 p-3 sm:flex-row sm:items-start">
       <div className="flex min-w-0 flex-1 flex-col gap-2">
         <Input
           value={label}

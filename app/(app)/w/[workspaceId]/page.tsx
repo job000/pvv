@@ -11,6 +11,7 @@ import { WorkspaceOverviewViewSettings } from "@/components/workspace/workspace-
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import { useQuery } from "convex/react";
+import { ArrowUpRight } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { Suspense, useMemo } from "react";
@@ -36,7 +37,12 @@ export default function WorkspaceOverviewPage() {
   }, [viewPrefs]);
 
   if (workspace === undefined || membership === undefined) {
-    return <ProductLoadingBlock label="Laster arbeidsområde ..." className="min-h-[30vh]" />;
+    return (
+      <ProductLoadingBlock
+        label="Laster arbeidsområde …"
+        className="min-h-[30vh]"
+      />
+    );
   }
 
   if (workspace === null) {
@@ -53,41 +59,23 @@ export default function WorkspaceOverviewPage() {
       <ProductPageHeader
         title={workspace.name}
         description={
-          workspace.notes ? (
-            <span className="text-muted-foreground text-sm leading-snug">
-              {workspace.notes}
-            </span>
-          ) : null
+          workspace.notes?.trim()
+            ? workspace.notes
+            : "Fortsett der du slapp — vurderinger, ROS og prosesser."
         }
-        actions={<WorkspaceOverviewViewSettings workspaceId={workspaceId} />}
+        actions={
+          <div className="flex flex-wrap items-center gap-2">
+            <WorkspaceOverviewViewSettings workspaceId={workspaceId} />
+            <Link
+              href={`/w/${workspaceId}/vurderinger`}
+              className="inline-flex h-11 items-center justify-center gap-2 rounded-full bg-foreground px-5 text-sm font-semibold text-background transition-opacity hover:opacity-90"
+            >
+              Til vurderinger
+              <ArrowUpRight className="size-4" aria-hidden />
+            </Link>
+          </div>
+        }
       />
-      <section className="rounded-2xl border border-border/50 bg-card p-3.5">
-        <p className="text-sm font-medium text-foreground">Start her</p>
-        <p className="mt-1 text-xs text-muted-foreground">
-          Samme funksjoner som før, men enklere inngang: velg rolle og gå rett
-          til riktig arbeidsflate.
-        </p>
-        <div className="mt-2.5 flex flex-wrap gap-2 text-xs">
-          <Link
-            href={`/w/${workspaceId}/vurderinger`}
-            className="rounded-full border border-border/50 px-2.5 py-1 text-muted-foreground hover:text-foreground"
-          >
-            Koordinator
-          </Link>
-          <Link
-            href={`/w/${workspaceId}/vurderinger?fane=prosesser`}
-            className="rounded-full border border-border/50 px-2.5 py-1 text-muted-foreground hover:text-foreground"
-          >
-            Prosessdesigner
-          </Link>
-          <Link
-            href={`/w/${workspaceId}/ros`}
-            className="rounded-full border border-border/50 px-2.5 py-1 text-muted-foreground hover:text-foreground"
-          >
-            Utvikler
-          </Link>
-        </div>
-      </section>
 
       <WorkspaceOperationalDashboard
         workspaceId={workspaceId}

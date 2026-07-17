@@ -9,11 +9,14 @@ export default function WorkspaceSettingsPage() {
   const workspaceId = params.workspaceId as Id<"workspaces">;
 
   return (
-    <div className="space-y-4">
-      <header className="border-border/60 border-b pb-3">
-        <h1 className="font-heading text-lg font-semibold tracking-tight text-foreground sm:text-xl">
+    <div className="mx-auto max-w-5xl space-y-8 pb-12">
+      <header className="space-y-1">
+        <h1 className="font-heading text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
           Innstillinger
         </h1>
+        <p className="text-sm text-muted-foreground">
+          Navn, tilgang og integrasjoner for arbeidsområdet.
+        </p>
       </header>
       <WorkspaceSettingsPanel workspaceId={workspaceId} />
     </div>

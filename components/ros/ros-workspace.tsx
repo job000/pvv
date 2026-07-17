@@ -48,9 +48,6 @@ import {
   type TemplateBuilderMode,
 } from "@/components/ros/ros-template-builder";
 import {
-  BarChart3,
-  BookMarked,
-  ClipboardList,
   Grid3x3,
   HelpCircle,
   History,
@@ -85,10 +82,10 @@ function formatRelative(ts: number | undefined): string {
 type Tab = "maler" | "analyser" | "oversikt" | "bibliotek";
 
 const FLOW_TABS = [
-  { id: "analyser" as const, label: "Arbeid", icon: ClipboardList },
-  { id: "maler" as const, label: "Maler", icon: Grid3x3 },
-  { id: "oversikt" as const, label: "Status", icon: BarChart3 },
-  { id: "bibliotek" as const, label: "Støtte", icon: BookMarked },
+  { id: "analyser" as const, label: "Arbeid" },
+  { id: "maler" as const, label: "Maler" },
+  { id: "oversikt" as const, label: "Status" },
+  { id: "bibliotek" as const, label: "Støtte" },
 ] as const;
 
 function RosFlowNav({
@@ -102,13 +99,12 @@ function RosFlowNav({
 }) {
   return (
     <nav
-      className="relative -mx-1 flex max-w-full flex-nowrap items-stretch gap-1 overflow-x-auto rounded-2xl border border-border/50 bg-card/70 p-1 shadow-sm [scrollbar-width:none] sm:mx-0 sm:px-1 [&::-webkit-scrollbar]:hidden"
+      className="inline-flex max-w-full flex-nowrap items-center gap-1 overflow-x-auto rounded-full border border-border/50 bg-background p-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
       role="tablist"
       aria-label="ROS-faner"
     >
       {FLOW_TABS.map((s) => {
         const active = tab === s.id;
-        const Icon = s.icon;
         const count =
           s.id === "maler"
             ? counts?.maler
@@ -123,34 +119,24 @@ function RosFlowNav({
             aria-selected={active}
             onClick={() => onTab(s.id)}
             className={cn(
-              "group relative flex shrink-0 items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium transition-colors duration-150",
+              "flex h-10 shrink-0 items-center gap-1.5 rounded-full px-3.5 text-sm font-medium transition-colors sm:h-9",
               active
-                ? "bg-background text-foreground shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.06]"
-                : "text-muted-foreground hover:bg-background/60 hover:text-foreground/80",
+                ? "bg-foreground text-background"
+                : "text-muted-foreground hover:text-foreground",
             )}
           >
-            <Icon
-              className={cn(
-                "size-4 shrink-0 transition-colors",
-                active ? "text-primary" : "text-muted-foreground/70 group-hover:text-foreground/60",
-              )}
-              aria-hidden
-            />
             <span>{s.label}</span>
             {count !== undefined && count > 0 ? (
               <span
                 className={cn(
                   "rounded-full px-1.5 py-0.5 text-[10px] font-semibold tabular-nums leading-none",
                   active
-                    ? "bg-primary/10 text-primary"
+                    ? "bg-background/20 text-background"
                     : "bg-muted text-muted-foreground",
                 )}
               >
                 {count}
               </span>
-            ) : null}
-            {active ? (
-              <span className="bg-primary absolute inset-x-3 bottom-0 h-0.5 rounded-full" />
             ) : null}
           </button>
         );
@@ -593,10 +579,9 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
 
   const templatesList = templates ?? [];
   const analysesList = analyses ?? [];
-  const defaultTemplateLabel =
-    hub?.defaultTemplateId && templatesList.length > 0
-      ? templatesList.find((template) => template._id === hub.defaultTemplateId)?.name ?? null
-      : null;
+
+  const hubGap = hub?.candidatesWithoutRosCount ?? 0;
+  const hubOpenTasks = hub?.openRosTasksCount ?? 0;
 
   return (
     <div className="space-y-6">
@@ -612,17 +597,9 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
         </section>
       ) : tab === "oversikt" ? (
         <section aria-labelledby="ros-dashboard-heading" className="space-y-6">
-          <div className="rounded-2xl border border-border/50 bg-card/50 px-4 py-4 sm:px-5">
-            <h2
-              id="ros-dashboard-heading"
-              className="font-heading text-lg font-semibold tracking-tight text-foreground"
-            >
-              Status
-            </h2>
-            <p className="text-muted-foreground mt-2 text-sm leading-relaxed">
-              Oversikt over analyser, prosessdekning og nøkkeltall — uten startskjema for nye ROS.
-            </p>
-          </div>
+          <h2 id="ros-dashboard-heading" className="sr-only">
+            Status
+          </h2>
           <RosWorkspaceHub
             workspaceId={workspaceId}
             hub={hub}
@@ -634,19 +611,12 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
           <RosDashboardPanel workspaceId={workspaceId} />
         </section>
       ) : tab === "maler" ? (
-        <div className="space-y-6">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <h2 className="font-heading text-lg font-semibold tracking-tight">
-                  ROS-maler
-              </h2>
-              <p className="text-muted-foreground mt-0.5 text-sm">
-                  Lag noen få enkle maler som andre kan bruke når de starter analyser.
-              </p>
-            </div>
+        <div className="space-y-4">
+          <div className="flex items-center justify-between gap-3">
+            <h2 className="sr-only">Maler</h2>
             <Button
               type="button"
-              className="shrink-0 gap-2 rounded-xl"
+              className="ml-auto h-10 shrink-0 gap-1.5 rounded-full"
               onClick={() => openNewTemplateDialog()}
             >
               <Plus className="size-4" aria-hidden />
@@ -655,23 +625,15 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
           </div>
 
           {templatesList.length === 0 ? (
-            <div className="flex flex-col items-center gap-5 rounded-2xl border border-dashed bg-muted/5 py-16 text-center">
-              <div className="bg-primary/10 flex size-16 items-center justify-center rounded-2xl">
-                <Grid3x3 className="text-primary size-8" />
-              </div>
-              <div className="max-w-sm">
-                <p className="text-foreground font-semibold">Ingen maler ennå</p>
-                <p className="text-muted-foreground mt-1.5 text-sm leading-relaxed">
-                  En mal definerer rutenettet for risikovurderingen — velg matrisestørrelse, navngi aksene og definer nivåbetydninger.
-                </p>
-              </div>
+            <div className="rounded-2xl border border-dashed border-border/60 px-6 py-12 text-center">
+              <p className="text-sm text-muted-foreground">Ingen maler</p>
               <Button
                 type="button"
-                className="gap-2 rounded-xl"
+                className="mt-4 h-10 gap-1.5 rounded-full"
                 onClick={() => openNewTemplateDialog()}
               >
                 <Plus className="size-4" aria-hidden />
-                Opprett første mal
+                Ny mal
               </Button>
             </div>
           ) : (
@@ -792,136 +754,109 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
         </div>
       ) : (
         <>
-          {/* Ett startkort med tre tydelige veier:
-              Fra prosess · Fra GitHub · Fra scratch. Erstatter tidligere
-              dobbel-hero og duplikate «Ny analyse»-knapper. */}
           <GithubIssueStartCard workspaceId={workspaceId} variant="ros" />
 
-          <div className="flex flex-wrap items-baseline justify-between gap-2">
-            <div>
-              <h2 className="font-heading text-lg font-semibold tracking-tight">
-                Fortsett tidligere analyser
-              </h2>
-              {analysesList.length > 0 ? (
-                <p className="text-muted-foreground mt-0.5 text-xs tabular-nums">
-                  {filteredSortedAnalyses.length === analysesList.length
-                    ? `${analysesList.length} analyse${analysesList.length === 1 ? "" : "r"}`
-                    : `${filteredSortedAnalyses.length} av ${analysesList.length} vises`}
-                  {defaultTemplateLabel ? (
-                    <span className="ml-2 text-muted-foreground/70">
-                      · standardmal: {defaultTemplateLabel}
-                    </span>
-                  ) : null}
-                </p>
-              ) : null}
-            </div>
-          </div>
+          <div className="space-y-3">
+            <h2 className="sr-only">Analyser</h2>
+            {hubGap > 0 ? (
+              <p className="text-sm text-muted-foreground">
+                <button
+                  type="button"
+                  className="font-medium text-foreground underline-offset-2 hover:underline"
+                  onClick={() => setTab("oversikt")}
+                >
+                  {hubGap} uten ROS
+                </button>
+                {hubOpenTasks > 0 ? ` · ${hubOpenTasks} oppgaver` : null}
+              </p>
+            ) : null}
+
           {analysisOrgFilter ? (
-            <div className="flex flex-wrap items-center gap-2 rounded-xl border border-border/40 bg-card/60 px-3 py-2 text-xs">
-              <span className="text-muted-foreground">
-                Filtrert på enhet:
-                <span className="ml-1 font-medium text-foreground">
-                  {activeAnalysisOrgName ?? "Valgt enhet"}
-                </span>
-              </span>
-              <button
-                type="button"
-                onClick={() => {
-                  setAnalysisOrgFilter("");
-                  const params = new URLSearchParams(searchParams.toString());
-                  params.delete("orgUnit");
-                  const qs = params.toString();
-                  router.replace(
-                    qs
-                      ? `/w/${workspaceId}/ros?${qs}`
-                      : `/w/${workspaceId}/ros`,
-                    { scroll: false },
-                  );
-                }}
-                className="rounded-full border border-border/50 px-2 py-0.5 text-muted-foreground transition-colors hover:text-foreground"
-              >
-                Fjern filter
-              </button>
-            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setAnalysisOrgFilter("");
+                const params = new URLSearchParams(searchParams.toString());
+                params.delete("orgUnit");
+                const qs = params.toString();
+                router.replace(
+                  qs ? `/w/${workspaceId}/ros?${qs}` : `/w/${workspaceId}/ros`,
+                  { scroll: false },
+                );
+              }}
+              className="text-sm text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+            >
+              Fjern enhetsfilter
+              {activeAnalysisOrgName ? ` (${activeAnalysisOrgName})` : ""}
+            </button>
           ) : null}
 
           {analysesList.length > 5 ? (
-            <div className="rounded-2xl border border-border/40 bg-card/40 p-3 shadow-sm sm:p-4">
-              <div className="flex flex-col gap-3">
-                <SearchInput
-                  value={analysisSearch}
-                  onChange={(e) => setAnalysisSearch(e.target.value)}
-                  placeholder="Søk i tittel, prosess eller organisasjon …"
-                  aria-label="Filtrer analyser"
-                />
-                <FilterToolbar>
-                  <NativeSelectField
-                    id="ros-ana-org"
-                    label="Organisasjon"
-                    value={analysisOrgFilter}
-                    onChange={(e) =>
-                      setAnalysisOrgFilter(
-                        e.target.value === "" ? "" : (e.target.value as Id<"orgUnits">),
-                      )
-                    }
-                    aria-label="Filtrer etter organisasjonsenhet"
-                    className="min-w-0 flex-1 sm:min-w-[min(100%,14rem)]"
-                  >
-                    <option value="">Alle enheter</option>
-                    {(orgUnits ?? []).map((u) => (
-                      <option key={u._id} value={u._id}>
-                        {u.name}
-                      </option>
-                    ))}
-                  </NativeSelectField>
-                  <NativeSelectField
-                    id="ros-ana-sort"
-                    label="Sorter"
-                    value={analysisSort}
-                    onChange={(e) => setAnalysisSort(e.target.value as AnalysisSort)}
-                    aria-label="Sorter analyser"
-                    className="min-w-0 sm:w-[min(100%,12rem)]"
-                  >
-                    <option value="updated">Sist oppdatert</option>
-                    <option value="title">Tittel A–Å</option>
-                    <option value="candidate">Prosess</option>
-                  </NativeSelectField>
-                </FilterToolbar>
-              </div>
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+              <SearchInput
+                value={analysisSearch}
+                onChange={(e) => setAnalysisSearch(e.target.value)}
+                placeholder="Søk …"
+                aria-label="Søk analyser"
+                className="h-10 rounded-xl sm:max-w-xs"
+              />
+              <FilterToolbar>
+                <NativeSelectField
+                  id="ros-ana-org"
+                  label="Enhet"
+                  value={analysisOrgFilter}
+                  onChange={(e) =>
+                    setAnalysisOrgFilter(
+                      e.target.value === ""
+                        ? ""
+                        : (e.target.value as Id<"orgUnits">),
+                    )
+                  }
+                  aria-label="Enhet"
+                  className="min-w-0 flex-1 sm:min-w-[min(100%,12rem)]"
+                >
+                  <option value="">Enhet</option>
+                  {(orgUnits ?? []).map((u) => (
+                    <option key={u._id} value={u._id}>
+                      {u.name}
+                    </option>
+                  ))}
+                </NativeSelectField>
+                <NativeSelectField
+                  id="ros-ana-sort"
+                  label="Sorter"
+                  value={analysisSort}
+                  onChange={(e) =>
+                    setAnalysisSort(e.target.value as AnalysisSort)
+                  }
+                  aria-label="Sorter"
+                  className="min-w-0 sm:w-[min(100%,10rem)]"
+                >
+                  <option value="updated">Nyeste</option>
+                  <option value="title">A–Å</option>
+                  <option value="candidate">Prosess</option>
+                </NativeSelectField>
+              </FilterToolbar>
             </div>
           ) : null}
 
           {analysesList.length === 0 ? (
-            <div className="border-border/40 flex flex-col items-center gap-3 rounded-3xl border bg-card px-6 py-10 text-center shadow-sm">
-              <div className="bg-primary/10 ring-border/60 flex size-12 items-center justify-center rounded-2xl ring-1">
-                <ClipboardList className="text-primary size-6" />
-              </div>
-              <div className="max-w-md space-y-1">
-                <p className="text-foreground text-sm font-semibold">
-                  Ingen analyser ennå
-                </p>
-                <p className="text-muted-foreground text-xs leading-relaxed">
-                  Bruk startkortet over for å lage din første ROS — fra
-                  prosess, GitHub-issue eller helt fra scratch.
-                </p>
-              </div>
-            </div>
+            <p className="py-6 text-center text-sm text-muted-foreground">
+              Ingen analyser
+            </p>
           ) : filteredSortedAnalyses.length === 0 ? (
-            <div className="border-border/40 bg-card/40 flex flex-col items-center gap-2 rounded-2xl border border-dashed px-6 py-8 text-center">
-              <Search className="text-muted-foreground/50 size-6" />
-              <p className="text-muted-foreground text-sm">
-                Ingen analyser matcher søket.{" "}
-                <button
-                  type="button"
-                  className="text-primary font-medium underline-offset-4 hover:underline"
-                  onClick={() => setAnalysisSearch("")}
-                >
-                  Nullstill
-                </button>
-              </p>
-            </div>
+            <p className="py-6 text-center text-sm text-muted-foreground">
+              Ingen treff.{" "}
+              <button
+                type="button"
+                className="font-medium text-foreground underline-offset-2 hover:underline"
+                onClick={() => setAnalysisSearch("")}
+              >
+                Nullstill
+              </button>
+            </p>
           ) : (
-            <ul className="bg-card/80 ring-border/40 divide-y divide-border/40 overflow-hidden rounded-2xl shadow-sm ring-1 backdrop-blur-sm">
+            <ul className="divide-y divide-border/40 overflow-hidden rounded-2xl border border-border/50 bg-card">
               {filteredSortedAnalyses.map((a) => {
                 const fromIntake = Boolean(
                   (a as { fromIntake?: boolean }).fromIntake,
@@ -1034,7 +969,7 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
                         type="button"
                         variant="ghost"
                         size="icon"
-                        className="text-muted-foreground/60 hover:bg-destructive/10 hover:text-destructive size-8 shrink-0 rounded-full opacity-0 transition-opacity group-hover/row:opacity-100"
+                        className="size-9 shrink-0 rounded-full text-muted-foreground/60 opacity-100 transition-opacity hover:bg-destructive/10 hover:text-destructive sm:opacity-0 sm:group-hover/row:opacity-100"
                         title="Slett"
                         onClick={(e) => {
                           e.preventDefault();
@@ -1050,38 +985,37 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
               })}
             </ul>
           )}
-
-          {/* Diskret hjelpe-rad — flyttet ned så den ikke konkurrerer med
-              startkortet og analyselisten. */}
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 pt-1 text-xs text-muted-foreground">
-            <span className="inline-flex items-center gap-1.5">
-              <HelpCircle className="size-3.5" aria-hidden />
-              Trenger du hjelp?
-            </span>
-            <button
-              type="button"
-              className="font-medium text-foreground/80 underline-offset-4 hover:text-primary hover:underline"
-              onClick={() => setScaleRefOpen(true)}
-            >
-              Skalareferanse
-            </button>
-            <span aria-hidden>·</span>
-            <button
-              type="button"
-              className="font-medium text-foreground/80 underline-offset-4 hover:text-primary hover:underline"
-              onClick={() => setMethodHelpOpen(true)}
-            >
-              Metode og veiledning
-            </button>
-            <span aria-hidden>·</span>
-            <button
-              type="button"
-              className="font-medium text-foreground/80 underline-offset-4 hover:text-primary hover:underline"
-              onClick={() => setCreateDialogOpen(true)}
-            >
-              Avansert: ny analyse med sektor og enhet
-            </button>
           </div>
+
+          <details className="group text-sm text-muted-foreground">
+            <summary className="flex cursor-pointer list-none items-center gap-1.5 hover:text-foreground [&::-webkit-details-marker]:hidden">
+              <HelpCircle className="size-3.5" aria-hidden />
+              Mer
+            </summary>
+            <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1">
+              <button
+                type="button"
+                className="underline-offset-2 hover:text-foreground hover:underline"
+                onClick={() => setScaleRefOpen(true)}
+              >
+                Skala
+              </button>
+              <button
+                type="button"
+                className="underline-offset-2 hover:text-foreground hover:underline"
+                onClick={() => setMethodHelpOpen(true)}
+              >
+                Metode
+              </button>
+              <button
+                type="button"
+                className="underline-offset-2 hover:text-foreground hover:underline"
+                onClick={() => setCreateDialogOpen(true)}
+              >
+                Avansert opprett
+              </button>
+            </div>
+          </details>
 
           <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
             <DialogContent size="lg" titleId="ros-create-title" descriptionId="ros-create-desc">

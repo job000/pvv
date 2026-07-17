@@ -9,15 +9,15 @@ export default function WorkspaceSharingPage() {
   const workspaceId = params.workspaceId as Id<"workspaces">;
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="font-heading text-lg font-semibold tracking-tight sm:text-xl">
-          Teammedlemmer
+    <div className="mx-auto max-w-5xl space-y-8 pb-12">
+      <header className="space-y-1">
+        <h1 className="font-heading text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
+          Team
         </h1>
-        <p className="text-muted-foreground mt-1 text-sm">
-          Administrer hvem som har tilgang til dette arbeidsområdet.
+        <p className="text-sm text-muted-foreground">
+          Hvem som har tilgang til dette arbeidsområdet.
         </p>
-      </div>
+      </header>
 
       <WorkspaceTeamPanel workspaceId={workspaceId} />
     </div>

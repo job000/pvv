@@ -29,8 +29,6 @@ import {
   Building2,
   ChevronDown,
   ChevronRight,
-  ClipboardList,
-  FileText,
   Hand,
   Maximize2,
   Minimize2,
@@ -2215,7 +2213,7 @@ export function OrgChartPanel({
   }
 
   return (
-    <div className="mx-auto max-w-7xl space-y-6">
+    <div className="space-y-6">
       {canEdit ? (
         <AddRootOrganizationForm
           workspaceId={workspaceId}
@@ -2248,18 +2246,10 @@ export function OrgChartPanel({
       ) : null}
 
       {rows.length > 0 ? (
-        <section className="space-y-3 rounded-2xl border border-border/50 bg-card/70 p-4 shadow-sm sm:p-5">
+        <section className="space-y-3" aria-label="Enhetshub">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <h2 className="text-foreground text-sm font-semibold tracking-tight">
-                Enhetshub
-              </h2>
-              <p className="text-muted-foreground text-xs">
-                Velg enhet og hopp direkte til Prosesser, Vurderinger og ROS.
-              </p>
-            </div>
             <select
-              className="border-input bg-background h-9 w-full rounded-full border px-3 text-xs sm:w-[22rem]"
+              className="border-input bg-background h-11 w-full rounded-full border border-border/50 px-4 text-sm sm:w-[22rem]"
               value={activeOrgUnitId === "" ? rows[0]!._id : activeOrgUnitId}
               onChange={(e) => {
                 const next = e.target.value as Id<"orgUnits">;
@@ -2274,66 +2264,50 @@ export function OrgChartPanel({
                 </option>
               ))}
             </select>
-          </div>
-          {activeOrgUnit ? (
-            <div className="flex flex-wrap gap-2">
-              <span className="rounded-full border border-border/50 bg-muted/40 px-2.5 py-1 text-[11px] text-muted-foreground">
-                {ORG_UNIT_KIND_LABELS[activeOrgUnit.kind]}
-              </span>
-              {activeRollup ? (
-                <>
-                  <span className="rounded-full border border-border/50 bg-muted/40 px-2.5 py-1 text-[11px] text-muted-foreground">
-                    {activeRollup.candidateCount} prosesser
-                  </span>
-                  <span className="rounded-full border border-border/50 bg-muted/40 px-2.5 py-1 text-[11px] text-muted-foreground">
-                    {activeRollup.assessmentCount ?? 0} vurderinger
-                  </span>
-                  <span className="rounded-full border border-border/50 bg-muted/40 px-2.5 py-1 text-[11px] text-muted-foreground">
-                    {activeRollup.analysisCount} ROS
-                  </span>
-                </>
-              ) : null}
-            </div>
-          ) : null}
-          {activeOrgUnit ? (
-            <div className="grid gap-2 sm:grid-cols-3">
-              <Link
-                href={`/w/${workspaceId}/vurderinger?fane=prosesser&orgUnit=${activeOrgUnit._id}`}
-                className="group rounded-xl border border-border/50 bg-card/80 p-3 transition-colors hover:bg-muted/40"
-              >
-                <p className="flex items-center gap-2 text-sm font-medium text-foreground">
-                  <Users className="size-4 text-primary" aria-hidden />
+            {activeOrgUnit ? (
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
+                <Link
+                  href={`/w/${workspaceId}/vurderinger?fane=prosesser&orgUnit=${activeOrgUnit._id}`}
+                  className="font-medium text-muted-foreground underline-offset-4 transition-colors hover:text-foreground hover:underline"
+                >
                   Prosesser
-                </p>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Se prosesser i valgt enhet
-                </p>
-              </Link>
-              <Link
-                href={`/w/${workspaceId}/vurderinger?orgUnit=${activeOrgUnit._id}`}
-                className="group rounded-xl border border-border/50 bg-card/80 p-3 transition-colors hover:bg-muted/40"
-              >
-                <p className="flex items-center gap-2 text-sm font-medium text-foreground">
-                  <ClipboardList className="size-4 text-primary" aria-hidden />
+                </Link>
+                <Link
+                  href={`/w/${workspaceId}/vurderinger?orgUnit=${activeOrgUnit._id}`}
+                  className="font-medium text-muted-foreground underline-offset-4 transition-colors hover:text-foreground hover:underline"
+                >
                   Vurderinger
-                </p>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Se vurderinger for denne enheten
-                </p>
-              </Link>
-              <Link
-                href={`/w/${workspaceId}/ros?fane=analyser&orgUnit=${activeOrgUnit._id}`}
-                className="group rounded-xl border border-border/50 bg-card/80 p-3 transition-colors hover:bg-muted/40"
-              >
-                <p className="flex items-center gap-2 text-sm font-medium text-foreground">
-                  <FileText className="size-4 text-primary" aria-hidden />
+                </Link>
+                <Link
+                  href={`/w/${workspaceId}/ros?fane=analyser&orgUnit=${activeOrgUnit._id}`}
+                  className="font-medium text-muted-foreground underline-offset-4 transition-colors hover:text-foreground hover:underline"
+                >
                   ROS
-                </p>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Se ROS-analyser for denne enheten
-                </p>
-              </Link>
-            </div>
+                </Link>
+              </div>
+            ) : null}
+          </div>
+          {activeOrgUnit && activeRollup ? (
+            <dl className="flex flex-wrap gap-x-8 gap-y-2 border-y border-border/50 py-3.5 text-sm">
+              <div className="flex items-baseline gap-2">
+                <dt className="text-muted-foreground">Prosesser</dt>
+                <dd className="font-semibold tabular-nums text-foreground">
+                  {activeRollup.candidateCount}
+                </dd>
+              </div>
+              <div className="flex items-baseline gap-2">
+                <dt className="text-muted-foreground">Vurderinger</dt>
+                <dd className="font-semibold tabular-nums text-foreground">
+                  {activeRollup.assessmentCount ?? 0}
+                </dd>
+              </div>
+              <div className="flex items-baseline gap-2">
+                <dt className="text-muted-foreground">ROS</dt>
+                <dd className="font-semibold tabular-nums text-foreground">
+                  {activeRollup.analysisCount}
+                </dd>
+              </div>
+            </dl>
           ) : null}
         </section>
       ) : null}

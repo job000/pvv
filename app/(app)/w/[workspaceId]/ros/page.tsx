@@ -2,7 +2,6 @@
 
 import { RosWorkspace } from "@/components/ros/ros-workspace";
 import type { Id } from "@/convex/_generated/dataModel";
-import { Shield } from "lucide-react";
 import { useParams } from "next/navigation";
 import { Suspense } from "react";
 
@@ -11,23 +10,10 @@ function RosPageBody() {
   const workspaceId = params.workspaceId as Id<"workspaces">;
 
   return (
-    <div className="mx-auto w-full max-w-7xl space-y-6 pb-16">
-      <header className="relative overflow-hidden rounded-2xl border border-border/40 bg-card shadow-sm ring-1 ring-black/[0.03] dark:ring-white/[0.05]">
-        <div className="relative flex items-start gap-4 px-5 py-5 sm:px-6 sm:py-6">
-          <div className="bg-primary/10 text-primary flex size-11 shrink-0 items-center justify-center rounded-xl ring-1 ring-border/60">
-            <Shield className="size-6" aria-hidden />
-          </div>
-          <div className="min-w-0">
-            <h1 className="font-heading text-xl font-semibold tracking-tight text-foreground sm:text-2xl">
-              Risiko og sårbarhet
-            </h1>
-            <p className="text-muted-foreground mt-1 max-w-2xl text-sm leading-relaxed">
-              Kartlegg, vurder og behandle risiko. ROS kan brukes alene — kobling
-              til PVV eller prosess er valgfritt.
-            </p>
-          </div>
-        </div>
-      </header>
+    <div className="mx-auto w-full max-w-5xl space-y-6 pb-16">
+      <h1 className="font-heading text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
+        ROS
+      </h1>
       <RosWorkspace workspaceId={workspaceId} />
     </div>
   );
@@ -38,8 +24,8 @@ export default function RosPage() {
     <Suspense
       fallback={
         <div className="flex min-h-[40vh] flex-col items-center justify-center gap-2">
-          <div className="size-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-          <p className="text-muted-foreground text-sm">Laster …</p>
+          <div className="size-8 animate-spin rounded-full border-2 border-foreground border-t-transparent" />
+          <p className="text-sm text-muted-foreground">Laster …</p>
         </div>
       }
     >

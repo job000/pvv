@@ -2041,18 +2041,6 @@ export function RosAnalysisEditor({
     reviewChecklist.pvvChecked &&
     reviewApproverName.trim().length > 0 &&
     reviewDecisionSummary.trim().length > 0;
-  const linkedAssessmentCount = data?.linkedAssessments?.length ?? 0;
-  const linkedPddCount =
-    data?.linkedAssessments?.filter((l) => {
-      const s = l.pddStatus ?? "not_started";
-      return s !== "not_started" && s !== "not_applicable";
-    }).length ?? 0;
-  const linkedPddDoneCount =
-    data?.linkedAssessments?.filter((l) => l.pddStatus === "completed")
-      .length ?? 0;
-  const firstLinkedAssessmentId =
-    data?.linkedAssessments?.[0]?.assessmentId ?? null;
-  const flowOrgUnitId = orgUnitLocal || "";
 
   async function setSelectedTasksStatus(status: "open" | "done") {
     if (selectedTaskIds.length === 0) return;
@@ -2517,7 +2505,7 @@ export function RosAnalysisEditor({
             <ChevronLeft className="size-4" aria-hidden />
           </Link>
           <div className="min-w-0 flex-1">
-            <h1 className="font-heading text-foreground truncate text-base font-semibold leading-tight tracking-tight sm:text-lg">
+            <h1 className="font-heading text-foreground truncate text-lg font-semibold leading-tight tracking-tight sm:text-xl">
               {data.title}
             </h1>
             <div className="text-muted-foreground mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px]">
@@ -2558,7 +2546,7 @@ export function RosAnalysisEditor({
               size="sm"
               onClick={() => void save()}
               disabled={saving}
-              className="h-9 gap-1.5 rounded-full px-4 text-sm font-semibold shadow-sm"
+              className="h-9 gap-1.5 rounded-full bg-foreground px-4 text-sm font-semibold text-background transition-opacity hover:opacity-90"
             >
               {saving ? "Lagrer …" : dirty ? "Lagre" : "Versjon"}
             </Button>
@@ -2613,10 +2601,10 @@ export function RosAnalysisEditor({
                 onClick={() => setRosSection(i)}
                 aria-current={active ? "page" : undefined}
                 className={cn(
-                  "inline-flex shrink-0 items-center gap-1.5 rounded-full px-3.5 py-1.5 text-[13px] font-medium transition-all",
+                  "inline-flex shrink-0 items-center gap-1.5 rounded-full px-3.5 py-1.5 text-[13px] font-medium transition-colors",
                   active
-                    ? "bg-primary text-primary-foreground shadow-sm"
-                    : "text-muted-foreground hover:text-foreground bg-card/60 ring-1 ring-border/40 backdrop-blur-sm hover:bg-card",
+                    ? "bg-foreground text-background"
+                    : "text-muted-foreground hover:text-foreground",
                 )}
               >
                 <Icon className="size-3.5 shrink-0" aria-hidden />
@@ -2684,107 +2672,52 @@ export function RosAnalysisEditor({
           </div>
         );
       })()}
-      <section className="rounded-2xl border border-border/40 bg-card/70 p-3 shadow-sm sm:p-4">
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <p className="text-sm font-semibold text-foreground">
-              Hva bør gjøres nå
-            </p>
-            <p className="text-xs text-muted-foreground">
-              Hurtigvalg basert på status i analysen akkurat nå.
-            </p>
+      <section aria-label="Status og hurtigvalg" className="space-y-3">
+        <dl className="flex flex-wrap gap-x-8 gap-y-2 border-y border-border/50 py-3.5 text-sm">
+          <div className="flex items-baseline gap-2">
+            <dt className="text-muted-foreground">Åpne tiltak</dt>
+            <dd className="font-semibold tabular-nums text-foreground">
+              {openTaskCount}
+            </dd>
           </div>
-          <div className="flex flex-wrap gap-1.5 text-[11px]">
-            <span className="rounded-full border border-border/50 bg-muted/40 px-2 py-0.5">
-              {openTaskCount} åpne tiltak
-            </span>
-            <span className="rounded-full border border-border/50 bg-muted/40 px-2 py-0.5">
-              {uncoveredBeforeRisks.length} risiko uten tiltak
-            </span>
-            <span className="rounded-full border border-border/50 bg-muted/40 px-2 py-0.5">
-              {data.linkedAssessments.length} PVV-koblinger
-            </span>
+          <div className="flex items-baseline gap-2">
+            <dt className="text-muted-foreground">Risiko uten tiltak</dt>
+            <dd className="font-semibold tabular-nums text-foreground">
+              {uncoveredBeforeRisks.length}
+            </dd>
           </div>
-        </div>
-        <div className="mt-3 flex flex-wrap gap-2">
-          <Button
+          <div className="flex items-baseline gap-2">
+            <dt className="text-muted-foreground">PVV-koblinger</dt>
+            <dd className="font-semibold tabular-nums text-foreground">
+              {data.linkedAssessments.length}
+            </dd>
+          </div>
+        </dl>
+        <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-sm">
+          <button
             type="button"
-            variant="outline"
-            size="sm"
-            className="rounded-full"
+            className="font-medium text-muted-foreground underline-offset-4 transition-colors hover:text-foreground hover:underline"
             onClick={() => setRosSection(1)}
           >
             Gå til tiltak
-          </Button>
-          <Button
+          </button>
+          <button
             type="button"
-            variant="outline"
-            size="sm"
-            className="rounded-full"
+            className="font-medium text-muted-foreground underline-offset-4 transition-colors hover:text-foreground hover:underline"
             onClick={() => setRosSection(3)}
           >
             Gå til PVV-kobling
-          </Button>
-          <Button
+          </button>
+          <button
             type="button"
-            size="sm"
-            className="rounded-full"
+            className="font-medium text-foreground underline-offset-4 hover:underline"
             onClick={() => {
               setRosSection(4);
               setReviewChecklistOpen(true);
             }}
           >
             Start revisjon
-          </Button>
-        </div>
-        <div className="mt-3 space-y-2 rounded-xl border border-border/40 bg-muted/[0.08] p-3">
-          <p className="text-[11px] font-medium text-muted-foreground">
-            Sammenheng i arbeidsflyten
-          </p>
-          <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
-            <Link
-              href={`/w/${workspaceId}/skjemaer`}
-              className="rounded-full border border-border/50 bg-card/70 px-2 py-0.5 text-muted-foreground hover:text-foreground"
-            >
-              Skjemaer
-            </Link>
-            <span className="text-muted-foreground/60">→</span>
-            <Link
-              href={`/w/${workspaceId}/vurderinger?fane=prosesser${
-                flowOrgUnitId ? `&orgUnit=${flowOrgUnitId}` : ""
-              }`}
-              className="rounded-full border border-border/50 bg-card/70 px-2 py-0.5 text-muted-foreground hover:text-foreground"
-            >
-              Prosesser
-            </Link>
-            <span className="text-muted-foreground/60">→</span>
-            <Link
-              href={`/w/${workspaceId}/vurderinger${
-                flowOrgUnitId ? `?orgUnit=${flowOrgUnitId}` : ""
-              }`}
-              className="rounded-full border border-border/50 bg-card/70 px-2 py-0.5 text-muted-foreground hover:text-foreground"
-            >
-              Vurderinger ({linkedAssessmentCount})
-            </Link>
-            <span className="text-muted-foreground/60">→</span>
-            <Link
-              href={
-                firstLinkedAssessmentId
-                  ? `/w/${workspaceId}/a/${firstLinkedAssessmentId}/prosessdesign`
-                  : `/w/${workspaceId}/prosessdesign`
-              }
-              className="rounded-full border border-border/50 bg-card/70 px-2 py-0.5 text-muted-foreground hover:text-foreground"
-            >
-              Prosessdesign ({linkedPddDoneCount}/{linkedPddCount})
-            </Link>
-            <span className="text-muted-foreground/60">→</span>
-            <span className="rounded-full border border-primary/25 bg-primary/[0.08] px-2 py-0.5 text-foreground">
-              ROS
-            </span>
-          </div>
-          <p className="text-[11px] text-muted-foreground">
-            Matrise: nivå 1–2 er ofte lavt, 3 bør følges opp, 4–5 krever tydelig tiltak eller formell aksept.
-          </p>
+          </button>
         </div>
       </section>
 

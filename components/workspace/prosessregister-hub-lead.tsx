@@ -7,31 +7,35 @@ import {
 } from "@/components/workspace/prosessregister-tutorial-overlay";
 import { api } from "@/convex/_generated/api";
 import { useMutation, useQuery } from "convex/react";
-import { ArrowRight, BookOpen, Plus, Workflow } from "lucide-react";
+import { Plus } from "lucide-react";
 import { useCallback, useState } from "react";
 
 type Props = {
   canEdit: boolean;
   onRegisterClick: () => void;
-  /** Antall registrerte prosesser (med P-ID). */
   candidatesCount: number;
-  /** Antall innsendte/godkjente fra skjema (uten P-ID enda). */
   intakeCount: number;
+  withoutRosCount?: number;
+  withoutPvvCount?: number;
 };
 
+/**
+ * Tesla-stil hero for Prosesser:
+ * én primærhandling, flat metrics-stripe, null dekorasjon.
+ */
 export function ProsessregisterHubLead({
   canEdit,
   onRegisterClick,
   candidatesCount,
   intakeCount,
+  withoutRosCount = 0,
+  withoutPvvCount = 0,
 }: Props) {
   const settings = useQuery(api.workspaces.getMySettings);
   const dismissTutorial = useMutation(
     api.workspaces.dismissProsessregisterTutorial,
   );
-
   const [tutorialOpen, setTutorialOpen] = useState(false);
-
   const tutorialAllowed = settings?.prosessregisterTutorialEnabled !== false;
 
   const handleIkkeVisMer = useCallback(async () => {
@@ -44,63 +48,85 @@ export function ProsessregisterHubLead({
   }, [dismissTutorial]);
 
   const total = candidatesCount + intakeCount;
-  const subtitle =
-    total === 0
-      ? canEdit
-        ? "Registrer din første prosess for å komme i gang."
-        : "Ingen prosesser registrert ennå."
-      : candidatesCount > 0 && intakeCount > 0
-        ? `${candidatesCount} med ID · ${intakeCount} fra skjema`
-        : candidatesCount > 0
-          ? `${candidatesCount} ${candidatesCount === 1 ? "prosess" : "prosesser"} med ID`
-          : `${intakeCount} fra skjema (ingen P-ID ennå)`;
+  const showGaps = candidatesCount >= 2;
 
   return (
     <>
       <div
         data-tutorial-anchor="hub-registrering"
-        className="group relative flex flex-col gap-4 overflow-hidden rounded-3xl border border-border/50 bg-card p-5 shadow-sm sm:flex-row sm:items-center sm:gap-6 sm:p-6"
+        className="space-y-5"
       >
-        <div
-          className="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary shadow-sm ring-1 ring-border/60 sm:size-14"
-          aria-hidden
-        >
-          <Workflow className="size-6 sm:size-7" />
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+          <div className="min-w-0">
+            <p className="text-sm text-muted-foreground">
+              {total === 0
+                ? "Registrer prosesser som skal vurderes og sikres."
+                : "Åpne en rad for å redigere eller koble videre."}
+            </p>
+          </div>
+          <div className="flex shrink-0 items-center gap-3">
+            {tutorialAllowed ? (
+              <button
+                type="button"
+                className="text-sm text-muted-foreground underline-offset-4 transition-colors hover:text-foreground hover:underline"
+                onClick={() => setTutorialOpen(true)}
+              >
+                Guide
+              </button>
+            ) : null}
+            {canEdit ? (
+              <Button
+                type="button"
+                className="h-11 gap-2 rounded-full bg-foreground px-5 text-sm font-semibold text-background transition-opacity hover:opacity-90"
+                onClick={onRegisterClick}
+              >
+                <Plus className="size-4 shrink-0" aria-hidden />
+                Ny prosess
+              </Button>
+            ) : null}
+          </div>
         </div>
-        <div className="min-w-0 flex-1 space-y-1">
-          <p className="font-heading text-lg font-semibold leading-snug tracking-tight text-foreground sm:text-xl">
-            Prosesser
-          </p>
-          <p className="text-sm leading-relaxed text-muted-foreground">
-            {subtitle}
-          </p>
-        </div>
-        <div className="flex shrink-0 flex-wrap items-center gap-2">
-          {canEdit ? (
-            <Button
-              type="button"
-              size="default"
-              className="gap-1.5 rounded-full bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm transition-all hover:bg-primary/90 hover:shadow-md"
-              onClick={onRegisterClick}
-            >
-              <Plus className="size-4 shrink-0" aria-hidden />
-              Ny prosess
-              <ArrowRight className="size-3.5 transition-transform group-hover:translate-x-0.5" />
-            </Button>
+
+        <dl className="flex flex-wrap gap-x-8 gap-y-2 border-y border-border/50 py-3.5 text-sm">
+          <div className="flex items-baseline gap-2">
+            <dt className="text-muted-foreground">Totalt</dt>
+            <dd className="font-semibold tabular-nums text-foreground">
+              {total}
+            </dd>
+          </div>
+          {candidatesCount > 0 ? (
+            <div className="flex items-baseline gap-2">
+              <dt className="text-muted-foreground">Med ID</dt>
+              <dd className="font-semibold tabular-nums text-foreground">
+                {candidatesCount}
+              </dd>
+            </div>
           ) : null}
-          {tutorialAllowed ? (
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="gap-1.5 rounded-full border border-border/60 bg-card/60 px-3 text-xs font-medium text-muted-foreground backdrop-blur-sm hover:bg-card hover:text-foreground"
-              onClick={() => setTutorialOpen(true)}
-            >
-              <BookOpen className="size-3.5" aria-hidden />
-              Vis guide
-            </Button>
+          {intakeCount > 0 ? (
+            <div className="flex items-baseline gap-2">
+              <dt className="text-muted-foreground">Fra skjema</dt>
+              <dd className="font-semibold tabular-nums text-foreground">
+                {intakeCount}
+              </dd>
+            </div>
           ) : null}
-        </div>
+          {showGaps && withoutRosCount > 0 ? (
+            <div className="flex items-baseline gap-2">
+              <dt className="text-muted-foreground">Uten ROS</dt>
+              <dd className="font-semibold tabular-nums text-foreground">
+                {withoutRosCount}
+              </dd>
+            </div>
+          ) : null}
+          {showGaps && withoutPvvCount > 0 ? (
+            <div className="flex items-baseline gap-2">
+              <dt className="text-muted-foreground">Uten PVV</dt>
+              <dd className="font-semibold tabular-nums text-foreground">
+                {withoutPvvCount}
+              </dd>
+            </div>
+          ) : null}
+        </dl>
       </div>
 
       <ProsessregisterTutorialOverlay

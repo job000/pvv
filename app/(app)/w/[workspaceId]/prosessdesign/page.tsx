@@ -122,16 +122,16 @@ function ProcessDesignHubBody() {
   const withOrgCount = assessments.filter((a) => Boolean(a.orgUnitId)).length;
 
   return (
-    <div className="mx-auto max-w-4xl space-y-6 px-4 pb-12 sm:px-6 lg:px-0">
-      <header className="space-y-2">
+    <div className="mx-auto max-w-5xl space-y-8 px-4 pb-12 sm:px-6 lg:px-0">
+      <header className="space-y-1">
         <h1 className="font-heading text-2xl font-semibold tracking-tight sm:text-3xl">
           Prosessdesign
         </h1>
-        <p className="max-w-2xl text-sm leading-6 text-muted-foreground">
-          Velg en vurdering for å åpne dens prosessdesign (PDD).
+        <p className="max-w-2xl text-sm text-muted-foreground">
+          Velg en vurdering for å åpne prosessdesign (PDD).
           {assessments.length === 0 ? (
             <>
-              {" "}Mangler det vurderinger? Opprett en under{" "}
+              {" "}Opprett først under{" "}
               <Link
                 href={`/w/${wid}/vurderinger`}
                 className="font-medium text-foreground underline-offset-2 hover:underline"
@@ -160,28 +160,28 @@ function ProcessDesignHubBody() {
         />
       ) : (
         <>
-          <div className="grid gap-2 rounded-2xl border border-border/50 bg-card p-3 sm:grid-cols-3">
-            <div className="rounded-xl border border-border/50 bg-muted/20 px-3 py-2">
-              <p className="text-[11px] text-muted-foreground">Totalt vurderinger</p>
-              <p className="text-base font-semibold tabular-nums text-foreground">
+          <dl className="flex flex-wrap gap-x-8 gap-y-2 border-y border-border/50 py-3 text-sm">
+            <div className="flex items-baseline gap-2">
+              <dt className="text-muted-foreground">Vurderinger</dt>
+              <dd className="font-semibold tabular-nums text-foreground">
                 {assessments.length}
-              </p>
+              </dd>
             </div>
-            <div className="rounded-xl border border-border/50 bg-muted/20 px-3 py-2">
-              <p className="text-[11px] text-muted-foreground">Med enhet satt</p>
-              <p className="text-base font-semibold tabular-nums text-foreground">
+            <div className="flex items-baseline gap-2">
+              <dt className="text-muted-foreground">Med enhet</dt>
+              <dd className="font-semibold tabular-nums text-foreground">
                 {withOrgCount}
-              </p>
+              </dd>
             </div>
-            <div className="rounded-xl border border-border/50 bg-muted/20 px-3 py-2">
-              <p className="text-[11px] text-muted-foreground">Vises nå</p>
-              <p className="text-base font-semibold tabular-nums text-foreground">
+            <div className="flex items-baseline gap-2">
+              <dt className="text-muted-foreground">Vises nå</dt>
+              <dd className="font-semibold tabular-nums text-foreground">
                 {filtered.length}
-              </p>
+              </dd>
             </div>
-          </div>
+          </dl>
 
-          <div className="flex flex-col gap-2 rounded-2xl border border-border/50 bg-card p-3">
+          <div className="flex flex-col gap-2">
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
               <div className="relative min-w-0 flex-1">
                 <Search
@@ -317,8 +317,8 @@ function ProcessDesignHubBody() {
               </p>
             </div>
           ) : (
-            <div className="overflow-hidden rounded-2xl bg-card shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.06]">
-              <div className="text-muted-foreground hidden grid-cols-[minmax(0,2.2fr)_minmax(0,1.4fr)_8rem_2.5rem] items-center gap-3 border-b border-border/50 bg-muted/20 px-4 py-2 text-[11px] font-medium sm:grid">
+            <div className="overflow-hidden rounded-2xl border border-border/50 bg-card">
+              <div className="text-muted-foreground hidden grid-cols-[minmax(0,2.2fr)_minmax(0,1.4fr)_8rem_2.5rem] items-center gap-3 border-b border-border/50 px-4 py-2 text-[11px] font-medium sm:grid">
                 <span>Vurdering</span>
                 <span>Enhet</span>
                 <span>Sist oppdatert</span>

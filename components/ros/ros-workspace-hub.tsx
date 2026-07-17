@@ -1,12 +1,10 @@
 "use client";
 
-import type { ComponentType } from "react";
 import { useMemo } from "react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { buttonVariants } from "@/components/ui/button";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
-import { cn } from "@/lib/utils";
 import { useQuery } from "convex/react";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -15,9 +13,7 @@ import {
   BarChart3,
   CalendarClock,
   ClipboardList,
-  Grid3x3,
   Layers,
-  ListTodo,
   Sparkles,
 } from "lucide-react";
 import Link from "next/link";
@@ -55,51 +51,6 @@ function formatShort(ts: number) {
   } catch {
     return "";
   }
-}
-
-function StatTile({
-  label,
-  value,
-  icon: Icon,
-  tone = "default",
-}: {
-  label: string;
-  value: number | string;
-  icon: ComponentType<{ className?: string; "aria-hidden"?: boolean }>;
-  tone?: "default" | "warn" | "muted" | "success";
-}) {
-  return (
-    <div
-      className={cn(
-        "relative flex min-w-0 items-center gap-3 overflow-hidden rounded-2xl border px-4 py-3.5 shadow-[0_1px_2px_rgba(0,0,0,0.04)] transition-shadow hover:shadow-md",
-        tone === "default" && "border-border/50 bg-card ring-1 ring-black/[0.03] dark:ring-white/[0.05]",
-        tone === "warn" && "border-amber-500/30 bg-amber-500/[0.06] ring-1 ring-amber-500/15",
-        tone === "muted" && "border-border/40 bg-muted/25 ring-1 ring-black/[0.02] dark:ring-white/[0.04]",
-        tone === "success" && "border-emerald-500/25 bg-emerald-500/[0.05] ring-1 ring-emerald-500/12",
-      )}
-    >
-      <div
-        className={cn(
-          "flex size-11 shrink-0 items-center justify-center rounded-xl",
-          tone === "warn"
-            ? "bg-amber-500/15 text-amber-700 ring-1 ring-amber-500/20 dark:text-amber-300"
-            : tone === "success"
-              ? "bg-emerald-500/12 text-emerald-700 ring-1 ring-emerald-500/15 dark:text-emerald-300"
-              : "bg-primary/10 text-primary ring-1 ring-primary/12",
-        )}
-      >
-        <Icon className="size-5" aria-hidden />
-      </div>
-      <div className="min-w-0">
-        <p className="font-heading text-[1.65rem] font-semibold tabular-nums tracking-tight leading-none text-foreground">
-          {value}
-        </p>
-        <p className="text-muted-foreground mt-1 text-[10px] font-semibold uppercase tracking-[0.12em]">
-          {label}
-        </p>
-      </div>
-    </div>
-  );
 }
 
 export function RosWorkspaceHub({
@@ -146,7 +97,6 @@ export function RosWorkspaceHub({
   }
 
   const gap = hub.candidatesWithoutRosCount;
-  const hasOrgScale = hub.candidateCount >= 8 || hub.analysisCount >= 6;
 
   const overdueBlock =
     reviewSchedule !== undefined && overdueReviewCount > 0 ? (
@@ -337,73 +287,46 @@ export function RosWorkspaceHub({
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
       {overdueBlock}
-      <div className="space-y-4">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="min-w-0">
-            <h2 className="font-heading text-base font-semibold tracking-tight">
-              Kontrollpanel
-            </h2>
-            <p className="text-muted-foreground text-xs">
-              {hasOrgScale
-                ? "Samlet oversikt over risikoarbeidet i arbeidsområdet"
-                : "Hurtigknapper og nøkkeltall for ROS-arbeidet"}
-            </p>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <dl className="flex flex-wrap gap-x-6 gap-y-1 text-sm">
+          <div className="flex items-baseline gap-1.5">
+            <dt className="text-muted-foreground">Analyser</dt>
+            <dd className="font-semibold tabular-nums text-foreground">
+              {hub.analysisCount}
+            </dd>
           </div>
-          <div className="flex flex-wrap gap-1.5 sm:shrink-0">
-            <Link
-              href={`/w/${workspaceId}/ros/akser`}
-              className={buttonVariants({
-                variant: "outline",
-                size: "sm",
-                className: "gap-1.5 h-8 text-xs",
-              })}
-            >
-              <Layers className="size-3" aria-hidden />
-              ROS-akser
-            </Link>
-            <button
-              type="button"
-              onClick={() => {
-                onTab("maler");
-                onOpenTemplateDialog();
-              }}
-              className={buttonVariants({
-                variant: "outline",
-                size: "sm",
-                className: "gap-1.5 h-8 text-xs",
-              })}
-            >
-              <Sparkles className="size-3" aria-hidden />
-              Ny mal
-            </button>
+          <div className="flex items-baseline gap-1.5">
+            <dt className="text-muted-foreground">Uten ROS</dt>
+            <dd className="font-semibold tabular-nums text-foreground">{gap}</dd>
           </div>
-        </div>
-
-        <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
-          <StatTile
-            label="ROS-analyser"
-            value={hub.analysisCount}
-            icon={ClipboardList}
-          />
-          <StatTile
-            label="Maler"
-            value={hub.templateCount}
-            icon={Grid3x3}
-          />
-          <StatTile
-            label="Uten ROS"
-            value={gap}
-            icon={AlertCircle}
-            tone={gap > 0 ? "warn" : "success"}
-          />
-          <StatTile
-            label="Åpne oppgaver"
-            value={hub.openRosTasksCount}
-            icon={ListTodo}
-            tone={hub.openRosTasksCount > 0 ? "warn" : "muted"}
-          />
+          {hub.openRosTasksCount > 0 ? (
+            <div className="flex items-baseline gap-1.5">
+              <dt className="text-muted-foreground">Oppgaver</dt>
+              <dd className="font-semibold tabular-nums text-foreground">
+                {hub.openRosTasksCount}
+              </dd>
+            </div>
+          ) : null}
+        </dl>
+        <div className="flex gap-3 text-sm text-muted-foreground">
+          <Link
+            href={`/w/${workspaceId}/ros/akser`}
+            className="hover:text-foreground"
+          >
+            Akser
+          </Link>
+          <button
+            type="button"
+            onClick={() => {
+              onTab("maler");
+              onOpenTemplateDialog();
+            }}
+            className="hover:text-foreground"
+          >
+            Ny mal
+          </button>
         </div>
       </div>
 
@@ -460,35 +383,33 @@ export function RosWorkspaceHub({
       ) : null}
 
       {hub.recentAnalyses.length > 0 ? (
-        <div className="space-y-2">
-          <p className="text-muted-foreground text-[11px] font-medium uppercase tracking-wide">
-            Nylig oppdatert
-          </p>
-          <div className="flex flex-col gap-1.5 sm:flex-row sm:flex-wrap">
+        <div className="space-y-3">
+          <p className="text-sm font-medium text-foreground">Nylig oppdatert</p>
+          <ul className="divide-y divide-border/40 overflow-hidden rounded-2xl border border-border/50 bg-card">
             {hub.recentAnalyses.map((r) => (
-              <Link
-                key={r.analysisId}
-                href={`/w/${workspaceId}/ros/a/${r.analysisId}`}
-                className="group inline-flex max-w-full items-center gap-2 rounded-lg border border-border/50 bg-card px-3 py-2 text-sm shadow-sm transition-all hover:border-primary/30 hover:shadow-md"
-              >
-                <span className="min-w-0 truncate font-medium">{r.title}</span>
-                {r.fromIntake ? (
-                  <Badge variant="secondary" className="h-5 shrink-0 border-0 px-1.5 text-[10px] font-medium">
-                    Skjema
-                  </Badge>
-                ) : null}
-                {r.candidateCode ? (
-                  <span className="text-muted-foreground shrink-0 font-mono text-xs">
-                    {r.candidateCode}
-                  </span>
-                ) : null}
-                <span className="text-muted-foreground hidden text-xs sm:inline">
-                  · {formatShort(r.updatedAt)}
-                </span>
-                <ArrowRight className="ml-auto size-3 shrink-0 text-muted-foreground/30 transition-transform group-hover:translate-x-0.5 group-hover:text-primary" />
-              </Link>
+              <li key={r.analysisId}>
+                <Link
+                  href={`/w/${workspaceId}/ros/a/${r.analysisId}`}
+                  className="group flex w-full min-w-0 items-center gap-3 px-4 py-3.5 transition-colors hover:bg-muted/30 sm:px-5"
+                >
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium text-foreground">
+                      {r.title}
+                    </p>
+                    <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                      {r.candidateCode ? `${r.candidateCode} · ` : null}
+                      {formatShort(r.updatedAt)}
+                      {r.fromIntake ? " · Skjema" : null}
+                    </p>
+                  </div>
+                  <ArrowRight
+                    className="size-4 shrink-0 text-muted-foreground/35 transition-transform group-hover:translate-x-0.5 group-hover:text-foreground"
+                    aria-hidden
+                  />
+                </Link>
+              </li>
             ))}
-          </div>
+          </ul>
         </div>
       ) : null}
     </div>

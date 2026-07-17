@@ -8,14 +8,7 @@ import {
 } from "@/components/ui/accordion";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { CardContent, CardFooter } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
@@ -30,6 +23,7 @@ import { cn } from "@/lib/utils";
 import { useAction, useMutation, useQuery } from "convex/react";
 import {
   Check,
+  ChevronRight,
   ClipboardCopy,
   GitBranch,
   Loader2,
@@ -241,57 +235,43 @@ export function WorkspaceGithubIntegrationCard({ workspaceId, workspace }: Props
   const tokenOk = githubTokenStatus?.hasWorkspaceToken ?? false;
 
   return (
-    <Card
+    <details
       id="github-arbeidsomrade"
-      className="border-border/60 from-muted/30 scroll-mt-24 overflow-hidden bg-gradient-to-br to-transparent shadow-sm"
+      className="group scroll-mt-24 overflow-hidden rounded-2xl border border-border/50 bg-card"
     >
-      <CardHeader className="border-border/50 border-b bg-card/80 pb-4">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-          <div className="flex gap-3">
-            <div className="bg-primary/12 text-primary flex size-11 shrink-0 items-center justify-center rounded-xl">
-              <GitBranch className="size-5" aria-hidden />
-            </div>
-            <div>
-              <CardTitle className="font-heading text-lg tracking-tight">
-                GitHub
-              </CardTitle>
-              <CardDescription className="mt-1 max-w-xl text-pretty leading-relaxed">
-                Koble arbeidsområdet til én eller flere repoer og valgfritt
-                prosjekt. Vi lagrer ikke hemmeligheter i nettleseren — token
-                ligger kryptert i backend.
-              </CardDescription>
-            </div>
-          </div>
-          {tokenOk ? (
-            <Badge
-              variant="secondary"
-              className="h-7 shrink-0 gap-1 border-emerald-500/25 bg-emerald-500/10 text-emerald-800 dark:text-emerald-200"
-            >
-              <Check className="size-3.5" aria-hidden />
-              Tilkoblet
-            </Badge>
-          ) : (
-            <Badge variant="outline" className="text-muted-foreground h-7">
-              Ikke konfigurert
-            </Badge>
-          )}
-        </div>
-      </CardHeader>
+      <summary className="flex cursor-pointer list-none items-center gap-4 px-4 py-4 transition-colors hover:bg-muted/30 [&::-webkit-details-marker]:hidden sm:px-5">
+        <span
+          className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-muted"
+          aria-hidden
+        >
+          <GitBranch className="size-4 text-foreground" />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block text-[15px] font-medium tracking-tight text-foreground">
+            GitHub
+          </span>
+          <span className="mt-0.5 block text-xs text-muted-foreground">
+            {tokenOk ? "Tilkoblet" : "Ikke konfigurert"}
+          </span>
+        </span>
+        {tokenOk ? (
+          <Check className="size-4 shrink-0 text-emerald-600 dark:text-emerald-400" aria-hidden />
+        ) : null}
+        <ChevronRight
+          className="size-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-90"
+          aria-hidden
+        />
+      </summary>
 
-      <CardContent className="space-y-8 pt-6">
+      <CardContent className="space-y-8 border-t border-border/40 pt-6">
         {/* Token */}
         <section className="space-y-3">
           <div className="flex items-center gap-2 text-sm font-medium">
             <Shield className="text-muted-foreground size-4" aria-hidden />
             Tilgangstoken
           </div>
-          <p className="text-muted-foreground text-sm leading-relaxed">
-            Fine-grained eller klassisk{" "}
-            <abbr title="Personal Access Token" className="cursor-help">
-              PAT
-            </abbr>
-            . For flere repoer: velg alle relevante repoer i token-innstillingene
-            på GitHub, eller bruk organisasjons-token med riktig omfang.
+          <p className="text-muted-foreground text-sm">
+            Personlig tilgangstoken fra GitHub. Lagres kryptert i backend.
           </p>
           <div className="flex flex-col gap-3 sm:flex-row sm:items-stretch">
             <Input
@@ -467,12 +447,8 @@ export function WorkspaceGithubIntegrationCard({ workspaceId, workspace }: Props
             <Sparkles className="text-muted-foreground size-4" aria-hidden />
             Standard-repoer
           </div>
-          <p className="text-muted-foreground text-sm leading-relaxed">
-            Én eller mange — f.eks. når et prosjekt spenner flere kodebaser.
-            Ved <strong className="text-foreground font-medium">Opprett issue</strong>{" "}
-            brukes <strong className="text-foreground font-medium">første</strong>{" "}
-            repo i listen som standard; du kan fortsatt koble til issues i andre
-            repoer manuelt.
+          <p className="text-muted-foreground text-sm">
+            Første repo i listen brukes som standard ved «Opprett issue».
           </p>
           {repos.length > 0 ? (
             <ul className="flex flex-wrap gap-2">
@@ -964,13 +940,13 @@ export function WorkspaceGithubIntegrationCard({ workspaceId, workspace }: Props
           ) : null}
           <Button
             type="button"
-            className="h-11 w-full sm:w-auto"
+            className="h-11 w-full rounded-full bg-foreground px-5 text-sm font-semibold text-background transition-opacity hover:opacity-90 sm:w-auto"
             onClick={() => void saveGithubReposAndProject()}
           >
             Lagre repo og prosjekt
           </Button>
         </div>
       </CardFooter>
-    </Card>
+    </details>
   );
 }

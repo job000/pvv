@@ -11,18 +11,11 @@ import { userProfileInitials } from "@/lib/user-profile-initials";
 import { cn } from "@/lib/utils";
 import { useMutation, useQuery } from "convex/react";
 import {
-  Building2,
   Camera,
-  Check,
+  ChevronRight,
   ExternalLink,
-  LayoutDashboard,
-  LayoutGrid,
-  LayoutList,
   Loader2,
   Mail,
-  Monitor,
-  Moon,
-  Sun,
   User,
 } from "lucide-react";
 import Link from "next/link";
@@ -329,68 +322,85 @@ export function UserSettingsPanel() {
           </div>
 
           <div className="flex items-center justify-end border-t border-border/30 pt-4">
-            <Button onClick={() => void saveProfile()} disabled={savingProfile}>
+            <Button
+              className="h-10 rounded-full bg-foreground px-5 text-sm font-semibold text-background transition-opacity hover:opacity-90"
+              onClick={() => void saveProfile()}
+              disabled={savingProfile}
+            >
               {savingProfile ? <><Loader2 className="mr-1.5 size-4 animate-spin" aria-hidden />Lagrer …</> : "Lagre profil"}
             </Button>
           </div>
         </div>
       </SettingsSection>
 
-      {/* ── Utseende ── */}
-      <SettingsSection title="Utseende" description="Lagres på kontoen og følger deg på alle enheter.">
-        <div className="grid gap-2 sm:grid-cols-3" role="radiogroup" aria-label="Tema">
-          {([
-            { value: "light" as const, label: "Lys", Icon: Sun },
-            { value: "dark" as const, label: "Mørk", Icon: Moon },
-            { value: "system" as const, label: "System", Icon: Monitor },
-          ] as const).map(({ value, label, Icon }) => (
-            <OptionButton
-              key={value}
-              selected={themePref === value}
-              onClick={() => void onTheme(value)}
-              icon={Icon}
-              label={label}
+      {/* ── Preferanser ── */}
+      <SettingsSection title="Preferanser">
+        <div className="divide-y divide-border/40 overflow-hidden rounded-2xl border border-border/50 bg-card">
+          <PreferenceRow label="Tema">
+            <SegmentedControl
+              ariaLabel="Tema"
+              value={themePref}
+              onChange={(v) => void onTheme(v as "light" | "dark" | "system")}
+              options={[
+                { value: "light", label: "Lys" },
+                { value: "dark", label: "Mørk" },
+                { value: "system", label: "System" },
+              ]}
             />
-          ))}
-        </div>
-      </SettingsSection>
-
-      {/* ── Visningsmåte ── */}
-      <SettingsSection title="Visningsmåte" description="Kompakt gir tettere layout med mindre luft.">
-        <div className="grid gap-2 sm:grid-cols-2" role="radiogroup" aria-label="Visningsmåte">
-          <OptionButton selected={density === "comfortable"} onClick={() => void onDensity("comfortable")} icon={LayoutList} label="Standard" />
-          <OptionButton selected={density === "compact"} onClick={() => void onDensity("compact")} icon={LayoutGrid} label="Kompakt" />
-        </div>
-      </SettingsSection>
-
-      {/* ── Startsted ── */}
-      <SettingsSection title="Startsted" description="Hvor du lander etter innlogging.">
-        <div className="grid gap-2 sm:grid-cols-2" role="radiogroup" aria-label="Startsted">
-          <OptionButton selected={appEntryPref === "dashboard"} onClick={() => void onAppEntryPreference("dashboard")} icon={LayoutDashboard} label="Oversikt" />
-          <OptionButton selected={appEntryPref === "workspace"} onClick={() => void onAppEntryPreference("workspace")} icon={Building2} label="Standard arbeidsområde" />
+          </PreferenceRow>
+          <PreferenceRow label="Tetthet">
+            <SegmentedControl
+              ariaLabel="Visningsmåte"
+              value={density}
+              onChange={(v) => void onDensity(v as "comfortable" | "compact")}
+              options={[
+                { value: "comfortable", label: "Standard" },
+                { value: "compact", label: "Kompakt" },
+              ]}
+            />
+          </PreferenceRow>
+          <PreferenceRow
+            label="Startsted"
+            hint={
+              appEntryPref === "workspace" && defaultWorkspace
+                ? defaultWorkspace.name
+                : undefined
+            }
+          >
+            <SegmentedControl
+              ariaLabel="Startsted"
+              value={appEntryPref}
+              onChange={(v) =>
+                void onAppEntryPreference(v as "dashboard" | "workspace")
+              }
+              options={[
+                { value: "dashboard", label: "Oversikt" },
+                { value: "workspace", label: "Arbeidsområde" },
+              ]}
+            />
+          </PreferenceRow>
         </div>
         {appEntryPref === "workspace" && !defaultWorkspaceId && (
-          <p className="mt-3 rounded-lg border border-border/40 bg-muted/15 px-3 py-2 text-sm text-muted-foreground">
-            Du har ikke valgt standard arbeidsområde ennå.{" "}
-            <Link href="/dashboard?oversikt=1" className="font-medium text-primary hover:underline">
-              Åpne oversikten
-            </Link>{" "}
-            og trykk på stjernen.
-          </p>
-        )}
-        {appEntryPref === "workspace" && defaultWorkspace && (
-          <p className="mt-2 text-sm text-muted-foreground">
-            Nå: <span className="font-medium text-foreground">{defaultWorkspace.name}</span>
+          <p className="text-sm text-muted-foreground">
+            Velg standard arbeidsområde med stjernen på{" "}
+            <Link href="/dashboard?oversikt=1" className="font-medium text-foreground underline-offset-2 hover:underline">
+              oversikten
+            </Link>
+            .
           </p>
         )}
       </SettingsSection>
 
       {/* ── Dashboard per arbeidsområde ── */}
       {myWorkspaces && myWorkspaces.length > 0 && (
-        <SettingsSection title="Dashboard-tilpasning" description="Velg hva som vises på hvert arbeidsområdes forside. Kun dine egne valg.">
-          <div className="divide-y divide-border/30 overflow-hidden rounded-xl border border-border/40">
+        <details className="group overflow-hidden rounded-2xl border border-border/50 bg-card">
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3.5 text-sm font-medium transition-colors hover:bg-muted/30 [&::-webkit-details-marker]:hidden sm:px-5">
+            <span className="font-semibold text-foreground">Dashboard-tilpasning</span>
+            <ChevronRight className="size-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-90" aria-hidden />
+          </summary>
+          <div className="divide-y divide-border/30 border-t border-border/40">
             {myWorkspaces.map(({ workspace }) => (
-              <div key={workspace._id} className="flex items-center justify-between gap-3 px-4 py-3">
+              <div key={workspace._id} className="flex items-center justify-between gap-3 px-4 py-3 sm:px-5">
                 <div className="min-w-0">
                   <p className="truncate text-sm font-medium">{workspace.name}</p>
                   <Link
@@ -409,7 +419,7 @@ export function UserSettingsPanel() {
               </div>
             ))}
           </div>
-        </SettingsSection>
+        </details>
       )}
 
       {/* ── Veiledning ── */}
@@ -460,37 +470,62 @@ function SettingsSection({
   );
 }
 
-function OptionButton({
-  selected,
-  onClick,
-  icon: Icon,
+function PreferenceRow({
   label,
+  hint,
+  children,
 }: {
-  selected: boolean;
-  onClick: () => void;
-  icon: React.ComponentType<{ className?: string }>;
   label: string;
+  hint?: string;
+  children: React.ReactNode;
 }) {
   return (
-    <button
-      type="button"
-      role="radio"
-      aria-checked={selected}
-      onClick={onClick}
-      className={cn(
-        "flex items-center gap-3 rounded-xl border p-3.5 text-left transition-all outline-none focus-visible:ring-2 focus-visible:ring-ring",
-        selected
-          ? "border-primary/40 bg-primary/5 ring-1 ring-primary/20"
-          : "border-border/50 hover:border-border/70 hover:bg-muted/20",
-      )}
-    >
-      <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-muted/40">
-        <Icon className="size-4" aria-hidden />
+    <div className="flex flex-col gap-2.5 px-4 py-3.5 sm:flex-row sm:items-center sm:justify-between sm:px-5">
+      <div className="min-w-0">
+        <p className="text-sm font-medium text-foreground">{label}</p>
+        {hint ? (
+          <p className="mt-0.5 truncate text-xs text-muted-foreground">{hint}</p>
+        ) : null}
       </div>
-      <span className="text-sm font-medium">{label}</span>
-      {selected && (
-        <Check className="ml-auto size-4 shrink-0 text-primary" aria-hidden />
-      )}
-    </button>
+      {children}
+    </div>
+  );
+}
+
+function SegmentedControl({
+  value,
+  onChange,
+  options,
+  ariaLabel,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  options: { value: string; label: string }[];
+  ariaLabel: string;
+}) {
+  return (
+    <div
+      role="radiogroup"
+      aria-label={ariaLabel}
+      className="inline-flex shrink-0 rounded-full border border-border/50 bg-background p-1"
+    >
+      {options.map((opt) => (
+        <button
+          key={opt.value}
+          type="button"
+          role="radio"
+          aria-checked={value === opt.value}
+          onClick={() => onChange(opt.value)}
+          className={cn(
+            "rounded-full px-3.5 py-1.5 text-xs font-medium transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring",
+            value === opt.value
+              ? "bg-foreground text-background"
+              : "text-muted-foreground hover:text-foreground",
+          )}
+        >
+          {opt.label}
+        </button>
+      ))}
+    </div>
   );
 }

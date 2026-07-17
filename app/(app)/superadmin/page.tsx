@@ -103,26 +103,42 @@ function SuperAdminDashboard() {
 
   return (
     <div className="mx-auto max-w-5xl space-y-8 px-5 pb-16 pt-6 sm:px-8 lg:px-10">
-      <header>
+      <header className="space-y-1">
         <p className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
           <ShieldCheck className="size-3.5" aria-hidden />
           Superadmin
         </p>
-        <h1 className="mt-1 font-heading text-2xl font-semibold tracking-tight">
+        <h1 className="font-heading text-2xl font-semibold tracking-tight sm:text-3xl">
           Administrasjon
         </h1>
       </header>
 
-      {/* Stats */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <StatCard label="Brukere" value={stats.users} />
-        <StatCard label="Superadmins" value={stats.superAdmins} />
-        <StatCard label="Arbeidsområder" value={stats.workspaces} />
-        <StatCard label="Vurderinger" value={stats.assessments} />
-      </div>
+      <dl className="flex flex-wrap gap-x-8 gap-y-2 border-y border-border/50 py-3 text-sm">
+        <div className="flex items-baseline gap-2">
+          <dt className="text-muted-foreground">Brukere</dt>
+          <dd className="font-semibold tabular-nums text-foreground">{stats.users}</dd>
+        </div>
+        <div className="flex items-baseline gap-2">
+          <dt className="text-muted-foreground">Superadmins</dt>
+          <dd className="font-semibold tabular-nums text-foreground">
+            {stats.superAdmins}
+          </dd>
+        </div>
+        <div className="flex items-baseline gap-2">
+          <dt className="text-muted-foreground">Arbeidsområder</dt>
+          <dd className="font-semibold tabular-nums text-foreground">
+            {stats.workspaces}
+          </dd>
+        </div>
+        <div className="flex items-baseline gap-2">
+          <dt className="text-muted-foreground">Vurderinger</dt>
+          <dd className="font-semibold tabular-nums text-foreground">
+            {stats.assessments}
+          </dd>
+        </div>
+      </dl>
 
-      {/* Tabs */}
-      <div className="flex gap-1 rounded-xl border border-border/50 bg-muted/25 p-1">
+      <div className="inline-flex rounded-full border border-border/50 bg-background p-1">
         <TabBtn active={tab === "users"} onClick={() => setTab("users")} icon={Users}>
           Brukere
         </TabBtn>
@@ -142,17 +158,6 @@ function SuperAdminDashboard() {
 
 /* ── Shared small components ── */
 
-function StatCard({ label, value }: { label: string; value: string | number }) {
-  return (
-    <div className="rounded-xl border border-border/50 bg-card/60 px-4 py-3">
-      <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-        {label}
-      </p>
-      <p className="mt-1 font-heading text-2xl font-semibold tabular-nums">{value}</p>
-    </div>
-  );
-}
-
 function TabBtn({
   active,
   onClick,
@@ -169,9 +174,9 @@ function TabBtn({
       type="button"
       onClick={onClick}
       className={cn(
-        "flex flex-1 items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-sm font-medium transition-all",
+        "flex items-center justify-center gap-2 rounded-full px-4 py-2 text-sm font-medium transition-colors",
         active
-          ? "bg-background text-foreground shadow-sm ring-1 ring-border/50"
+          ? "bg-foreground text-background"
           : "text-muted-foreground hover:text-foreground",
       )}
     >

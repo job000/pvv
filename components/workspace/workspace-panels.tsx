@@ -51,7 +51,6 @@ import { cn } from "@/lib/utils";
 import {
   AlertTriangle,
   ChevronRight,
-  ClipboardCheck,
   Clock,
   Eye,
   ExternalLink,
@@ -65,7 +64,6 @@ import {
   Plus,
   RefreshCw,
   Search,
-  Sparkles,
   Trash2,
   User,
   Users,
@@ -288,27 +286,26 @@ export function WorkspaceSettingsPanel({
 
   if (!isAdmin) {
     return (
-      <Card>
-        <CardHeader>
-          <CardTitle>Innstillinger</CardTitle>
-          <CardDescription>
-            Kun administratorer kan endre navn og notater for arbeidsområdet.
-          </CardDescription>
-        </CardHeader>
-      </Card>
+      <div className="rounded-2xl border border-border/50 bg-card px-4 py-5 sm:px-5">
+        <p className="text-sm text-muted-foreground">
+          Kun administratorer kan endre navn og notater for arbeidsområdet.
+        </p>
+      </div>
     );
   }
 
   return (
     <>
-    <Card>
-      <CardHeader>
-        <CardTitle>Arbeidsområde</CardTitle>
-        <CardDescription>
+    <section className="space-y-4 rounded-2xl border border-border/50 bg-card p-4 sm:p-5">
+      <div className="space-y-1">
+        <h2 className="text-base font-semibold tracking-tight text-foreground">
+          Arbeidsområde
+        </h2>
+        <p className="text-sm text-muted-foreground">
           Navn, org.nr / HER-id og notater — synlig for alle med tilgang.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
+        </p>
+      </div>
+      <div className="space-y-4">
         <div className="space-y-2">
           <Label htmlFor="ws-name">Navn</Label>
           <Input
@@ -348,34 +345,37 @@ export function WorkspaceSettingsPanel({
             rows={4}
           />
         </div>
-      </CardContent>
-      <CardFooter>
-        <Button type="button" onClick={() => void saveWorkspaceSettings()}>
-          Lagre innstillinger
+        <Button
+          type="button"
+          className="h-10 rounded-full bg-foreground px-5 text-sm font-semibold text-background transition-opacity hover:opacity-90"
+          onClick={() => void saveWorkspaceSettings()}
+        >
+          Lagre
         </Button>
-      </CardFooter>
-    </Card>
+      </div>
+    </section>
 
     <WorkspaceGithubIntegrationCard workspaceId={workspaceId} workspace={workspace} />
 
     {isOwner && workspace ? (
-      <Card className="border-destructive/40">
-        <CardHeader>
-          <CardTitle className="text-destructive">Fare</CardTitle>
-          <CardDescription>
+      <section className="space-y-3 rounded-2xl border border-destructive/30 bg-card p-4 sm:p-5">
+        <div className="space-y-1">
+          <h2 className="text-base font-semibold tracking-tight text-destructive">
+            Fare
+          </h2>
+          <p className="text-sm text-muted-foreground">
             Slett hele arbeidsområdet og all tilhørende data. Kan ikke angres.
-          </CardDescription>
-        </CardHeader>
-        <CardFooter>
-          <Button
-            type="button"
-            variant="destructive"
-            onClick={() => setShowDeleteWorkspace(true)}
-          >
-            Slett arbeidsområde …
-          </Button>
-        </CardFooter>
-      </Card>
+          </p>
+        </div>
+        <Button
+          type="button"
+          variant="destructive"
+          className="rounded-full"
+          onClick={() => setShowDeleteWorkspace(true)}
+        >
+          Slett arbeidsområde …
+        </Button>
+      </section>
     ) : null}
 
     <WorkspaceDeleteDialog
@@ -486,13 +486,12 @@ export function WorkspaceTeamPanel({
     return (
       <div className="space-y-5">
         {/* Invite form */}
-        <div className="rounded-2xl bg-card p-5 shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.06] sm:p-6">
-          <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-            Legg til eller inviter bruker
+        <div className="rounded-2xl border border-border/50 bg-card p-4 sm:p-5">
+          <p className="text-sm font-semibold text-foreground">
+            Inviter bruker
           </p>
-          <p className="text-muted-foreground mt-1 max-w-2xl text-xs leading-relaxed">
-            Mottaker får varsel og må godta under Oversikt før vedkommende blir medlem. Uregistrert
-            e-post får invitasjon som dukker opp når personen logger inn med samme adresse.
+          <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
+            Mottakeren godtar invitasjonen på sin oversikt.
           </p>
           <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-end">
             <InviteEmailSuggestInput
@@ -520,7 +519,7 @@ export function WorkspaceTeamPanel({
             </div>
             <Button
               type="button"
-              className="rounded-xl"
+              className="h-10 rounded-full bg-foreground px-5 text-sm font-semibold text-background transition-opacity hover:opacity-90"
               disabled={inviteButtonDisabled}
               onClick={() => void sendInvite()}
             >
@@ -552,184 +551,166 @@ export function WorkspaceTeamPanel({
           ) : null}
         </div>
 
-        {/* Pending: registered users (awaiting accept) */}
-        {pendingUserInvites !== undefined && pendingUserInvites.length > 0 ? (
-          <div className="space-y-2">
-            <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-              Venter på svar (registrerte brukere)
-            </p>
-            {pendingUserInvites.map((row) => (
-              <div
-                key={row._id}
-                className="group/pui flex items-center gap-3 rounded-2xl bg-card px-4 py-3 shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.06]"
-              >
-                <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-sky-500/10">
-                  <span className="text-xs font-bold text-sky-700 dark:text-sky-300">
+        {(pendingUserInvites !== undefined && pendingUserInvites.length > 0) ||
+        (pendingInvites !== undefined && pendingInvites.length > 0) ? (
+          <section className="space-y-3">
+            <h3 className="text-sm font-semibold text-foreground">
+              Venter på svar
+            </h3>
+            <ul className="divide-y divide-border/40 overflow-hidden rounded-2xl border border-border/50 bg-card">
+              {(pendingUserInvites ?? []).map((row) => (
+                <li
+                  key={row._id}
+                  className="flex items-center gap-3 px-4 py-3.5 sm:px-5"
+                >
+                  <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-muted text-sm font-semibold text-foreground">
                     {(row.name ?? row.email ?? "?").charAt(0).toUpperCase()}
                   </span>
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium">
-                    {row.name ?? row.email ?? row.userId}
-                  </p>
-                  <p className="text-muted-foreground text-[10px]">
-                    {WORKSPACE_ROLE_LABEL_NB[row.role] ?? row.role} · Venter på godkjenning ·{" "}
-                    {new Date(row.createdAt).toLocaleDateString("nb-NO", { dateStyle: "medium" })}
-                  </p>
-                </div>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="rounded-xl text-xs opacity-0 transition-opacity group-hover/pui:opacity-100"
-                  onClick={() => void cancelWorkspaceUserInvite({ inviteId: row._id })}
-                >
-                  Trekk tilbake
-                </Button>
-              </div>
-            ))}
-          </div>
-        ) : null}
-
-        {/* Pending invitations */}
-        {pendingInvites !== undefined && pendingInvites.length > 0 && (
-          <div className="space-y-2">
-            <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Ventende invitasjoner</p>
-            {pendingInvites.map((inv) => (
-              <div
-                key={inv._id}
-                className="group/inv flex items-center gap-3 rounded-2xl bg-card px-4 py-3 shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.06]"
-              >
-                <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-amber-500/10">
-                  <span className="text-xs font-bold text-amber-600 dark:text-amber-400">
-                    {inv.email.charAt(0).toUpperCase()}
-                  </span>
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium">{inv.email}</p>
-                  <p className="text-muted-foreground text-[10px]">
-                    {WORKSPACE_ROLE_LABEL_NB[inv.role] ?? inv.role} · Invitert{" "}
-                    {new Date(inv.createdAt).toLocaleDateString("nb-NO", { dateStyle: "medium" })}
-                  </p>
-                </div>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="rounded-xl text-xs opacity-0 transition-opacity group-hover/inv:opacity-100"
-                  onClick={() => void cancelWorkspaceInvite({ inviteId: inv._id })}
-                >
-                  Trekk tilbake
-                </Button>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* Members */}
-        <div className="space-y-2">
-          <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-            Medlemmer ({members.length})
-          </p>
-          {members.map((m) => (
-            <div
-              key={m._id}
-              className="group/member flex items-center gap-3 rounded-2xl bg-card px-4 py-3 shadow-sm ring-1 ring-black/[0.04] transition-all duration-200 hover:shadow-md dark:ring-white/[0.06]"
-            >
-              <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10">
-                <span className="text-sm font-bold text-primary">
-                  {(m.name ?? m.email ?? "?").charAt(0).toUpperCase()}
-                </span>
-              </div>
-              <div className="min-w-0 flex-1">
-                <p className="text-sm font-medium">
-                  {m.name ?? m.email ?? m.userId}
-                </p>
-                <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
-                  <span className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-semibold ${
-                    m.role === "owner" ? "bg-amber-500/10 text-amber-700 dark:text-amber-300"
-                    : m.role === "admin" ? "bg-blue-500/10 text-blue-700 dark:text-blue-300"
-                    : "bg-muted text-muted-foreground"
-                  }`}>
-                    {WORKSPACE_ROLE_LABEL_NB[m.role] ?? m.role}
-                  </span>
-                  {m.email && (
-                    <span className="text-muted-foreground text-[10px]">{m.email}</span>
-                  )}
-                </div>
-              </div>
-              {m.role !== "owner" && (
-                <div className="flex shrink-0 items-center gap-2 opacity-0 transition-opacity group-hover/member:opacity-100">
-                  <select
-                    className="border-input h-8 rounded-xl border bg-background px-2 text-xs"
-                    value={m.role}
-                    onChange={(e) => {
-                      const next = e.target.value as "admin" | "member" | "viewer";
-                      void updateMemberRole({
-                        workspaceId,
-                        targetUserId: m.userId,
-                        role: next,
-                      });
-                    }}
-                  >
-                    <option value="admin">Administrator</option>
-                    <option value="member">Medlem</option>
-                    <option value="viewer">Kun visning</option>
-                  </select>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium">
+                      {row.name ?? row.email ?? row.userId}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {WORKSPACE_ROLE_LABEL_NB[row.role] ?? row.role} · Sendt til bruker
+                    </p>
+                  </div>
                   <Button
                     type="button"
                     variant="ghost"
                     size="sm"
-                    className="rounded-xl text-xs text-muted-foreground hover:text-destructive"
+                    className="rounded-full text-xs text-muted-foreground hover:text-foreground"
                     onClick={() =>
-                      void removeMember({
-                        workspaceId,
-                        targetUserId: m.userId,
-                      })
+                      void cancelWorkspaceUserInvite({ inviteId: row._id })
                     }
                   >
-                    Fjern
+                    Trekk tilbake
                   </Button>
+                </li>
+              ))}
+              {(pendingInvites ?? []).map((inv) => (
+                <li
+                  key={inv._id}
+                  className="flex items-center gap-3 px-4 py-3.5 sm:px-5"
+                >
+                  <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-muted text-sm font-semibold text-foreground">
+                    {inv.email.charAt(0).toUpperCase()}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium">{inv.email}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {WORKSPACE_ROLE_LABEL_NB[inv.role] ?? inv.role} · Venter på innlogging
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="rounded-full text-xs text-muted-foreground hover:text-foreground"
+                    onClick={() =>
+                      void cancelWorkspaceInvite({ inviteId: inv._id })
+                    }
+                  >
+                    Trekk tilbake
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          </section>
+        ) : null}
+
+        <section className="space-y-3">
+          <h3 className="text-sm font-semibold text-foreground">
+            Medlemmer ({members.length})
+          </h3>
+          <ul className="divide-y divide-border/40 overflow-hidden rounded-2xl border border-border/50 bg-card">
+            {members.map((m) => (
+              <li
+                key={m._id}
+                className="group/member flex items-center gap-3 px-4 py-3.5 sm:px-5"
+              >
+                <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-muted text-sm font-semibold text-foreground">
+                  {(m.name ?? m.email ?? "?").charAt(0).toUpperCase()}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-medium">
+                    {m.name ?? m.email ?? m.userId}
+                  </p>
+                  <p className="truncate text-xs text-muted-foreground">
+                    {WORKSPACE_ROLE_LABEL_NB[m.role] ?? m.role}
+                    {m.email ? ` · ${m.email}` : null}
+                  </p>
                 </div>
-              )}
-            </div>
-          ))}
-        </div>
+                {m.role !== "owner" ? (
+                  <div className="flex shrink-0 items-center gap-2">
+                    <select
+                      className="border-input h-8 rounded-xl border bg-background px-2 text-xs"
+                      value={m.role}
+                      onChange={(e) => {
+                        const next = e.target.value as
+                          | "admin"
+                          | "member"
+                          | "viewer";
+                        void updateMemberRole({
+                          workspaceId,
+                          targetUserId: m.userId,
+                          role: next,
+                        });
+                      }}
+                    >
+                      <option value="admin">Administrator</option>
+                      <option value="member">Medlem</option>
+                      <option value="viewer">Kun visning</option>
+                    </select>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="rounded-full text-xs text-muted-foreground hover:text-destructive"
+                      onClick={() =>
+                        void removeMember({
+                          workspaceId,
+                          targetUserId: m.userId,
+                        })
+                      }
+                    >
+                      Fjern
+                    </Button>
+                  </div>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        </section>
       </div>
     );
   }
 
   return (
-    <div className="space-y-2">
-      <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+    <section className="space-y-3">
+      <h3 className="text-sm font-semibold text-foreground">
         Medlemmer ({members.length})
-      </p>
-      {members.map((m) => (
-        <div
-          key={m._id}
-          className="flex items-center gap-3 rounded-2xl bg-card px-4 py-3 shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.06]"
-        >
-          <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10">
-            <span className="text-sm font-bold text-primary">
+      </h3>
+      <ul className="divide-y divide-border/40 overflow-hidden rounded-2xl border border-border/50 bg-card">
+        {members.map((m) => (
+          <li key={m._id} className="flex items-center gap-3 px-4 py-3.5 sm:px-5">
+            <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-muted text-sm font-semibold text-foreground">
               {(m.name ?? m.email ?? "?").charAt(0).toUpperCase()}
             </span>
-          </div>
-          <div className="min-w-0 flex-1">
-            <p className="text-sm font-medium">{m.name ?? m.email ?? m.userId}</p>
-            <span className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-semibold ${
-              m.role === "owner" ? "bg-amber-500/10 text-amber-700 dark:text-amber-300"
-              : m.role === "admin" ? "bg-blue-500/10 text-blue-700 dark:text-blue-300"
-              : "bg-muted text-muted-foreground"
-            }`}>
-              {WORKSPACE_ROLE_LABEL_NB[m.role] ?? m.role}
-            </span>
-          </div>
-        </div>
-      ))}
-      <p className="text-muted-foreground pt-2 text-xs">
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-medium">
+                {m.name ?? m.email ?? m.userId}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                {WORKSPACE_ROLE_LABEL_NB[m.role] ?? m.role}
+              </p>
+            </div>
+          </li>
+        ))}
+      </ul>
+      <p className="text-sm text-muted-foreground">
         Kontakt en administrator for å endre roller.
       </p>
-    </div>
+    </section>
   );
 }
 
@@ -770,6 +751,11 @@ export function WorkspaceCandidatesPanel({
     workspaceId,
   });
   const orgUnits = useQuery(api.orgUnits.listByWorkspace, { workspaceId });
+  /** Dekning PVV/ROS/PDD — brukes til status i hubMode (SMB: skjul, enterprise: vis). */
+  const processCoverage = useQuery(
+    api.candidates.listProcessCoverage,
+    hubMode ? { workspaceId } : "skip",
+  );
   const createCandidate = useMutation(api.candidates.create);
   const updateCandidate = useMutation(api.candidates.update);
   const removeCandidate = useMutation(api.candidates.remove);
@@ -846,6 +832,9 @@ export function WorkspaceCandidatesPanel({
   const [autoGhHelpOpen, setAutoGhHelpOpen] = useState(false);
   const [processRegHelpOpen, setProcessRegHelpOpen] = useState(false);
   const [processRegisterSearch, setProcessRegisterSearch] = useState("");
+  const [coverageFilter, setCoverageFilter] = useStickyState<
+    "all" | "missing_ros" | "missing_pvv" | "complete"
+  >(`ws:${workspaceId}:processes:coverageFilter`, "all");
   const [orgUnitFilter, setOrgUnitFilter] = useStickyState<
     "" | Id<"orgUnits">
   >(`ws:${workspaceId}:processes:orgFilter`, initialOrgUnit ?? "");
@@ -1278,12 +1267,48 @@ export function WorkspaceCandidatesPanel({
     assessments,
   ]);
 
+  const coverageByCandidateId = useMemo(() => {
+    const m = new Map<
+      string,
+      { rosCount: number; pvvCount: number; pddCount: number }
+    >();
+    for (const row of processCoverage ?? []) {
+      m.set(String(row.candidateId), {
+        rosCount: row.ros.count,
+        pvvCount: row.pvv.count,
+        pddCount: row.pdd.count,
+      });
+    }
+    return m;
+  }, [processCoverage]);
+
+  const coverageTotals = useMemo(() => {
+    let withoutRos = 0;
+    let withoutPvv = 0;
+    for (const c of candidatesSorted) {
+      const cov = coverageByCandidateId.get(String(c._id));
+      if (!cov || cov.rosCount === 0) withoutRos += 1;
+      if (!cov || cov.pvvCount === 0) withoutPvv += 1;
+    }
+    return { withoutRos, withoutPvv };
+  }, [candidatesSorted, coverageByCandidateId]);
+
   const candidatesFiltered = useMemo(() => {
     const units = orgUnits ?? [];
     let rows = candidatesSorted;
     if (orgUnitFilter) {
       const subtree = orgSubtreeIds(orgUnitFilter, units);
       rows = rows.filter((c) => (c.orgUnitId ? subtree.has(c.orgUnitId) : false));
+    }
+    if (coverageFilter !== "all") {
+      rows = rows.filter((c) => {
+        const cov = coverageByCandidateId.get(String(c._id));
+        const ros = cov?.rosCount ?? 0;
+        const pvv = cov?.pvvCount ?? 0;
+        if (coverageFilter === "missing_ros") return ros === 0;
+        if (coverageFilter === "missing_pvv") return pvv === 0;
+        return ros > 0 && pvv > 0;
+      });
     }
     if (!processRegisterSearchQuery) {
       return rows;
@@ -1296,7 +1321,14 @@ export function WorkspaceCandidatesPanel({
         org.toLowerCase().includes(processRegisterSearchQuery)
       );
     });
-  }, [candidatesSorted, processRegisterSearchQuery, orgUnits, orgUnitFilter]);
+  }, [
+    candidatesSorted,
+    processRegisterSearchQuery,
+    orgUnits,
+    orgUnitFilter,
+    coverageFilter,
+    coverageByCandidateId,
+  ]);
 
   const projectItemIdsLinkedInPvv = useMemo(() => {
     const s = new Set<string>();
@@ -1816,6 +1848,8 @@ export function WorkspaceCandidatesPanel({
             onRegisterClick={() => setNewProcessOpen(true)}
             candidatesCount={candidates.length}
             intakeCount={approvedIntakeForProcessregister.length}
+            withoutRosCount={coverageTotals.withoutRos}
+            withoutPvvCount={coverageTotals.withoutPvv}
           />
         ) : null}
         {hubMode ? (
@@ -1826,7 +1860,7 @@ export function WorkspaceCandidatesPanel({
           />
         ) : null}
 
-        {/* ── Oversikt: skjemavurderinger + P-ID (samme kortmønster som Vurderinger / ROS) ── */}
+        {/* ── Prosessliste (Tesla: én sheet, tydelige rader) ── */}
         {approvedIntakeForProcessregister.length > 0 || candidates.length > 0 ? (
           <section
             className="space-y-4"
@@ -1836,50 +1870,75 @@ export function WorkspaceCandidatesPanel({
             data-tutorial-anchor="prosess-oversikt-liste"
           >
             {hubMode ? (
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <h2
-                  id="prosessregister-oversikt-heading"
-                  className="font-heading text-foreground text-base font-semibold tracking-tight"
-                >
-                  Alle prosesser
+              <>
+                <h2 id="prosessregister-oversikt-heading" className="sr-only">
+                  Prosesser
                 </h2>
-                <div className="flex w-full min-w-0 flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
-                  {candidates.length + approvedIntakeForProcessregister.length >= 5 ? (
-                    <SearchInput
-                      value={processRegisterSearch}
-                      onChange={(e) => setProcessRegisterSearch(e.target.value)}
-                      placeholder="Søk navn, ID eller enhet …"
-                      className="h-9 w-full min-w-0 rounded-full sm:max-w-xs"
-                      aria-label="Søk i prosesser og skjemavurderinger"
-                    />
-                  ) : null}
-                  {orgUnits.length > 0 ? (
-                    <select
-                      className="border-input bg-background h-9 w-full rounded-full border px-3 text-xs sm:w-[15rem]"
-                      value={orgUnitFilter}
-                      onChange={(e) =>
-                        setOrgUnitFilter(
-                          e.target.value === ""
-                            ? ""
-                            : (e.target.value as Id<"orgUnits">),
-                        )
-                      }
-                      aria-label="Filtrer prosesser på organisasjonsenhet"
-                    >
-                      <option value="">Alle enheter</option>
-                      {orgUnits.map((u) => (
-                        <option key={u._id} value={u._id}>
-                          {u.name}
-                        </option>
-                      ))}
-                    </select>
-                  ) : null}
-                </div>
-              </div>
+                {candidates.length + approvedIntakeForProcessregister.length >=
+                  4 ||
+                (orgUnits.length > 0 && candidates.length >= 2) ||
+                candidates.length >= 5 ? (
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                    {candidates.length +
+                      approvedIntakeForProcessregister.length >=
+                    4 ? (
+                      <SearchInput
+                        value={processRegisterSearch}
+                        onChange={(e) => setProcessRegisterSearch(e.target.value)}
+                        placeholder="Søk navn eller ID"
+                        className="h-11 w-full min-w-0 rounded-full border-border/50 sm:max-w-sm"
+                        aria-label="Søk i prosesser"
+                      />
+                    ) : null}
+                    {orgUnits.length > 0 && candidates.length >= 2 ? (
+                      <select
+                        className="border-input h-11 w-full rounded-full border border-border/50 bg-background px-4 text-sm sm:w-[13rem]"
+                        value={orgUnitFilter}
+                        onChange={(e) =>
+                          setOrgUnitFilter(
+                            e.target.value === ""
+                              ? ""
+                              : (e.target.value as Id<"orgUnits">),
+                          )
+                        }
+                        aria-label="Enhet"
+                      >
+                        <option value="">Alle enheter</option>
+                        {orgUnits.map((u) => (
+                          <option key={u._id} value={u._id}>
+                            {u.name}
+                          </option>
+                        ))}
+                      </select>
+                    ) : null}
+                    {candidates.length >= 5 ? (
+                      <select
+                        className="border-input h-11 w-full rounded-full border border-border/50 bg-background px-4 text-sm sm:w-[11rem]"
+                        value={coverageFilter}
+                        onChange={(e) =>
+                          setCoverageFilter(
+                            e.target.value as
+                              | "all"
+                              | "missing_ros"
+                              | "missing_pvv"
+                              | "complete",
+                          )
+                        }
+                        aria-label="Dekning"
+                      >
+                        <option value="all">Alle</option>
+                        <option value="missing_ros">Uten ROS</option>
+                        <option value="missing_pvv">Uten PVV</option>
+                        <option value="complete">Komplett</option>
+                      </select>
+                    ) : null}
+                  </div>
+                ) : null}
+              </>
             ) : (
               <h2
                 id="process-overview-heading"
-                className="text-foreground text-base font-semibold"
+                className="text-base font-semibold text-foreground"
               >
                 {candidates.length > 0 && approvedIntakeForProcessregister.length > 0
                   ? `${candidates.length} prosess${candidates.length !== 1 ? "er" : ""} · ${approvedIntakeForProcessregister.length} fra skjema`
@@ -1888,231 +1947,233 @@ export function WorkspaceCandidatesPanel({
                     : `${approvedIntakeForProcessregister.length} fra skjema`}
               </h2>
             )}
-            {hubMode ? (
-              <div className="flex flex-wrap gap-2" aria-label="Start etter rolle">
-                <Link
-                  href={`/w/${workspaceId}/vurderinger?fane=prosesser`}
-                  className="text-muted-foreground hover:text-foreground rounded-full border border-border/50 bg-card px-3 py-1 text-xs transition-colors"
-                >
-                  Prosessdesigner - Prosesser
-                </Link>
-                <Link
-                  href={`/w/${workspaceId}/vurderinger`}
-                  className="text-muted-foreground hover:text-foreground rounded-full border border-border/50 bg-card px-3 py-1 text-xs transition-colors"
-                >
-                  Koordinator - Vurderinger
-                </Link>
-                <Link
-                  href={`/w/${workspaceId}/ros`}
-                  className="text-muted-foreground hover:text-foreground rounded-full border border-border/50 bg-card px-3 py-1 text-xs transition-colors"
-                >
-                  Utvikler - ROS og tiltak
-                </Link>
-              </div>
-            ) : null}
 
-            {processRegisterSearchQuery &&
+            {(processRegisterSearchQuery || coverageFilter !== "all") &&
             approvedIntakeFiltered.length === 0 &&
             candidatesFiltered.length === 0 &&
             (approvedIntakeForProcessregister.length > 0 ||
               candidates.length > 0) ? (
-              <p
-                className="text-muted-foreground py-6 text-center text-sm"
-                role="status"
-              >
-                Ingen treff — prøv et annet søk.
+              <p className="py-10 text-center text-sm text-muted-foreground" role="status">
+                Ingen treff.{" "}
+                <button
+                  type="button"
+                  className="font-medium text-foreground underline-offset-2 hover:underline"
+                  onClick={() => {
+                    setProcessRegisterSearch("");
+                    setCoverageFilter("all");
+                  }}
+                >
+                  Nullstill
+                </button>
               </p>
             ) : null}
 
-            {approvedIntakeFiltered.length > 0 ? (
-              <div className="space-y-2">
-                {hubMode ? (
-                  <h3 className="text-muted-foreground flex items-center gap-2 px-1 text-[11px] font-medium uppercase tracking-wide">
-                    <span className="size-1.5 rounded-full bg-primary/60" aria-hidden />
-                    Fra skjema · {approvedIntakeFiltered.length}
-                  </h3>
-                ) : null}
-                <ul className="divide-y divide-border/40 overflow-hidden rounded-2xl bg-card/80 shadow-sm ring-1 ring-black/[0.04] backdrop-blur-sm dark:ring-white/[0.06]">
-                  {approvedIntakeFiltered.map((row) => (
-                    <li
-                      key={row.submissionId}
-                      className="group relative flex items-center gap-3 transition-colors hover:bg-muted/40 sm:gap-4"
+            {hubMode &&
+            (approvedIntakeFiltered.length > 0 ||
+              candidatesFiltered.length > 0) ? (
+              <ul className="divide-y divide-border/40 overflow-hidden rounded-2xl border border-border/50 bg-card">
+                {approvedIntakeFiltered.map((row) => (
+                  <li key={row.submissionId}>
+                    <Link
+                      href={`/w/${workspaceId}/a/${row.approvedAssessmentId}`}
+                      className="group flex min-w-0 items-center gap-4 px-4 py-4 transition-colors hover:bg-muted/25 sm:px-5"
                     >
-                      <Link
-                        href={`/w/${workspaceId}/a/${row.approvedAssessmentId}`}
-                        className="flex min-w-0 flex-1 items-center gap-3 px-4 py-3 sm:gap-4 sm:px-5 sm:py-3.5"
+                      <span
+                        className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-muted text-xs font-semibold text-foreground"
+                        aria-hidden
                       >
-                        <div
-                          className="flex size-9 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary ring-1 ring-primary/20"
-                          aria-hidden
-                        >
-                          <ClipboardCheck className="size-4" />
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <p className="text-foreground truncate text-sm font-medium group-hover:text-primary">
-                              {row.title}
-                            </p>
-                            <Badge
-                              variant="outline"
-                              className="rounded-full border-primary/25 bg-primary/[0.06] text-[10px] font-medium text-primary"
-                            >
-                              Vurdering
-                            </Badge>
-                          </div>
-                          <p className="text-muted-foreground mt-0.5 text-[11px] tabular-nums">
-                            Godkjent{" "}
-                            {new Date(row.reviewedAt).toLocaleString("nb-NO", {
-                              dateStyle: "medium",
-                              timeStyle: "short",
-                            })}
-                          </p>
-                        </div>
-                        <ChevronRight
-                          className="text-muted-foreground/40 size-4 shrink-0 transition-all duration-200 group-hover:translate-x-0.5 group-hover:text-foreground"
-                          aria-hidden
-                        />
-                      </Link>
-                      {row.githubRepoFullName?.trim() && row.githubIssueNumber != null ? (
-                        <a
-                          href={`https://github.com/${row.githubRepoFullName}/issues/${row.githubIssueNumber}`}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="text-muted-foreground hover:text-primary mr-2 inline-flex shrink-0 items-center rounded-full p-2 transition-colors hover:bg-muted"
-                          aria-label={`GitHub-issue ${row.githubIssueNumber}`}
-                        >
-                          <ExternalLink className="size-4" aria-hidden />
-                        </a>
-                      ) : null}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ) : null}
+                        S
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-[15px] font-medium tracking-tight text-foreground">
+                          {row.title}
+                        </p>
+                        <p className="mt-0.5 text-xs text-muted-foreground">
+                          Fra skjema
+                          {row.githubRepoFullName?.trim() &&
+                          row.githubIssueNumber != null
+                            ? " · GitHub"
+                            : null}
+                        </p>
+                      </div>
+                      <ChevronRight
+                        className="size-4 shrink-0 text-muted-foreground/30 transition-transform group-hover:translate-x-0.5 group-hover:text-foreground"
+                        aria-hidden
+                      />
+                    </Link>
+                  </li>
+                ))}
+                {candidatesFiltered.map((c) => {
+                  const hasGithub = Boolean(c.githubProjectItemNodeId);
+                  const canPreviewGh =
+                    c.githubRepoFullName &&
+                    c.githubIssueNumber != null &&
+                    c.githubIssueNumber > 0;
+                  const orgLabel = candidateOrgUnitLabel(c, orgUnits);
+                  const cov = coverageByCandidateId.get(String(c._id));
+                  const hasRos = (cov?.rosCount ?? 0) > 0;
+                  const hasPvv = (cov?.pvvCount ?? 0) > 0;
+                  const initial =
+                    c.name.trim().charAt(0).toUpperCase() || "P";
+                  const statusBits: string[] = [];
+                  if (orgLabel !== "—") statusBits.push(orgLabel);
+                  if (hasPvv) statusBits.push("PVV");
+                  else if (candidates.length >= 2) statusBits.push("Mangler PVV");
+                  if (hasRos) statusBits.push("ROS");
+                  else if (candidates.length >= 2) statusBits.push("Mangler ROS");
+                  if (hasGithub) statusBits.push("GitHub");
 
-            {candidatesFiltered.length > 0 ? (
-              <div className="space-y-2">
-                {hubMode ? (
-                  <h3 className="text-muted-foreground flex items-center gap-2 px-1 text-[11px] font-medium uppercase tracking-wide">
-                    <span className="size-1.5 rounded-full bg-emerald-500/70" aria-hidden />
-                    Registrert · {candidatesFiltered.length}
-                    {processRegisterSearchQuery &&
-                    candidatesFiltered.length !== candidates.length
-                      ? ` av ${candidates.length}`
-                      : null}
-                  </h3>
-                ) : null}
-                <ul className="divide-y divide-border/40 overflow-hidden rounded-2xl bg-card/80 shadow-sm ring-1 ring-black/[0.04] backdrop-blur-sm dark:ring-white/[0.06]">
-                  {candidatesFiltered.map((c) => {
-                    const hasGithub = Boolean(c.githubProjectItemNodeId);
-                    const canPreviewGh =
-                      c.githubRepoFullName &&
-                      c.githubIssueNumber != null &&
-                      c.githubIssueNumber > 0;
-                    const orgLabel = candidateOrgUnitLabel(c, orgUnits);
-                    return (
-                      <li
-                        key={c._id}
-                        className="group relative flex cursor-pointer items-center gap-3 px-4 py-3 transition-colors hover:bg-muted/40 sm:gap-4 sm:px-5 sm:py-3.5"
+                  return (
+                    <li key={c._id}>
+                      <div
+                        role="button"
+                        tabIndex={0}
+                        className="group flex min-w-0 cursor-pointer items-center gap-4 px-4 py-4 transition-colors hover:bg-muted/25 sm:px-5"
                         onClick={() => setEditCandidateId(c._id)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault();
+                            setEditCandidateId(c._id);
+                          }
+                        }}
                       >
                         <span
                           className={cn(
-                            "size-2 shrink-0 rounded-full transition-transform group-hover:scale-125",
-                            hasGithub ? "bg-emerald-500" : "bg-muted-foreground/40",
+                            "flex size-10 shrink-0 items-center justify-center rounded-xl text-sm font-semibold",
+                            hasRos && hasPvv
+                              ? "bg-foreground text-background"
+                              : "bg-muted text-foreground",
                           )}
                           aria-hidden
-                        />
+                        >
+                          {initial}
+                        </span>
                         <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-2">
-                            <p className="text-foreground truncate text-sm font-medium group-hover:text-foreground">
+                          <div className="flex min-w-0 items-baseline gap-2">
+                            <p className="truncate text-[15px] font-medium tracking-tight text-foreground">
                               {c.name}
                             </p>
-                            <span className="text-muted-foreground shrink-0 rounded-full bg-muted/60 px-1.5 py-0.5 font-mono text-[10px]">
+                            <span className="shrink-0 font-mono text-[11px] text-muted-foreground">
                               {c.code}
                             </span>
                           </div>
-                          <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
-                            {orgLabel !== "—" ? <span>{orgLabel}</span> : null}
-                            {hasGithub ? (
-                              <Badge
-                                variant="secondary"
-                                className={cn(
-                                  "h-5 rounded-full border-emerald-500/30 bg-emerald-500/10 px-2 text-[10px] font-medium text-emerald-900 dark:text-emerald-100",
-                                  canPreviewGh && "cursor-pointer hover:bg-emerald-500/20",
-                                )}
-                                onClick={
-                                  canPreviewGh
-                                    ? (e) => {
-                                        e.stopPropagation();
-                                        void openGhPreview(
-                                          c.githubRepoFullName!,
-                                          c.githubIssueNumber!,
-                                        );
-                                      }
-                                    : undefined
-                                }
-                              >
-                                GitHub
-                              </Badge>
-                            ) : null}
-                          </div>
+                          {statusBits.length > 0 ? (
+                            <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                              {statusBits.join(" · ")}
+                            </p>
+                          ) : null}
                         </div>
 
-                        <div className="flex shrink-0 items-center gap-1">
-                          {!hasGithub && canEditCandidates && canQuickAddGithubCard ? (
+                        <div className="flex shrink-0 items-center gap-0.5">
+                          {canPreviewGh ? (
+                            <button
+                              type="button"
+                              className="flex size-9 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                              aria-label="Åpne GitHub"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                void openGhPreview(
+                                  c.githubRepoFullName!,
+                                  c.githubIssueNumber!,
+                                );
+                              }}
+                            >
+                              <ExternalLink className="size-4" aria-hidden />
+                            </button>
+                          ) : null}
+                          {!hasGithub &&
+                          canEditCandidates &&
+                          canQuickAddGithubCard ? (
                             <Button
                               type="button"
                               variant="ghost"
-                              size="sm"
-                              className="text-muted-foreground hover:bg-muted hover:text-foreground h-8 gap-1 rounded-full px-2 text-xs opacity-0 transition-all group-hover:opacity-100"
+                              size="icon"
+                              className="size-9 rounded-full text-muted-foreground hover:text-foreground"
                               disabled={rowGithubBusyId === c._id}
-                              title="Legg til i GitHub-prosjekt"
+                              title="Legg til i GitHub"
                               onClick={(e) => {
                                 e.stopPropagation();
                                 void registerOneFromOverviewTable(c._id);
                               }}
                             >
                               {rowGithubBusyId === c._id ? (
-                                <Loader2 className="size-3.5 animate-spin" aria-hidden />
+                                <Loader2
+                                  className="size-3.5 animate-spin"
+                                  aria-hidden
+                                />
                               ) : (
                                 <GitBranch className="size-3.5" aria-hidden />
                               )}
                             </Button>
                           ) : null}
-
                           {canEditCandidates ? (
                             <Button
                               type="button"
                               variant="ghost"
                               size="icon"
-                              className="text-muted-foreground hover:bg-destructive/10 hover:text-destructive size-8 rounded-full opacity-0 transition-all group-hover:opacity-100"
+                              className="size-9 rounded-full text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
                               disabled={overviewDeleteBusyId === c._id}
-                              aria-label={`Slett prosess ${c.code}`}
-                              title="Slett prosess"
+                              aria-label={`Slett ${c.code}`}
                               onClick={(e) => {
                                 e.stopPropagation();
                                 void deleteCandidateFromOverview(c._id, c);
                               }}
                             >
                               {overviewDeleteBusyId === c._id ? (
-                                <Loader2 className="size-3.5 animate-spin" aria-hidden />
+                                <Loader2
+                                  className="size-3.5 animate-spin"
+                                  aria-hidden
+                                />
                               ) : (
                                 <Trash2 className="size-3.5" aria-hidden />
                               )}
                             </Button>
                           ) : null}
-
                           <ChevronRight
-                            className="text-muted-foreground/40 size-4 transition-all duration-200 group-hover:text-foreground group-hover:translate-x-0.5"
+                            className="size-4 text-muted-foreground/30 transition-transform group-hover:translate-x-0.5 group-hover:text-foreground"
                             aria-hidden
                           />
                         </div>
-                      </li>
-                    );
-                  })}
-                </ul>
-              </div>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            ) : null}
+
+            {!hubMode && approvedIntakeFiltered.length > 0 ? (
+              <ul className="divide-y divide-border/40 overflow-hidden rounded-2xl border border-border/50 bg-card">
+                {approvedIntakeFiltered.map((row) => (
+                  <li key={row.submissionId}>
+                    <Link
+                      href={`/w/${workspaceId}/a/${row.approvedAssessmentId}`}
+                      className="group flex items-center gap-3 px-4 py-3.5 hover:bg-muted/25 sm:px-5"
+                    >
+                      <p className="min-w-0 flex-1 truncate text-sm font-medium">
+                        {row.title}
+                      </p>
+                      <ChevronRight className="size-4 text-muted-foreground/35" />
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+
+            {!hubMode && candidatesFiltered.length > 0 ? (
+              <ul className="divide-y divide-border/40 overflow-hidden rounded-2xl border border-border/50 bg-card">
+                {candidatesFiltered.map((c) => (
+                  <li
+                    key={c._id}
+                    className="cursor-pointer px-4 py-3.5 hover:bg-muted/25 sm:px-5"
+                    onClick={() => setEditCandidateId(c._id)}
+                  >
+                    <p className="text-sm font-medium">{c.name}</p>
+                    <p className="font-mono text-[11px] text-muted-foreground">
+                      {c.code}
+                    </p>
+                  </li>
+                ))}
+              </ul>
             ) : null}
           </section>
         ) : null}
@@ -2120,32 +2181,22 @@ export function WorkspaceCandidatesPanel({
         {hubMode &&
         approvedIntakeForProcessregister.length === 0 &&
         candidates.length === 0 ? (
-          <div className="relative overflow-hidden rounded-3xl border border-dashed border-border/60 bg-gradient-to-br from-muted/40 via-card to-card px-6 py-10 text-center sm:px-8 sm:py-14">
-            <div
-              className="mx-auto mb-4 flex size-12 items-center justify-center rounded-2xl bg-emerald-500/10 text-emerald-600 ring-1 ring-emerald-500/20 dark:text-emerald-300"
-              aria-hidden
-            >
-              <Workflow className="size-6" />
-            </div>
-            <p className="font-heading text-foreground text-base font-semibold tracking-tight">
+          <div className="rounded-2xl border border-dashed border-border/60 px-6 py-16 text-center">
+            <p className="text-base font-medium tracking-tight text-foreground">
               Ingen prosesser ennå
             </p>
-            <p className="text-muted-foreground mx-auto mt-2 max-w-md text-sm leading-relaxed">
-              Registrer din første prosess for å starte vurdering, ROS og
-              prosessdesign.
+            <p className="mx-auto mt-2 max-w-sm text-sm text-muted-foreground">
+              Opprett den første for å koble vurdering, ROS og prosessdesign.
             </p>
             {canEditCandidates ? (
-              <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
-                <Button
-                  type="button"
-                  size="default"
-                  className="gap-1.5 rounded-full bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-emerald-600/90 dark:bg-emerald-500 dark:text-emerald-950 dark:hover:bg-emerald-500/90"
-                  onClick={() => setNewProcessOpen(true)}
-                >
-                  <Plus className="size-4" aria-hidden />
-                  Ny prosess
-                </Button>
-              </div>
+              <Button
+                type="button"
+                className="mt-6 h-11 gap-2 rounded-full bg-foreground px-5 text-sm font-semibold text-background"
+                onClick={() => setNewProcessOpen(true)}
+              >
+                <Plus className="size-4" aria-hidden />
+                Ny prosess
+              </Button>
             ) : null}
           </div>
         ) : null}
@@ -2621,19 +2672,14 @@ export function WorkspaceCandidatesPanel({
         {hubMode && canEditCandidates && w.githubProjectNodeId?.trim() ? (
           <details
             data-tutorial-anchor="github-prosess"
-            className="group rounded-2xl border border-border/40 bg-card/50 px-4 py-3 sm:px-5"
+            className="group text-sm"
           >
-            <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-sm font-medium text-foreground [&::-webkit-details-marker]:hidden">
-              <span className="flex items-center gap-2">
-                <GitBranch className="size-4 text-muted-foreground" aria-hidden />
-                Importer fra GitHub
-              </span>
-              <ChevronRight className="size-4 text-muted-foreground transition-transform group-open:rotate-90" aria-hidden />
+            <summary className="flex cursor-pointer list-none items-center gap-1.5 text-muted-foreground transition-colors hover:text-foreground [&::-webkit-details-marker]:hidden">
+              <GitBranch className="size-3.5" aria-hidden />
+              GitHub-import
+              <ChevronRight className="size-3.5 transition-transform group-open:rotate-90" aria-hidden />
             </summary>
-            <p className="mt-2 text-xs text-muted-foreground">
-              Hent en eksisterende issue eller plukk kort fra en prosjektkolonne. Bruk dette bare når prosessen allerede finnes i GitHub.
-            </p>
-            <div className="mt-4 space-y-3">
+            <div className="mt-3 space-y-3 rounded-2xl border border-border/50 bg-card p-3 sm:p-4">
               <div
                 className="flex gap-0.5 rounded-lg bg-muted/40 p-0.5"
                 role="tablist"
@@ -4090,6 +4136,22 @@ export function WorkspaceAssessmentsPanel({
     return { high, mid, low };
   }, [filteredAssessments]);
 
+  const pipelineStats = useMemo(() => {
+    const rows = assessments ?? [];
+    let notAssessed = 0;
+    let inProgress = 0;
+    let done = 0;
+    let highPriority = 0;
+    for (const row of rows) {
+      const s = normalizePipelineStatus(row.pipelineStatus);
+      if (s === "not_assessed") notAssessed += 1;
+      else if (s === "done") done += 1;
+      else inProgress += 1;
+      if (effectiveAssessmentPriority(row) >= 70) highPriority += 1;
+    }
+    return { total: rows.length, notAssessed, inProgress, done, highPriority };
+  }, [assessments]);
+
   if (workspace === undefined || assessments === undefined || orgUnits === undefined) {
     return (
       <div className="space-y-4" aria-busy>
@@ -4115,26 +4177,49 @@ export function WorkspaceAssessmentsPanel({
 
   return (
     <div className="space-y-6">
+      {hubMode && assessments.length > 0 ? (
+        <dl className="flex flex-wrap gap-x-8 gap-y-2 border-y border-border/50 py-3.5 text-sm">
+          <div className="flex items-baseline gap-2">
+            <dt className="text-muted-foreground">Totalt</dt>
+            <dd className="font-semibold tabular-nums text-foreground">
+              {pipelineStats.total}
+            </dd>
+          </div>
+          {pipelineStats.inProgress > 0 ? (
+            <div className="flex items-baseline gap-2">
+              <dt className="text-muted-foreground">I arbeid</dt>
+              <dd className="font-semibold tabular-nums text-foreground">
+                {pipelineStats.inProgress}
+              </dd>
+            </div>
+          ) : null}
+          {pipelineStats.done > 0 ? (
+            <div className="flex items-baseline gap-2">
+              <dt className="text-muted-foreground">Ferdig</dt>
+              <dd className="font-semibold tabular-nums text-foreground">
+                {pipelineStats.done}
+              </dd>
+            </div>
+          ) : null}
+          {pipelineStats.highPriority > 0 ? (
+            <div className="flex items-baseline gap-2">
+              <dt className="text-muted-foreground">Høy prioritet</dt>
+              <dd className="font-semibold tabular-nums text-foreground">
+                {pipelineStats.highPriority}
+              </dd>
+            </div>
+          ) : null}
+        </dl>
+      ) : null}
+
       {assessments.length > 0 ? (
-        <details className="group overflow-hidden rounded-3xl border border-border/40 bg-card/40 shadow-sm backdrop-blur-sm open:bg-card/70">
-          <summary className="flex cursor-pointer list-none items-center justify-between gap-3 rounded-3xl px-4 py-3 text-sm font-medium transition-colors hover:bg-muted/30 [&::-webkit-details-marker]:hidden sm:px-5">
-            <span className="inline-flex items-center gap-2.5">
-              <span
-                className="flex size-9 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary ring-1 ring-primary/20"
-                aria-hidden
-              >
-                <Plus className="size-4" />
-              </span>
-              <span className="flex flex-col text-left">
-                <span className="font-heading font-semibold tracking-tight text-foreground">
-                  Ny vurdering
-                </span>
-                <span className="text-muted-foreground text-[11px] font-normal sm:text-xs">
-                  Fra prosess, GitHub-issue eller fra bunnen
-                </span>
-              </span>
+        <details className="group overflow-hidden rounded-2xl border border-border/50 bg-card open:bg-card">
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3.5 text-sm font-medium transition-colors hover:bg-muted/30 [&::-webkit-details-marker]:hidden sm:px-5">
+            <span className="inline-flex items-center gap-2">
+              <Plus className="size-4 shrink-0 text-muted-foreground" aria-hidden />
+              <span className="font-semibold text-foreground">Ny vurdering</span>
             </span>
-            <ChevronRight className="text-muted-foreground size-4 shrink-0 transition-transform group-open:rotate-90" />
+            <ChevronRight className="size-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-90" />
           </summary>
           <div className="border-t border-border/40 px-2 pb-3 pt-1 sm:px-3">
             <GithubIssueStartCard workspaceId={workspaceId} variant="assessment" />
@@ -4149,114 +4234,95 @@ export function WorkspaceAssessmentsPanel({
         role="region"
         aria-labelledby="vurderinger-liste-heading"
       >
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        {hubMode ? (
+          <h2 id="vurderinger-liste-heading" className="sr-only">
+            Alle vurderinger
+          </h2>
+        ) : (
           <h2
             id="vurderinger-liste-heading"
-            className="font-heading text-foreground flex items-baseline gap-2 text-base font-semibold tracking-tight sm:text-lg"
+            className="flex items-baseline gap-2 text-base font-semibold tracking-tight text-foreground"
           >
             Alle vurderinger
             {assessments.length > 0 ? (
-              <span className="text-muted-foreground text-xs font-normal tabular-nums">
+              <span className="text-xs font-normal tabular-nums text-muted-foreground">
                 · {assessments.length}
               </span>
             ) : null}
           </h2>
+        )}
 
-          {assessments.length >= 5 ? (
+        {assessments.length >= 5 ? (
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
             <SearchInput
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Søk tittel eller enhet …"
+              placeholder="Søk tittel eller enhet"
               aria-label="Søk i vurderinger"
-              className="h-9 w-full min-w-0 rounded-full sm:max-w-xs"
+              className="h-11 w-full min-w-0 rounded-full border-border/50 sm:max-w-sm"
             />
-          ) : null}
-        </div>
-        {hubMode ? (
-          <div className="flex flex-wrap gap-2" aria-label="Start etter rolle">
-            <Link
-              href={`/w/${workspaceId}/vurderinger`}
-              className="text-muted-foreground hover:text-foreground rounded-full border border-border/50 bg-card px-3 py-1 text-xs transition-colors"
-            >
-              Koordinator - Prioriter vurderinger
-            </Link>
-            <Link
-              href={`/w/${workspaceId}/vurderinger?fane=prosesser`}
-              className="text-muted-foreground hover:text-foreground rounded-full border border-border/50 bg-card px-3 py-1 text-xs transition-colors"
-            >
-              Prosessdesigner - Koble prosess
-            </Link>
-            <Link
-              href={`/w/${workspaceId}/ros`}
-              className="text-muted-foreground hover:text-foreground rounded-full border border-border/50 bg-card px-3 py-1 text-xs transition-colors"
-            >
-              Utvikler - Valider ROS
-            </Link>
+            {assessments.length >= 8 ? (
+              <>
+                {orgUnits.length > 0 ? (
+                  <select
+                    className="border-input h-11 w-full rounded-full border border-border/50 bg-background px-4 text-sm sm:w-[12rem]"
+                    value={orgUnitFilter}
+                    onChange={(e) =>
+                      setOrgUnitFilter(
+                        e.target.value === ""
+                          ? ""
+                          : (e.target.value as Id<"orgUnits">),
+                      )
+                    }
+                    aria-label="Filtrer etter organisasjonsenhet"
+                  >
+                    <option value="">Alle enheter</option>
+                    {orgUnits.map((u) => (
+                      <option key={u._id} value={u._id}>
+                        {u.name}
+                      </option>
+                    ))}
+                  </select>
+                ) : null}
+                <select
+                  className="border-input h-11 w-full rounded-full border border-border/50 bg-background px-4 text-sm sm:w-[12rem]"
+                  value={statusFilter}
+                  onChange={(e) =>
+                    setStatusFilter(e.target.value as PipelineStatus | "all")
+                  }
+                  aria-label="Filtrer etter status"
+                >
+                  <option value="all">Alle statuser</option>
+                  {PIPELINE_KANBAN_ORDER.map((s) => (
+                    <option key={s} value={s}>
+                      {PIPELINE_STATUS_LABELS[s]}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  className="border-input h-11 w-full rounded-full border border-border/50 bg-background px-4 text-sm sm:w-[11rem]"
+                  value={sortBy}
+                  onChange={(e) =>
+                    setSortBy(
+                      e.target.value as
+                        | "priority"
+                        | "updated"
+                        | "ap"
+                        | "criticality"
+                        | "ease",
+                    )
+                  }
+                  aria-label="Sorter vurderinger"
+                >
+                  <option value="priority">Prioritet</option>
+                  <option value="ap">Gevinst</option>
+                  <option value="criticality">Viktighet</option>
+                  <option value="ease">Implementering</option>
+                  <option value="updated">Sist endret</option>
+                </select>
+              </>
+            ) : null}
           </div>
-        ) : null}
-
-        {assessments.length >= 8 ? (
-          <FilterToolbar>
-            <NativeSelectField
-              id="assessment-org-filter"
-              label="Enhet"
-              value={orgUnitFilter}
-              onChange={(e) =>
-                setOrgUnitFilter(
-                  e.target.value === "" ? "" : (e.target.value as Id<"orgUnits">),
-                )
-              }
-              aria-label="Filtrer etter organisasjonsenhet"
-              className="w-full min-w-0 sm:w-[min(100%,11rem)]"
-            >
-              <option value="">Alle</option>
-              {orgUnits.map((u) => (
-                <option key={u._id} value={u._id}>
-                  {u.name}
-                </option>
-              ))}
-            </NativeSelectField>
-            <NativeSelectField
-              id="assessment-sort"
-              label="Sorter"
-              value={sortBy}
-              onChange={(e) =>
-                setSortBy(
-                  e.target.value as
-                    | "priority"
-                    | "updated"
-                    | "ap"
-                    | "criticality"
-                    | "ease",
-                )
-              }
-              aria-label="Sorter vurderinger"
-              className="w-full min-w-0 sm:w-[min(100%,11rem)]"
-            >
-              <option value="priority">Prioritet</option>
-              <option value="ap">Gevinst</option>
-              <option value="criticality">Viktighet</option>
-              <option value="ease">Implementering</option>
-              <option value="updated">Sist endret</option>
-            </NativeSelectField>
-            <NativeSelectField
-              id="assessment-status-filter"
-              label="Status"
-              value={statusFilter}
-              onChange={(e) =>
-                setStatusFilter(e.target.value as PipelineStatus | "all")
-              }
-              aria-label="Filtrer etter status"
-              className="w-full min-w-0 sm:w-[min(100%,12rem)]"
-            >
-              <option value="all">Alle</option>
-              {PIPELINE_KANBAN_ORDER.map((s) => (
-                <option key={s} value={s}>
-                  {PIPELINE_STATUS_LABELS[s]}
-                </option>
-              ))}
-            </NativeSelectField>
-          </FilterToolbar>
         ) : null}
 
         {assessments.length > 0 &&
@@ -4265,90 +4331,75 @@ export function WorkspaceAssessmentsPanel({
           <p className="text-muted-foreground text-xs tabular-nums">
             {filteredAssessments.length} treff
             <span className="text-border mx-1.5">·</span>
-            Høy {priorityDistribution.high} · Mid {priorityDistribution.mid} · Lav{" "}
+            Høy {priorityDistribution.high} · Middels {priorityDistribution.mid} · Lav{" "}
             {priorityDistribution.low}
           </p>
         ) : null}
 
         {assessments.length === 0 ? (
-          <div className="relative overflow-hidden rounded-3xl border border-dashed border-border/60 bg-card px-6 py-12 text-center sm:py-14">
-            <div
-              className="mx-auto mb-4 flex size-12 items-center justify-center rounded-2xl bg-primary/10 text-primary ring-1 ring-primary/20"
-              aria-hidden
-            >
-              <Sparkles className="size-6" />
-            </div>
-            <p className="font-heading text-foreground text-base font-semibold tracking-tight">
+          <div className="rounded-2xl border border-dashed border-border/60 px-6 py-16 text-center">
+            <p className="text-base font-medium tracking-tight text-foreground">
               Ingen vurderinger ennå
             </p>
-            <p className="text-muted-foreground mx-auto mt-2 max-w-md text-sm leading-relaxed">
-              Start fra skjemaet over — koble til en prosess, et GitHub-issue,
-              eller opprett fra bunnen.
+            <p className="mx-auto mt-2 max-w-sm text-sm text-muted-foreground">
+              Start fra en prosess, en GitHub-issue eller helt blankt.
             </p>
           </div>
         ) : filteredAssessments.length === 0 ? (
-          <div className="flex flex-col items-center rounded-3xl border border-dashed border-border/40 px-6 py-10 text-center">
-            <Search className="text-muted-foreground mb-2 size-5" aria-hidden />
-            <p className="text-muted-foreground text-sm">Ingen treff for filteret.</p>
-          </div>
+          <p className="py-10 text-center text-sm text-muted-foreground" role="status">
+            Ingen treff.{" "}
+            <button
+              type="button"
+              className="font-medium text-foreground underline-offset-2 hover:underline"
+              onClick={() => {
+                setSearch("");
+                setStatusFilter("all");
+                setOrgUnitFilter("");
+              }}
+            >
+              Nullstill
+            </button>
+          </p>
         ) : (
-          <div className="overflow-hidden rounded-2xl bg-card shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.06]">
-            <div className="text-muted-foreground hidden grid-cols-[minmax(0,2.1fr)_minmax(0,1.4fr)_5.5rem_10rem_2.5rem] items-center gap-3 border-b border-border/50 bg-muted/20 px-5 py-2 text-[11px] font-medium sm:grid">
-              <span>Vurdering</span>
-              <span>Enhet / sist oppdatert</span>
-              <span className="text-center">Prioritet</span>
-              <span>Status</span>
-              <span className="sr-only">Åpne</span>
-            </div>
-            <ul className="divide-y divide-border/40">
-              {filteredAssessments.map((a) => {
-                const pipeline = normalizePipelineStatus(a.pipelineStatus);
-                const prio = effectiveAssessmentPriority(a);
-                const orgLine = orgUnitSearchLabel(a.orgUnitId ?? undefined, orgUnits);
-                const fromIntake = intakeAssessmentIdSet.has(a._id);
-                return (
-                  <li
-                    key={a._id}
-                    className="group/card relative grid grid-cols-1 gap-2 px-4 py-3 transition-colors hover:bg-muted/35 sm:grid-cols-[minmax(0,2.1fr)_minmax(0,1.4fr)_5.5rem_10rem_2.5rem] sm:items-center sm:gap-3 sm:px-5 sm:py-3.5"
-                  >
+          <ul className="divide-y divide-border/40 overflow-hidden rounded-2xl border border-border/50 bg-card">
+            {filteredAssessments.map((a) => {
+              const pipeline = normalizePipelineStatus(a.pipelineStatus);
+              const prio = effectiveAssessmentPriority(a);
+              const orgLine = orgUnitSearchLabel(a.orgUnitId ?? undefined, orgUnits);
+              const fromIntake = intakeAssessmentIdSet.has(a._id);
+              const secondaryBits: string[] = [];
+              if (orgLine) secondaryBits.push(orgLine);
+              if (fromIntake) secondaryBits.push("Fra skjema");
+              secondaryBits.push(formatRelativeUpdatedAt(a.updatedAt));
+              return (
+                <li key={a._id} className="group/card relative">
+                  <div className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2 px-4 py-4 transition-colors hover:bg-muted/25 sm:flex-nowrap sm:px-5">
                     <Link
                       href={`/w/${workspaceId}/a/${a._id}`}
-                      className="absolute inset-0 z-0 rounded-none"
+                      className="absolute inset-0 z-0"
                       aria-label={`Åpne vurdering: ${a.title}`}
                     />
-                    <div className="pointer-events-none relative z-10 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span
-                          className={cn("size-2 shrink-0 rounded-full", priorityFillClass(prio))}
-                          aria-hidden
-                        />
-                        <p className="text-foreground truncate text-sm font-medium">
-                          {a.title}
-                        </p>
-                        {fromIntake ? (
-                          <Badge
-                            variant="outline"
-                            className="rounded-full border-primary/25 bg-primary/[0.06] text-[10px] font-medium text-primary"
-                          >
-                            Skjema
-                          </Badge>
-                        ) : null}
-                      </div>
-                    </div>
-                    <div className="pointer-events-none relative z-10 min-w-0 text-[11px] text-muted-foreground">
-                      <p className="truncate">{orgLine || "Ikke satt"}</p>
-                      <p
-                        className="tabular-nums"
-                        title={new Date(a.updatedAt).toLocaleString("nb-NO")}
-                      >
-                        {formatRelativeUpdatedAt(a.updatedAt)}
+                    <span
+                      className={cn(
+                        "pointer-events-none relative z-10 flex size-10 shrink-0 items-center justify-center rounded-xl text-sm font-semibold tabular-nums",
+                        prio >= 70
+                          ? "bg-foreground text-background"
+                          : "bg-muted text-foreground",
+                      )}
+                      title={`Prioritet ${prio.toFixed(0)} av 100`}
+                      aria-hidden
+                    >
+                      {prio.toFixed(0)}
+                    </span>
+                    <div className="pointer-events-none relative z-10 min-w-0 flex-1">
+                      <p className="truncate text-[15px] font-medium tracking-tight text-foreground">
+                        {a.title}
+                      </p>
+                      <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                        {secondaryBits.join(" · ")}
                       </p>
                     </div>
-                    <div className="pointer-events-none relative z-10 text-center text-xs tabular-nums">
-                      <span className="font-semibold text-foreground">{prio.toFixed(0)}</span>
-                      <span className="text-muted-foreground"> / 100</span>
-                    </div>
-                    <div className="pointer-events-auto relative z-10">
+                    <div className="pointer-events-auto relative z-10 flex shrink-0 items-center gap-1.5">
                       {canEditPipeline ? (
                         <PipelineStatusSelect
                           assessmentId={a._id}
@@ -4363,11 +4414,9 @@ export function WorkspaceAssessmentsPanel({
                           {PIPELINE_STATUS_LABELS[pipeline]}
                         </Badge>
                       )}
-                    </div>
-                    <div className="pointer-events-auto relative z-10 ml-auto flex items-center gap-1">
                       <button
                         type="button"
-                        className="text-muted-foreground/60 hover:bg-destructive/10 hover:text-destructive flex size-8 items-center justify-center rounded-full opacity-0 transition-all sm:group-hover/card:opacity-100"
+                        className="flex size-9 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
                         title="Slett vurdering"
                         aria-label={`Slett vurdering ${a.title}`}
                         onClick={(e) => {
@@ -4396,15 +4445,15 @@ export function WorkspaceAssessmentsPanel({
                         <Trash2 className="size-3.5" aria-hidden />
                       </button>
                       <ChevronRight
-                        className="text-muted-foreground/40 size-4 transition-all duration-200 group-hover/card:text-foreground group-hover/card:translate-x-0.5"
+                        className="pointer-events-none size-4 text-muted-foreground/30 transition-transform group-hover/card:translate-x-0.5 group-hover/card:text-foreground"
                         aria-hidden
                       />
                     </div>
-                  </li>
-                );
-              })}
-            </ul>
-          </div>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
         )}
       </section>
     </div>
