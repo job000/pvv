@@ -1797,7 +1797,7 @@ export function WorkspaceCandidatesPanel({
       className={cn(
         "overflow-hidden rounded-2xl bg-transparent shadow-none",
         hubMode
-          ? "border-0"
+          ? "gap-0 rounded-none border-0 bg-transparent py-0 shadow-none ring-0"
           : "border-0 bg-card shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.06]",
       )}
     >
@@ -1839,7 +1839,7 @@ export function WorkspaceCandidatesPanel({
       <CardContent
         className={cn(
           "space-y-6 px-5 pb-6 pt-5 sm:px-6",
-          hubMode && "px-0 pt-0 sm:px-0",
+          hubMode && "space-y-10 px-0 py-0 pb-0 sm:px-0",
         )}
       >
         {hubMode ? (
@@ -1860,10 +1860,10 @@ export function WorkspaceCandidatesPanel({
           />
         ) : null}
 
-        {/* ── Prosessliste (Tesla: én sheet, tydelige rader) ── */}
+        {/* ── Prosessliste ── */}
         {approvedIntakeForProcessregister.length > 0 || candidates.length > 0 ? (
           <section
-            className="space-y-4"
+            className={cn("space-y-4", hubMode && "space-y-6")}
             aria-labelledby={
               hubMode ? "prosessregister-oversikt-heading" : "process-overview-heading"
             }
@@ -1878,7 +1878,7 @@ export function WorkspaceCandidatesPanel({
                   4 ||
                 (orgUnits.length > 0 && candidates.length >= 2) ||
                 candidates.length >= 5 ? (
-                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                  <div className="flex flex-col gap-3.5 sm:flex-row sm:items-center">
                     {candidates.length +
                       approvedIntakeForProcessregister.length >=
                     4 ? (
@@ -1886,13 +1886,18 @@ export function WorkspaceCandidatesPanel({
                         value={processRegisterSearch}
                         onChange={(e) => setProcessRegisterSearch(e.target.value)}
                         placeholder="Søk navn eller ID"
-                        className="h-11 w-full min-w-0 rounded-full border-border/50 sm:max-w-sm"
+                        className="w-full min-w-0 sm:max-w-sm"
+                        inputClassName="h-12 min-h-12 rounded-2xl border-border/60 px-5 md:h-12 md:min-h-12 md:rounded-2xl md:px-5"
                         aria-label="Søk i prosesser"
                       />
                     ) : null}
                     {orgUnits.length > 0 && candidates.length >= 2 ? (
                       <select
-                        className="border-input h-11 w-full rounded-full border border-border/50 bg-background px-4 text-sm sm:w-[13rem]"
+                        className="border-input h-12 w-full appearance-none rounded-2xl border border-border/60 bg-background bg-[length:1rem] bg-[right_1.1rem_center] bg-no-repeat px-5 pr-12 text-sm shadow-sm transition-colors focus-visible:border-ring focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/40 sm:w-[15rem] dark:bg-input/30"
+                        style={{
+                          backgroundImage:
+                            "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23888' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E\")",
+                        }}
                         value={orgUnitFilter}
                         onChange={(e) =>
                           setOrgUnitFilter(
@@ -1913,7 +1918,11 @@ export function WorkspaceCandidatesPanel({
                     ) : null}
                     {candidates.length >= 5 ? (
                       <select
-                        className="border-input h-11 w-full rounded-full border border-border/50 bg-background px-4 text-sm sm:w-[11rem]"
+                        className="border-input h-12 w-full appearance-none rounded-2xl border border-border/60 bg-background bg-[length:1rem] bg-[right_1.1rem_center] bg-no-repeat px-5 pr-12 text-sm shadow-sm transition-colors focus-visible:border-ring focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/40 sm:w-[13rem] dark:bg-input/30"
+                        style={{
+                          backgroundImage:
+                            "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23888' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E\")",
+                        }}
                         value={coverageFilter}
                         onChange={(e) =>
                           setCoverageFilter(
@@ -1971,24 +1980,24 @@ export function WorkspaceCandidatesPanel({
             {hubMode &&
             (approvedIntakeFiltered.length > 0 ||
               candidatesFiltered.length > 0) ? (
-              <ul className="divide-y divide-border/40 overflow-hidden rounded-2xl border border-border/50 bg-card">
+              <ul className="flex flex-col gap-4">
                 {approvedIntakeFiltered.map((row) => (
                   <li key={row.submissionId}>
                     <Link
                       href={`/w/${workspaceId}/a/${row.approvedAssessmentId}`}
-                      className="group flex min-w-0 items-center gap-4 px-4 py-4 transition-colors hover:bg-muted/25 sm:px-5"
+                      className="group flex min-w-0 items-center gap-4 rounded-3xl border border-border/50 bg-card px-6 py-6 shadow-sm transition-colors hover:bg-muted/30 sm:gap-5 sm:px-7 sm:py-7"
                     >
                       <span
-                        className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-muted text-xs font-semibold text-foreground"
+                        className="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-muted text-sm font-semibold text-foreground"
                         aria-hidden
                       >
                         S
                       </span>
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-[15px] font-medium tracking-tight text-foreground">
+                      <div className="min-w-0 flex-1 space-y-1.5">
+                        <p className="truncate text-base font-medium tracking-tight text-foreground">
                           {row.title}
                         </p>
-                        <p className="mt-0.5 text-xs text-muted-foreground">
+                        <p className="text-sm leading-relaxed text-muted-foreground">
                           Fra skjema
                           {row.githubRepoFullName?.trim() &&
                           row.githubIssueNumber != null
@@ -1997,7 +2006,7 @@ export function WorkspaceCandidatesPanel({
                         </p>
                       </div>
                       <ChevronRight
-                        className="size-4 shrink-0 text-muted-foreground/30 transition-transform group-hover:translate-x-0.5 group-hover:text-foreground"
+                        className="size-5 shrink-0 text-muted-foreground/35 transition-transform group-hover:translate-x-0.5 group-hover:text-foreground"
                         aria-hidden
                       />
                     </Link>
@@ -2028,7 +2037,7 @@ export function WorkspaceCandidatesPanel({
                       <div
                         role="button"
                         tabIndex={0}
-                        className="group flex min-w-0 cursor-pointer items-center gap-4 px-4 py-4 transition-colors hover:bg-muted/25 sm:px-5"
+                        className="group flex min-w-0 cursor-pointer items-center gap-4 rounded-3xl border border-border/50 bg-card px-6 py-6 shadow-sm transition-colors hover:bg-muted/30 sm:gap-5 sm:px-7 sm:py-7"
                         onClick={() => setEditCandidateId(c._id)}
                         onKeyDown={(e) => {
                           if (e.key === "Enter" || e.key === " ") {
@@ -2039,7 +2048,7 @@ export function WorkspaceCandidatesPanel({
                       >
                         <span
                           className={cn(
-                            "flex size-10 shrink-0 items-center justify-center rounded-xl text-sm font-semibold",
+                            "flex size-12 shrink-0 items-center justify-center rounded-2xl text-sm font-semibold",
                             hasRos && hasPvv
                               ? "bg-foreground text-background"
                               : "bg-muted text-foreground",
@@ -2048,27 +2057,27 @@ export function WorkspaceCandidatesPanel({
                         >
                           {initial}
                         </span>
-                        <div className="min-w-0 flex-1">
-                          <div className="flex min-w-0 items-baseline gap-2">
-                            <p className="truncate text-[15px] font-medium tracking-tight text-foreground">
+                        <div className="min-w-0 flex-1 space-y-1.5">
+                          <div className="flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-1">
+                            <p className="truncate text-base font-medium tracking-tight text-foreground">
                               {c.name}
                             </p>
-                            <span className="shrink-0 font-mono text-[11px] text-muted-foreground">
+                            <span className="shrink-0 font-mono text-xs text-muted-foreground">
                               {c.code}
                             </span>
                           </div>
                           {statusBits.length > 0 ? (
-                            <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                            <p className="truncate text-sm leading-relaxed text-muted-foreground">
                               {statusBits.join(" · ")}
                             </p>
                           ) : null}
                         </div>
 
-                        <div className="flex shrink-0 items-center gap-0.5">
+                        <div className="flex shrink-0 items-center gap-2 pl-1">
                           {canPreviewGh ? (
                             <button
                               type="button"
-                              className="flex size-9 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                              className="flex size-11 items-center justify-center rounded-2xl text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                               aria-label="Åpne GitHub"
                               onClick={(e) => {
                                 e.stopPropagation();
@@ -2088,7 +2097,7 @@ export function WorkspaceCandidatesPanel({
                               type="button"
                               variant="ghost"
                               size="icon"
-                              className="size-9 rounded-full text-muted-foreground hover:text-foreground"
+                              className="size-11 rounded-2xl text-muted-foreground hover:text-foreground"
                               disabled={rowGithubBusyId === c._id}
                               title="Legg til i GitHub"
                               onClick={(e) => {
@@ -2098,11 +2107,11 @@ export function WorkspaceCandidatesPanel({
                             >
                               {rowGithubBusyId === c._id ? (
                                 <Loader2
-                                  className="size-3.5 animate-spin"
+                                  className="size-4 animate-spin"
                                   aria-hidden
                                 />
                               ) : (
-                                <GitBranch className="size-3.5" aria-hidden />
+                                <GitBranch className="size-4" aria-hidden />
                               )}
                             </Button>
                           ) : null}
@@ -2111,7 +2120,7 @@ export function WorkspaceCandidatesPanel({
                               type="button"
                               variant="ghost"
                               size="icon"
-                              className="size-9 rounded-full text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                              className="size-11 rounded-2xl text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
                               disabled={overviewDeleteBusyId === c._id}
                               aria-label={`Slett ${c.code}`}
                               onClick={(e) => {
@@ -2121,16 +2130,16 @@ export function WorkspaceCandidatesPanel({
                             >
                               {overviewDeleteBusyId === c._id ? (
                                 <Loader2
-                                  className="size-3.5 animate-spin"
+                                  className="size-4 animate-spin"
                                   aria-hidden
                                 />
                               ) : (
-                                <Trash2 className="size-3.5" aria-hidden />
+                                <Trash2 className="size-4" aria-hidden />
                               )}
                             </Button>
                           ) : null}
                           <ChevronRight
-                            className="size-4 text-muted-foreground/30 transition-transform group-hover:translate-x-0.5 group-hover:text-foreground"
+                            className="ml-1 size-5 text-muted-foreground/35 transition-transform group-hover:translate-x-0.5 group-hover:text-foreground"
                             aria-hidden
                           />
                         </div>
@@ -2181,17 +2190,17 @@ export function WorkspaceCandidatesPanel({
         {hubMode &&
         approvedIntakeForProcessregister.length === 0 &&
         candidates.length === 0 ? (
-          <div className="rounded-2xl border border-dashed border-border/60 px-6 py-16 text-center">
+          <div className="rounded-3xl border border-dashed border-border/60 px-8 py-20 text-center">
             <p className="text-base font-medium tracking-tight text-foreground">
               Ingen prosesser ennå
             </p>
-            <p className="mx-auto mt-2 max-w-sm text-sm text-muted-foreground">
+            <p className="mx-auto mt-3 max-w-sm text-[15px] leading-relaxed text-muted-foreground">
               Opprett den første for å koble vurdering, ROS og prosessdesign.
             </p>
             {canEditCandidates ? (
               <Button
                 type="button"
-                className="mt-6 h-11 gap-2 rounded-full bg-foreground px-5 text-sm font-semibold text-background"
+                className="mt-8 h-12 gap-2 rounded-2xl bg-foreground px-6 text-sm font-semibold text-background"
                 onClick={() => setNewProcessOpen(true)}
               >
                 <Plus className="size-4" aria-hidden />
@@ -2672,16 +2681,16 @@ export function WorkspaceCandidatesPanel({
         {hubMode && canEditCandidates && w.githubProjectNodeId?.trim() ? (
           <details
             data-tutorial-anchor="github-prosess"
-            className="group text-sm"
+            className="group pt-2 text-sm"
           >
-            <summary className="flex cursor-pointer list-none items-center gap-1.5 text-muted-foreground transition-colors hover:text-foreground [&::-webkit-details-marker]:hidden">
-              <GitBranch className="size-3.5" aria-hidden />
+            <summary className="flex cursor-pointer list-none items-center gap-2 py-2 text-muted-foreground transition-colors hover:text-foreground [&::-webkit-details-marker]:hidden">
+              <GitBranch className="size-4" aria-hidden />
               GitHub-import
-              <ChevronRight className="size-3.5 transition-transform group-open:rotate-90" aria-hidden />
+              <ChevronRight className="size-4 transition-transform group-open:rotate-90" aria-hidden />
             </summary>
-            <div className="mt-3 space-y-3 rounded-2xl border border-border/50 bg-card p-3 sm:p-4">
+            <div className="mt-4 space-y-4 rounded-2xl border border-border/50 bg-card p-4 sm:p-5">
               <div
-                className="flex gap-0.5 rounded-lg bg-muted/40 p-0.5"
+                className="flex gap-1 rounded-2xl bg-muted/40 p-1"
                 role="tablist"
                 aria-label="Importkilde"
               >
@@ -2690,7 +2699,7 @@ export function WorkspaceCandidatesPanel({
                   role="tab"
                   aria-selected={githubImportTab === "issue"}
                   className={cn(
-                    "flex-1 rounded-md px-3 py-1.5 text-center text-xs font-medium transition-all duration-150",
+                    "flex-1 rounded-xl px-3 py-2.5 text-center text-sm font-medium transition-all duration-150",
                     githubImportTab === "issue"
                       ? "bg-card text-foreground shadow-sm"
                       : "text-muted-foreground hover:text-foreground",
@@ -2704,7 +2713,7 @@ export function WorkspaceCandidatesPanel({
                   role="tab"
                   aria-selected={githubImportTab === "column"}
                   className={cn(
-                    "flex-1 rounded-md px-3 py-1.5 text-center text-xs font-medium transition-all duration-150",
+                    "flex-1 rounded-xl px-3 py-2.5 text-center text-sm font-medium transition-all duration-150",
                     githubImportTab === "column"
                       ? "bg-card text-foreground shadow-sm"
                       : "text-muted-foreground hover:text-foreground",
@@ -2717,20 +2726,20 @@ export function WorkspaceCandidatesPanel({
 
               {githubImportTab === "issue" ? (
                 <section aria-label="Importer fra GitHub-issue">
-                  <div className="flex gap-2">
+                  <div className="flex flex-col gap-3 sm:flex-row">
                     <Input
                       id="gh-issue-url-hub"
                       type="url"
                       value={issueGithubUrlInput}
                       onChange={(e) => setIssueGithubUrlInput(e.target.value)}
                       placeholder="github.com/org/repo/issues/42"
-                      className="h-10 min-w-0 flex-1 rounded-xl bg-background font-mono text-xs shadow-sm"
+                      className="h-12 min-h-12 min-w-0 flex-1 rounded-2xl bg-background px-4 font-mono text-sm shadow-sm md:h-12 md:min-h-12 md:rounded-2xl md:px-4"
                       autoComplete="off"
                       aria-label="Issue-URL"
                     />
                     <Button
                       type="button"
-                      className="h-10 shrink-0 gap-1.5 rounded-xl shadow-sm"
+                      className="h-12 shrink-0 gap-2 rounded-2xl px-5 shadow-sm"
                       disabled={issueUrlFetchBusy || !issueGithubUrlInput.trim()}
                       onClick={() => void fetchGithubIssueForImport()}
                     >
@@ -3501,7 +3510,7 @@ export function WorkspaceCandidatesPanel({
           </DialogContent>
         </Dialog>
 
-        <Separator />
+        {!hubMode ? <Separator /> : null}
 
         <Dialog open={newProcessOpen} onOpenChange={setNewProcessOpen}>
           <DialogContent
@@ -3511,30 +3520,30 @@ export function WorkspaceCandidatesPanel({
             descriptionId="new-process-desc"
           >
             <DialogHeader>
-              <div className="flex items-center gap-2">
-                <div className="bg-primary/10 flex size-8 items-center justify-center rounded-lg">
-                  <Plus className="text-primary size-4" aria-hidden />
+              <div className="flex items-center gap-3">
+                <div className="bg-primary/10 flex size-10 items-center justify-center rounded-2xl">
+                  <Plus className="text-primary size-5" aria-hidden />
                 </div>
-                <div>
+                <div className="space-y-1">
                   <h2
                     id="new-process-title"
-                    className="text-foreground text-base font-semibold"
+                    className="text-foreground text-lg font-semibold tracking-tight"
                   >
                     Ny prosess
                   </h2>
                   <p
                     id="new-process-desc"
-                    className="text-muted-foreground text-xs"
+                    className="text-muted-foreground text-sm"
                   >
                     Fyll inn navn. Resten er valgfritt.
                   </p>
                 </div>
               </div>
             </DialogHeader>
-            <DialogBody className="space-y-4">
-              <div className="grid gap-3 sm:grid-cols-2">
-                <div className="space-y-1.5">
-                  <Label htmlFor="new-cand-name" className="text-xs font-medium">
+            <DialogBody className="space-y-5">
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="new-cand-name" className="text-sm font-medium">
                     Prosessnavn
                   </Label>
                   <Input
@@ -3544,14 +3553,15 @@ export function WorkspaceCandidatesPanel({
                     placeholder="F.eks. Fakturamottak"
                     required
                     autoComplete="off"
+                    className="h-12 min-h-12 rounded-2xl px-4 md:h-12 md:min-h-12 md:rounded-2xl md:px-4"
                   />
                 </div>
-                <div className="space-y-1.5">
-                  <div className="flex items-center gap-1">
-                    <Label htmlFor="new-cand-code" className="text-xs font-medium">
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <Label htmlFor="new-cand-code" className="text-sm font-medium">
                       Prosess-ID
                     </Label>
-                    <span className="text-muted-foreground text-[10px]">
+                    <span className="text-muted-foreground text-xs">
                       valgfritt
                     </span>
                   </div>
@@ -3561,35 +3571,35 @@ export function WorkspaceCandidatesPanel({
                     onChange={(e) => setCCode(e.target.value)}
                     placeholder="F.eks. INN-EL-01"
                     autoComplete="off"
-                    className="font-mono"
+                    className="h-12 min-h-12 rounded-2xl px-4 font-mono md:h-12 md:min-h-12 md:rounded-2xl md:px-4"
                   />
-                  <p className="text-muted-foreground text-[10px]">
+                  <p className="text-muted-foreground text-xs">
                     Tomt = auto-ID
                   </p>
                 </div>
               </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="new-cand-notes" className="text-xs font-medium">
+              <div className="space-y-2">
+                <Label htmlFor="new-cand-notes" className="text-sm font-medium">
                   Notat
                 </Label>
                 <Textarea
                   id="new-cand-notes"
                   value={cNotes}
                   onChange={(e) => setCNotes(e.target.value)}
-                  rows={2}
+                  rows={3}
                   placeholder="Systemer, kontaktperson, notater …"
-                  className="resize-y"
+                  className="min-h-[5.5rem] resize-y rounded-2xl px-4 py-3"
                 />
               </div>
 
-              <details className="group">
-                <summary className="text-muted-foreground hover:text-foreground flex cursor-pointer items-center gap-1.5 text-xs font-medium transition-colors">
-                  <ChevronRight className="size-3 transition-transform group-open:rotate-90" aria-hidden />
+              <details className="group rounded-2xl border border-border/50 bg-muted/20 px-4 py-3">
+                <summary className="text-muted-foreground hover:text-foreground flex cursor-pointer items-center gap-2 text-sm font-medium transition-colors">
+                  <ChevronRight className="size-4 transition-transform group-open:rotate-90" aria-hidden />
                   Forhåndsutfyll vurderingsfelt
                 </summary>
-                <div className="mt-3 grid gap-2.5">
-                  <div className="space-y-1">
-                    <Label htmlFor="new-cand-owner" className="text-[11px]">
+                <div className="mt-4 grid gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="new-cand-owner" className="text-sm">
                       Ansvarlig / eier
                     </Label>
                     <Input
@@ -3597,11 +3607,11 @@ export function WorkspaceCandidatesPanel({
                       value={cOwner}
                       onChange={(e) => setCOwner(e.target.value)}
                       placeholder="Avdelingsleder, kontaktperson"
-                      className="h-9"
+                      className="h-11 min-h-11 rounded-xl px-3.5 md:h-11 md:min-h-11 md:rounded-xl md:px-3.5"
                     />
                   </div>
-                  <div className="space-y-1">
-                    <Label htmlFor="new-cand-systems" className="text-[11px]">
+                  <div className="space-y-2">
+                    <Label htmlFor="new-cand-systems" className="text-sm">
                       Systemer og data
                     </Label>
                     <Input
@@ -3609,11 +3619,11 @@ export function WorkspaceCandidatesPanel({
                       value={cSystems}
                       onChange={(e) => setCSystems(e.target.value)}
                       placeholder="EPJ, faktura, integrasjoner"
-                      className="h-9"
+                      className="h-11 min-h-11 rounded-xl px-3.5 md:h-11 md:min-h-11 md:rounded-xl md:px-3.5"
                     />
                   </div>
-                  <div className="space-y-1">
-                    <Label htmlFor="new-cand-comp" className="text-[11px]">
+                  <div className="space-y-2">
+                    <Label htmlFor="new-cand-comp" className="text-sm">
                       Sikkerhet og personvern
                     </Label>
                     <Textarea
@@ -3622,10 +3632,10 @@ export function WorkspaceCandidatesPanel({
                       onChange={(e) => setCCompliance(e.target.value)}
                       rows={2}
                       placeholder="Sensitivitet, tilgang, dokumentasjon …"
-                      className="resize-y"
+                      className="resize-y rounded-xl px-3.5 py-2.5"
                     />
                   </div>
-                  <p className="text-muted-foreground text-[10px] leading-relaxed">
+                  <p className="text-muted-foreground text-xs leading-relaxed">
                     Fylles automatisk inn i vurderingen første gang prosessen
                     velges. Tomme felt hoppes over.
                   </p>
@@ -3636,14 +3646,14 @@ export function WorkspaceCandidatesPanel({
               <Button
                 type="button"
                 variant="ghost"
-                size="sm"
+                className="h-11 rounded-xl px-4"
                 onClick={() => setNewProcessOpen(false)}
               >
                 Avbryt
               </Button>
               <Button
                 type="button"
-                size="sm"
+                className="h-11 rounded-xl px-5"
                 disabled={!cName.trim()}
                 onClick={() => void addCandidate()}
               >

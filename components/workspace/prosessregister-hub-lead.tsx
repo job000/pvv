@@ -54,21 +54,21 @@ export function ProsessregisterHubLead({
     <>
       <div
         data-tutorial-anchor="hub-registrering"
-        className="space-y-5"
+        className="space-y-7"
       >
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
           <div className="min-w-0">
-            <p className="text-sm text-muted-foreground">
+            <p className="text-[15px] leading-relaxed text-muted-foreground">
               {total === 0
                 ? "Registrer prosesser som skal vurderes og sikres."
                 : "Åpne en rad for å redigere eller koble videre."}
             </p>
           </div>
-          <div className="flex shrink-0 items-center gap-3">
+          <div className="flex shrink-0 items-center gap-4">
             {tutorialAllowed ? (
               <button
                 type="button"
-                className="text-sm text-muted-foreground underline-offset-4 transition-colors hover:text-foreground hover:underline"
+                className="px-2 py-2.5 text-sm text-muted-foreground underline-offset-4 transition-colors hover:text-foreground hover:underline"
                 onClick={() => setTutorialOpen(true)}
               >
                 Guide
@@ -77,7 +77,7 @@ export function ProsessregisterHubLead({
             {canEdit ? (
               <Button
                 type="button"
-                className="h-11 gap-2 rounded-full bg-foreground px-5 text-sm font-semibold text-background transition-opacity hover:opacity-90"
+                className="h-12 min-h-12 gap-2.5 rounded-2xl bg-foreground px-7 text-sm font-semibold text-background transition-opacity hover:opacity-90"
                 onClick={onRegisterClick}
               >
                 <Plus className="size-4 shrink-0" aria-hidden />
@@ -87,15 +87,15 @@ export function ProsessregisterHubLead({
           </div>
         </div>
 
-        <dl className="flex flex-wrap gap-x-8 gap-y-2 border-y border-border/50 py-3.5 text-sm">
-          <div className="flex items-baseline gap-2">
+        <dl className="flex flex-wrap gap-3">
+          <div className="inline-flex items-baseline gap-2.5 rounded-2xl bg-muted/50 px-4 py-2.5 text-sm">
             <dt className="text-muted-foreground">Totalt</dt>
             <dd className="font-semibold tabular-nums text-foreground">
               {total}
             </dd>
           </div>
           {candidatesCount > 0 ? (
-            <div className="flex items-baseline gap-2">
+            <div className="inline-flex items-baseline gap-2.5 rounded-2xl bg-muted/50 px-4 py-2.5 text-sm">
               <dt className="text-muted-foreground">Med ID</dt>
               <dd className="font-semibold tabular-nums text-foreground">
                 {candidatesCount}
@@ -103,7 +103,7 @@ export function ProsessregisterHubLead({
             </div>
           ) : null}
           {intakeCount > 0 ? (
-            <div className="flex items-baseline gap-2">
+            <div className="inline-flex items-baseline gap-2.5 rounded-2xl bg-muted/50 px-4 py-2.5 text-sm">
               <dt className="text-muted-foreground">Fra skjema</dt>
               <dd className="font-semibold tabular-nums text-foreground">
                 {intakeCount}
@@ -111,7 +111,7 @@ export function ProsessregisterHubLead({
             </div>
           ) : null}
           {showGaps && withoutRosCount > 0 ? (
-            <div className="flex items-baseline gap-2">
+            <div className="inline-flex items-baseline gap-2.5 rounded-2xl bg-muted/50 px-4 py-2.5 text-sm">
               <dt className="text-muted-foreground">Uten ROS</dt>
               <dd className="font-semibold tabular-nums text-foreground">
                 {withoutRosCount}
@@ -119,7 +119,7 @@ export function ProsessregisterHubLead({
             </div>
           ) : null}
           {showGaps && withoutPvvCount > 0 ? (
-            <div className="flex items-baseline gap-2">
+            <div className="inline-flex items-baseline gap-2.5 rounded-2xl bg-muted/50 px-4 py-2.5 text-sm">
               <dt className="text-muted-foreground">Uten PVV</dt>
               <dd className="font-semibold tabular-nums text-foreground">
                 {withoutPvvCount}
