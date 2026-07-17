@@ -1,8 +1,10 @@
 /**
  * Rasteriserer lagret tldraw JSON til PNG (data-URL) for PDF-eksport.
  * Støtter flere pages per diagram.
- * Krever nettleser (Offscreen Editor + canvas); brukes kun fra klient.
+ * Krever nettleser (Editor + canvas); brukes kun fra klient.
  */
+
+import { parsePddTldrawDocumentSnapshot } from "@/lib/pdd-diagram-snapshot";
 
 type TldrawModule = typeof import("@tldraw/tldraw");
 
@@ -13,28 +15,33 @@ export type PddDiagramRaster = {
   pageName: string;
 };
 
+function waitFrames(count: number): Promise<void> {
+  return new Promise((resolve) => {
+    let left = count;
+    const tick = () => {
+      left -= 1;
+      if (left <= 0) resolve();
+      else requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  });
+}
+
 export async function rasterizePddDiagramSnapshot(
   snapshotJson: string | undefined,
 ): Promise<PddDiagramRaster[] | null> {
   if (typeof window === "undefined") return null;
-  const raw = snapshotJson?.trim();
-  if (!raw) return null;
+  const snap = parsePddTldrawDocumentSnapshot(snapshotJson);
+  if (!snap?.document) return null;
 
-  let parsed: unknown;
+  let tldraw: TldrawModule;
   try {
-    parsed = JSON.parse(raw);
-  } catch {
-    return null;
-  }
-  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-    return null;
-  }
-  const doc = (parsed as { document?: unknown }).document;
-  if (!doc || typeof doc !== "object" || Array.isArray(doc)) {
+    tldraw = (await import("@tldraw/tldraw")) as TldrawModule;
+  } catch (err) {
+    console.error("[pdd-pdf] Klarte ikke å laste tldraw for rasterisering", err);
     return null;
   }
 
-  const tldraw = (await import("@tldraw/tldraw")) as TldrawModule;
   const {
     createTLStore,
     defaultShapeUtils,
@@ -42,6 +49,8 @@ export async function rasterizePddDiagramSnapshot(
     defaultTools,
     Editor,
   } = tldraw;
+
+  // TipTap-typer fra tldraw er ikke alltid eksportert rent — bruk løs typing her.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const tipTapDefaultExtensions = (tldraw as any).tipTapDefaultExtensions as
     | any[]
@@ -51,69 +60,93 @@ export async function rasterizePddDiagramSnapshot(
     | ((...args: any[]) => any)
     | undefined;
 
-  const store = createTLStore({
-    shapeUtils: defaultShapeUtils,
-    bindingUtils: defaultBindingUtils,
-    snapshot: { document: doc as never },
-  });
+  let store;
+  try {
+    store = createTLStore({
+      shapeUtils: defaultShapeUtils,
+      bindingUtils: defaultBindingUtils,
+      snapshot: snap,
+    });
+  } catch (err) {
+    console.error("[pdd-pdf] Klarte ikke å laste diagram-snapshot", err);
+    return null;
+  }
 
   const container = document.createElement("div");
   container.setAttribute("data-pdd-pdf-export", "true");
   container.style.cssText =
-    "position:fixed;left:-9999px;top:0;width:1px;height:1px;overflow:hidden;opacity:0;pointer-events:none";
+    "position:fixed;left:-10000px;top:0;width:1200px;height:800px;overflow:hidden;opacity:0;pointer-events:none";
   document.body.appendChild(container);
 
-  const editor = new Editor({
-    store,
-    shapeUtils: defaultShapeUtils,
-    bindingUtils: defaultBindingUtils,
-    tools: defaultTools,
-    getContainer: () => container,
-    autoFocus: false,
-    options: {
-      text: {
-        addFontsFromNode: defaultAddFontsFromNode,
-        tipTapConfig: {
-          extensions: tipTapDefaultExtensions ?? [],
+  let editor: InstanceType<typeof Editor> | null = null;
+  try {
+    editor = new Editor({
+      store,
+      shapeUtils: defaultShapeUtils,
+      bindingUtils: defaultBindingUtils,
+      tools: defaultTools,
+      getContainer: () => container,
+      autoFocus: false,
+      options: {
+        text: {
+          addFontsFromNode: defaultAddFontsFromNode,
+          tipTapConfig: {
+            extensions: tipTapDefaultExtensions ?? [],
+          },
         },
       },
-    },
-  });
+    });
 
-  try {
+    editor.updateViewportScreenBounds(container);
+    await waitFrames(2);
+
     const pages = editor.getPages();
     const results: PddDiagramRaster[] = [];
 
     for (const page of pages) {
       editor.setCurrentPage(page.id);
+      await waitFrames(1);
 
-      const ids = editor.getSortedChildIdsForParent(page.id);
+      const ids = [...editor.getCurrentPageShapeIds()];
       if (ids.length === 0) continue;
 
-      editor.zoomToFit({ animation: { duration: 0 } });
-      await new Promise<void>((resolve) =>
-        requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
-      );
+      try {
+        editor.selectNone();
+        editor.zoomToFit({ animation: { duration: 0 } });
+        await waitFrames(2);
 
-      const out = await editor.toImageDataUrl(ids, {
-        format: "png",
-        background: true,
-        pixelRatio: 2,
-        padding: 24,
-      });
-      if (!out?.url) continue;
+        const out = await editor.toImageDataUrl(ids, {
+          format: "png",
+          background: true,
+          pixelRatio: 2,
+          padding: 32,
+        });
+        if (!out?.url || out.width < 2 || out.height < 2) continue;
 
-      results.push({
-        dataUrl: out.url,
-        width: out.width,
-        height: out.height,
-        pageName: page.name,
-      });
+        results.push({
+          dataUrl: out.url,
+          width: out.width,
+          height: out.height,
+          pageName: page.name,
+        });
+      } catch (pageErr) {
+        console.warn(
+          `[pdd-pdf] Kunne ikke rasterisere side «${page.name}»`,
+          pageErr,
+        );
+      }
     }
 
     return results.length > 0 ? results : null;
+  } catch (err) {
+    console.error("[pdd-pdf] Rasterisering feilet", err);
+    return null;
   } finally {
-    editor.dispose();
+    try {
+      editor?.dispose();
+    } catch {
+      /* ignore */
+    }
     container.remove();
   }
 }

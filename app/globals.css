@@ -251,3 +251,13 @@
 html[data-ui-density="compact"] {
   font-size: 0.9375rem;
 }
+
+/* PDD-diagram: Apple Pencil / freehand — ingen nettleser-gest som stjeler streken */
+.pdd-tldraw-canvas,
+.pdd-tldraw-canvas .tl-container,
+.pdd-tldraw-canvas .tl-canvas {
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}

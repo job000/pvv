@@ -272,6 +272,7 @@ export default function PdfForhandsvisningPage() {
             payload: pddDoc.payload as ProcessDesignDocumentPayload,
             generatedAt: new Date(),
             publishedVersion: latestPublished,
+            diagramCacheKey: `${String(pddState.assessment._id)}-${pddDoc.revision ?? 0}`,
           });
           if (cancelled) {
             URL.revokeObjectURL(url);
@@ -354,6 +355,7 @@ export default function PdfForhandsvisningPage() {
         payload: pddState.document.payload as ProcessDesignDocumentPayload,
         generatedAt: new Date(),
         publishedVersion: latestPublished,
+        diagramCacheKey: `${String(pddState.assessment._id)}-${pddState.document.revision ?? 0}`,
       });
     }
   }

@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { SearchInput } from "@/components/ui/search-input";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { Textarea } from "@/components/ui/textarea";
 import { api } from "@/convex/_generated/api";
@@ -45,8 +46,14 @@ import {
 import { cn } from "@/lib/utils";
 import { useMutation, useQuery } from "convex/react";
 import {
+  PddGettingStartedCard,
+  PddTutorialOverlay,
+  usePddTutorialDismissed,
+} from "@/components/process-design/pdd-onboarding";
+import {
   AlertTriangle,
   ArrowLeft,
+  BookOpen,
   ChevronDown,
   ExternalLink,
   FileDown,
@@ -62,7 +69,6 @@ import {
   Plus,
   RefreshCw,
   Save,
-  Search,
   Sparkles,
   Trash2,
   X,
@@ -162,6 +168,9 @@ const PDD_SECTION_SHORTCUTS: {
 /*  Primitives                                                         */
 /* ------------------------------------------------------------------ */
 
+const PDD_ACCORDION_ITEM_CLASS =
+  "overflow-hidden rounded-xl border border-border/45 bg-background px-4 sm:px-5";
+
 function Field({
   label,
   value,
@@ -189,7 +198,9 @@ function Field({
 }) {
   return (
     <div className="space-y-1.5">
-      <Label className="text-sm font-medium text-foreground">{label}</Label>
+      <Label className="text-[0.8125rem] font-medium text-foreground">
+        {label}
+      </Label>
       {description ? (
         <p className="text-xs leading-5 text-muted-foreground">{description}</p>
       ) : null}
@@ -200,8 +211,8 @@ function Field({
         disabled={disabled}
         placeholder={placeholder}
         className={cn(
-          "resize-y rounded-xl border-border/60 bg-background/80 px-3 py-2.5 text-sm leading-6 shadow-sm transition-colors",
-          "focus-visible:ring-1 focus-visible:ring-ring",
+          "resize-y rounded-xl border-border/50 bg-muted/15 px-3.5 py-2.5 text-sm leading-6 transition-colors",
+          "placeholder:text-muted-foreground/55 focus-visible:border-foreground/20 focus-visible:bg-background focus-visible:ring-1 focus-visible:ring-foreground/10",
           textareaHeightClass(rows),
           className,
         )}
@@ -219,10 +230,8 @@ function ReadOnlyBlock({
 }) {
   return (
     <div className="space-y-2">
-      <p className="text-[0.76rem] font-semibold tracking-[0.01em] text-muted-foreground">
-        {label}
-      </p>
-      <div className="rounded-xl border border-border/50 bg-muted/20 px-3.5 py-3 text-sm shadow-sm">
+      <p className="text-xs font-medium text-muted-foreground">{label}</p>
+      <div className="rounded-xl border border-border/40 bg-muted/15 px-3.5 py-3 text-sm">
         {children}
       </div>
     </div>
@@ -238,14 +247,17 @@ function StatusBadge({
 }) {
   const toneClass =
     tone === "warning"
-      ? "border-amber-500/20 bg-amber-500/10 text-amber-700 dark:text-amber-300"
+      ? "bg-amber-500/12 text-amber-800 dark:text-amber-200"
       : tone === "success"
-        ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
-        : "border-border/60 bg-muted/40 text-muted-foreground";
+        ? "bg-emerald-500/12 text-emerald-800 dark:text-emerald-200"
+        : "bg-muted text-muted-foreground";
 
   return (
     <span
-      className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-medium ${toneClass}`}
+      className={cn(
+        "inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-medium tracking-wide",
+        toneClass,
+      )}
     >
       {children}
     </span>
@@ -260,7 +272,7 @@ function SourceHintBadges({
   const cleanHints = hints.map((hint) => hint.trim()).filter(Boolean);
   if (cleanHints.length === 0) return null;
   return (
-    <div className="flex flex-wrap gap-2">
+    <div className="flex flex-wrap gap-1.5">
       {cleanHints.map((hint) => (
         <StatusBadge key={hint}>{hint}</StatusBadge>
       ))}
@@ -281,25 +293,53 @@ function CollapsibleSection({
 }) {
   const [open, setOpen] = useState(defaultOpen);
   return (
-    <div className="rounded-2xl border border-border/60 bg-card/70 shadow-sm backdrop-blur-sm">
+    <div className="rounded-xl border border-border/45 bg-background">
       <button
         type="button"
-        className="flex w-full touch-manipulation items-center gap-2.5 px-4 py-3.5 text-left sm:px-5"
+        className="flex w-full touch-manipulation items-center gap-2.5 px-4 py-3 text-left sm:px-5"
         onClick={() => setOpen(!open)}
+        aria-expanded={open}
       >
         <Icon className="size-4 shrink-0 text-muted-foreground" />
-        <span className="flex-1 text-sm font-semibold text-foreground">{title}</span>
+        <span className="flex-1 text-sm font-medium text-foreground">{title}</span>
         <ChevronDown
-          className={`size-4 text-muted-foreground transition-transform ${open ? "rotate-180" : ""}`}
+          className={cn(
+            "size-4 text-muted-foreground transition-transform",
+            open && "rotate-180",
+          )}
           aria-hidden
         />
       </button>
-      {open && (
-        <div className="border-t border-border/40 px-4 pb-4 pt-3 sm:px-5">
+      {open ? (
+        <div className="border-t border-border/35 px-4 pb-4 pt-3 sm:px-5">
           {children}
         </div>
-      )}
+      ) : null}
     </div>
+  );
+}
+
+function SectionTrigger({
+  label,
+  done,
+}: {
+  label: string;
+  done: boolean;
+}) {
+  return (
+    <AccordionTrigger className="py-3.5 text-sm font-medium no-underline hover:no-underline">
+      <span className="flex min-w-0 items-center gap-2.5">
+        <span
+          className={cn(
+            "size-1.5 shrink-0 rounded-full",
+            done ? "bg-emerald-500" : "bg-muted-foreground/35",
+          )}
+          aria-hidden
+        />
+        <span className="truncate">{label}</span>
+        <span className="sr-only">{done ? "Fullført" : "Mangler innhold"}</span>
+      </span>
+    </AccordionTrigger>
   );
 }
 
@@ -319,6 +359,7 @@ function ProcessTextDiagramBlock({
   onDiagramJson,
   canEdit,
   instanceKey,
+  diagramKind,
   sourceHints = [],
 }: {
   sectionLabel: string;
@@ -330,6 +371,7 @@ function ProcessTextDiagramBlock({
   onDiagramJson: (json: string) => void;
   canEdit: boolean;
   instanceKey: string;
+  diagramKind: "asIs" | "toBe";
   sourceHints?: string[];
 }) {
   const tabKey = `${instanceKey}:${sectionLabel}`;
@@ -364,32 +406,32 @@ function ProcessTextDiagramBlock({
   return (
     <div className="space-y-2">
       <div className="space-y-2">
-        <Label className="text-[0.8rem] font-medium text-muted-foreground">
+        <Label className="text-[0.8125rem] font-medium text-foreground">
           {sectionLabel}
         </Label>
         <SourceHintBadges hints={sourceHints} />
       </div>
-      <div className="inline-flex w-full rounded-xl border border-border bg-muted/40 p-0.5 sm:w-auto">
+      <div className="inline-flex w-full rounded-xl bg-muted/30 p-0.5 sm:w-auto">
         <button
           type="button"
-          className={`touch-manipulation rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+          className={cn(
+            "flex-1 touch-manipulation rounded-lg px-3 py-1.5 text-sm font-medium transition-colors sm:flex-none",
             mode === "beskrivelse"
               ? "bg-background text-foreground shadow-sm"
-              : "text-muted-foreground hover:text-foreground"
-          }`}
-          style={{ flex: 1 }}
+              : "text-muted-foreground hover:text-foreground",
+          )}
           onClick={() => setMode("beskrivelse")}
         >
           Beskrivelse
         </button>
         <button
           type="button"
-          className={`touch-manipulation rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+          className={cn(
+            "flex-1 touch-manipulation rounded-lg px-3 py-1.5 text-sm font-medium transition-colors sm:flex-none",
             mode === "diagram"
               ? "bg-background text-foreground shadow-sm"
-              : "text-muted-foreground hover:text-foreground"
-          }`}
-          style={{ flex: 1 }}
+              : "text-muted-foreground hover:text-foreground",
+          )}
           onClick={() => setMode("diagram")}
         >
           Diagram
@@ -402,21 +444,20 @@ function ProcessTextDiagramBlock({
           rows={isMobileViewport ? Math.max(textRows, 8) : textRows}
           disabled={!canEdit}
           className={cn(
-            "resize-y rounded-2xl border-border/60 bg-background/80 px-3 py-2.5 text-sm leading-6 shadow-sm",
+            "resize-y rounded-xl border-border/50 bg-muted/15 px-3.5 py-2.5 text-sm leading-6",
+            "focus-visible:border-foreground/20 focus-visible:bg-background focus-visible:ring-1 focus-visible:ring-foreground/10",
             isMobileViewport
               ? "min-h-[14rem]"
               : textareaHeightClass(textRows),
           )}
         />
       ) : !isMobileViewport ? (
-        <div
-          className="flex flex-col gap-3"
-        >
-          <div className="space-y-2">
-            <p className="text-xs leading-relaxed text-muted-foreground">
+        <div className="flex flex-col gap-3">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+            <p className="max-w-xl text-xs leading-relaxed text-muted-foreground">
               {diagramHint}
             </p>
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
+            <div className="flex shrink-0 flex-col gap-2 sm:flex-row sm:items-center">
               {canEdit && diagramValue?.trim() ? (
                 <Button
                   type="button"
@@ -461,6 +502,7 @@ function ProcessTextDiagramBlock({
                 onSnapshotChange={onDiagramJson}
                 readOnly={!canEdit}
                 instanceKey={instanceKey}
+                diagramKind={diagramKind}
                 layoutVariant="embed"
               />
             )}
@@ -517,11 +559,12 @@ function ProcessTextDiagramBlock({
                   </p>
                   {!diagramFullscreen ? (
                     <p className="text-sm leading-relaxed text-muted-foreground">
-                      Bruk to fingre for zoom og én finger for å tegne eller flytte objekter.
+                      Apple Pencil: tegn direkte (håndflate ignoreres). To fingre zoomer/panorerer;
+                      bytt til Pil for feste-koblinger mellom bokser.
                     </p>
                   ) : (
                     <p className="sr-only">
-                      Bruk to fingre for zoom og én finger for å tegne eller flytte objekter.
+                      Apple Pencil tegner freehand med trykk. To fingre zoomer. Pil festes til bokser.
                     </p>
                   )}
                 </div>
@@ -581,6 +624,7 @@ function ProcessTextDiagramBlock({
                 onSnapshotChange={onDiagramJson}
                 readOnly={!canEdit}
                 instanceKey={instanceKey}
+                diagramKind={diagramKind}
                 layoutVariant="fullscreen"
                 className={cn(
                   "min-h-0 flex-1",
@@ -989,9 +1033,9 @@ function SecondaryActionsMenu({
     <div ref={ref} className="relative">
       <Button
         type="button"
-        size="icon-sm"
+        size="icon"
         variant="outline"
-        className="touch-manipulation"
+        className="size-9 touch-manipulation rounded-lg"
         onClick={() => setOpen(!open)}
         aria-label="Flere handlinger"
       >
@@ -1134,6 +1178,10 @@ export function ProcessDesignDocPage({
   const [sectionFilter, setSectionFilter] = useState<
     "all" | "incomplete" | "complete"
   >("all");
+  const [tutorialOpen, setTutorialOpen] = useState(false);
+  const { dismissed: tutorialDismissed, dismissPermanent, resetDismiss } =
+    usePddTutorialDismissed();
+  const tutorialAutoShownRef = useRef(false);
   const autoAutofillKeyRef = useRef<string | null>(null);
   const payloadRef = useRef(payload);
   const organizationLineRef = useRef(organizationLine);
@@ -1524,6 +1572,40 @@ export function ProcessDesignDocPage({
     };
   }, [payload]);
   const completedSectionCount = Object.values(sectionCompletion).filter(Boolean).length;
+  const nextIncompleteSection = useMemo(() => {
+    return (
+      PDD_SECTION_SHORTCUTS.find(
+        (section) =>
+          !sectionCompletion[section.value as keyof typeof sectionCompletion],
+      ) ?? null
+    );
+  }, [sectionCompletion]);
+
+  useEffect(() => {
+    if (
+      !hasDoc ||
+      tutorialDismissed ||
+      tutorialAutoShownRef.current ||
+      completedSectionCount >= 2
+    ) {
+      return;
+    }
+    tutorialAutoShownRef.current = true;
+    const id = window.setTimeout(() => setTutorialOpen(true), 700);
+    return () => window.clearTimeout(id);
+  }, [hasDoc, tutorialDismissed, completedSectionCount]);
+
+  const goToSection = useCallback((value: string) => {
+    setOpenSections((prev) =>
+      prev.includes(value) ? prev : [...prev, value],
+    );
+    window.setTimeout(() => {
+      document
+        .getElementById(`pdd-section-${value}`)
+        ?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 50);
+  }, []);
+
   const sectionVisible = useMemo(() => {
     const q = sectionQuery.trim().toLowerCase();
     const rosText = (rosCtx ?? [])
@@ -1619,13 +1701,16 @@ export function ProcessDesignDocPage({
   const exportPdf = async () => {
     setPdfExporting(true);
     try {
+      // La debounce flush diagram til live-cache før eksporter
+      await new Promise((r) => setTimeout(r, 120));
       await downloadProcessDesignPdf({
         assessmentTitle,
         workspaceName: workspace?.name ?? null,
         organizationLine: organizationLine.trim() || undefined,
-        payload,
+        payload: payloadRef.current,
         generatedAt: new Date(),
         publishedVersion: latestPublishedVersion,
+        diagramCacheKey: diagramInstanceKey,
       });
     } finally {
       setPdfExporting(false);
@@ -1635,19 +1720,23 @@ export function ProcessDesignDocPage({
   const previewPdf = async () => {
     setPdfPreviewing(true);
     try {
+      await new Promise((r) => setTimeout(r, 120));
       const url = await buildProcessDesignPdfPreviewUrl({
         assessmentTitle,
         workspaceName: workspace?.name ?? null,
         organizationLine: organizationLine.trim() || undefined,
-        payload,
+        payload: payloadRef.current,
         generatedAt: new Date(),
         publishedVersion: latestPublishedVersion,
+        diagramCacheKey: diagramInstanceKey,
       });
       setPdfPreviewUrl((current) => {
         if (current) URL.revokeObjectURL(current);
         return url;
       });
       setPdfPreviewOpen(true);
+    } catch (err) {
+      console.error("[pdd] PDF-forhåndsvisning feilet", err);
     } finally {
       setPdfPreviewing(false);
     }
@@ -1699,259 +1788,308 @@ export function ProcessDesignDocPage({
   const orgCoverageValue =
     payload.orgOperatingUnits?.trim() || payload.orgRolloutNotes?.trim() || "";
 
+  const documentTitle =
+    payload.processTitle?.trim() || assessmentTitle || "Uten tittel";
+
   return (
-    <div className="mx-auto max-w-4xl space-y-5 px-4 pb-28 sm:space-y-6 sm:px-6 lg:px-0 lg:pb-12">
-      {/* Back nav */}
+    <div className="mx-auto max-w-3xl space-y-7 px-4 pb-28 sm:space-y-9 sm:px-6 lg:px-0 lg:pb-16">
       <Link
         href={`/w/${wid}/prosessdesign`}
-        className="inline-flex touch-manipulation items-center gap-1.5 rounded-lg py-1 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
+        className="inline-flex touch-manipulation items-center gap-1.5 text-[13px] text-muted-foreground transition-colors hover:text-foreground"
       >
-        <ArrowLeft className="size-4" aria-hidden />
-        Til PDD-oversikt
+        <ArrowLeft className="size-3.5" aria-hidden />
+        Oversikt
       </Link>
 
-      {/* Slim header — tittel + lagre-status. Tidligere visste også
-          DOKUMENT/KILDER/NESTE STEG-grid + duplisert tittel; det er fjernet
-          fordi lagre-status og kontekst allerede vises i toppmenyen og fanen. */}
-      <header className="space-y-2">
-        <div className="flex flex-wrap items-center gap-2">
-          <h1 className="font-heading text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
-            Prosessdesign
-          </h1>
-          <StatusBadge tone={dirty ? "warning" : "success"}>
-            {dirty ? "Ulagret" : "Lagret"}
-          </StatusBadge>
-          {draftRegistryOnly && !explicitRegistry ? (
-            <StatusBadge tone="warning">Ikke koblet til prosess</StatusBadge>
-          ) : null}
-        </div>
-        <p className="max-w-2xl text-sm leading-6 text-muted-foreground">
-          Beskriv prosessen seksjon for seksjon. Bruk «Fyll fra kilder» i menyen
-          for å foreslå tekst fra vurdering, register og ROS.
+      <header className="space-y-3">
+        <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
+          Prosessdesign
         </p>
-        {hasDoc ? (
-          <div className="grid gap-2 rounded-2xl border border-border/50 bg-card p-3 sm:grid-cols-3">
-            <div className="rounded-xl border border-border/50 bg-muted/20 px-3 py-2">
-              <p className="text-[11px] text-muted-foreground">Seksjoner fylt</p>
-              <p className="text-base font-semibold tabular-nums text-foreground">
-                {completedSectionCount} / {PDD_SECTION_SHORTCUTS.length}
-              </p>
-            </div>
-            <div className="rounded-xl border border-border/50 bg-muted/20 px-3 py-2">
-              <p className="text-[11px] text-muted-foreground">Koblede ROS</p>
-              <p className="text-base font-semibold tabular-nums text-foreground">
-                {rosAnalyses.length}
-              </p>
-            </div>
-            <div className="rounded-xl border border-border/50 bg-muted/20 px-3 py-2">
-              <p className="text-[11px] text-muted-foreground">Prosesskobling</p>
-              <p className="text-base font-semibold text-foreground">
-                {explicitRegistry ? "Verifisert" : draftRegistryOnly ? "Utkast" : "Mangler"}
-              </p>
-            </div>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+          <div className="min-w-0 space-y-2">
+            <h1 className="font-heading text-[1.65rem] font-semibold leading-tight tracking-tight text-foreground sm:text-[1.85rem]">
+              {hasDoc ? documentTitle : "Nytt dokument"}
+            </h1>
+            <p className="max-w-lg text-sm leading-6 text-muted-foreground">
+              Én seksjon om gangen. Bruk menyen for å fylle fra vurdering, register
+              og ROS.
+            </p>
           </div>
+          <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+            <StatusBadge tone={dirty ? "warning" : "success"}>
+              {dirty ? "Ulagret" : "Lagret"}
+            </StatusBadge>
+            {draftRegistryOnly && !explicitRegistry ? (
+              <StatusBadge tone="warning">Ikke koblet</StatusBadge>
+            ) : explicitRegistry ? (
+              <StatusBadge tone="success">Koblet</StatusBadge>
+            ) : null}
+          </div>
+        </div>
+        {hasDoc ? (
+          <p className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-border/40 pt-3 text-[13px] text-muted-foreground">
+            <span>
+              <span className="font-medium tabular-nums text-foreground">
+                {completedSectionCount}/{PDD_SECTION_SHORTCUTS.length}
+              </span>{" "}
+              seksjoner
+            </span>
+            <span aria-hidden className="text-border">
+              ·
+            </span>
+            <span>
+              <span className="font-medium tabular-nums text-foreground">
+                {rosAnalyses.length}
+              </span>{" "}
+              ROS
+            </span>
+            <span aria-hidden className="text-border">
+              ·
+            </span>
+            <span>
+              Prosess{" "}
+              <span className="font-medium text-foreground">
+                {explicitRegistry
+                  ? "verifisert"
+                  : draftRegistryOnly
+                    ? "utkast"
+                    : "mangler"}
+              </span>
+            </span>
+          </p>
         ) : null}
       </header>
 
       {!hasDoc ? (
-        <ProductEmptyState
-          icon={FileText}
-          title="Ingen prosessdesign ennå"
-          description="Opprett et tomt dokument og fyll inn etter hvert. Du kan også foreslå tekst fra vurdering, register og ROS underveis."
-          action={
-            canEdit ? (
-              <Button
-                type="button"
-                size="lg"
-                onClick={handleCreate}
-                disabled={saving}
-              >
-                {saving ? (
-                  <Loader2 className="size-4 animate-spin" />
-                ) : null}
-                Opprett dokument
-              </Button>
-            ) : (
-              <p className="text-sm text-muted-foreground">
-                Kun teammedlemmer med redigeringstilgang kan opprette
-                dokumentet.
-              </p>
-            )
-          }
-        />
+        <div className="space-y-4">
+          <ProductEmptyState
+            icon={FileText}
+            title="Ingen prosessdesign ennå"
+            description="Opprett dokumentet, fyll fra kilder, og beskriv prosessen seksjon for seksjon."
+            action={
+              canEdit ? (
+                <Button
+                  type="button"
+                  size="lg"
+                  className="rounded-lg"
+                  onClick={handleCreate}
+                  disabled={saving}
+                >
+                  {saving ? (
+                    <Loader2 className="size-4 animate-spin" />
+                  ) : null}
+                  Opprett dokument
+                </Button>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  Kun teammedlemmer med redigeringstilgang kan opprette
+                  dokumentet.
+                </p>
+              )
+            }
+          />
+          <div className="rounded-xl border border-border/50 bg-muted/15 px-4 py-4 text-sm leading-6 text-muted-foreground">
+            <p className="font-medium text-foreground">Etter opprettelse</p>
+            <ol className="mt-2 list-decimal space-y-1 pl-5">
+              <li>Fyll fra kilder for å få forslag inn i tomme felt</li>
+              <li>Skriv prosesstittel og kort beskrivelse</li>
+              <li>Beskriv As-Is og To-Be — tekst eller diagram</li>
+            </ol>
+          </div>
+        </div>
       ) : (
         <>
-          {/* Slim toolbar — primær Lagre + Forhåndsvis PDF + meny.
-              Tidligere hadde vi to rader knapper + dupliserte handlinger
-              i et eget «Versjoner og historikk»-panel + et «PDD er koblet
-              til kilder»-panel; alt det er fjernet og lagt i «...»-menyen
-              eller dialoger. */}
-          <div className="sticky top-2 z-20 flex flex-wrap items-center gap-2 rounded-2xl border border-border/60 bg-card/85 px-3 py-2 shadow-sm backdrop-blur sm:px-3.5">
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-medium text-foreground">
-                {payload.processTitle?.trim() || assessmentTitle}
-              </p>
-              {dirty ? (
-                <p className="text-[11px] text-amber-700 dark:text-amber-300">
-                  Husk å lagre før du forlater siden
+          <PddGettingStartedCard
+            completedCount={completedSectionCount}
+            totalCount={PDD_SECTION_SHORTCUTS.length}
+            nextSectionLabel={nextIncompleteSection?.label ?? null}
+            onGoToNext={() => {
+              if (nextIncompleteSection) {
+                goToSection(nextIncompleteSection.value);
+              }
+            }}
+            onAutofill={applyAutofill}
+            onOpenTutorial={() => {
+              resetDismiss();
+              setTutorialOpen(true);
+            }}
+            canAutofill={!!draftBundle?.draft && canEdit}
+            canEdit={canEdit}
+          />
+
+          <div
+            data-tutorial-anchor="pdd-toolbar"
+            className="sticky top-2 z-20 space-y-3 rounded-xl border border-border/45 bg-background/95 px-3 py-3 backdrop-blur-xl sm:px-3.5"
+          >
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-medium text-foreground">
+                  {documentTitle}
                 </p>
-              ) : null}
-            </div>
-            {canEdit && (
+                <p
+                  className={cn(
+                    "mt-0.5 text-xs",
+                    dirty
+                      ? "text-amber-700 dark:text-amber-300"
+                      : "text-muted-foreground",
+                  )}
+                >
+                  {dirty ? "Ulagrede endringer" : "Alt lagret"}
+                </p>
+              </div>
               <Button
                 type="button"
+                variant="ghost"
                 size="sm"
-                className="gap-1.5 rounded-xl"
-                onClick={handleSave}
-                disabled={saving || !dirty}
+                className="h-9 gap-1.5 rounded-lg"
+                onClick={() => {
+                  resetDismiss();
+                  setTutorialOpen(true);
+                }}
               >
-                {saving ? (
-                  <Loader2 className="size-4 animate-spin" />
-                ) : (
-                  <Save className="size-3.5" />
-                )}
-                Lagre
+                <BookOpen className="size-3.5" aria-hidden />
+                <span className="hidden sm:inline">Veiledning</span>
               </Button>
-            )}
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="hidden gap-1.5 rounded-xl sm:inline-flex"
-              onClick={() => void previewPdf()}
-              disabled={pdfPreviewing}
-            >
-              {pdfPreviewing ? (
-                <Loader2 className="size-3.5 animate-spin" aria-hidden />
-              ) : (
-                <Eye className="size-3.5" aria-hidden />
-              )}
-              PDF
-            </Button>
-            <SecondaryActionsMenu
-              onAutofill={applyAutofill}
-              onSnapshot={() => setSnapshotOpen(true)}
-              onHistory={() => setHistoryOpen(true)}
-              onPreviewPdf={() => void previewPdf()}
-              onExportPdf={() => void exportPdf()}
-              canAutofill={!!draftBundle?.draft && canEdit}
-              canEdit={canEdit}
-              pdfPreviewing={pdfPreviewing}
-              pdfExporting={pdfExporting}
-            />
-          </div>
-          <div className="space-y-2 rounded-2xl border border-border/50 bg-card p-2.5">
+              {canEdit ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  className="h-9 gap-1.5 rounded-lg"
+                  onClick={handleSave}
+                  disabled={saving || !dirty}
+                >
+                  {saving ? (
+                    <Loader2 className="size-3.5 animate-spin" />
+                  ) : (
+                    <Save className="size-3.5" />
+                  )}
+                  Lagre
+                </Button>
+              ) : null}
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="hidden h-9 gap-1.5 rounded-lg sm:inline-flex"
+                onClick={() => void previewPdf()}
+                disabled={pdfPreviewing}
+              >
+                {pdfPreviewing ? (
+                  <Loader2 className="size-3.5 animate-spin" aria-hidden />
+                ) : (
+                  <Eye className="size-3.5" aria-hidden />
+                )}
+                PDF
+              </Button>
+              <SecondaryActionsMenu
+                onAutofill={applyAutofill}
+                onSnapshot={() => setSnapshotOpen(true)}
+                onHistory={() => setHistoryOpen(true)}
+                onPreviewPdf={() => void previewPdf()}
+                onExportPdf={() => void exportPdf()}
+                canAutofill={!!draftBundle?.draft && canEdit}
+                canEdit={canEdit}
+                pdfPreviewing={pdfPreviewing}
+                pdfExporting={pdfExporting}
+              />
+            </div>
+
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-              <div className="relative min-w-0 flex-1">
-                <Search
-                  className="pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground"
-                  aria-hidden
-                />
-                <Input
-                  value={sectionQuery}
-                  onChange={(e) => setSectionQuery(e.target.value)}
-                  placeholder="Søk i dokumentseksjoner …"
-                  className="h-9 rounded-xl border-border/60 pl-9 text-sm"
-                />
-              </div>
-              <div className="inline-flex rounded-xl border border-border/50 bg-muted/20 p-0.5">
-                <button
-                  type="button"
-                  onClick={() => setSectionFilter("all")}
-                  className={cn(
-                    "rounded-lg px-2.5 py-1 text-xs transition-colors",
-                    sectionFilter === "all"
-                      ? "bg-background text-foreground shadow-sm"
-                      : "text-muted-foreground hover:text-foreground",
-                  )}
-                >
-                  Alle
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setSectionFilter("incomplete")}
-                  className={cn(
-                    "rounded-lg px-2.5 py-1 text-xs transition-colors",
-                    sectionFilter === "incomplete"
-                      ? "bg-background text-foreground shadow-sm"
-                      : "text-muted-foreground hover:text-foreground",
-                  )}
-                >
-                  Mangler innhold
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setSectionFilter("complete")}
-                  className={cn(
-                    "rounded-lg px-2.5 py-1 text-xs transition-colors",
-                    sectionFilter === "complete"
-                      ? "bg-background text-foreground shadow-sm"
-                      : "text-muted-foreground hover:text-foreground",
-                  )}
-                >
-                  Ferdige
-                </button>
+              <SearchInput
+                value={sectionQuery}
+                onChange={(e) => setSectionQuery(e.target.value)}
+                placeholder="Søk i seksjoner…"
+                aria-label="Søk i dokumentseksjoner"
+                className="min-w-0 flex-1"
+                inputClassName="h-10 min-h-10 rounded-lg border-border/40 bg-muted/25 shadow-none ring-0 placeholder:text-muted-foreground/70 focus-visible:border-foreground/15 focus-visible:bg-background focus-visible:ring-1 focus-visible:ring-foreground/10 md:h-9 md:min-h-9 md:rounded-lg md:pl-11"
+              />
+              <div className="inline-flex shrink-0 self-start rounded-lg bg-muted/35 p-0.5">
+                {(
+                  [
+                    ["all", "Alle"],
+                    ["incomplete", "Mangler"],
+                    ["complete", "Ferdige"],
+                  ] as const
+                ).map(([value, label]) => (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => setSectionFilter(value)}
+                    className={cn(
+                      "rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors",
+                      sectionFilter === value
+                        ? "bg-background text-foreground shadow-sm"
+                        : "text-muted-foreground hover:text-foreground",
+                    )}
+                  >
+                    {label}
+                  </button>
+                ))}
               </div>
             </div>
-            <div className="flex flex-wrap gap-1.5">
+
+            <nav
+              data-tutorial-anchor="pdd-sections"
+              aria-label="Dokumentseksjoner"
+              className="-mx-0.5 flex gap-1 overflow-x-auto px-0.5 pb-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+            >
               {PDD_SECTION_SHORTCUTS.filter(
                 (section) =>
                   sectionVisible[section.value as keyof typeof sectionVisible],
               ).map((section) => {
-              const active = openSections.includes(section.value);
-              const done = sectionCompletion[section.value as keyof typeof sectionCompletion];
-              return (
-                <button
-                  key={section.value}
-                  type="button"
-                  onClick={() => {
-                    setOpenSections((prev) =>
-                      prev.includes(section.value)
-                        ? prev
-                        : [...prev, section.value],
-                    );
-                    document
-                      .getElementById(`pdd-section-${section.value}`)
-                      ?.scrollIntoView({ behavior: "smooth", block: "start" });
-                  }}
-                  className={cn(
-                    "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs transition-colors",
-                    active
-                      ? "border-primary/30 bg-primary/10 text-foreground"
-                      : "border-border/50 bg-card text-muted-foreground hover:text-foreground",
-                  )}
-                >
-                  <span
+                const active = openSections.includes(section.value);
+                const done =
+                  sectionCompletion[
+                    section.value as keyof typeof sectionCompletion
+                  ];
+                return (
+                  <button
+                    key={section.value}
+                    type="button"
+                    onClick={() => goToSection(section.value)}
                     className={cn(
-                      "size-1.5 rounded-full",
-                      done ? "bg-primary" : "bg-muted-foreground/40",
+                      "inline-flex shrink-0 items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors",
+                      active
+                        ? "bg-foreground text-background"
+                        : "text-muted-foreground hover:bg-muted/70 hover:text-foreground",
                     )}
-                    aria-hidden
-                  />
-                  {section.label}
-                </button>
-              );
-            })}
-            </div>
+                  >
+                    <span
+                      className={cn(
+                        "size-1.5 rounded-full",
+                        done
+                          ? active
+                            ? "bg-background/85"
+                            : "bg-emerald-500"
+                          : active
+                            ? "bg-background/35"
+                            : "bg-muted-foreground/35",
+                      )}
+                      aria-hidden
+                    />
+                    {section.label}
+                  </button>
+                );
+              })}
+            </nav>
             {PDD_SECTION_SHORTCUTS.every(
               (section) =>
                 !sectionVisible[section.value as keyof typeof sectionVisible],
             ) ? (
-              <p className="px-1 text-xs text-muted-foreground">
-                Ingen seksjoner matcher gjeldende søk/filter.
+              <p className="text-xs text-muted-foreground">
+                Ingen seksjoner matcher søk eller filter.
               </p>
             ) : null}
           </div>
 
-          {/* Koblinger — read-only data from linked sources */}
           <CollapsibleSection title="Koblinger" icon={Link2}>
-            <div className="space-y-3 text-sm">
-              <LinkRow
-                label="PVV-vurdering"
-                href={`/w/${wid}/a/${assessmentId}`}
-                text={assessmentTitle}
-              />
-              <div>
+            <div className="space-y-2.5">
+              <div className="grid gap-2 sm:grid-cols-2">
+                <LinkRow
+                  label="PVV-vurdering"
+                  href={`/w/${wid}/a/${assessmentId}`}
+                  text={assessmentTitle}
+                />
                 <LinkRow
                   label="Prosess (register)"
                   href={
@@ -1964,69 +2102,77 @@ export function ProcessDesignDocPage({
                       ? `${processForKoblingerRow.code} ${processForKoblingerRow.name}`
                       : undefined
                   }
-                  emptyText="Ingen prosess funnet i utkast eller kobling — velg prosess på vurderingen"
+                  emptyText="Ingen prosess funnet — velg prosess på vurderingen"
                 />
-                {draftRegistryOnly && !explicitRegistry ? (
-                  <p className="mt-1.5 text-xs leading-5 text-amber-800 dark:text-amber-200/90">
-                    Prosessen er valgt i vurderingens utkast, men ikke eksplisitt koblet.
-                    Koble vurderingen til prosessen under Prosessregister for å ta med
+                <div className="rounded-xl bg-muted/20 px-3 py-2.5">
+                  <span className="text-[11px] font-medium uppercase tracking-[0.06em] text-muted-foreground">
+                    ROS-analyser
+                  </span>
+                  {rosAnalyses.length > 0 ? (
+                    <ul className="mt-1 space-y-1">
+                      {rosAnalyses.map((r) => (
+                        <li key={r.linkId}>
+                          <Link
+                            href={`/w/${wid}/ros/a/${r.rosAnalysisId}`}
+                            className="inline-flex items-center gap-1.5 text-sm font-medium text-foreground underline-offset-4 hover:text-primary hover:underline"
+                          >
+                            {r.title}
+                            <ExternalLink
+                              className="size-3.5 opacity-50"
+                              aria-hidden
+                            />
+                          </Link>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      Ingen ROS-analyse koblet
+                    </p>
+                  )}
+                </div>
+                <LinkRow
+                  label="Organisasjon"
+                  text={organizationLine.trim() || workspace?.name || undefined}
+                  emptyText="Ikke angitt"
+                />
+              </div>
+              {draftRegistryOnly && !explicitRegistry ? (
+                <div className="flex gap-2.5 rounded-xl border border-amber-500/25 bg-amber-500/[0.08] px-3 py-2.5 text-xs leading-5 text-amber-900 dark:text-amber-100/90">
+                  <AlertTriangle
+                    className="mt-0.5 size-3.5 shrink-0"
+                    aria-hidden
+                  />
+                  <p>
+                    Prosessen er valgt i utkastet, men ikke eksplisitt koblet.
+                    Koble vurderingen under Prosessregister for å ta med
                     registerfelter i «Fyll inn manglende felt».
                   </p>
-                ) : null}
-              </div>
-              <div>
-                <span className="text-xs font-medium text-muted-foreground">
-                  ROS-analyser
-                </span>
-                {rosAnalyses.length > 0 ? (
-                  <ul className="mt-1 space-y-1">
-                    {rosAnalyses.map((r) => (
-                      <li key={r.linkId}>
-                        <Link
-                          href={`/w/${wid}/ros/a/${r.rosAnalysisId}`}
-                          className="inline-flex items-center gap-1 text-sm font-medium text-primary underline-offset-4 hover:underline"
-                        >
-                          {r.title}
-                          <ExternalLink
-                            className="size-3 opacity-60"
-                            aria-hidden
-                          />
-                        </Link>
-                      </li>
-                    ))}
-                  </ul>
-                ) : (
-                  <p className="mt-0.5 text-xs text-muted-foreground">
-                    Ingen ROS-analyse koblet
-                  </p>
-                )}
-              </div>
-              <LinkRow
-                label="Organisasjon"
-                text={organizationLine.trim() || workspace?.name || undefined}
-                emptyText="Ikke angitt"
-              />
+                </div>
+              ) : null}
             </div>
           </CollapsibleSection>
 
           <CollapsibleSection title="Anbefalt mapping fra kilder" icon={Sparkles}>
-            <div className="grid gap-3 sm:grid-cols-2">
+            <div className="grid gap-2 sm:grid-cols-2">
               {PDD_SOURCE_MAPPING_GROUPS.map((group) => (
                 <div
                   key={group.title}
-                  className="rounded-2xl border border-border/60 bg-muted/10 p-4 shadow-sm"
+                  className="rounded-xl bg-muted/20 px-3.5 py-3"
                 >
-                  <p className="text-sm font-semibold text-foreground">{group.title}</p>
-                  <p className="mt-2 text-xs font-medium uppercase tracking-[0.08em] text-muted-foreground">
+                  <p className="text-sm font-medium text-foreground">
+                    {group.title}
+                  </p>
+                  <p className="mt-2 text-[11px] font-medium uppercase tracking-[0.06em] text-muted-foreground">
                     Felter
                   </p>
-                  <p className="mt-1 text-sm leading-6 text-muted-foreground">
+                  <p className="mt-0.5 text-sm leading-6 text-muted-foreground">
                     {group.fields}
                   </p>
-                  <p className="mt-3 text-xs font-medium uppercase tracking-[0.08em] text-muted-foreground">
+                  <p className="mt-2.5 text-[11px] font-medium uppercase tracking-[0.06em] text-muted-foreground">
                     Hentes fra
                   </p>
-                  <p className="mt-1 text-sm leading-6 text-muted-foreground">
+                  <p className="mt-0.5 text-sm leading-6 text-muted-foreground">
                     {group.sources}
                   </p>
                 </div>
@@ -2034,24 +2180,24 @@ export function ProcessDesignDocPage({
             </div>
           </CollapsibleSection>
 
-          {/* ============ MAIN SECTIONS ============ */}
           <Accordion
             multiple
             value={openSections}
             onValueChange={(value) => setOpenSections([...value])}
-            className="space-y-3"
+            className="space-y-2.5"
           >
-            {/* ---- 1. Oversikt ---- */}
             {sectionVisible.overview ? (
             <AccordionItem
               id="pdd-section-overview"
+              data-tutorial-anchor="pdd-section-overview"
               value="overview"
-              className="overflow-hidden rounded-2xl border border-border/60 bg-card/70 px-4 shadow-sm backdrop-blur-sm sm:px-5"
+              className={PDD_ACCORDION_ITEM_CLASS}
             >
-              <AccordionTrigger className="py-4 text-sm font-semibold no-underline hover:no-underline">
-                Prosessoversikt
-              </AccordionTrigger>
-              <AccordionContent className="space-y-5 border-t border-border/40 pt-4">
+              <SectionTrigger
+                label="Prosessoversikt"
+                done={sectionCompletion.overview}
+              />
+              <AccordionContent className="space-y-5 border-t border-border/35 pt-4">
                 <Field
                   label="Prosesstittel"
                   value={payload.processTitle ?? payload.asIsProcessName ?? ""}
@@ -2191,13 +2337,15 @@ export function ProcessDesignDocPage({
             {sectionVisible.asis ? (
             <AccordionItem
               id="pdd-section-asis"
+              data-tutorial-anchor="pdd-section-asis"
               value="asis"
-              className="overflow-hidden rounded-2xl border border-border/60 bg-card/70 px-4 shadow-sm backdrop-blur-sm sm:px-5"
+              className={PDD_ACCORDION_ITEM_CLASS}
             >
-              <AccordionTrigger className="py-4 text-sm font-semibold no-underline hover:no-underline">
-                As-Is — nåværende prosess
-              </AccordionTrigger>
-              <AccordionContent className="space-y-5 border-t border-border/40 pt-4">
+              <SectionTrigger
+                label="As-Is — nåværende prosess"
+                done={sectionCompletion.asis}
+              />
+              <AccordionContent className="space-y-5 border-t border-border/35 pt-4">
                 <Field
                   label="Beskrivelse av nåsituasjonen"
                   value={payload.asIsShortDescription ?? ""}
@@ -2248,7 +2396,7 @@ export function ProcessDesignDocPage({
                 </div>
                 <ProcessTextDiagramBlock
                   sectionLabel="As-Is prosesskart"
-                  diagramHint="Koble bokser med Pil-verktøyet. Pilene festes til kanten av boksene. Bruk fullskjerm for større arbeidsflate."
+                  diagramHint="Tegn fritt med Blyant (Apple Pencil støttes med trykk). Sett bokser med form-verktøyet, koble med Pil — eller skisser flyt freehand. Fullskjerm gir best arbeidsflate på iPad."
                   textRows={4}
                   textValue={payload.asIsProcessMap ?? ""}
                   onTextChange={(v) => setStr("asIsProcessMap", v)}
@@ -2258,6 +2406,7 @@ export function ProcessDesignDocPage({
                   }
                   canEdit={canEdit}
                   instanceKey={diagramInstanceKey}
+                  diagramKind="asIs"
                   sourceHints={["Fra vurdering", "Kan utdypes manuelt i PDD"]}
                 />
                 <ApplicationEditor
@@ -2291,15 +2440,16 @@ export function ProcessDesignDocPage({
             <AccordionItem
               id="pdd-section-tobe"
               value="tobe"
-              className="overflow-hidden rounded-2xl border border-border/60 bg-card/70 px-4 shadow-sm backdrop-blur-sm sm:px-5"
+              className={PDD_ACCORDION_ITEM_CLASS}
             >
-              <AccordionTrigger className="py-4 text-sm font-semibold no-underline hover:no-underline">
-                To-Be — fremtidig prosess
-              </AccordionTrigger>
-              <AccordionContent className="space-y-5 border-t border-border/40 pt-4">
+              <SectionTrigger
+                label="To-Be — fremtidig prosess"
+                done={sectionCompletion.tobe}
+              />
+              <AccordionContent className="space-y-5 border-t border-border/35 pt-4">
                 <ProcessTextDiagramBlock
                   sectionLabel="To-Be prosesskart"
-                  diagramHint="Tegn fremtidig flyt — bruk Pil-verktøyet for koblinger."
+                  diagramHint="Tegn fremtidig flyt freehand med Blyant (Apple Pencil), eller bygg med bokser + Pil for faste koblinger."
                   textRows={4}
                   textValue={payload.toBeMap ?? ""}
                   onTextChange={(v) => setStr("toBeMap", v)}
@@ -2309,6 +2459,7 @@ export function ProcessDesignDocPage({
                   }
                   canEdit={canEdit}
                   instanceKey={diagramInstanceKey}
+                  diagramKind="toBe"
                   sourceHints={["Bygges i PDD", "Støttes av vurdering"]}
                 />
                 <Field
@@ -2358,12 +2509,13 @@ export function ProcessDesignDocPage({
             <AccordionItem
               id="pdd-section-huki"
               value="huki"
-              className="overflow-hidden rounded-2xl border border-border/60 bg-card/70 px-4 shadow-sm backdrop-blur-sm sm:px-5"
+              className={PDD_ACCORDION_ITEM_CLASS}
             >
-              <AccordionTrigger className="py-4 text-sm font-semibold no-underline hover:no-underline">
-                HUKI — roller og ansvar
-              </AccordionTrigger>
-              <AccordionContent className="border-t border-border/40 pt-4">
+              <SectionTrigger
+                label="HUKI — roller og ansvar"
+                done={sectionCompletion.huki}
+              />
+              <AccordionContent className="border-t border-border/35 pt-4">
                 <HukiEditor
                   rows={payload.hukiRows ?? []}
                   disabled={!canEdit}
@@ -2382,12 +2534,13 @@ export function ProcessDesignDocPage({
             <AccordionItem
               id="pdd-section-risk"
               value="risk"
-              className="overflow-hidden rounded-2xl border border-border/60 bg-card/70 px-4 shadow-sm backdrop-blur-sm sm:px-5"
+              className={PDD_ACCORDION_ITEM_CLASS}
             >
-              <AccordionTrigger className="py-4 text-sm font-semibold no-underline hover:no-underline">
-                Risiko og feilhåndtering
-              </AccordionTrigger>
-              <AccordionContent className="space-y-5 border-t border-border/40 pt-4">
+              <SectionTrigger
+                label="Risiko og feilhåndtering"
+                done={sectionCompletion.risk}
+              />
+              <AccordionContent className="space-y-5 border-t border-border/35 pt-4">
                 {/* ROS risks — read-only from linked analyses */}
                 {rosAnalyses.length > 0 && (
                   <div className="space-y-2">
@@ -2514,12 +2667,13 @@ export function ProcessDesignDocPage({
             <AccordionItem
               id="pdd-section-extra"
               value="extra"
-              className="overflow-hidden rounded-2xl border border-border/60 bg-card/70 px-4 shadow-sm backdrop-blur-sm sm:px-5"
+              className={PDD_ACCORDION_ITEM_CLASS}
             >
-              <AccordionTrigger className="py-4 text-sm font-semibold no-underline hover:no-underline">
-                Tilleggsinformasjon
-              </AccordionTrigger>
-              <AccordionContent className="space-y-5 border-t border-border/40 pt-4">
+              <SectionTrigger
+                label="Tilleggsinformasjon"
+                done={sectionCompletion.extra}
+              />
+              <AccordionContent className="space-y-5 border-t border-border/35 pt-4">
                 <Field
                   label="Andre observasjoner"
                   value={payload.otherObservations ?? ""}
@@ -2559,13 +2713,12 @@ export function ProcessDesignDocPage({
             ) : null}
           </Accordion>
 
-          {/* Mobile sticky bottom bar */}
-          {canEdit && (
-            <div className="fixed inset-x-0 bottom-0 z-40 border-t border-border/60 bg-background/90 px-4 py-3 backdrop-blur-xl sm:hidden [padding-bottom:calc(0.75rem+env(safe-area-inset-bottom))]">
+          {canEdit ? (
+            <div className="fixed inset-x-0 bottom-0 z-40 border-t border-border/40 bg-background/95 px-4 py-3 backdrop-blur-xl sm:hidden [padding-bottom:calc(0.75rem+env(safe-area-inset-bottom))]">
               <Button
                 type="button"
                 size="lg"
-                className="h-12 w-full gap-2 rounded-2xl shadow-sm"
+                className="h-12 w-full gap-2 rounded-2xl"
                 onClick={handleSave}
                 disabled={saving || !dirty}
               >
@@ -2574,10 +2727,10 @@ export function ProcessDesignDocPage({
                 ) : (
                   <Save className="size-4" />
                 )}
-                {dirty ? "Lagre endringer" : "Ingen endringer"}
+                {dirty ? "Lagre endringer" : "Alt er lagret"}
               </Button>
             </div>
-          )}
+          ) : null}
         </>
       )}
 
@@ -2893,6 +3046,15 @@ export function ProcessDesignDocPage({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <PddTutorialOverlay
+        open={tutorialOpen}
+        onClose={() => setTutorialOpen(false)}
+        onDismissPermanent={() => {
+          dismissPermanent();
+          setTutorialOpen(false);
+        }}
+      />
     </div>
   );
 }
@@ -2913,22 +3075,22 @@ function LinkRow({
   emptyText?: string;
 }) {
   return (
-    <div>
-      <span className="text-xs font-medium text-muted-foreground">{label}</span>
+    <div className="rounded-xl bg-muted/20 px-3 py-2.5">
+      <span className="text-[11px] font-medium uppercase tracking-[0.06em] text-muted-foreground">
+        {label}
+      </span>
       {text && href ? (
         <Link
           href={href}
-          className="mt-0.5 flex items-center gap-1 text-sm font-medium text-primary underline-offset-4 hover:underline"
+          className="mt-1 flex items-center gap-1.5 text-sm font-medium text-foreground underline-offset-4 transition-colors hover:text-primary hover:underline"
         >
-          {text}
-          <ExternalLink className="size-3 opacity-60" aria-hidden />
+          <span className="min-w-0 truncate">{text}</span>
+          <ExternalLink className="size-3.5 shrink-0 opacity-50" aria-hidden />
         </Link>
       ) : text ? (
-        <p className="mt-0.5 text-sm">{text}</p>
+        <p className="mt-1 text-sm text-foreground">{text}</p>
       ) : (
-        <p className="mt-0.5 text-xs text-muted-foreground">
-          {emptyText ?? "—"}
-        </p>
+        <p className="mt-1 text-sm text-muted-foreground">{emptyText ?? "—"}</p>
       )}
     </div>
   );

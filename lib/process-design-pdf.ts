@@ -1,6 +1,7 @@
 import { jsPDF } from "jspdf";
 
 import type { ProcessDesignDocumentPayload } from "@/lib/process-design-doc-types";
+import { resolvePddDiagramSnapshot } from "@/lib/pdd-diagram-live-cache";
 import {
   type PddDiagramRaster,
   rasterizePddDiagramSnapshot,
@@ -20,6 +21,8 @@ export type ProcessDesignPdfInput = {
   payload: ProcessDesignDocumentPayload;
   generatedAt: Date;
   publishedVersion?: number | null;
+  /** Nøkkel for live diagram-cache (typisk assessmentId + revisjon). */
+  diagramCacheKey?: string;
 };
 
 function formatTs(d: Date) {
@@ -416,11 +419,36 @@ function buildProcessDesignPdfDocument(
 async function buildProcessDesignPdfBlob(
   data: ProcessDesignPdfInput,
 ): Promise<Blob> {
+  const cacheKey = data.diagramCacheKey?.trim() || "";
+  const asIsSnapshot = cacheKey
+    ? resolvePddDiagramSnapshot(
+        cacheKey,
+        "asIs",
+        data.payload.asIsDiagramSnapshot,
+      )
+    : data.payload.asIsDiagramSnapshot;
+  const toBeSnapshot = cacheKey
+    ? resolvePddDiagramSnapshot(
+        cacheKey,
+        "toBe",
+        data.payload.toBeDiagramSnapshot,
+      )
+    : data.payload.toBeDiagramSnapshot;
+
+  const payloadForPdf: ProcessDesignDocumentPayload = {
+    ...data.payload,
+    asIsDiagramSnapshot: asIsSnapshot,
+    toBeDiagramSnapshot: toBeSnapshot,
+  };
+
   const [asIs, toBe] = await Promise.all([
-    rasterizePddDiagramSnapshot(data.payload.asIsDiagramSnapshot),
-    rasterizePddDiagramSnapshot(data.payload.toBeDiagramSnapshot),
+    rasterizePddDiagramSnapshot(asIsSnapshot),
+    rasterizePddDiagramSnapshot(toBeSnapshot),
   ]);
-  const doc = buildProcessDesignPdfDocument(data, { asIs, toBe });
+  const doc = buildProcessDesignPdfDocument(
+    { ...data, payload: payloadForPdf },
+    { asIs, toBe },
+  );
   return doc.output("blob");
 }
 

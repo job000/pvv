@@ -2,12 +2,16 @@
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
+  DefaultDashStyle,
+  DrawShapeUtil,
   Tldraw,
   createTLStore,
   defaultBindingUtils,
   defaultShapeUtils,
 } from "@tldraw/tldraw";
-import type { ArrowShapeUtil, Editor, TLEditorSnapshot } from "@tldraw/tldraw";
+import type { ArrowShapeUtil, Editor } from "@tldraw/tldraw";
+import { setPddDiagramLiveSnapshot } from "@/lib/pdd-diagram-live-cache";
+import { parsePddTldrawDocumentSnapshot } from "@/lib/pdd-diagram-snapshot";
 import { cn } from "@/lib/utils";
 import type { KeyboardEvent as ReactKeyboardEvent } from "react";
 import {
@@ -17,6 +21,15 @@ import {
   useMemo,
   useRef,
 } from "react";
+
+export { parsePddTldrawDocumentSnapshot } from "@/lib/pdd-diagram-snapshot";
+
+/** Lengre frie Pencil-streker før tldraw splitter automatisk (default 600). */
+const PDD_MAX_DRAW_POINTS = 1400;
+
+const PddDrawShapeUtil = DrawShapeUtil.configure({
+  maxPointsPerShape: PDD_MAX_DRAW_POINTS,
+});
 
 /**
  * Pil mot bundne former: større snap-radier + pnpm-patch (BOUND_ARROW_OFFSET, kantsnapping for arc-piler).
@@ -36,27 +49,85 @@ function configurePddArrowBindings(editor: Editor) {
   });
 }
 
-export function parsePddTldrawDocumentSnapshot(
-  json: string | undefined,
-): Partial<TLEditorSnapshot> | undefined {
-  if (!json?.trim()) return undefined;
-  try {
-    const parsed: unknown = JSON.parse(json);
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-      return undefined;
-    }
-    const doc = (parsed as { document?: unknown }).document;
-    if (!doc || typeof doc !== "object" || Array.isArray(doc)) {
-      return undefined;
-    }
-    const d = doc as { store?: unknown };
-    if (!d.store || typeof d.store !== "object" || Array.isArray(d.store)) {
-      return undefined;
-    }
-    return { document: doc as TLEditorSnapshot["document"] };
-  } catch {
-    return undefined;
+function prefersPenFirstSurface(): boolean {
+  if (typeof window === "undefined") return false;
+  const coarse = window.matchMedia("(pointer: coarse)").matches;
+  const hasTouch = navigator.maxTouchPoints > 0;
+  return coarse || hasTouch;
+}
+
+/**
+ * Concepts-lignende freehand: trykkfølsom blyant, palm rejection, lengre streker.
+ * Apple Pencil aktiverer pen-modus og bytter til tegneverktøy fra select/hand.
+ */
+function configurePddFreehandDrawing(editor: Editor, readOnly: boolean) {
+  const drawUtil = editor.getShapeUtil("draw") as DrawShapeUtil | undefined;
+  if (drawUtil?.options) {
+    Object.assign(drawUtil.options, {
+      maxPointsPerShape: PDD_MAX_DRAW_POINTS,
+    });
   }
+
+  editor.setStyleForNextShapes(DefaultDashStyle, "draw");
+
+  if (!readOnly && prefersPenFirstSurface()) {
+    editor.setCurrentTool("draw");
+  }
+
+  const container = editor.getContainer();
+  container.classList.add("pdd-tldraw-pen-ready");
+
+  let penStrokeActive = false;
+
+  const isEventOnCanvas = (target: EventTarget | null) => {
+    if (!(target instanceof Node)) return false;
+    return container.contains(target);
+  };
+
+  const blockPageScroll = (event: TouchEvent | WheelEvent) => {
+    if (!penStrokeActive) return;
+    event.preventDefault();
+  };
+
+  // Document-capture: bytt til blyant FØR tldraw behandler første Pencil-treff
+  const onPointerDownCapture = (event: PointerEvent) => {
+    if (readOnly) return;
+    if (event.pointerType !== "pen") return;
+    if (!isEventOnCanvas(event.target)) return;
+
+    penStrokeActive = true;
+    if (!editor.getInstanceState().isPenMode) {
+      editor.updateInstanceState({ isPenMode: true });
+    }
+
+    const toolId = editor.getCurrentToolId();
+    // Behold Pil/form/tekst hvis brukeren aktivt valgte dem; ellers freehand
+    if (toolId === "select" || toolId === "hand") {
+      editor.setCurrentTool("draw");
+    }
+  };
+
+  const endPenStroke = (event: PointerEvent) => {
+    if (event.pointerType !== "pen") return;
+    penStrokeActive = false;
+  };
+
+  document.addEventListener("pointerdown", onPointerDownCapture, true);
+  document.addEventListener("pointerup", endPenStroke, true);
+  document.addEventListener("pointercancel", endPenStroke, true);
+  // iPad: unngå at dokumentet scroller mens Pencil tegner i innfelt canvas
+  container.addEventListener("touchmove", blockPageScroll, { passive: false });
+  container.addEventListener("wheel", blockPageScroll, { passive: false });
+
+  return () => {
+    penStrokeActive = false;
+    container.classList.remove("pdd-tldraw-pen-ready");
+    document.removeEventListener("pointerdown", onPointerDownCapture, true);
+    document.removeEventListener("pointerup", endPenStroke, true);
+    document.removeEventListener("pointercancel", endPenStroke, true);
+    container.removeEventListener("touchmove", blockPageScroll);
+    container.removeEventListener("wheel", blockPageScroll);
+  };
 }
 
 export function PddTldrawCanvas({
@@ -64,6 +135,7 @@ export function PddTldrawCanvas({
   onSnapshotChange,
   readOnly,
   instanceKey,
+  diagramKind,
   layoutVariant = "embed",
   className,
 }: {
@@ -72,6 +144,8 @@ export function PddTldrawCanvas({
   readOnly: boolean;
   /** Endres ved ny serverdata (revisjon) for å laste inn lagret tegning på nytt. */
   instanceKey: string;
+  /** Brukes til live-cache for PDF-eksport (As-Is / To-Be). */
+  diagramKind?: "asIs" | "toBe";
   /** `fullscreen`: fyll tilgjengelig høyde (brukes med Fullscreen API). */
   layoutVariant?: "embed" | "fullscreen";
   className?: string;
@@ -79,7 +153,7 @@ export function PddTldrawCanvas({
   const store = useMemo(() => {
     const snap = parsePddTldrawDocumentSnapshot(snapshotJson);
     return createTLStore({
-      shapeUtils: defaultShapeUtils,
+      shapeUtils: [...defaultShapeUtils.filter((u) => u.type !== "draw"), PddDrawShapeUtil],
       bindingUtils: defaultBindingUtils,
       ...(snap ? { snapshot: snap } : {}),
     });
@@ -103,19 +177,31 @@ export function PddTldrawCanvas({
     lastSentRef.current = snapshotJson ?? null;
   }, [snapshotJson]);
 
+  const writeLiveCache = useCallback(
+    (json: string) => {
+      if (!diagramKind) return;
+      setPddDiagramLiveSnapshot(instanceKey, diagramKind, json);
+    },
+    [diagramKind, instanceKey],
+  );
+
   const flushToParent = useCallback(() => {
     if (!onSnapshotChange || readOnly) return;
     const doc = storeRef.current.getStoreSnapshot();
     const json = JSON.stringify({ document: doc });
+    writeLiveCache(json);
     if (json === lastSentRef.current) return;
     lastSentRef.current = json;
     onSnapshotChange(json);
-  }, [onSnapshotChange, readOnly]);
+  }, [onSnapshotChange, readOnly, writeLiveCache]);
 
   useLayoutEffect(() => {
     if (readOnly || !onSnapshotChange) return;
     const unsub = store.listen(
       () => {
+        const doc = storeRef.current.getStoreSnapshot();
+        const json = JSON.stringify({ document: doc });
+        writeLiveCache(json);
         if (debounceRef.current) clearTimeout(debounceRef.current);
         debounceRef.current = setTimeout(() => {
           debounceRef.current = null;
@@ -133,13 +219,19 @@ export function PddTldrawCanvas({
       if (!readOnly) {
         const doc = store.getStoreSnapshot();
         const json = JSON.stringify({ document: doc });
+        writeLiveCache(json);
         if (json !== lastSentRef.current) {
           lastSentRef.current = json;
           onSnapshotChange(json);
         }
       }
     };
-  }, [store, readOnly, onSnapshotChange, flushToParent]);
+  }, [store, readOnly, onSnapshotChange, flushToParent, writeLiveCache]);
+
+  useEffect(() => {
+    if (!diagramKind || !snapshotJson?.trim()) return;
+    writeLiveCache(snapshotJson);
+  }, [diagramKind, snapshotJson, writeLiveCache]);
 
   useEffect(() => {
     const ed = editorRef.current;
@@ -284,7 +376,7 @@ export function PddTldrawCanvas({
       ref={containerRef}
       onKeyDown={trapScrollKeys}
       className={cn(
-        "relative w-full overflow-hidden rounded-2xl border border-border/60 bg-muted/10 touch-manipulation shadow-sm [overscroll-behavior:contain] [overflow-anchor:none]",
+        "pdd-tldraw-canvas relative w-full overflow-hidden rounded-2xl border border-border/60 bg-muted/10 shadow-sm touch-none select-none [overscroll-behavior:contain] [overflow-anchor:none] [-webkit-touch-callout:none]",
         heightClass,
         className,
       )}
@@ -292,11 +384,14 @@ export function PddTldrawCanvas({
       <Tldraw
         licenseKey={licenseKey}
         store={store}
+        shapeUtils={[PddDrawShapeUtil]}
         onMount={(editor) => {
           editorRef.current = editor;
           editor.updateInstanceState({ isReadonly: readOnly });
           configurePddArrowBindings(editor);
+          const cleanupFreehand = configurePddFreehandDrawing(editor, readOnly);
           return () => {
+            cleanupFreehand();
             editorRef.current = null;
           };
         }}

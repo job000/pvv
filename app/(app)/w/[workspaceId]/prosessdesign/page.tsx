@@ -8,6 +8,8 @@ import { buttonVariants } from "@/components/ui/button-variants";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import { formatRelativeUpdatedAt } from "@/lib/assessment-ui-helpers";
+import { orgSubtreeIds, orgUnitSearchLabel } from "@/lib/org-unit-filter";
+import { useStickyState } from "@/lib/use-sticky-state";
 import { cn } from "@/lib/utils";
 import { useQuery } from "convex/react";
 import {
@@ -16,16 +18,26 @@ import {
   ChevronLeft,
   ChevronRight,
   FileText,
+  LayoutGrid,
+  List,
   Search,
+  Table2,
 } from "lucide-react";
-import { orgSubtreeIds, orgUnitSearchLabel } from "@/lib/org-unit-filter";
 import Link from "next/link";
 import { useParams, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 
-const PAGE_SIZE = 20;
 type ActivityFilter = "all" | "7d" | "30d";
 type SortBy = "updated_desc" | "updated_asc" | "title_asc";
+type ViewMode = "cards" | "list" | "table";
+type PageSize = 6 | 10 | 20;
+
+const PAGE_SIZES: PageSize[] = [6, 10, 20];
+
+const selectClass = cn(
+  "h-10 cursor-pointer appearance-none truncate rounded-lg border border-border/60 bg-background/60 py-0 pl-3 pr-8 text-sm outline-none",
+  "transition-colors focus:border-foreground/25 focus:bg-background",
+);
 
 function ProcessDesignHubBody() {
   const params = useParams();
@@ -41,9 +53,19 @@ function ProcessDesignHubBody() {
 
   const [q, setQ] = useState("");
   const [page, setPage] = useState(1);
-  const [orgUnitFilter, setOrgUnitFilter] = useState<"" | Id<"orgUnits">>(rawOrgUnit ?? "");
+  const [orgUnitFilter, setOrgUnitFilter] = useState<"" | Id<"orgUnits">>(
+    rawOrgUnit ?? "",
+  );
   const [activityFilter, setActivityFilter] = useState<ActivityFilter>("all");
   const [sortBy, setSortBy] = useState<SortBy>("updated_desc");
+  const [viewMode, setViewMode] = useStickyState<ViewMode>(
+    `pdd-hub:${wid}:view`,
+    "list",
+  );
+  const [pageSize, setPageSize] = useStickyState<PageSize>(
+    `pdd-hub:${wid}:pageSize`,
+    10,
+  );
 
   const appliedRef = useRef(false);
   useEffect(() => {
@@ -75,7 +97,9 @@ function ProcessDesignHubBody() {
     let list = assessments;
     if (orgUnitFilter) {
       const subtree = orgSubtreeIds(orgUnitFilter, units);
-      list = list.filter((a) => a.orgUnitId ? subtree.has(a.orgUnitId) : false);
+      list = list.filter((a) =>
+        a.orgUnitId ? subtree.has(a.orgUnitId) : false,
+      );
     }
     if (freshnessCutoffMs !== null) {
       list = list.filter((a) => a.updatedAt >= freshnessCutoffMs);
@@ -83,7 +107,7 @@ function ProcessDesignHubBody() {
     if (term) {
       list = list.filter((a) => {
         const orgName = a.orgUnitId
-          ? orgUnitNameById.get(String(a.orgUnitId))?.toLowerCase() ?? ""
+          ? (orgUnitNameById.get(String(a.orgUnitId))?.toLowerCase() ?? "")
           : "";
         return a.title.toLowerCase().includes(term) || orgName.includes(term);
       });
@@ -97,12 +121,28 @@ function ProcessDesignHubBody() {
       sorted.sort((a, b) => b.updatedAt - a.updatedAt);
     }
     return sorted;
-  }, [assessments, orgUnits, orgUnitFilter, q, activityFilter, sortBy, orgUnitNameById]);
+  }, [
+    assessments,
+    orgUnits,
+    orgUnitFilter,
+    q,
+    activityFilter,
+    sortBy,
+    orgUnitNameById,
+  ]);
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const safePage = Math.max(1, Math.min(page, totalPages));
-  const pageStart = (safePage - 1) * PAGE_SIZE;
-  const paginated = filtered.slice(pageStart, pageStart + PAGE_SIZE);
+  const pageStart = (safePage - 1) * pageSize;
+  const paginated = filtered.slice(pageStart, pageStart + pageSize);
+
+  useEffect(() => {
+    setPage(1);
+  }, [q, orgUnitFilter, activityFilter, sortBy, pageSize]);
+
+  useEffect(() => {
+    if (page > totalPages) setPage(totalPages);
+  }, [page, totalPages]);
 
   if (assessments === undefined) {
     return (
@@ -131,7 +171,8 @@ function ProcessDesignHubBody() {
           Velg en vurdering for å åpne prosessdesign (PDD).
           {assessments.length === 0 ? (
             <>
-              {" "}Opprett først under{" "}
+              {" "}
+              Opprett først under{" "}
               <Link
                 href={`/w/${wid}/vurderinger`}
                 className="font-medium text-foreground underline-offset-2 hover:underline"
@@ -181,7 +222,7 @@ function ProcessDesignHubBody() {
             </div>
           </dl>
 
-          <div className="flex flex-col gap-2">
+          <div className="flex flex-col gap-3">
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
               <div className="relative min-w-0 flex-1">
                 <Search
@@ -193,13 +234,12 @@ function ProcessDesignHubBody() {
                   value={q}
                   onChange={(e) => {
                     setQ(e.target.value);
-                    setPage(1);
                   }}
                   placeholder="Søk tittel eller enhet …"
                   autoComplete="off"
                   aria-label="Søk i vurderinger"
                   className={cn(
-                    "h-10 w-full rounded-xl border border-border/60 bg-background/60 pl-9 pr-3 text-sm outline-none",
+                    "h-10 w-full rounded-lg border border-border/60 bg-background/60 pl-9 pr-3 text-sm outline-none",
                     "transition-colors placeholder:text-muted-foreground/70",
                     "focus:border-foreground/25 focus:bg-background focus:ring-0",
                   )}
@@ -212,12 +252,8 @@ function ProcessDesignHubBody() {
                     value={orgUnitFilter}
                     onChange={(e) => {
                       setOrgUnitFilter(e.target.value as "" | Id<"orgUnits">);
-                      setPage(1);
                     }}
-                    className={cn(
-                      "h-10 max-w-[14rem] cursor-pointer appearance-none truncate rounded-xl border border-border/60 bg-background/60 py-0 pl-3 pr-8 text-sm outline-none",
-                      "transition-colors focus:border-foreground/25 focus:bg-background",
-                    )}
+                    className={cn(selectClass, "max-w-[14rem]")}
                   >
                     <option value="">Alle enheter</option>
                     {(orgUnits ?? []).map((u) => (
@@ -238,12 +274,8 @@ function ProcessDesignHubBody() {
                   value={activityFilter}
                   onChange={(e) => {
                     setActivityFilter(e.target.value as ActivityFilter);
-                    setPage(1);
                   }}
-                  className={cn(
-                    "h-10 w-full min-w-[9rem] cursor-pointer appearance-none truncate rounded-xl border border-border/60 bg-background/60 py-0 pl-3 pr-8 text-sm outline-none",
-                    "transition-colors focus:border-foreground/25 focus:bg-background",
-                  )}
+                  className={cn(selectClass, "min-w-[9rem]")}
                 >
                   <option value="all">All aktivitet</option>
                   <option value="7d">Siste 7 dager</option>
@@ -260,12 +292,8 @@ function ProcessDesignHubBody() {
                   value={sortBy}
                   onChange={(e) => {
                     setSortBy(e.target.value as SortBy);
-                    setPage(1);
                   }}
-                  className={cn(
-                    "h-10 w-full min-w-[9rem] cursor-pointer appearance-none truncate rounded-xl border border-border/60 bg-background/60 py-0 pl-3 pr-8 text-sm outline-none",
-                    "transition-colors focus:border-foreground/25 focus:bg-background",
-                  )}
+                  className={cn(selectClass, "min-w-[9rem]")}
                 >
                   <option value="updated_desc">Nyeste først</option>
                   <option value="updated_asc">Eldste først</option>
@@ -277,30 +305,98 @@ function ProcessDesignHubBody() {
                 />
               </div>
             </div>
-            {activeFiltersCount > 0 ? (
-              <div className="flex items-center justify-between gap-2">
-                <p className="text-xs text-muted-foreground">
-                  {activeFiltersCount} aktiv{activeFiltersCount === 1 ? "" : "e"} filter
-                </p>
-                <button
-                  type="button"
-                  className="rounded-full border border-border/50 px-2.5 py-1 text-xs text-muted-foreground transition-colors hover:text-foreground"
-                  onClick={() => {
-                    setQ("");
-                    setOrgUnitFilter("");
-                    setActivityFilter("all");
-                    setSortBy("updated_desc");
-                    setPage(1);
-                  }}
+
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              {activeFiltersCount > 0 ? (
+                <div className="flex items-center gap-2">
+                  <p className="text-xs text-muted-foreground">
+                    {activeFiltersCount} aktiv
+                    {activeFiltersCount === 1 ? "" : "e"} filter
+                  </p>
+                  <button
+                    type="button"
+                    className="rounded-lg border border-border/50 px-2.5 py-1 text-xs text-muted-foreground transition-colors hover:text-foreground"
+                    onClick={() => {
+                      setQ("");
+                      setOrgUnitFilter("");
+                      setActivityFilter("all");
+                      setSortBy("updated_desc");
+                    }}
+                  >
+                    Nullstill filtre
+                  </button>
+                </div>
+              ) : (
+                <div />
+              )}
+
+              <div className="flex flex-wrap items-center gap-2">
+                <label className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <span className="sr-only sm:not-sr-only">Visning</span>
+                  <select
+                    aria-label="Visningsmodus"
+                    value={viewMode}
+                    onChange={(e) => setViewMode(e.target.value as ViewMode)}
+                    className={cn(selectClass, "min-w-[8.5rem]")}
+                  >
+                    <option value="cards">Kort</option>
+                    <option value="list">Liste</option>
+                    <option value="table">Tabell</option>
+                  </select>
+                </label>
+                <label className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <span className="sr-only sm:not-sr-only">Per side</span>
+                  <select
+                    aria-label="Antall per side"
+                    value={pageSize}
+                    onChange={(e) =>
+                      setPageSize(Number(e.target.value) as PageSize)
+                    }
+                    className={cn(selectClass, "min-w-[5.5rem]")}
+                  >
+                    {PAGE_SIZES.map((n) => (
+                      <option key={n} value={n}>
+                        {n}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <div
+                  className="hidden items-center gap-0.5 rounded-lg border border-border/50 bg-muted/30 p-1 sm:inline-flex"
+                  role="group"
+                  aria-label="Hurtigvisning"
                 >
-                  Nullstill filtre
-                </button>
+                  {(
+                    [
+                      { value: "cards" as const, label: "Kort", Icon: LayoutGrid },
+                      { value: "list" as const, label: "Liste", Icon: List },
+                      { value: "table" as const, label: "Tabell", Icon: Table2 },
+                    ] as const
+                  ).map(({ value, label, Icon }) => (
+                    <button
+                      key={value}
+                      type="button"
+                      title={label}
+                      aria-label={label}
+                      aria-pressed={viewMode === value}
+                      className={cn(
+                        "flex size-9 items-center justify-center rounded-md transition-colors",
+                        viewMode === value
+                          ? "bg-background text-foreground shadow-sm"
+                          : "text-muted-foreground hover:text-foreground",
+                      )}
+                      onClick={() => setViewMode(value)}
+                    >
+                      <Icon className="size-4" aria-hidden />
+                    </button>
+                  ))}
+                </div>
               </div>
-            ) : null}
+            </div>
           </div>
 
           {paginated.length === 0 ? (
-            <div className="rounded-2xl border border-dashed border-border/60 bg-card/20 px-6 py-14 text-center">
+            <div className="rounded-xl border border-dashed border-border/60 bg-card/20 px-6 py-14 text-center">
               <p className="text-sm text-muted-foreground">
                 Ingen treff.{" "}
                 <button
@@ -309,69 +405,161 @@ function ProcessDesignHubBody() {
                   onClick={() => {
                     setQ("");
                     setOrgUnitFilter("");
-                    setPage(1);
                   }}
                 >
                   Nullstill
                 </button>
               </p>
             </div>
-          ) : (
-            <div className="overflow-hidden rounded-2xl border border-border/50 bg-card">
-              <div className="text-muted-foreground hidden grid-cols-[minmax(0,2.2fr)_minmax(0,1.4fr)_8rem_2.5rem] items-center gap-3 border-b border-border/50 px-4 py-2 text-[11px] font-medium sm:grid">
-                <span>Vurdering</span>
-                <span>Enhet</span>
-                <span>Sist oppdatert</span>
-                <span className="sr-only">Åpne</span>
-              </div>
-              <ul className="divide-y divide-border/40">
-                {paginated.map((a) => {
-                  const orgName = a.orgUnitId
-                    ? orgUnitNameById.get(String(a.orgUnitId))
-                    : undefined;
-                  return (
-                    <li key={a._id}>
-                      <Link
-                        href={`/w/${wid}/a/${a._id}/prosessdesign`}
-                        className={cn(
-                          "group grid grid-cols-1 gap-1.5 px-4 py-3 transition-colors hover:bg-muted/35",
-                          "sm:grid-cols-[minmax(0,2.2fr)_minmax(0,1.4fr)_8rem_2.5rem] sm:items-center sm:gap-3 sm:py-3.5",
-                          "focus-visible:relative focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                        )}
-                      >
-                        <div className="min-w-0">
-                          <p className="truncate text-sm font-medium text-foreground sm:text-[0.95rem]">
-                            {a.title}
-                          </p>
-                        </div>
-                        <div className="min-w-0 text-xs text-muted-foreground">
-                          <span className="truncate">
-                            {orgName ?? "Ikke satt"}
-                          </span>
-                        </div>
-                        <div
-                          className="text-xs tabular-nums text-muted-foreground"
-                          title={new Date(a.updatedAt).toLocaleString("nb-NO")}
-                        >
-                          {formatRelativeUpdatedAt(a.updatedAt)}
-                        </div>
+          ) : null}
+
+          {paginated.length > 0 && viewMode === "cards" ? (
+            <ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+              {paginated.map((a) => {
+                const orgName = a.orgUnitId
+                  ? orgUnitNameById.get(String(a.orgUnitId))
+                  : undefined;
+                return (
+                  <li key={a._id} className="min-w-0">
+                    <Link
+                      href={`/w/${wid}/a/${a._id}/prosessdesign`}
+                      className={cn(
+                        "group flex h-full flex-col rounded-xl border border-border/50 bg-card p-4 transition-colors",
+                        "hover:border-border hover:bg-muted/20",
+                        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                      )}
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-muted text-sm font-semibold text-foreground">
+                          {a.title.trim().charAt(0).toUpperCase() || "P"}
+                        </span>
                         <ArrowUpRight
-                          className="ml-auto size-4 shrink-0 text-muted-foreground/50 transition-all group-hover:translate-x-0.5 group-hover:-translate-y-0.5 group-hover:text-foreground"
+                          className="size-4 text-muted-foreground/45 transition-all group-hover:translate-x-0.5 group-hover:-translate-y-0.5 group-hover:text-foreground"
                           aria-hidden
                         />
-                      </Link>
-                    </li>
-                  );
-                })}
-              </ul>
-            </div>
-          )}
+                      </div>
+                      <h2 className="mt-3 line-clamp-2 text-sm font-semibold tracking-tight text-foreground">
+                        {a.title}
+                      </h2>
+                      <p className="mt-1.5 text-xs text-muted-foreground">
+                        {orgName ?? "Ikke satt"}
+                      </p>
+                      <p
+                        className="mt-auto pt-4 text-xs tabular-nums text-muted-foreground"
+                        title={new Date(a.updatedAt).toLocaleString("nb-NO")}
+                      >
+                        {formatRelativeUpdatedAt(a.updatedAt)}
+                      </p>
+                    </Link>
+                  </li>
+                );
+              })}
+            </ul>
+          ) : null}
 
-          {totalPages > 1 && (
+          {paginated.length > 0 && viewMode === "list" ? (
+            <ul className="flex flex-col gap-2">
+              {paginated.map((a) => {
+                const orgName = a.orgUnitId
+                  ? orgUnitNameById.get(String(a.orgUnitId))
+                  : undefined;
+                return (
+                  <li key={a._id}>
+                    <Link
+                      href={`/w/${wid}/a/${a._id}/prosessdesign`}
+                      className={cn(
+                        "group flex items-center gap-3 rounded-xl border border-border/50 bg-card px-4 py-3.5 transition-colors",
+                        "hover:bg-muted/25 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                      )}
+                    >
+                      <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-muted text-xs font-semibold">
+                        {a.title.trim().charAt(0).toUpperCase() || "P"}
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-medium text-foreground">
+                          {a.title}
+                        </p>
+                        <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                          {orgName ?? "Ikke satt"} ·{" "}
+                          {formatRelativeUpdatedAt(a.updatedAt)}
+                        </p>
+                      </div>
+                      <ArrowUpRight
+                        className="size-4 shrink-0 text-muted-foreground/45 transition-all group-hover:translate-x-0.5 group-hover:-translate-y-0.5 group-hover:text-foreground"
+                        aria-hidden
+                      />
+                    </Link>
+                  </li>
+                );
+              })}
+            </ul>
+          ) : null}
+
+          {paginated.length > 0 && viewMode === "table" ? (
+            <div className="overflow-hidden rounded-xl border border-border/50 bg-card">
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[28rem] text-left text-sm">
+                  <thead className="border-b border-border/50 bg-muted/25 text-xs font-medium text-muted-foreground">
+                    <tr>
+                      <th className="px-4 py-2.5 font-medium">Vurdering</th>
+                      <th className="px-4 py-2.5 font-medium">Enhet</th>
+                      <th className="px-4 py-2.5 font-medium">Sist oppdatert</th>
+                      <th className="px-4 py-2.5 text-right font-medium">
+                        Åpne
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {paginated.map((a) => {
+                      const orgName = a.orgUnitId
+                        ? orgUnitNameById.get(String(a.orgUnitId))
+                        : undefined;
+                      return (
+                        <tr
+                          key={a._id}
+                          className="border-b border-border/40 last:border-0 transition-colors hover:bg-muted/25"
+                        >
+                          <td className="px-4 py-3">
+                            <Link
+                              href={`/w/${wid}/a/${a._id}/prosessdesign`}
+                              className="font-medium text-foreground hover:underline"
+                            >
+                              {a.title}
+                            </Link>
+                          </td>
+                          <td className="px-4 py-3 text-muted-foreground">
+                            {orgName ?? "Ikke satt"}
+                          </td>
+                          <td
+                            className="px-4 py-3 tabular-nums text-muted-foreground"
+                            title={new Date(a.updatedAt).toLocaleString("nb-NO")}
+                          >
+                            {formatRelativeUpdatedAt(a.updatedAt)}
+                          </td>
+                          <td className="px-4 py-3 text-right">
+                            <Link
+                              href={`/w/${wid}/a/${a._id}/prosessdesign`}
+                              className="inline-flex size-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                              aria-label={`Åpne ${a.title}`}
+                            >
+                              <ArrowUpRight className="size-4" aria-hidden />
+                            </Link>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          ) : null}
+
+          {totalPages > 1 ? (
             <div className="flex flex-wrap items-center justify-between gap-3 px-1 text-xs text-muted-foreground">
               <span className="tabular-nums">
-                {pageStart + 1}–{Math.min(pageStart + PAGE_SIZE, filtered.length)}{" "}
-                av {filtered.length}
+                {pageStart + 1}–
+                {Math.min(pageStart + pageSize, filtered.length)} av{" "}
+                {filtered.length}
               </span>
               <div className="flex items-center gap-1">
                 <button
@@ -397,7 +585,7 @@ function ProcessDesignHubBody() {
                 </button>
               </div>
             </div>
-          )}
+          ) : null}
         </>
       )}
     </div>
