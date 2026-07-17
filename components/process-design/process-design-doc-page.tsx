@@ -46,7 +46,7 @@ import {
   buildProcessDesignPdfPreviewUrl,
   downloadProcessDesignPdf,
 } from "@/lib/process-design-pdf";
-import { setPddDiagramLiveSnapshot } from "@/lib/pdd-diagram-live-cache";
+import { beginPddDiagramClear } from "@/lib/pdd-diagram-live-cache";
 import { cn } from "@/lib/utils";
 import { useMutation, useQuery } from "convex/react";
 import {
@@ -398,7 +398,8 @@ function ProcessTextDiagramBlock({
   const clearDiagram = useCallback(() => {
     if (!canEdit) return;
     if (!confirm("Slette alt i diagrammet?")) return;
-    setPddDiagramLiveSnapshot(instanceKey, diagramKind, "");
+    // 1) Blokker flush fra gammel canvas  2) tøm parent  3) remount med tom store
+    beginPddDiagramClear(instanceKey, diagramKind);
     onDiagramJson("");
     setClearState({ key: instanceKey, n: clearNonce + 1 });
   }, [canEdit, clearNonce, diagramKind, instanceKey, onDiagramJson]);
@@ -497,6 +498,7 @@ function ProcessTextDiagramBlock({
               </div>
             ) : (
               <PddTldrawCanvas
+                key={`embed-${instanceKey}-c${clearNonce}`}
                 snapshotJson={diagramValue}
                 onSnapshotChange={onDiagramJson}
                 readOnly={!canEdit}
@@ -632,6 +634,7 @@ function ProcessTextDiagramBlock({
               )}
             >
               <PddTldrawCanvas
+                key={`fs-${instanceKey}-c${clearNonce}`}
                 snapshotJson={diagramValue}
                 onSnapshotChange={onDiagramJson}
                 readOnly={!canEdit}

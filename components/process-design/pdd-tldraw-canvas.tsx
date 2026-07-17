@@ -11,6 +11,8 @@ import {
 } from "@tldraw/tldraw";
 import type { ArrowShapeUtil, Editor } from "@tldraw/tldraw";
 import {
+  endPddDiagramClear,
+  isPddDiagramClearInProgress,
   resolvePddDiagramSnapshot,
   setPddDiagramLiveSnapshot,
 } from "@/lib/pdd-diagram-live-cache";
@@ -35,11 +37,6 @@ const PddDrawShapeUtil = DrawShapeUtil.configure({
   maxPointsPerShape: PDD_MAX_DRAW_POINTS,
 });
 
-/**
- * Pil mot bundne former: større snap-radier + pnpm-patch (BOUND_ARROW_OFFSET, kantsnapping for arc-piler).
- * Arc-piler på lukkede former prioriterer kant (ikke senter) via patch av arrowTargetState.
- * Ikke overstyr shouldBeExact — isExact-bindinger kan gi løse ankre ved flytting.
- */
 function configurePddArrowBindings(editor: Editor) {
   const util = editor.getShapeUtil("arrow") as ArrowShapeUtil;
   if (!util?.options) return;
@@ -64,25 +61,6 @@ function syncEditorViewport(editor: Editor) {
   const container = editor.getContainer();
   const canvas = container.querySelector(".tl-canvas") as HTMLElement | null;
   editor.updateViewportScreenBounds(canvas ?? container);
-}
-
-function clearAllShapesOnPage(editor: Editor) {
-  const ids = [...editor.getCurrentPageShapeIds()];
-  if (ids.length > 0) {
-    editor.run(() => {
-      editor.deleteShapes(ids);
-    });
-  }
-  // Ekstra pass: select-all + delete (grupper / skjulte valg)
-  editor.selectAll();
-  const selected = [...editor.getSelectedShapeIds()];
-  if (selected.length > 0) {
-    editor.run(() => {
-      editor.deleteShapes(selected);
-    });
-  }
-  editor.selectNone();
-  editor.clearHistory();
 }
 
 /**
@@ -112,7 +90,6 @@ function configurePddFreehandDrawing(editor: Editor, readOnly: boolean) {
   let penStrokeActive = false;
   let toolBeforeEraser: string | null = null;
 
-  // Dobbelttrykk med Pencil på lerretet (web-erstatning for barrel double-tap)
   let lastPenTapAt = 0;
   let lastPenTapX = 0;
   let lastPenTapY = 0;
@@ -135,9 +112,10 @@ function configurePddFreehandDrawing(editor: Editor, readOnly: boolean) {
     if (readOnly) return;
     const toolId = editor.getCurrentToolId();
     if (toolId === "eraser") {
-      const restore = toolBeforeEraser && toolBeforeEraser !== "eraser"
-        ? toolBeforeEraser
-        : "draw";
+      const restore =
+        toolBeforeEraser && toolBeforeEraser !== "eraser"
+          ? toolBeforeEraser
+          : "draw";
       editor.setCurrentTool(restore);
       toolBeforeEraser = null;
       toast.message("Blyant", { duration: 1200 });
@@ -148,7 +126,6 @@ function configurePddFreehandDrawing(editor: Editor, readOnly: boolean) {
     }
   };
 
-  // Document-capture: bytt til blyant FØR tldraw behandler første Pencil-treff
   const onPointerDownCapture = (event: PointerEvent) => {
     if (readOnly) return;
     if (event.pointerType !== "pen") return;
@@ -164,7 +141,6 @@ function configurePddFreehandDrawing(editor: Editor, readOnly: boolean) {
       editor.updateInstanceState({ isPenMode: true });
     }
 
-    // Stylus med viskelær-ende / sekundærknapp (der plattformen eksponerer det)
     const isEraserTip =
       event.button === 5 ||
       (typeof event.buttons === "number" && (event.buttons & 32) !== 0);
@@ -177,7 +153,6 @@ function configurePddFreehandDrawing(editor: Editor, readOnly: boolean) {
     }
 
     const toolId = editor.getCurrentToolId();
-    // Behold Pil/form/tekst hvis brukeren aktivt valgte dem; ellers freehand
     if (toolId === "select" || toolId === "hand") {
       editor.setCurrentTool("draw");
     }
@@ -198,7 +173,6 @@ function configurePddFreehandDrawing(editor: Editor, readOnly: boolean) {
     const wasActive = penStrokeActive;
     penStrokeActive = false;
     if (!wasActive || readOnly) return;
-    if (!isEventOnCanvas(event.target) && event.type !== "pointerup") return;
 
     const duration = performance.now() - penDownAt;
     const isTap = !penMovedFar && duration < 280;
@@ -208,7 +182,7 @@ function configurePddFreehandDrawing(editor: Editor, readOnly: boolean) {
     const dt = now - lastPenTapAt;
     const dx = event.clientX - lastPenTapX;
     const dy = event.clientY - lastPenTapY;
-    const near = dx * dx + dy * dy < 900; // ~30px
+    const near = dx * dx + dy * dy < 900;
 
     if (dt > 40 && dt < 420 && near) {
       lastPenTapAt = 0;
@@ -225,7 +199,6 @@ function configurePddFreehandDrawing(editor: Editor, readOnly: boolean) {
   document.addEventListener("pointermove", onPointerMove, true);
   document.addEventListener("pointerup", endPenStroke, true);
   document.addEventListener("pointercancel", endPenStroke, true);
-  // iPad: unngå at dokumentet scroller mens Pencil tegner i innfelt canvas
   container.addEventListener("touchmove", blockPageScroll, { passive: false });
   container.addEventListener("wheel", blockPageScroll, { passive: false });
 
@@ -248,40 +221,36 @@ export function PddTldrawCanvas({
   instanceKey,
   diagramKind,
   layoutVariant = "embed",
-  /** Økes når brukeren tømmer diagrammet — tvinger ny tom store. */
+  /** Økes ved «Tøm diagram» — remounter hele canvas med tom store (samme effekt som fullskjerm). */
   clearNonce = 0,
   className,
 }: {
   snapshotJson: string | undefined;
   onSnapshotChange?: (json: string) => void;
   readOnly: boolean;
-  /** Endres ved ny serverdata (revisjon) for å laste inn lagret tegning på nytt. */
   instanceKey: string;
-  /** Brukes til live-cache for PDF-eksport (As-Is / To-Be). */
   diagramKind?: "asIs" | "toBe";
-  /** `fullscreen`: fyll tilgjengelig høyde (brukes med Fullscreen API). */
   layoutVariant?: "embed" | "fullscreen";
   clearNonce?: number;
   className?: string;
 }) {
   /**
-   * Blokkerer flush til parent under «Tøm diagram» slik at deleteShapes /
-   * pending debounce ikke skriver streker tilbake.
+   * Under tøm-remount: ikke flush gamle former fra forrige store-instans.
+   * Settes synkront i useMemo (før React cleanups).
    */
   const suppressFlushRef = useRef(false);
 
   const store = useMemo(() => {
-    // Sett suppress synkront i render FØR gamle store-cleanups kjører,
-    // ellers skrives formene tilbake til parent/live-cache ved tøm-remount.
-    if (clearNonce > 0) {
+    const clearing = clearNonce > 0;
+    if (clearing) {
       suppressFlushRef.current = true;
     }
-    const source =
-      clearNonce > 0
-        ? undefined
-        : diagramKind
-          ? resolvePddDiagramSnapshot(instanceKey, diagramKind, snapshotJson)
-          : snapshotJson;
+    // Ved tøm: ignorer live-cache/snapshot — alltid blank store
+    const source = clearing
+      ? undefined
+      : diagramKind
+        ? resolvePddDiagramSnapshot(instanceKey, diagramKind, snapshotJson)
+        : snapshotJson;
     const snap = parsePddTldrawDocumentSnapshot(source);
     return createTLStore({
       shapeUtils: [
@@ -307,11 +276,17 @@ export function PddTldrawCanvas({
   }, [readOnly]);
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const lastSentRef = useRef<string | null>(snapshotJson ?? null);
+  const lastSentRef = useRef<string | null>(
+    clearNonce > 0 ? "" : (snapshotJson ?? null),
+  );
 
   useEffect(() => {
+    if (clearNonce > 0) {
+      lastSentRef.current = "";
+      return;
+    }
     lastSentRef.current = snapshotJson ?? null;
-  }, [snapshotJson]);
+  }, [snapshotJson, clearNonce]);
 
   const writeLiveCache = useCallback(
     (json: string) => {
@@ -324,19 +299,37 @@ export function PddTldrawCanvas({
   const flushToParent = useCallback(() => {
     if (!onSnapshotChange || readOnly) return;
     if (suppressFlushRef.current) return;
+    if (
+      diagramKind != null &&
+      isPddDiagramClearInProgress(instanceKey, diagramKind)
+    ) {
+      return;
+    }
     const doc = storeRef.current.getStoreSnapshot();
     const json = JSON.stringify({ document: doc });
     writeLiveCache(json);
     if (json === lastSentRef.current) return;
     lastSentRef.current = json;
     onSnapshotChange(json);
-  }, [onSnapshotChange, readOnly, writeLiveCache]);
+  }, [
+    onSnapshotChange,
+    readOnly,
+    writeLiveCache,
+    diagramKind,
+    instanceKey,
+  ]);
 
   useLayoutEffect(() => {
     if (readOnly || !onSnapshotChange) return;
     const unsub = store.listen(
       () => {
         if (suppressFlushRef.current) return;
+        if (
+          diagramKind != null &&
+          isPddDiagramClearInProgress(instanceKey, diagramKind)
+        ) {
+          return;
+        }
         const doc = storeRef.current.getStoreSnapshot();
         const json = JSON.stringify({ document: doc });
         writeLiveCache(json);
@@ -354,8 +347,13 @@ export function PddTldrawCanvas({
         clearTimeout(debounceRef.current);
         debounceRef.current = null;
       }
-      // Ved tøm-remount: aldri flush gamle former fra forrige store
-      if (clearNonce > 0 || suppressFlushRef.current) {
+      // Kritisk: ved tøm må gamle former ALDRI skrives tilbake (også fra forrige React-instans)
+      const clearing =
+        suppressFlushRef.current ||
+        clearNonce > 0 ||
+        (diagramKind != null &&
+          isPddDiagramClearInProgress(instanceKey, diagramKind));
+      if (clearing) {
         writeLiveCache("");
         lastSentRef.current = "";
         return;
@@ -377,50 +375,44 @@ export function PddTldrawCanvas({
     flushToParent,
     writeLiveCache,
     clearNonce,
+    diagramKind,
+    instanceKey,
   ]);
 
   useEffect(() => {
     if (!diagramKind) return;
-    if (!snapshotJson?.trim()) {
+    if (clearNonce > 0 || !snapshotJson?.trim()) {
       setPddDiagramLiveSnapshot(instanceKey, diagramKind, "");
       return;
     }
     if (suppressFlushRef.current) return;
     writeLiveCache(snapshotJson);
-  }, [diagramKind, snapshotJson, instanceKey, writeLiveCache]);
+  }, [diagramKind, snapshotJson, instanceKey, writeLiveCache, clearNonce]);
 
-  // «Tøm diagram»: tøm parent/cache; Tldraw remountes via key + ny tom store
+  // Etter tøm-remount: parent/cache blank, tillat tegning igjen
   useLayoutEffect(() => {
     if (clearNonce === 0) {
       suppressFlushRef.current = false;
       return;
     }
-
     if (debounceRef.current) {
       clearTimeout(debounceRef.current);
       debounceRef.current = null;
     }
-
-    suppressFlushRef.current = true;
     writeLiveCache("");
     lastSentRef.current = "";
     onSnapshotChange?.("");
-
-    const ed = editorRef.current;
-    if (ed) {
-      clearAllShapesOnPage(ed);
-    }
-
-    // La tegning fungere igjen etter at remount/cleanup er ferdig
+    // Slip global + lokal suppress etter at gamle instansers cleanups er ferdige
     const t = window.setTimeout(() => {
       suppressFlushRef.current = false;
-    }, 0);
+      if (diagramKind) {
+        endPddDiagramClear(instanceKey, diagramKind);
+      }
+    }, 50);
     return () => window.clearTimeout(t);
-  }, [clearNonce, onSnapshotChange, writeLiveCache]);
+  }, [clearNonce, onSnapshotChange, writeLiveCache, diagramKind, instanceKey]);
 
-  // Hold viewport i sync med container (fullskjerm, rotasjon, tastatur på iPad)
   useEffect(() => {
-    const ed = editorRef.current;
     const shell = containerRef.current;
     if (!shell) return;
 
@@ -467,7 +459,10 @@ export function PddTldrawCanvas({
       rafId = null;
       const root = document.scrollingElement;
       if (!root) return;
-      if (root.scrollTop !== lastScroll.top || root.scrollLeft !== lastScroll.left) {
+      if (
+        root.scrollTop !== lastScroll.top ||
+        root.scrollLeft !== lastScroll.left
+      ) {
         root.scrollTo({
           top: lastScroll.top,
           left: lastScroll.left,
@@ -592,6 +587,7 @@ export function PddTldrawCanvas({
       )}
     >
       <Tldraw
+        // clearNonce i key → destruer WebGL-canvas og bygg blankt på nytt
         key={`${instanceKey}:c${clearNonce}`}
         licenseKey={licenseKey}
         store={store}
@@ -599,11 +595,6 @@ export function PddTldrawCanvas({
         onMount={(editor) => {
           editorRef.current = editor;
           editor.updateInstanceState({ isReadonly: readOnly });
-          if (clearNonce > 0) {
-            clearAllShapesOnPage(editor);
-            writeLiveCache("");
-            lastSentRef.current = "";
-          }
           configurePddArrowBindings(editor);
           const cleanupFreehand = configurePddFreehandDrawing(
             editor,
