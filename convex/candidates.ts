@@ -1438,7 +1438,7 @@ export const addAssignee = mutation({
         userId: args.userId,
         title: `Du er tildelt som ${roleLabel} på prosessen «${candidate.name}»`,
         body: `Prosess ${candidate.code} — ${candidate.name}`,
-        href: `/w/${candidate.workspaceId}/prosessregister`,
+        href: `/w/${candidate.workspaceId}/vurderinger?fane=prosesser`,
       });
     }
     return id;

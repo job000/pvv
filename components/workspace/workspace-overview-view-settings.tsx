@@ -59,6 +59,10 @@ export function WorkspaceOverviewViewSettings({
   const [showPriority, setShowPriority] = useState(true);
   const [showRecent, setShowRecent] = useState(true);
   const [showBegreper, setShowBegreper] = useState(true);
+  const [homeListViewMode, setHomeListViewMode] = useState<
+    "cards" | "list" | "table"
+  >("cards");
+  const [homeListPageSize, setHomeListPageSize] = useState<6 | 10 | 20>(6);
 
   const wid = String(workspaceId);
   const shortcuts = buildWorkspaceOverviewShortcuts(wid);
@@ -70,6 +74,8 @@ export function WorkspaceOverviewViewSettings({
       setShowPriority(true);
       setShowRecent(true);
       setShowBegreper(false);
+      setHomeListViewMode("cards");
+      setHomeListPageSize(6);
       return;
     }
     setVisibleIds(
@@ -83,6 +89,16 @@ export function WorkspaceOverviewViewSettings({
     setShowPriority(prefs.showPrioritySection);
     setShowRecent(prefs.showRecentSection);
     setShowBegreper(prefs.showBegreperSection);
+    setHomeListViewMode(
+      prefs.homeListViewMode === "list" || prefs.homeListViewMode === "table"
+        ? prefs.homeListViewMode
+        : "cards",
+    );
+    setHomeListPageSize(
+      prefs.homeListPageSize === 10 || prefs.homeListPageSize === 20
+        ? prefs.homeListPageSize
+        : 6,
+    );
   }, [prefs]);
 
   useEffect(() => {
@@ -103,6 +119,8 @@ export function WorkspaceOverviewViewSettings({
         showPrioritySection: showPriority,
         showRecentSection: showRecent,
         showBegreperSection: showBegreper,
+        homeListViewMode,
+        homeListPageSize,
       });
       toast.success("Visning lagret for dette arbeidsområdet.");
       setOpen(false);
@@ -251,6 +269,51 @@ export function WorkspaceOverviewViewSettings({
                     </span>
                   </span>
                 </label>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <div className="flex items-center gap-2">
+                <LayoutGrid className="text-muted-foreground size-4" aria-hidden />
+                <p className="text-sm font-semibold">Aktivitetsliste</p>
+              </div>
+              <div className="grid gap-3 rounded-xl border border-border/50 bg-muted/15 px-3 py-3 sm:grid-cols-2">
+                <label className="space-y-1.5 text-sm">
+                  <span className="font-medium">Visning</span>
+                  <select
+                    value={homeListViewMode}
+                    onChange={(e) =>
+                      setHomeListViewMode(
+                        e.target.value as "cards" | "list" | "table",
+                      )
+                    }
+                    className="h-11 w-full appearance-none rounded-xl border border-border/50 bg-background px-3 text-sm"
+                  >
+                    <option value="cards">Kort</option>
+                    <option value="list">Liste</option>
+                    <option value="table">Tabell</option>
+                  </select>
+                </label>
+                <label className="space-y-1.5 text-sm">
+                  <span className="font-medium">Per side</span>
+                  <select
+                    value={homeListPageSize}
+                    onChange={(e) =>
+                      setHomeListPageSize(
+                        Number(e.target.value) as 6 | 10 | 20,
+                      )
+                    }
+                    className="h-11 w-full appearance-none rounded-xl border border-border/50 bg-background px-3 text-sm"
+                  >
+                    <option value={6}>6</option>
+                    <option value={10}>10</option>
+                    <option value={20}>20</option>
+                  </select>
+                </label>
+                <p className="text-muted-foreground text-xs leading-snug sm:col-span-2">
+                  Lagres for deg i dette arbeidsområdet og huskes neste gang du
+                  logger inn.
+                </p>
               </div>
             </div>
 

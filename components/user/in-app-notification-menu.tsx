@@ -9,7 +9,7 @@ import { cn } from "@/lib/utils";
 import { formatUserFacingError } from "@/lib/user-facing-error";
 import { Menu } from "@base-ui/react/menu";
 import { useMutation, useQuery } from "convex/react";
-import { Bell, Check, Loader2, Trash2 } from "lucide-react";
+import { Bell, Check, ChevronRight, Loader2, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useState } from "react";
 
@@ -209,79 +209,106 @@ export function InAppNotificationMenu() {
                       rowPending?.id === row._id && rowPending.op === "read";
                     const dismissLoading =
                       rowPending?.id === row._id && rowPending.op === "dismiss";
+                    const href = row.href?.trim() || null;
+                    const canOpen = Boolean(href);
+
                     return (
-                      <li
-                        key={row._id}
-                        className={cn(
-                          "rounded-xl border border-border/50 p-2.5 transition-colors",
-                          unread ? "bg-primary/[0.06]" : "bg-muted/15",
-                        )}
-                      >
-                        <div className="flex gap-2">
-                          <div className="min-w-0 flex-1 space-y-1">
-                            {row.href ? (
-                              <Link
-                                href={row.href}
-                                className="text-foreground block text-sm font-medium leading-snug hover:underline"
-                                onClick={() => {
-                                  void onMarkRead(row._id);
-                                  setOpen(false);
-                                }}
+                      <li key={row._id}>
+                        <div
+                          className={cn(
+                            "group relative rounded-xl border border-border/50 transition-colors",
+                            unread ? "bg-primary/[0.06]" : "bg-muted/15",
+                            canOpen &&
+                              "hover:border-border hover:bg-muted/40 focus-within:border-border",
+                          )}
+                        >
+                          {canOpen ? (
+                            <Link
+                              href={href!}
+                              className="absolute inset-0 z-0 rounded-xl"
+                              aria-label={`Åpne: ${row.title}`}
+                              onClick={() => {
+                                void onMarkRead(row._id);
+                                setOpen(false);
+                              }}
+                            />
+                          ) : null}
+
+                          <div className="relative z-10 flex gap-2 p-3 pointer-events-none">
+                            <div className="min-w-0 flex-1 space-y-1">
+                              <p
+                                className={cn(
+                                  "text-sm font-medium leading-snug",
+                                  canOpen && "group-hover:underline",
+                                )}
                               >
                                 {row.title}
-                              </Link>
-                            ) : (
-                              <p className="text-sm font-medium leading-snug">
-                                {row.title}
                               </p>
-                            )}
-                            {row.body ? (
-                              <p className="text-muted-foreground text-xs leading-snug">
-                                {row.body}
-                              </p>
-                            ) : null}
-                            <p className="text-muted-foreground text-[10px] tabular-nums">
-                              {formatNotifTime(row.createdAt)}
-                              {unread ? (
-                                <span className="text-primary ml-1.5 font-medium">
-                                  · Ulest
-                                </span>
+                              {row.body ? (
+                                <p className="text-muted-foreground text-xs leading-snug">
+                                  {row.body}
+                                </p>
                               ) : null}
-                            </p>
-                          </div>
-                          <div className="flex shrink-0 flex-col gap-0.5">
-                            {unread ? (
+                              <p className="text-muted-foreground text-[10px] tabular-nums">
+                                {formatNotifTime(row.createdAt)}
+                                {unread ? (
+                                  <span className="text-primary ml-1.5 font-medium">
+                                    · Ulest
+                                  </span>
+                                ) : null}
+                              </p>
+                            </div>
+
+                            <div className="flex shrink-0 flex-col items-end gap-0.5">
+                              {unread ? (
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="xs"
+                                  className="pointer-events-auto h-7 px-2 text-xs"
+                                  disabled={rowLock}
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    void onMarkRead(row._id);
+                                  }}
+                                  title="Merk som lest"
+                                >
+                                  {readLoading ? (
+                                    <Loader2 className="size-3.5 animate-spin" />
+                                  ) : (
+                                    "Lest"
+                                  )}
+                                </Button>
+                              ) : null}
                               <Button
                                 type="button"
                                 variant="ghost"
                                 size="xs"
-                                className="h-7 px-2 text-xs"
+                                className="pointer-events-auto text-muted-foreground hover:text-destructive h-7 px-2 text-xs"
                                 disabled={rowLock}
-                                onClick={() => void onMarkRead(row._id)}
-                                title="Merk som lest"
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  void onDismiss(row._id);
+                                }}
+                                title="Fjern varsel"
                               >
-                                {readLoading ? (
+                                {dismissLoading ? (
                                   <Loader2 className="size-3.5 animate-spin" />
                                 ) : (
-                                  "Lest"
+                                  "Fjern"
                                 )}
                               </Button>
-                            ) : null}
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="xs"
-                              className="text-muted-foreground hover:text-destructive h-7 px-2 text-xs"
-                              disabled={rowLock}
-                              onClick={() => void onDismiss(row._id)}
-                              title="Fjern varsel"
-                            >
-                              {dismissLoading ? (
-                                <Loader2 className="size-3.5 animate-spin" />
-                              ) : (
-                                "Fjern"
-                              )}
-                            </Button>
+                              {canOpen ? (
+                                <span
+                                  className="mt-0.5 flex size-7 items-center justify-center"
+                                  aria-hidden
+                                >
+                                  <ChevronRight className="size-4 text-muted-foreground/50 transition-colors group-hover:text-foreground" />
+                                </span>
+                              ) : null}
+                            </div>
                           </div>
                         </div>
                       </li>
@@ -295,7 +322,8 @@ export function InAppNotificationMenu() {
               <>
                 <Separator />
                 <p className="text-muted-foreground px-3 py-2 text-[10px] leading-relaxed">
-                  E-postvarsler finner du under{" "}
+                  Trykk på et varsel for å åpne riktig side. E-postvarsler finner du
+                  under{" "}
                   <span className="text-foreground font-medium">Varslinger</span>{" "}
                   i menyen til arbeidsområdet.
                 </p>

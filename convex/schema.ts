@@ -709,6 +709,17 @@ export default defineSchema({
     showPrioritySection: v.boolean(),
     showRecentSection: v.boolean(),
     showBegreperSection: v.boolean(),
+    /**
+     * Hjem-listen (Siste aktivitet / prioritet): kort | liste | tabell.
+     * Manglende = kort (standard).
+     */
+    homeListViewMode: v.optional(
+      v.union(v.literal("cards"), v.literal("list"), v.literal("table")),
+    ),
+    /** Antall rader/kort per side på hjem. Manglende = 6. */
+    homeListPageSize: v.optional(
+      v.union(v.literal(6), v.literal(10), v.literal(20)),
+    ),
     updatedAt: v.number(),
   }).index("by_user_workspace", ["userId", "workspaceId"]),
 

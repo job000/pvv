@@ -1,9 +1,9 @@
 "use client";
 
-import { type ComponentType, useState } from "react";
+import { type ComponentType, useEffect, useMemo, useState } from "react";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
-import { useQuery } from "convex/react";
+import { useMutation, useQuery } from "convex/react";
 import {
   PIPELINE_STATUS_LABELS,
   type PipelineStatus,
@@ -13,13 +13,25 @@ import { formatRelativeUpdatedAt } from "@/lib/assessment-ui-helpers";
 import { cn } from "@/lib/utils";
 import {
   ArrowRight,
+  ChevronLeft,
+  ChevronRight,
   ClipboardList,
   Clock3,
+  LayoutGrid,
+  List,
   PlayCircle,
   ShieldAlert,
   ShieldPlus,
+  Table2,
 } from "lucide-react";
 import Link from "next/link";
+
+const HOME_PAGE_SIZES = [6, 10, 20] as const;
+type HomePageSize = (typeof HOME_PAGE_SIZES)[number];
+type HomeViewMode = "cards" | "list" | "table";
+
+const selectClass =
+  "h-11 appearance-none rounded-2xl border border-border/50 bg-background px-4 pr-10 text-sm outline-none focus:ring-2 focus:ring-foreground/15";
 
 type DashboardRow = {
   assessmentId: Id<"assessments">;
@@ -114,15 +126,61 @@ export function WorkspaceOperationalDashboard({
   sectionVisibility?: WorkspaceDashboardSectionVisibility;
 }) {
   const dash = useQuery(api.assessments.workspaceDashboard, { workspaceId });
+  const viewPrefs = useQuery(api.workspaceViewPrefs.getMyWorkspaceViewPrefs, {
+    workspaceId,
+  });
+  const setHomeListPrefs = useMutation(
+    api.workspaceViewPrefs.setMyHomeListPrefs,
+  );
   const wid = String(workspaceId);
   const [quickListFilter, setQuickListFilter] = useState<
     "all" | "without_ros" | "follow_up"
   >("all");
   const [quickListSearch, setQuickListSearch] = useState("");
+  const [viewMode, setViewMode] = useState<HomeViewMode>("cards");
+  const [pageSize, setPageSize] = useState<HomePageSize>(6);
+  const [page, setPage] = useState(1);
+  const [prefsHydrated, setPrefsHydrated] = useState(false);
 
   const showMetrics = sectionVisibility?.showMetrics !== false;
   const showPriority = sectionVisibility?.showPrioritySection !== false;
   const showRecent = sectionVisibility?.showRecentSection !== false;
+
+  useEffect(() => {
+    if (viewPrefs === undefined) return;
+    if (viewPrefs === null) {
+      setViewMode("cards");
+      setPageSize(6);
+      setPrefsHydrated(true);
+      return;
+    }
+    const mode = viewPrefs.homeListViewMode;
+    const size = viewPrefs.homeListPageSize;
+    if (mode === "cards" || mode === "list" || mode === "table") {
+      setViewMode(mode);
+    }
+    if (size === 6 || size === 10 || size === 20) {
+      setPageSize(size);
+    }
+    setPrefsHydrated(true);
+  }, [viewPrefs]);
+
+  async function persistHomeListPrefs(
+    nextMode: HomeViewMode,
+    nextSize: HomePageSize,
+  ) {
+    setViewMode(nextMode);
+    setPageSize(nextSize);
+    try {
+      await setHomeListPrefs({
+        workspaceId,
+        homeListViewMode: nextMode,
+        homeListPageSize: nextSize,
+      });
+    } catch {
+      /* preferanse er fortsatt lokalt — neste lagring kan prøves igjen */
+    }
+  }
 
   if (dash === undefined) {
     return (
@@ -335,138 +393,355 @@ export function WorkspaceOperationalDashboard({
           vurderinger; vi viser bare én — flettet etter brukerens preferanse
           (recent har forrang fordi det matcher hva folk forventer å finne
           igjen først). Brukeren kan fortsatt skjule listen i Visning-menyen. */}
-      {showPriority || showRecent ? (() => {
-        const listBase =
-          showRecent && recentlyUpdated.length > 0
-            ? recentlyUpdated
-            : priorityTop;
-        const heading =
-          showRecent && recentlyUpdated.length > 0
-            ? "Siste aktivitet"
-            : "Høyest prioritet";
-        const quickSearch = quickListSearch.trim().toLowerCase();
-        const list = listBase.filter((row) => {
-          if (quickListFilter === "without_ros" && row.hasRosLink) return false;
-          if (
-            quickListFilter === "follow_up" &&
-            row.pipelineStatus !== "assessed" &&
-            row.pipelineStatus !== "on_hold"
-          ) {
-            return false;
+      {showPriority || showRecent ? (
+        <HomeActivitySection
+          wid={wid}
+          heading={
+            showRecent && recentlyUpdated.length > 0
+              ? "Siste aktivitet"
+              : "Høyest prioritet"
           }
-          if (!quickSearch) return true;
-          return (
-            row.title.toLowerCase().includes(quickSearch) ||
-            (row.ownerName ?? "").toLowerCase().includes(quickSearch) ||
-            row.nextStepHint.toLowerCase().includes(quickSearch)
-          );
-        });
-        return (
-          <section className="space-y-3">
-            <div className="flex items-center justify-between gap-2">
-              <h2 className="font-heading text-base font-semibold tracking-tight">
-                {heading}
-              </h2>
-              <Link
-                href={`/w/${wid}/vurderinger`}
-                className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-semibold text-muted-foreground transition-colors hover:text-foreground"
-              >
-                Alle
-                <ArrowRight className="size-3" />
-              </Link>
-            </div>
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-              <div className="flex flex-wrap gap-1.5">
-                <button
-                  type="button"
-                  onClick={() => setQuickListFilter("all")}
-                  className={cn(
-                    "rounded-full border px-3 py-1.5 text-xs transition-colors",
-                    quickListFilter === "all"
-                      ? "border-border bg-muted text-foreground"
-                      : "border-border/50 bg-card/60 text-muted-foreground hover:text-foreground",
-                  )}
-                >
-                  Alle
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setQuickListFilter("without_ros")}
-                  className={cn(
-                    "rounded-full border px-3 py-1.5 text-xs transition-colors",
-                    quickListFilter === "without_ros"
-                      ? "border-border bg-muted text-foreground"
-                      : "border-border/50 bg-card/60 text-muted-foreground hover:text-foreground",
-                  )}
-                >
-                  Uten ROS
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setQuickListFilter("follow_up")}
-                  className={cn(
-                    "rounded-full border px-3 py-1.5 text-xs transition-colors",
-                    quickListFilter === "follow_up"
-                      ? "border-border bg-muted text-foreground"
-                      : "border-border/50 bg-card/60 text-muted-foreground hover:text-foreground",
-                  )}
-                >
-                  Oppfølging
-                </button>
-              </div>
-              <SearchInput
-                value={quickListSearch}
-                onChange={(e) => setQuickListSearch(e.target.value)}
-                placeholder="Søk i listen …"
-                aria-label="Søk i arbeidsområdelisten"
-                className="h-10 w-full rounded-full sm:h-8 sm:max-w-xs"
-              />
-            </div>
-            {list.length === 0 ? (
-              <EmptyState wid={wid} />
-            ) : (
-              <div className="overflow-hidden rounded-2xl border border-border/50 bg-card">
-                <div className="text-muted-foreground hidden grid-cols-[minmax(0,2fr)_9rem_8rem_5.5rem_2.5rem] items-center gap-3 border-b border-border/50 px-5 py-2 text-[11px] font-medium sm:grid">
-                  <span>Vurdering</span>
-                  <span>Status</span>
-                  <span>Sist oppdatert</span>
-                  <span className="text-center">Prioritet</span>
-                  <span className="sr-only">Åpne</span>
-                </div>
-                <ul className="divide-y divide-border/40">
-                  {list.map((row) => (
-                    <li key={row.assessmentId}>
-                      <AssessmentDashRow wid={wid} row={row} />
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-          </section>
-        );
-      })() : null}
+          listBase={
+            showRecent && recentlyUpdated.length > 0
+              ? recentlyUpdated
+              : priorityTop
+          }
+          quickListFilter={quickListFilter}
+          setQuickListFilter={setQuickListFilter}
+          quickListSearch={quickListSearch}
+          setQuickListSearch={setQuickListSearch}
+          viewMode={viewMode}
+          pageSize={pageSize}
+          page={page}
+          setPage={setPage}
+          prefsReady={prefsHydrated || viewPrefs !== undefined}
+          onChangeView={(mode) => void persistHomeListPrefs(mode, pageSize)}
+          onChangePageSize={(size) => {
+            setPage(1);
+            void persistHomeListPrefs(viewMode, size);
+          }}
+        />
+      ) : null}
     </div>
+  );
+}
+
+function HomeActivitySection({
+  wid,
+  heading,
+  listBase,
+  quickListFilter,
+  setQuickListFilter,
+  quickListSearch,
+  setQuickListSearch,
+  viewMode,
+  pageSize,
+  page,
+  setPage,
+  prefsReady,
+  onChangeView,
+  onChangePageSize,
+}: {
+  wid: string;
+  heading: string;
+  listBase: DashboardRow[];
+  quickListFilter: "all" | "without_ros" | "follow_up";
+  setQuickListFilter: (v: "all" | "without_ros" | "follow_up") => void;
+  quickListSearch: string;
+  setQuickListSearch: (v: string) => void;
+  viewMode: HomeViewMode;
+  pageSize: HomePageSize;
+  page: number;
+  setPage: (n: number | ((p: number) => number)) => void;
+  prefsReady: boolean;
+  onChangeView: (mode: HomeViewMode) => void;
+  onChangePageSize: (size: HomePageSize) => void;
+}) {
+  const quickSearch = quickListSearch.trim().toLowerCase();
+  const list = useMemo(() => {
+    return listBase.filter((row) => {
+      if (quickListFilter === "without_ros" && row.hasRosLink) return false;
+      if (
+        quickListFilter === "follow_up" &&
+        row.pipelineStatus !== "assessed" &&
+        row.pipelineStatus !== "on_hold"
+      ) {
+        return false;
+      }
+      if (!quickSearch) return true;
+      return (
+        row.title.toLowerCase().includes(quickSearch) ||
+        (row.ownerName ?? "").toLowerCase().includes(quickSearch) ||
+        row.nextStepHint.toLowerCase().includes(quickSearch)
+      );
+    });
+  }, [listBase, quickListFilter, quickSearch]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [quickListFilter, quickListSearch, pageSize, setPage]);
+
+  const totalPages = Math.max(1, Math.ceil(list.length / pageSize));
+  const safePage = Math.min(page, totalPages);
+  const pageItems = list.slice(
+    (safePage - 1) * pageSize,
+    safePage * pageSize,
+  );
+  const rangeStart = list.length === 0 ? 0 : (safePage - 1) * pageSize + 1;
+  const rangeEnd = Math.min(safePage * pageSize, list.length);
+
+  return (
+    <section className="space-y-5">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div className="space-y-1">
+          <h2 className="font-heading text-lg font-semibold tracking-tight">
+            {heading}
+          </h2>
+          <p className="text-sm text-muted-foreground">
+            Visning og antall huskes for deg i dette området.
+          </p>
+        </div>
+        <Link
+          href={`/w/${wid}/vurderinger`}
+          className="inline-flex items-center gap-1 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
+        >
+          Alle vurderinger
+          <ArrowRight className="size-3.5" />
+        </Link>
+      </div>
+
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex flex-wrap gap-1.5">
+          {(
+            [
+              { id: "all", label: "Alle" },
+              { id: "without_ros", label: "Uten ROS" },
+              { id: "follow_up", label: "Oppfølging" },
+            ] as const
+          ).map((f) => (
+            <button
+              key={f.id}
+              type="button"
+              onClick={() => setQuickListFilter(f.id)}
+              className={cn(
+                "rounded-full border px-3.5 py-2 text-xs font-medium transition-colors",
+                quickListFilter === f.id
+                  ? "border-border bg-muted text-foreground"
+                  : "border-border/50 bg-card/60 text-muted-foreground hover:text-foreground",
+              )}
+            >
+              {f.label}
+            </button>
+          ))}
+        </div>
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+          <SearchInput
+            value={quickListSearch}
+            onChange={(e) => setQuickListSearch(e.target.value)}
+            placeholder="Søk i listen …"
+            aria-label="Søk i arbeidsområdelisten"
+            className="w-full sm:max-w-xs"
+            inputClassName="h-11 min-h-11 rounded-2xl md:h-11 md:min-h-11 md:rounded-2xl"
+          />
+          <div className="flex flex-wrap items-center gap-2">
+            <select
+              aria-label="Visningsmodus"
+              value={viewMode}
+              disabled={!prefsReady}
+              onChange={(e) => onChangeView(e.target.value as HomeViewMode)}
+              className={cn(selectClass, "min-w-[8.5rem]")}
+            >
+              <option value="cards">Kort</option>
+              <option value="list">Liste</option>
+              <option value="table">Tabell</option>
+            </select>
+            <select
+              aria-label="Antall per side"
+              value={pageSize}
+              disabled={!prefsReady}
+              onChange={(e) =>
+                onChangePageSize(Number(e.target.value) as HomePageSize)
+              }
+              className={cn(selectClass, "min-w-[5.5rem]")}
+            >
+              {HOME_PAGE_SIZES.map((n) => (
+                <option key={n} value={n}>
+                  {n}
+                </option>
+              ))}
+            </select>
+            <div
+              className="hidden items-center gap-0.5 rounded-2xl border border-border/50 bg-muted/30 p-1 sm:inline-flex"
+              role="group"
+              aria-label="Hurtigvisning"
+            >
+              {(
+                [
+                  { value: "cards", label: "Kort", Icon: LayoutGrid },
+                  { value: "list", label: "Liste", Icon: List },
+                  { value: "table", label: "Tabell", Icon: Table2 },
+                ] as const
+              ).map(({ value, label, Icon }) => (
+                <button
+                  key={value}
+                  type="button"
+                  title={label}
+                  aria-label={label}
+                  aria-pressed={viewMode === value}
+                  disabled={!prefsReady}
+                  className={cn(
+                    "flex size-9 items-center justify-center rounded-xl transition-colors",
+                    viewMode === value
+                      ? "bg-background text-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground",
+                  )}
+                  onClick={() => onChangeView(value)}
+                >
+                  <Icon className="size-4" aria-hidden />
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {list.length === 0 ? (
+        <EmptyState wid={wid} />
+      ) : (
+        <>
+          {viewMode === "cards" ? (
+            <ul className="grid gap-3 sm:grid-cols-2">
+              {pageItems.map((row) => (
+                <li key={row.assessmentId}>
+                  <AssessmentDashCard wid={wid} row={row} />
+                </li>
+              ))}
+            </ul>
+          ) : null}
+
+          {viewMode === "list" ? (
+            <ul className="flex flex-col gap-3">
+              {pageItems.map((row) => (
+                <li key={row.assessmentId}>
+                  <AssessmentDashListRow wid={wid} row={row} />
+                </li>
+              ))}
+            </ul>
+          ) : null}
+
+          {viewMode === "table" ? (
+            <div className="overflow-hidden rounded-3xl border border-border/50 bg-card shadow-sm">
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[32rem] text-left text-sm">
+                  <thead className="border-b border-border/50 bg-muted/30 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                    <tr>
+                      <th className="px-5 py-3.5 font-medium">Vurdering</th>
+                      <th className="px-5 py-3.5 font-medium">Status</th>
+                      <th className="px-5 py-3.5 font-medium">Oppdatert</th>
+                      <th className="px-5 py-3.5 text-right font-medium">
+                        Prioritet
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {pageItems.map((row) => (
+                      <tr
+                        key={row.assessmentId}
+                        className="border-b border-border/40 last:border-0 transition-colors hover:bg-muted/25"
+                      >
+                        <td className="px-5 py-4">
+                          <Link
+                            href={`/w/${wid}/a/${row.assessmentId}`}
+                            className="flex min-w-0 items-center gap-2.5 font-medium text-foreground"
+                          >
+                            <span
+                              className={cn(
+                                "size-2 shrink-0 rounded-full",
+                                priorityDotClass(row.effectivePriority),
+                              )}
+                              aria-hidden
+                            />
+                            <span className="truncate">{row.title}</span>
+                          </Link>
+                          {!(row.rosLinked ?? row.hasRosLink) ? (
+                            <p className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">
+                              <ShieldAlert className="size-3" aria-hidden />
+                              Uten ROS
+                            </p>
+                          ) : null}
+                        </td>
+                        <td className="px-5 py-4 text-muted-foreground">
+                          {PIPELINE_STATUS_LABELS[row.pipelineStatus]}
+                        </td>
+                        <td className="px-5 py-4 text-muted-foreground tabular-nums">
+                          {formatRelativeUpdatedAt(row.updatedAt)}
+                        </td>
+                        <td className="px-5 py-4 text-right tabular-nums">
+                          <span className="font-semibold text-foreground">
+                            {row.effectivePriority.toFixed(0)}
+                          </span>
+                          <span className="text-muted-foreground"> / 100</span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          ) : null}
+
+          <div className="flex flex-col gap-3 border-t border-border/40 pt-4 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-sm text-muted-foreground" aria-live="polite">
+              Viser {rangeStart}–{rangeEnd} av {list.length}
+            </p>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                className="inline-flex h-10 items-center gap-1.5 rounded-2xl border border-border/50 bg-background px-3.5 text-sm font-medium text-foreground transition-colors hover:bg-muted/50 disabled:pointer-events-none disabled:opacity-40"
+                disabled={safePage <= 1}
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+              >
+                <ChevronLeft className="size-4" aria-hidden />
+                Forrige
+              </button>
+              <span className="min-w-[5.5rem] text-center text-sm tabular-nums text-muted-foreground">
+                Side {safePage} / {totalPages}
+              </span>
+              <button
+                type="button"
+                className="inline-flex h-10 items-center gap-1.5 rounded-2xl border border-border/50 bg-background px-3.5 text-sm font-medium text-foreground transition-colors hover:bg-muted/50 disabled:pointer-events-none disabled:opacity-40"
+                disabled={safePage >= totalPages}
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              >
+                Neste
+                <ChevronRight className="size-4" aria-hidden />
+              </button>
+            </div>
+          </div>
+        </>
+      )}
+    </section>
   );
 }
 
 function EmptyState({ wid }: { wid: string }) {
   return (
-    <div className="rounded-2xl border border-dashed border-border/60 px-6 py-10 text-center">
-      <p className="text-sm font-medium text-foreground">Ingen vurderinger ennå</p>
-      <p className="mt-1 text-sm text-muted-foreground">
+    <div className="rounded-3xl border border-dashed border-border/60 px-8 py-14 text-center">
+      <p className="text-base font-medium text-foreground">Ingen vurderinger ennå</p>
+      <p className="mx-auto mt-2 max-w-sm text-[15px] leading-relaxed text-muted-foreground">
         Start fra en prosess eller opprett en ny vurdering.
       </p>
-      <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
+      <div className="mt-6 flex flex-wrap items-center justify-center gap-2">
         <Link
           href={`/w/${wid}/vurderinger`}
-          className="inline-flex h-10 items-center gap-1.5 rounded-full bg-foreground px-4 text-sm font-semibold text-background"
+          className="inline-flex h-11 items-center gap-1.5 rounded-2xl bg-foreground px-5 text-sm font-semibold text-background"
         >
           Start vurdering
           <ArrowRight className="size-3.5" aria-hidden />
         </Link>
         <Link
           href={`/w/${wid}/vurderinger?fane=prosesser`}
-          className="inline-flex h-10 items-center gap-1.5 rounded-full border border-border/60 px-4 text-sm font-medium text-foreground transition-colors hover:bg-muted/40"
+          className="inline-flex h-11 items-center gap-1.5 rounded-2xl border border-border/60 px-5 text-sm font-medium text-foreground transition-colors hover:bg-muted/40"
         >
           Se prosesser
         </Link>
@@ -484,7 +759,7 @@ function priorityDotClass(score: number): string {
   return "bg-slate-400/70";
 }
 
-function AssessmentDashRow({
+function AssessmentDashCard({
   wid,
   row,
 }: {
@@ -492,61 +767,81 @@ function AssessmentDashRow({
   row: DashboardRow;
 }) {
   const rosLinked = row.rosLinked ?? row.hasRosLink;
-
   return (
     <Link
       href={`/w/${wid}/a/${row.assessmentId}`}
-      className="group grid grid-cols-1 gap-1.5 px-4 py-3 transition-colors hover:bg-muted/35 sm:grid-cols-[minmax(0,2fr)_9rem_8rem_5.5rem_2.5rem] sm:items-center sm:gap-3 sm:px-5 sm:py-3.5"
+      className="group flex min-h-[7.5rem] flex-col justify-between rounded-3xl border border-border/50 bg-card p-5 shadow-sm transition-colors hover:bg-muted/30"
     >
-      <div className="min-w-0">
-        <div className="flex items-center gap-2">
+      <div className="min-w-0 space-y-2">
+        <div className="flex items-start gap-2.5">
           <span
             className={cn(
-              "size-2 shrink-0 rounded-full ring-2 ring-background",
+              "mt-1.5 size-2.5 shrink-0 rounded-full",
               priorityDotClass(row.effectivePriority),
             )}
             aria-hidden
           />
-          <p className="truncate text-sm font-medium text-foreground">
+          <p className="line-clamp-2 text-[15px] font-semibold tracking-tight text-foreground">
             {row.title}
           </p>
         </div>
-        {!rosLinked ? (
-          <div className="mt-0.5 inline-flex items-center gap-1 text-[11px] font-medium text-muted-foreground">
-            <ShieldAlert className="size-3" aria-hidden />
-            Uten ROS
-          </div>
-        ) : null}
-        <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-[11px] sm:hidden">
-          <span className="inline-flex rounded-full border border-border/60 bg-muted px-2 py-0.5 text-foreground">
-            {PIPELINE_STATUS_LABELS[row.pipelineStatus]}
-          </span>
-          <span className="inline-flex items-center gap-1 rounded-full border border-border/60 bg-card px-2 py-0.5 text-muted-foreground">
-            <Clock3 className="size-3 opacity-70" aria-hidden />
-            {formatRelativeUpdatedAt(row.updatedAt)}
-          </span>
-          <span className="inline-flex rounded-full border border-border/60 bg-card px-2 py-0.5 text-foreground">
-            {row.effectivePriority.toFixed(0)} / 100
-          </span>
-        </div>
+        <p className="text-sm text-muted-foreground">
+          {PIPELINE_STATUS_LABELS[row.pipelineStatus]}
+          {!rosLinked ? " · Uten ROS" : null}
+        </p>
       </div>
-      <div className="hidden text-xs text-muted-foreground sm:block">
-        {PIPELINE_STATUS_LABELS[row.pipelineStatus]}
-      </div>
-      <div className="hidden text-xs text-muted-foreground tabular-nums sm:block">
-        <span className="inline-flex items-center gap-1">
-          <Clock3 className="size-3 opacity-70" aria-hidden />
+      <div className="mt-4 flex items-center justify-between gap-2 text-sm text-muted-foreground">
+        <span className="inline-flex items-center gap-1.5 tabular-nums">
+          <Clock3 className="size-3.5 opacity-70" aria-hidden />
           {formatRelativeUpdatedAt(row.updatedAt)}
         </span>
-      </div>
-      <div className="hidden text-center text-xs tabular-nums sm:block">
-        <span className="font-semibold text-foreground">
-          {row.effectivePriority.toFixed(0)}
+        <span className="tabular-nums">
+          <span className="font-semibold text-foreground">
+            {row.effectivePriority.toFixed(0)}
+          </span>
+          {" / 100"}
         </span>
-        <span className="text-muted-foreground"> / 100</span>
       </div>
+    </Link>
+  );
+}
+
+function AssessmentDashListRow({
+  wid,
+  row,
+}: {
+  wid: string;
+  row: DashboardRow;
+}) {
+  const rosLinked = row.rosLinked ?? row.hasRosLink;
+  return (
+    <Link
+      href={`/w/${wid}/a/${row.assessmentId}`}
+      className="group flex items-center gap-4 rounded-3xl border border-border/50 bg-card px-5 py-4 shadow-sm transition-colors hover:bg-muted/25"
+    >
+      <span
+        className={cn(
+          "size-2.5 shrink-0 rounded-full",
+          priorityDotClass(row.effectivePriority),
+        )}
+        aria-hidden
+      />
+      <div className="min-w-0 flex-1 space-y-1">
+        <p className="truncate text-[15px] font-semibold tracking-tight text-foreground">
+          {row.title}
+        </p>
+        <p className="truncate text-sm text-muted-foreground">
+          {PIPELINE_STATUS_LABELS[row.pipelineStatus]}
+          {!rosLinked ? " · Uten ROS" : null}
+          {" · "}
+          {formatRelativeUpdatedAt(row.updatedAt)}
+        </p>
+      </div>
+      <span className="shrink-0 rounded-xl bg-muted/70 px-2.5 py-1 text-xs font-semibold tabular-nums text-foreground">
+        {row.effectivePriority.toFixed(0)}
+      </span>
       <ArrowRight
-        className="ml-auto size-4 shrink-0 text-muted-foreground/40 transition-all duration-200 group-hover:translate-x-0.5 group-hover:text-foreground"
+        className="size-4 shrink-0 text-muted-foreground/35 transition-transform group-hover:translate-x-0.5 group-hover:text-foreground"
         aria-hidden
       />
     </Link>
