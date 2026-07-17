@@ -16,6 +16,7 @@ import { SearchInput } from "@/components/ui/search-input";
 import { FilterToolbar } from "@/components/ui/filter-toolbar";
 import { Label } from "@/components/ui/label";
 import { ListViewModeToggle } from "@/components/ui/list-view-mode-toggle";
+import { RichTextEditor } from "@/components/ui/rich-text-editor";
 import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/lib/app-toast";
@@ -23,8 +24,16 @@ import { api } from "@/convex/_generated/api";
 import type { Doc, Id } from "@/convex/_generated/dataModel";
 import { useAction, useMutation, useQuery } from "convex/react";
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useDeferredValue,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import type { ListViewMode } from "@/lib/list-view-mode";
+import { isEmptyRichText } from "@/lib/rich-text";
 import { useStickyState } from "@/lib/use-sticky-state";
 
 import { InviteEmailSuggestInput } from "@/components/user/invite-email-suggest-input";
@@ -63,6 +72,8 @@ import {
   Tag,
   Ticket,
   Loader2,
+  Maximize2,
+  Minimize2,
   Plus,
   RefreshCw,
   Search,
@@ -117,6 +128,26 @@ function githubColumnContentKindLabel(
     default:
       return "Ukjent";
   }
+}
+
+function filterGithubColumnItems(
+  items: GithubColumnItemRow[],
+  query: string,
+): GithubColumnItemRow[] {
+  const q = query.trim().toLowerCase();
+  if (!q) return items;
+  return items.filter((row) => {
+    const hay = [
+      row.title,
+      row.repoFullName ?? "",
+      row.issueNumber != null ? String(row.issueNumber) : "",
+      row.issueNumber != null ? `#${row.issueNumber}` : "",
+      githubColumnContentKindLabel(row.contentKind),
+    ]
+      .join(" ")
+      .toLowerCase();
+    return hay.includes(q);
+  });
 }
 
 const GITHUB_COLUMN_IMPORT_CACHE_VERSION = 1 as const;
@@ -730,6 +761,8 @@ export function WorkspaceCandidatesPanel({
   hubMode = false,
   approvedIntakeForProcessregister,
   initialOrgUnit,
+  initialEditCandidateId = null,
+  initialEditFullscreen = false,
 }: {
   workspaceId: Id<"workspaces">;
   /** Når true: vist under PVV-hub med tydeligere forklaring og layout */
@@ -743,7 +776,12 @@ export function WorkspaceCandidatesPanel({
     | ApprovedIntakeProcessregisterRow[];
   /** Valgfritt deep-link: filtrer prosesser til valgt enhet (inkludert underenheter). */
   initialOrgUnit?: Id<"orgUnits"> | null;
+  /** Deep-link: åpne redigeringsdialog for prosess (`?rediger=`). */
+  initialEditCandidateId?: Id<"candidates"> | null;
+  /** Deep-link: start redigering i fullskjerm (`&fullskjerm=1`). */
+  initialEditFullscreen?: boolean;
 }) {
+  const router = useRouter();
   const membership = useQuery(api.workspaces.getMyMembership, { workspaceId });
   const workspace = useQuery(api.workspaces.get, { workspaceId });
   const candidates = useQuery(api.candidates.listByWorkspace, { workspaceId });
@@ -992,7 +1030,11 @@ export function WorkspaceCandidatesPanel({
   );
 
   const [editCandidateId, setEditCandidateId] =
-    useState<Id<"candidates"> | null>(null);
+    useState<Id<"candidates"> | null>(initialEditCandidateId);
+  const [editProcessFullscreen, setEditProcessFullscreen] = useState(
+    initialEditFullscreen,
+  );
+  const editDeepLinkAppliedRef = useRef(false);
 
   const [columnPickId, setColumnPickId] = useState("");
   const [columnItemsResult, setColumnItemsResult] = useState<{
@@ -1002,6 +1044,9 @@ export function WorkspaceCandidatesPanel({
   } | null>(null);
   const [columnItemsError, setColumnItemsError] = useState<string | null>(null);
   const [columnItemsLoading, setColumnItemsLoading] = useState(false);
+  /** Filtrer hentede kolonnekort lokalt (etter «Hent»). */
+  const [columnItemsSearch, setColumnItemsSearch] = useState("");
+  const deferredColumnItemsSearch = useDeferredValue(columnItemsSearch);
   /** Tidspunkt for siste vellykkede henting av kolonnekort (kun klient) */
   const [columnItemsFetchedAt, setColumnItemsFetchedAt] = useState<number | null>(
     null,
@@ -1044,6 +1089,16 @@ export function WorkspaceCandidatesPanel({
     return candidates.find((c) => c._id === editCandidateId);
   }, [editCandidateId, candidates]);
 
+  const filteredColumnItems = useMemo(() => {
+    if (!columnItemsResult) return [];
+    return filterGithubColumnItems(
+      columnItemsResult.items,
+      deferredColumnItemsSearch,
+    );
+  }, [columnItemsResult, deferredColumnItemsSearch]);
+
+  const columnItemsSearchActive = columnItemsSearch.trim().length > 0;
+
   useEffect(() => {
     if (
       editCandidateId &&
@@ -1051,8 +1106,46 @@ export function WorkspaceCandidatesPanel({
       !candidates.some((c) => c._id === editCandidateId)
     ) {
       setEditCandidateId(null);
+      setEditProcessFullscreen(false);
     }
   }, [editCandidateId, candidates]);
+
+  useEffect(() => {
+    if (editDeepLinkAppliedRef.current) return;
+    if (!initialEditCandidateId) return;
+    editDeepLinkAppliedRef.current = true;
+    setEditCandidateId(initialEditCandidateId);
+    setEditProcessFullscreen(initialEditFullscreen);
+  }, [initialEditCandidateId, initialEditFullscreen]);
+
+  const clearEditProcessUrl = useCallback(() => {
+    if (typeof window === "undefined") return;
+    const url = new URL(window.location.href);
+    if (!url.searchParams.has("rediger") && !url.searchParams.has("fullskjerm")) {
+      return;
+    }
+    url.searchParams.delete("rediger");
+    url.searchParams.delete("fullskjerm");
+    const qs = url.searchParams.toString();
+    router.replace(
+      `${url.pathname}${qs ? `?${qs}` : ""}${url.hash}`,
+      { scroll: false },
+    );
+  }, [router]);
+
+  const closeEditProcess = useCallback(() => {
+    setEditCandidateId(null);
+    setEditProcessFullscreen(false);
+    clearEditProcessUrl();
+  }, [clearEditProcessUrl]);
+
+  const openEditProcessInNewTab = useCallback(
+    (candidateId: Id<"candidates">) => {
+      const url = `/w/${workspaceId}/vurderinger?fane=prosesser&rediger=${candidateId}&fullskjerm=1`;
+      window.open(url, "_blank", "noopener,noreferrer");
+    },
+    [workspaceId],
+  );
 
   const reloadGithubProjectStatus = useCallback(
     (forceRefresh = false) => {
@@ -1426,7 +1519,7 @@ export function WorkspaceCandidatesPanel({
         workspaceId,
         name,
         code: cCode.trim() === "" ? undefined : cCode,
-        notes: cNotes.trim() === "" ? undefined : cNotes.trim(),
+        notes: isEmptyRichText(cNotes) ? undefined : cNotes.trim(),
         linkHintBusinessOwner:
           cOwner.trim() === "" ? undefined : cOwner.trim(),
         linkHintSystems:
@@ -1584,7 +1677,7 @@ export function WorkspaceCandidatesPanel({
       await removeCandidate({ candidateId });
       toast.success("Prosess slettet.");
       if (editCandidateId === candidateId) {
-        setEditCandidateId(null);
+        closeEditProcess();
       }
     } catch (e) {
       toast.error(
@@ -1602,6 +1695,7 @@ export function WorkspaceCandidatesPanel({
       return;
     }
     setColumnItemsError(null);
+    setColumnItemsSearch("");
     setColumnItemsLoading(true);
     try {
       const r = await listGithubProjectColumnItems({
@@ -1617,6 +1711,7 @@ export function WorkspaceCandidatesPanel({
     } catch (e) {
       setColumnItemsResult(null);
       setColumnItemsFetchedAt(null);
+      setColumnItemsSearch("");
       clearGithubColumnImportCache(workspaceId);
       setColumnItemsError(
         formatUserFacingError(e, "Kunne ikke hente kort fra GitHub."),
@@ -2535,7 +2630,10 @@ export function WorkspaceCandidatesPanel({
                     id="gh-column-pick"
                     className="border-input bg-background h-10 w-full rounded-xl border px-3 text-sm shadow-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     value={columnPickId}
-                    onChange={(e) => setColumnPickId(e.target.value)}
+                    onChange={(e) => {
+                      setColumnPickId(e.target.value);
+                      setColumnItemsSearch("");
+                    }}
                   >
                     <option value="">Velg kolonne …</option>
                     {githubProjectStatus.options?.map((o) => (
@@ -2593,7 +2691,9 @@ export function WorkspaceCandidatesPanel({
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="text-muted-foreground rounded-full bg-muted/50 px-2 py-0.5 text-[11px] font-medium tabular-nums">
-                      {columnItemsResult.items.length} kort
+                      {columnItemsSearchActive
+                        ? `${filteredColumnItems.length} av ${columnItemsResult.items.length}`
+                        : `${columnItemsResult.items.length} kort`}
                     </span>
                     <Button
                       type="button"
@@ -2616,9 +2716,23 @@ export function WorkspaceCandidatesPanel({
                   </div>
                 </div>
                 {columnItemsResult.items.length > 0 ? (
+                <>
+                <SearchInput
+                  value={columnItemsSearch}
+                  onChange={(e) => setColumnItemsSearch(e.target.value)}
+                  placeholder={`Søk blant ${columnItemsResult.items.length} kort…`}
+                  aria-label="Søk i hentede GitHub-kort"
+                  className="w-full"
+                  inputClassName="h-10 min-h-10 rounded-xl border-border/60 md:h-10 md:min-h-10"
+                />
+                {columnItemsSearchActive && filteredColumnItems.length === 0 ? (
+                  <p className="text-muted-foreground text-sm">
+                    Ingen treff for «{columnItemsSearch.trim()}».
+                  </p>
+                ) : null}
                 <div className="max-h-[min(32rem,60vh)] overflow-y-auto pr-0.5">
                   <div className="grid gap-2 sm:grid-cols-2">
-                  {columnItemsResult.items.map((row) => {
+                  {filteredColumnItems.map((row) => {
                     const linked = projectItemIdsLinkedInPvv.has(
                       row.projectItemId,
                     );
@@ -2751,6 +2865,7 @@ export function WorkspaceCandidatesPanel({
                   })}
                   </div>
                 </div>
+                </>
                 ) : (
               <div className="flex flex-col items-center gap-2 py-6 text-center">
                 <div className="flex size-10 items-center justify-center rounded-xl bg-muted/50">
@@ -2916,7 +3031,10 @@ export function WorkspaceCandidatesPanel({
                           id="gh-column-pick-hub"
                           className="border-input bg-background h-10 w-full rounded-xl border px-3 text-sm shadow-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
                           value={columnPickId}
-                          onChange={(e) => setColumnPickId(e.target.value)}
+                          onChange={(e) => {
+                            setColumnPickId(e.target.value);
+                            setColumnItemsSearch("");
+                          }}
                         >
                           <option value="">Velg kolonne …</option>
                           {githubProjectStatus.options?.map((o) => (
@@ -2947,52 +3065,79 @@ export function WorkspaceCandidatesPanel({
                     </p>
                   ) : null}
                   {columnItemsResult ? (
-                    <div className="space-y-2">
+                    <div className="space-y-2.5">
                       <p className="text-muted-foreground text-[11px]">
-                        {columnItemsResult.optionName} · {columnItemsResult.items.length} kort
+                        {columnItemsResult.optionName} ·{" "}
+                        {columnItemsSearchActive
+                          ? `${filteredColumnItems.length} av ${columnItemsResult.items.length} kort`
+                          : `${columnItemsResult.items.length} kort`}
                       </p>
                       {columnItemsResult.items.length > 0 ? (
-                        <div className="max-h-[20rem] space-y-2 overflow-y-auto pr-1">
-                          {columnItemsResult.items.map((row) => {
-                            const linked = projectItemIdsLinkedInPvv.has(row.projectItemId);
-                            return (
-                              <div
-                                key={row.projectItemId}
-                                className={cn(
-                                  "flex items-center gap-2 rounded-lg border border-border/40 px-3 py-2 text-sm",
-                                  linked ? "bg-muted/30" : "bg-card",
-                                )}
-                              >
-                                <p className="min-w-0 flex-1 truncate text-foreground">
-                                  {row.title}
-                                </p>
-                                {linked ? (
-                                  <Badge
-                                    variant="secondary"
-                                    className="h-[18px] border-0 bg-emerald-500/10 px-1.5 text-[10px] font-medium text-emerald-800 dark:text-emerald-200"
+                        <>
+                          <SearchInput
+                            value={columnItemsSearch}
+                            onChange={(e) => setColumnItemsSearch(e.target.value)}
+                            placeholder={`Søk blant ${columnItemsResult.items.length} kort…`}
+                            aria-label="Søk i hentede GitHub-kort"
+                            className="w-full"
+                            inputClassName="h-10 min-h-10 rounded-xl border-border/60 md:h-10 md:min-h-10"
+                          />
+                          {columnItemsSearchActive &&
+                          filteredColumnItems.length === 0 ? (
+                            <p className="text-muted-foreground text-xs">
+                              Ingen treff for «{columnItemsSearch.trim()}».
+                            </p>
+                          ) : (
+                            <div className="max-h-[20rem] space-y-2 overflow-y-auto pr-1">
+                              {filteredColumnItems.map((row) => {
+                                const linked = projectItemIdsLinkedInPvv.has(
+                                  row.projectItemId,
+                                );
+                                return (
+                                  <div
+                                    key={row.projectItemId}
+                                    className={cn(
+                                      "flex items-center gap-2 rounded-lg border border-border/40 px-3 py-2 text-sm",
+                                      linked ? "bg-muted/30" : "bg-card",
+                                    )}
                                   >
-                                    I PVV
-                                  </Badge>
-                                ) : (
-                                  <Button
-                                    type="button"
-                                    size="sm"
-                                    className="h-7 gap-1 rounded-lg px-2.5 text-[11px]"
-                                    disabled={
-                                      row.contentKind === "unknown" ||
-                                      ((row.contentKind === "issue" || row.contentKind === "pull_request") &&
-                                        (!row.repoFullName?.trim() || row.issueNumber == null))
-                                    }
-                                    onClick={() => openImportFromGithubColumn(row)}
-                                  >
-                                    <Plus className="size-3" aria-hidden />
-                                    Opprett
-                                  </Button>
-                                )}
-                              </div>
-                            );
-                          })}
-                        </div>
+                                    <p className="min-w-0 flex-1 truncate text-foreground">
+                                      {row.title}
+                                    </p>
+                                    {linked ? (
+                                      <Badge
+                                        variant="secondary"
+                                        className="h-[18px] border-0 bg-emerald-500/10 px-1.5 text-[10px] font-medium text-emerald-800 dark:text-emerald-200"
+                                      >
+                                        I PVV
+                                      </Badge>
+                                    ) : (
+                                      <Button
+                                        type="button"
+                                        size="sm"
+                                        className="h-7 gap-1 rounded-lg px-2.5 text-[11px]"
+                                        disabled={
+                                          row.contentKind === "unknown" ||
+                                          ((row.contentKind === "issue" ||
+                                            row.contentKind ===
+                                              "pull_request") &&
+                                            (!row.repoFullName?.trim() ||
+                                              row.issueNumber == null))
+                                        }
+                                        onClick={() =>
+                                          openImportFromGithubColumn(row)
+                                        }
+                                      >
+                                        <Plus className="size-3" aria-hidden />
+                                        Opprett
+                                      </Button>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </>
                       ) : (
                         <p className="text-muted-foreground text-xs">
                           Ingen kort i denne kolonnen.
@@ -3702,16 +3847,13 @@ export function WorkspaceCandidatesPanel({
                 </div>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="new-cand-notes" className="text-sm font-medium">
-                  Notat
-                </Label>
-                <Textarea
-                  id="new-cand-notes"
+                <Label className="text-sm font-medium">Notat</Label>
+                <RichTextEditor
+                  aria-label="Notat"
                   value={cNotes}
-                  onChange={(e) => setCNotes(e.target.value)}
-                  rows={3}
+                  onChange={setCNotes}
+                  rows={4}
                   placeholder="Systemer, kontaktperson, notater …"
-                  className="min-h-[5.5rem] resize-y rounded-2xl px-4 py-3"
                 />
               </div>
 
@@ -4005,13 +4147,18 @@ export function WorkspaceCandidatesPanel({
           open={editCandidateId !== null}
           onOpenChange={(open) => {
             if (!open) {
-              setEditCandidateId(null);
+              closeEditProcess();
             }
           }}
         >
           <DialogContent
-            size="2xl"
-            className="max-h-[92vh] max-w-3xl"
+            size="5xl"
+            fillViewport={editProcessFullscreen}
+            className={
+              editProcessFullscreen
+                ? undefined
+                : "max-h-[min(96vh,56rem)] max-w-5xl"
+            }
             titleId="edit-process-title"
             descriptionId="edit-process-desc"
           >
@@ -4033,16 +4180,56 @@ export function WorkspaceCandidatesPanel({
                       : "…"}
                   </p>
                 </div>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="size-9 shrink-0 rounded-full"
-                  onClick={() => setEditCandidateId(null)}
-                  aria-label="Lukk rediger prosess"
-                >
-                  <X className="size-4" aria-hidden />
-                </Button>
+                <div className="flex shrink-0 items-center gap-1">
+                  {editCandidateId ? (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="size-9 rounded-full"
+                      onClick={() => openEditProcessInNewTab(editCandidateId)}
+                      aria-label="Åpne i egen fane"
+                      title="Åpne i egen fane"
+                    >
+                      <ExternalLink className="size-4" aria-hidden />
+                    </Button>
+                  ) : null}
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="size-9 rounded-full"
+                    onClick={() =>
+                      setEditProcessFullscreen((prev) => !prev)
+                    }
+                    aria-label={
+                      editProcessFullscreen
+                        ? "Avslutt fullskjerm"
+                        : "Fullskjerm"
+                    }
+                    title={
+                      editProcessFullscreen
+                        ? "Avslutt fullskjerm"
+                        : "Fullskjerm"
+                    }
+                  >
+                    {editProcessFullscreen ? (
+                      <Minimize2 className="size-4" aria-hidden />
+                    ) : (
+                      <Maximize2 className="size-4" aria-hidden />
+                    )}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="size-9 rounded-full"
+                    onClick={closeEditProcess}
+                    aria-label="Lukk rediger prosess"
+                  >
+                    <X className="size-4" aria-hidden />
+                  </Button>
+                </div>
               </div>
             </DialogHeader>
             <DialogBody>
@@ -4050,6 +4237,8 @@ export function WorkspaceCandidatesPanel({
                 <WorkspaceCandidateRow
                   key={`${editingCandidate._id}-${editingCandidate.updatedAt}`}
                   as="div"
+                  embedded
+                  notesRows={editProcessFullscreen ? 12 : 6}
                   workspaceId={workspaceId}
                   candidate={editingCandidate}
                   orgUnits={orgUnits}

@@ -3,11 +3,13 @@
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { RichTextEditor } from "@/components/ui/rich-text-editor";
 import { Textarea } from "@/components/ui/textarea";
 import { UserAvatar } from "@/components/user-avatar";
 import { api } from "@/convex/_generated/api";
 import type { Doc, Id } from "@/convex/_generated/dataModel";
 import { toast } from "@/lib/app-toast";
+import { isEmptyRichText } from "@/lib/rich-text";
 import { cn } from "@/lib/utils";
 import { useMutation, useQuery } from "convex/react";
 import Link from "next/link";
@@ -49,6 +51,10 @@ export function WorkspaceCandidateRow({
   githubProject,
   importFromGithub,
   as = "li",
+  /** Høydehint for notat-editor (flere rader i fullskjerm). */
+  notesRows = 5,
+  /** Kompakt kort når raden ligger i dialog. */
+  embedded = false,
 }: {
   workspaceId: Id<"workspaces">;
   candidate: Doc<"candidates">;
@@ -120,6 +126,8 @@ export function WorkspaceCandidateRow({
   };
   /** `div` når raden vises i dialog (unngå `<li>` uten `<ul>`). */
   as?: "li" | "div";
+  notesRows?: number;
+  embedded?: boolean;
   /** Hent PVV-markerte felt fra GitHub-prosjektkort inn i skjemaet. */
   importFromGithub?: (
     candidateId: Id<"candidates">,
@@ -264,7 +272,7 @@ export function WorkspaceCandidateRow({
         candidateId: c._id,
         name: nameT,
         code: codeT,
-        notes: notes.trim() === "" ? null : notes.trim(),
+        notes: isEmptyRichText(notes) ? null : notes.trim(),
         orgUnitId: orgUnitId === "" ? null : (orgUnitId as Id<"orgUnits">),
         linkHintBusinessOwner:
           linkOwner.trim() === "" ? null : linkOwner.trim(),
@@ -285,7 +293,12 @@ export function WorkspaceCandidateRow({
   return (
     <Wrapper
       id={`cand-detail-${c._id}`}
-      className="scroll-mt-24 min-w-0 overflow-hidden rounded-2xl border border-border/70 bg-card p-4 shadow-sm sm:p-5"
+      className={cn(
+        "scroll-mt-24 min-w-0 overflow-hidden",
+        embedded
+          ? "bg-transparent p-0 shadow-none"
+          : "rounded-2xl border border-border/70 bg-card p-4 shadow-sm sm:p-5",
+      )}
     >
       <p className="text-muted-foreground mb-4 flex flex-wrap items-center gap-2 text-xs leading-relaxed">
         <span className="bg-muted text-foreground inline-flex items-center rounded-md px-2 py-0.5 font-mono text-[11px] font-semibold">
@@ -382,21 +395,17 @@ export function WorkspaceCandidateRow({
       </div>
 
       <div className="mt-5 space-y-2">
-        <Label
-          htmlFor={`cand-notes-${c._id}`}
-          className="flex items-center gap-2 text-sm font-medium"
-        >
+        <Label className="flex items-center gap-2 text-sm font-medium">
           <StickyNote className="size-3.5 opacity-70" aria-hidden />
           {prosessRegisterCopy.notes.label}
         </Label>
-        <Textarea
-          id={`cand-notes-${c._id}`}
+        <RichTextEditor
+          aria-label={prosessRegisterCopy.notes.label}
           value={notes}
-          onChange={(e) => setNotes(e.target.value)}
-          rows={2}
+          onChange={setNotes}
+          rows={notesRows}
           disabled={!canEdit}
           placeholder="Valgfritt — f.eks. systemnavn, kontaktperson …"
-          className="resize-y"
         />
         <p className="text-muted-foreground text-[11px] leading-snug">
           {prosessRegisterCopy.notes.hint}

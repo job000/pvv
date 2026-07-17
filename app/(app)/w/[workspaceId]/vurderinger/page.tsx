@@ -26,10 +26,25 @@ function VurderingerHubBody() {
   const searchParams = useSearchParams();
   const workspaceId = params.workspaceId as Id<"workspaces">;
   const activeTab: PvvHubTab =
-    searchParams.get("fane") === "prosesser" ? "prosesser" : "vurderinger";
+    searchParams.get("fane") === "prosesser" || searchParams.get("rediger")
+      ? "prosesser"
+      : "vurderinger";
   const orgUnit = searchParams.get("orgUnit") as Id<"orgUnits"> | null;
+  const rediger = searchParams.get("rediger");
+  const initialEditCandidateId = rediger
+    ? (rediger as Id<"candidates">)
+    : null;
+  const initialEditFullscreen = searchParams.get("fullskjerm") === "1";
 
-  return <WorkspacePvvHub workspaceId={workspaceId} activeTab={activeTab} initialOrgUnit={orgUnit} />;
+  return (
+    <WorkspacePvvHub
+      workspaceId={workspaceId}
+      activeTab={activeTab}
+      initialOrgUnit={orgUnit}
+      initialEditCandidateId={initialEditCandidateId}
+      initialEditFullscreen={initialEditFullscreen}
+    />
+  );
 }
 
 export default function WorkspaceAssessmentsPage() {

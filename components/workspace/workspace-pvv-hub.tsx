@@ -43,9 +43,17 @@ type Props = {
   workspaceId: Id<"workspaces">;
   activeTab: PvvHubTab;
   initialOrgUnit?: Id<"orgUnits"> | null;
+  initialEditCandidateId?: Id<"candidates"> | null;
+  initialEditFullscreen?: boolean;
 };
 
-export function WorkspacePvvHub({ workspaceId, activeTab, initialOrgUnit }: Props) {
+export function WorkspacePvvHub({
+  workspaceId,
+  activeTab,
+  initialOrgUnit,
+  initialEditCandidateId = null,
+  initialEditFullscreen = false,
+}: Props) {
   const router = useRouter();
   const orgUnits = useQuery(api.orgUnits.listByWorkspace, { workspaceId });
 
@@ -109,6 +117,8 @@ export function WorkspacePvvHub({ workspaceId, activeTab, initialOrgUnit }: Prop
             hubMode
             approvedIntakeForProcessregister={approvedIntakeForProcessregister}
             initialOrgUnit={initialOrgUnit}
+            initialEditCandidateId={initialEditCandidateId}
+            initialEditFullscreen={initialEditFullscreen}
           />
         )}
       </div>

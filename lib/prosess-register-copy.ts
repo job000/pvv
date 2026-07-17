@@ -26,6 +26,6 @@ export const prosessRegisterCopy = {
   },
   notes: {
     label: "Notat til teamet",
-    hint: "F.eks. kjente systemer, kontaktpunkt eller særlige forhold — ikke påkrevd.",
+    hint: "F.eks. kjente systemer, kontaktpunkt eller særlige forhold. Støtter fet, kursiv og bilder — ikke påkrevd.",
   },
 } as const;

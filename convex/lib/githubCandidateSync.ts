@@ -20,16 +20,35 @@ export function b64ToUtf8(b64: string): string {
   return new TextDecoder().decode(bytes);
 }
 
+/** Strip HTML for lesbar GitHub-body (base64 beholder full verdi inkl. formatering). */
+function plainTextForGithubVisible(text: string): string {
+  if (!text.trim()) return "";
+  if (!/<\/?[a-z][\s\S]*>/i.test(text)) return text;
+  return text
+    .replace(/<img[^>]*>/gi, "[bilde]")
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/(p|div|li|h[1-6])>/gi, "\n")
+    .replace(/<[^>]+>/g, "")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
 export function formatPvvSyncBlock(
   key: PvvGithubSyncFieldKeys,
   text: string,
 ): string {
   const encoded = utf8ToB64(text);
   /** Lesbar tekst i Markdown; base64 kun i én HTML-kommentar (GitHub skjuler den). */
+  const plain = plainTextForGithubVisible(text);
   const visible =
-    text.trim() === ""
+    plain.trim() === ""
       ? "*(Ingen tekst i PVV for dette feltet.)*"
-      : text;
+      : plain;
   return `${visible}\n\n<!-- pvv:b64:${key}:${encoded} -->`;
 }
 
