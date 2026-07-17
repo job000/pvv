@@ -8,8 +8,10 @@ import { getAuthUserId } from "@convex-dev/auth/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import {
   canEditAssessment,
+  canReadAssessment,
   requireAssessmentEdit,
   getAssessmentIfReadable,
+  requireWorkspaceMember,
 } from "./lib/access";
 import {
   processDesignDocumentPayloadValidator,
@@ -383,6 +385,51 @@ export const getForAssessment = query({
         readable.userId,
       ),
     };
+  },
+});
+
+/** Prosesstitler for PDD-hub-kort (fallback til vurderingstittel i klienten). */
+export const listTitlesByWorkspace = query({
+  args: { workspaceId: v.id("workspaces") },
+  returns: v.array(
+    v.object({
+      assessmentId: v.id("assessments"),
+      processTitle: v.string(),
+      updatedAt: v.number(),
+    }),
+  ),
+  handler: async (ctx, args) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) return [];
+    await requireWorkspaceMember(ctx, args.workspaceId, userId, "viewer");
+
+    const docs = await ctx.db
+      .query("processDesignDocuments")
+      .withIndex("by_workspace", (q) => q.eq("workspaceId", args.workspaceId))
+      .collect();
+
+    const out: {
+      assessmentId: Id<"assessments">;
+      processTitle: string;
+      updatedAt: number;
+    }[] = [];
+
+    for (const doc of docs) {
+      const assessment = await ctx.db.get(doc.assessmentId);
+      if (!assessment) continue;
+      if (!(await canReadAssessment(ctx, assessment, userId))) continue;
+
+      const payload = doc.payload as ProcessDesignDocumentPayload;
+      const title = stripSimpleHtml(payload.processTitle ?? "").slice(0, 400);
+      if (!title) continue;
+
+      out.push({
+        assessmentId: doc.assessmentId,
+        processTitle: title,
+        updatedAt: doc.updatedAt,
+      });
+    }
+    return out;
   },
 });
 

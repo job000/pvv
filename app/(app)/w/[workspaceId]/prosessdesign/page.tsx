@@ -47,7 +47,21 @@ function ProcessDesignHubBody() {
   const assessments = useQuery(api.assessments.listByWorkspace, {
     workspaceId,
   });
+  const pddTitles = useQuery(api.processDesignDocs.listTitlesByWorkspace, {
+    workspaceId,
+  });
   const orgUnits = useQuery(api.orgUnits.listByWorkspace, { workspaceId });
+
+  const processTitleByAssessmentId = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const row of pddTitles ?? []) {
+      map.set(String(row.assessmentId), row.processTitle);
+    }
+    return map;
+  }, [pddTitles]);
+
+  const displayTitle = (assessmentId: string, assessmentTitle: string) =>
+    processTitleByAssessmentId.get(assessmentId)?.trim() || assessmentTitle;
 
   const rawOrgUnit = searchParams.get("orgUnit") as Id<"orgUnits"> | null;
 
@@ -109,12 +123,26 @@ function ProcessDesignHubBody() {
         const orgName = a.orgUnitId
           ? (orgUnitNameById.get(String(a.orgUnitId))?.toLowerCase() ?? "")
           : "";
-        return a.title.toLowerCase().includes(term) || orgName.includes(term);
+        const title = (
+          processTitleByAssessmentId.get(String(a._id)) ?? a.title
+        ).toLowerCase();
+        return (
+          title.includes(term) ||
+          a.title.toLowerCase().includes(term) ||
+          orgName.includes(term)
+        );
       });
     }
     const sorted = [...list];
     if (sortBy === "title_asc") {
-      sorted.sort((a, b) => a.title.localeCompare(b.title, "nb"));
+      sorted.sort((a, b) =>
+        (
+          processTitleByAssessmentId.get(String(a._id)) ?? a.title
+        ).localeCompare(
+          processTitleByAssessmentId.get(String(b._id)) ?? b.title,
+          "nb",
+        ),
+      );
     } else if (sortBy === "updated_asc") {
       sorted.sort((a, b) => a.updatedAt - b.updatedAt);
     } else {
@@ -129,6 +157,7 @@ function ProcessDesignHubBody() {
     activityFilter,
     sortBy,
     orgUnitNameById,
+    processTitleByAssessmentId,
   ]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
@@ -419,6 +448,7 @@ function ProcessDesignHubBody() {
                 const orgName = a.orgUnitId
                   ? orgUnitNameById.get(String(a.orgUnitId))
                   : undefined;
+                const title = displayTitle(String(a._id), a.title);
                 return (
                   <li key={a._id} className="min-w-0">
                     <Link
@@ -431,7 +461,7 @@ function ProcessDesignHubBody() {
                     >
                       <div className="flex items-start justify-between gap-2">
                         <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-muted text-sm font-semibold text-foreground">
-                          {a.title.trim().charAt(0).toUpperCase() || "P"}
+                          {title.trim().charAt(0).toUpperCase() || "P"}
                         </span>
                         <ArrowUpRight
                           className="size-4 text-muted-foreground/45 transition-all group-hover:translate-x-0.5 group-hover:-translate-y-0.5 group-hover:text-foreground"
@@ -439,7 +469,7 @@ function ProcessDesignHubBody() {
                         />
                       </div>
                       <h2 className="mt-3 line-clamp-2 text-sm font-semibold tracking-tight text-foreground">
-                        {a.title}
+                        {title}
                       </h2>
                       <p className="mt-1.5 text-xs text-muted-foreground">
                         {orgName ?? "Ikke satt"}
@@ -463,6 +493,7 @@ function ProcessDesignHubBody() {
                 const orgName = a.orgUnitId
                   ? orgUnitNameById.get(String(a.orgUnitId))
                   : undefined;
+                const title = displayTitle(String(a._id), a.title);
                 return (
                   <li key={a._id}>
                     <Link
@@ -473,11 +504,11 @@ function ProcessDesignHubBody() {
                       )}
                     >
                       <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-muted text-xs font-semibold">
-                        {a.title.trim().charAt(0).toUpperCase() || "P"}
+                        {title.trim().charAt(0).toUpperCase() || "P"}
                       </span>
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-sm font-medium text-foreground">
-                          {a.title}
+                          {title}
                         </p>
                         <p className="mt-0.5 truncate text-xs text-muted-foreground">
                           {orgName ?? "Ikke satt"} ·{" "}
@@ -501,7 +532,7 @@ function ProcessDesignHubBody() {
                 <table className="w-full min-w-[28rem] text-left text-sm">
                   <thead className="border-b border-border/50 bg-muted/25 text-xs font-medium text-muted-foreground">
                     <tr>
-                      <th className="px-4 py-2.5 font-medium">Vurdering</th>
+                      <th className="px-4 py-2.5 font-medium">Tittel</th>
                       <th className="px-4 py-2.5 font-medium">Enhet</th>
                       <th className="px-4 py-2.5 font-medium">Sist oppdatert</th>
                       <th className="px-4 py-2.5 text-right font-medium">
@@ -514,6 +545,7 @@ function ProcessDesignHubBody() {
                       const orgName = a.orgUnitId
                         ? orgUnitNameById.get(String(a.orgUnitId))
                         : undefined;
+                      const title = displayTitle(String(a._id), a.title);
                       return (
                         <tr
                           key={a._id}
@@ -524,7 +556,7 @@ function ProcessDesignHubBody() {
                               href={`/w/${wid}/a/${a._id}/prosessdesign`}
                               className="font-medium text-foreground hover:underline"
                             >
-                              {a.title}
+                              {title}
                             </Link>
                           </td>
                           <td className="px-4 py-3 text-muted-foreground">
@@ -540,7 +572,7 @@ function ProcessDesignHubBody() {
                             <Link
                               href={`/w/${wid}/a/${a._id}/prosessdesign`}
                               className="inline-flex size-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                              aria-label={`Åpne ${a.title}`}
+                              aria-label={`Åpne ${title}`}
                             >
                               <ArrowUpRight className="size-4" aria-hidden />
                             </Link>
