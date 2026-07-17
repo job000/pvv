@@ -16,7 +16,7 @@ export function UserAvatarNav() {
   if (profile === undefined) {
     return (
       <div
-        className="border-border/45 bg-muted/60 size-10 shrink-0 animate-pulse rounded-full border shadow-inner"
+        className="border-border/45 bg-muted/60 size-9 shrink-0 animate-pulse rounded-full border shadow-inner sm:size-10"
         aria-hidden
       />
     );
@@ -27,13 +27,13 @@ export function UserAvatarNav() {
       <Link
         href="/bruker/innstillinger"
         className={cn(
-          "border-border/50 bg-background/80 text-muted-foreground hover:bg-background focus-visible:ring-ring inline-flex size-10 shrink-0 items-center justify-center rounded-full border shadow-sm transition-all hover:shadow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2",
+          "border-border/50 bg-background/80 text-muted-foreground hover:bg-background focus-visible:ring-ring inline-flex size-9 shrink-0 items-center justify-center rounded-full border shadow-sm transition-all hover:shadow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 sm:size-10",
           active && "ring-primary/40 ring-2 ring-offset-1 ring-offset-background",
         )}
         aria-label="Brukerinnstillinger"
         title="Brukerinnstillinger"
       >
-        <User className="size-[1.2rem]" aria-hidden />
+        <User className="size-[1.15rem]" aria-hidden />
       </Link>
     );
   }
@@ -50,7 +50,7 @@ export function UserAvatarNav() {
     <Link
       href="/bruker/innstillinger"
       className={cn(
-        "border-border/50 bg-background/90 focus-visible:ring-ring relative inline-flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-full border shadow-sm transition-all hover:border-primary/25 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2",
+        "border-border/50 bg-background/90 focus-visible:ring-ring relative inline-flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-full border shadow-sm transition-all hover:border-primary/25 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 sm:size-10",
         active && "ring-primary/45 ring-2 ring-offset-1 ring-offset-background",
       )}
       aria-label="Brukerinnstillinger"

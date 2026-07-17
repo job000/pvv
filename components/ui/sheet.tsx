@@ -35,7 +35,7 @@ export function SheetContent({
   /** Når true, vises panelet også på md+ (standard er kun mobil). */
   showOnDesktop = false,
 }: {
-  side?: "left" | "right";
+  side?: "left" | "right" | "bottom";
   className?: string;
   children: React.ReactNode;
   showOnDesktop?: boolean;
@@ -79,13 +79,15 @@ export function SheetContent({
     return null;
   }
 
+  const isBottom = side === "bottom";
+
   return createPortal(
     <div
       className={cn("fixed inset-0 z-50", !showOnDesktop && "md:hidden")}
     >
       <button
         type="button"
-        aria-label="Lukk meny"
+        aria-label="Lukk"
         className={cn(
           "absolute inset-0 bg-black/45 backdrop-blur-[2px] transition-opacity duration-200",
           visible ? "opacity-100" : "opacity-0",
@@ -96,21 +98,35 @@ export function SheetContent({
         role="dialog"
         aria-modal="true"
         className={cn(
-          "absolute inset-y-0 flex w-[min(19.5rem,90vw)] flex-col bg-background shadow-2xl",
-          "pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]",
+          "absolute flex flex-col bg-background shadow-2xl",
           "transition-transform duration-200 ease-out will-change-transform",
-          side === "left"
+          isBottom
             ? cn(
-                "left-0 border-r border-border/50 rounded-r-2xl",
-                visible ? "translate-x-0" : "-translate-x-full",
+                "inset-x-0 bottom-0 max-h-[min(85dvh,36rem)] rounded-t-3xl border-t border-border/50",
+                "pb-[env(safe-area-inset-bottom)]",
+                visible ? "translate-y-0" : "translate-y-full",
               )
             : cn(
-                "right-0 border-l border-border/50 rounded-l-2xl",
-                visible ? "translate-x-0" : "translate-x-full",
+                "inset-y-0 w-[min(20rem,92vw)]",
+                "pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]",
+                side === "left"
+                  ? cn(
+                      "left-0 rounded-r-2xl border-r border-border/50",
+                      visible ? "translate-x-0" : "-translate-x-full",
+                    )
+                  : cn(
+                      "right-0 rounded-l-2xl border-l border-border/50",
+                      visible ? "translate-x-0" : "translate-x-full",
+                    ),
               ),
           className,
         )}
       >
+        {isBottom ? (
+          <div className="flex justify-center pt-2.5 pb-1" aria-hidden>
+            <span className="bg-muted-foreground/30 h-1 w-10 rounded-full" />
+          </div>
+        ) : null}
         {children}
       </div>
     </div>,

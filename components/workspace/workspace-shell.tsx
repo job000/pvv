@@ -1,16 +1,69 @@
 "use client";
 
+import { BrandMark } from "@/components/brand-mark";
+import { ThemeModeToggle } from "@/components/theme-mode-toggle";
+import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
-import { cn } from "@/lib/utils";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
-import { useQuery } from "convex/react";
-import { ArrowLeft } from "lucide-react";
+import { PRODUCT_NAME } from "@/lib/brand";
+import { cn } from "@/lib/utils";
+import { useAuthActions } from "@convex-dev/auth/react";
+import { useMutation, useQuery } from "convex/react";
+import { ArrowLeft, LogOut } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo } from "react";
 
 import { useWorkspaceChrome } from "./workspace-chrome-context";
 import { WorkspaceNav } from "./workspace-nav";
+
+function DrawerFooter({ onNavigate }: { onNavigate?: () => void }) {
+  const { signOut } = useAuthActions();
+  const patchUserSettings = useMutation(api.users.patchMyUserSettings);
+
+  return (
+    <div className="shrink-0 space-y-1 border-t border-border/40 p-3">
+      <Link
+        href="/dashboard?oversikt=1"
+        onClick={onNavigate}
+        className={cn(
+          "text-muted-foreground hover:text-foreground hover:bg-muted/70 active:bg-muted",
+          "flex min-h-11 items-center gap-2.5 rounded-xl px-3 text-sm font-medium transition-colors touch-manipulation",
+        )}
+      >
+        <BrandMark size={22} decorative />
+        <span className="min-w-0 flex-1 truncate">Alle områder</span>
+        <ArrowLeft className="size-4 opacity-50" aria-hidden />
+      </Link>
+
+      {/* Tema + logg ut — synlig i drawer på mobil (skjult i toppbar) */}
+      <div className="flex items-center gap-1 md:hidden">
+        <ThemeModeToggle
+          className="size-11 rounded-xl"
+          onThemeChange={(value) => {
+            void patchUserSettings({ themePreference: value });
+          }}
+        />
+        <Button
+          type="button"
+          variant="ghost"
+          className="text-muted-foreground hover:text-foreground h-11 flex-1 justify-start gap-2 rounded-xl px-3"
+          onClick={() => {
+            onNavigate?.();
+            void signOut();
+          }}
+        >
+          <LogOut className="size-4 opacity-70" aria-hidden />
+          Logg ut
+        </Button>
+      </div>
+
+      <p className="text-muted-foreground/70 px-1 pt-1 text-[0.65rem] md:hidden">
+        {PRODUCT_NAME}
+      </p>
+    </div>
+  );
+}
 
 export function WorkspaceShell({
   workspaceId,
@@ -41,14 +94,14 @@ export function WorkspaceShell({
     <div
       className={cn(
         "relative flex min-h-0 flex-1 flex-col",
-        showDesktopSidebar && "md:ml-[16rem]",
+        showDesktopSidebar && "md:ml-64",
       )}
     >
       {showDesktopSidebar ? (
         <aside
           className={cn(
             "fixed left-0 top-[var(--app-header-height,3.5rem)] z-30 hidden h-[calc(100dvh-var(--app-header-height,3.5rem))] w-64 flex-col overflow-hidden md:flex",
-            "border-border/40 bg-card/40 border-r backdrop-blur-md",
+            "border-border/40 bg-card/50 border-r backdrop-blur-md",
           )}
           aria-label="Arbeidsområde-meny"
         >
@@ -58,25 +111,14 @@ export function WorkspaceShell({
               workspaceName={workspace === null ? undefined : name}
             />
           </div>
-          <div className="shrink-0 border-t border-border/40 p-3">
-            <Link
-              href="/dashboard?oversikt=1"
-              className={cn(
-                "text-muted-foreground hover:text-foreground hover:bg-muted/70",
-                "flex min-h-11 items-center gap-2 rounded-xl px-3 text-sm font-medium transition-colors",
-              )}
-            >
-              <ArrowLeft className="size-4 opacity-70" aria-hidden />
-              Alle områder
-            </Link>
-          </div>
+          <DrawerFooter />
         </aside>
       ) : null}
 
       <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
         <SheetContent
           side="left"
-          className="bg-background/95 border-border/40 p-0 backdrop-blur-xl"
+          className="bg-background/98 border-border/40 p-0 backdrop-blur-xl"
         >
           <div className="flex h-full max-h-[100dvh] flex-col overflow-hidden">
             <div className="min-h-0 flex-1 overflow-hidden">
@@ -87,24 +129,12 @@ export function WorkspaceShell({
                 onClose={() => setMobileOpen(false)}
               />
             </div>
-            <div className="shrink-0 border-t border-border/40 p-3">
-              <Link
-                href="/dashboard?oversikt=1"
-                onClick={() => setMobileOpen(false)}
-                className={cn(
-                  "text-muted-foreground hover:text-foreground hover:bg-muted/70",
-                  "flex min-h-11 items-center gap-2 rounded-xl px-3 text-sm font-medium transition-colors",
-                )}
-              >
-                <ArrowLeft className="size-4 opacity-70" aria-hidden />
-                Alle områder
-              </Link>
-            </div>
+            <DrawerFooter onNavigate={() => setMobileOpen(false)} />
           </div>
         </SheetContent>
       </Sheet>
 
-      <div className="mx-auto min-h-0 w-full max-w-[min(100%,var(--page-max-width))] flex-1 overflow-y-auto px-[var(--spacing-page-x,1rem)] py-4 pb-[max(1rem,env(safe-area-inset-bottom))] [overflow-anchor:none] sm:px-6 sm:py-5">
+      <div className="mx-auto min-h-0 w-full max-w-[min(100%,var(--page-max-width))] flex-1 overflow-y-auto px-3 py-3 pb-[max(1rem,env(safe-area-inset-bottom))] [overflow-anchor:none] sm:px-6 sm:py-5">
         {children}
       </div>
     </div>
