@@ -846,7 +846,10 @@ export const listProcessCoverage = query({
               documentId: pddDoc._id,
               assessmentId: a._id,
               title:
-                pddPayload?.processTitle?.trim() ||
+                (pddPayload?.processTitle ?? "")
+                  .replace(/<[^>]+>/g, " ")
+                  .replace(/\s+/g, " ")
+                  .trim() ||
                 pvvProcessName ||
                 a.title ||
                 "Prosessdesign",

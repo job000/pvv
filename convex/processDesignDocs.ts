@@ -37,6 +37,21 @@ function clampStr(s: string | undefined, max: number): string | undefined {
   return t.length > max ? t.slice(0, max) : t;
 }
 
+/** Strip tags from short title fields (Convex has no DOM). */
+function stripSimpleHtml(s: string): string {
+  return s
+    .replace(/<br\s*\/?>/gi, " ")
+    .replace(/<\/(p|div|li|h[1-6])>/gi, " ")
+    .replace(/<[^>]+>/g, "")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 function sanitizeDiagramSnapshotField(
   raw: string | undefined,
   label: string,
@@ -102,6 +117,8 @@ function sanitizePayload(
   };
 
   for (const key of [
+    "processTitle",
+    "shortDescription",
     "orgPrimaryUnit",
     "orgOperatingUnits",
     "orgRolloutNotes",
@@ -138,6 +155,19 @@ function sanitizePayload(
     "appendix",
   ] as const) {
     copyStr(key);
+  }
+
+  // Korte felt skal være ren tekst (ikke TipTap-HTML fra tidligere editor)
+  if (out.processTitle) {
+    out.processTitle = stripSimpleHtml(out.processTitle).slice(0, 400);
+    if (!out.processTitle) delete out.processTitle;
+  }
+  if (out.shortDescription) {
+    out.shortDescription = stripSimpleHtml(out.shortDescription).slice(
+      0,
+      2000,
+    );
+    if (!out.shortDescription) delete out.shortDescription;
   }
 
   const asIsDia = sanitizeDiagramSnapshotField(

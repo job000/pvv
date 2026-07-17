@@ -25,7 +25,8 @@ import { RichTextEditor } from "@/components/ui/rich-text-editor";
 import { SearchInput } from "@/components/ui/search-input";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { Textarea } from "@/components/ui/textarea";
-import { isEmptyRichText } from "@/lib/rich-text";
+import { htmlToPlainText, isEmptyRichText } from "@/lib/rich-text";
+import { toast } from "sonner";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import type { AssessmentPayload } from "@/lib/assessment-types";
@@ -177,6 +178,7 @@ function Field({
   disabled,
   placeholder,
   description,
+  plain = false,
   // sourceHint er bevisst ignorert — det er meta-info som la støy på hvert
   // eneste felt. Brukere som vil hente fra kilder bruker «Fyll fra kilder»
   // i toppmenyen, så hint per felt er ikke nødvendig.
@@ -191,9 +193,13 @@ function Field({
   disabled?: boolean;
   placeholder?: string;
   description?: string;
+  /** Plain text (Input/Textarea) — for titler og korte én-linjers felt. */
+  plain?: boolean;
   sourceHint?: string;
   className?: string;
 }) {
+  const plainValue = plain ? htmlToPlainText(value) : value;
+
   return (
     <div className="space-y-1.5">
       <Label className="text-[0.8125rem] font-medium text-foreground">
@@ -202,15 +208,38 @@ function Field({
       {description ? (
         <p className="text-xs leading-5 text-muted-foreground">{description}</p>
       ) : null}
-      <RichTextEditor
-        value={value}
-        onChange={onChange}
-        rows={rows}
-        disabled={disabled}
-        placeholder={placeholder}
-        aria-label={label}
-        className={className}
-      />
+      {plain ? (
+        rows <= 1 ? (
+          <Input
+            value={plainValue}
+            onChange={(e) => onChange(e.target.value)}
+            disabled={disabled}
+            placeholder={placeholder}
+            aria-label={label}
+            className={cn("rounded-xl", className)}
+          />
+        ) : (
+          <Textarea
+            value={plainValue}
+            onChange={(e) => onChange(e.target.value)}
+            disabled={disabled}
+            placeholder={placeholder}
+            aria-label={label}
+            rows={rows}
+            className={cn("rounded-xl", className)}
+          />
+        )
+      ) : (
+        <RichTextEditor
+          value={value}
+          onChange={onChange}
+          rows={rows}
+          disabled={disabled}
+          placeholder={placeholder}
+          aria-label={label}
+          className={className}
+        />
+      )}
     </div>
   );
 }
@@ -1376,7 +1405,27 @@ export function ProcessDesignDocPage({
         return true;
       }
 
-      const payloadToSave = payloadRef.current;
+      // Normaliser korte plain-felt (rydder opp gammel TipTap-HTML)
+      const titlePlain = htmlToPlainText(
+        payloadRef.current.processTitle,
+      ).trim();
+      const shortPlain = htmlToPlainText(
+        payloadRef.current.shortDescription,
+      ).trim();
+      const payloadToSave: ProcessDesignDocumentPayload = {
+        ...payloadRef.current,
+        processTitle: titlePlain || undefined,
+        shortDescription: shortPlain || undefined,
+      };
+      if (
+        payloadToSave.processTitle !== payloadRef.current.processTitle ||
+        payloadToSave.shortDescription !==
+          payloadRef.current.shortDescription
+      ) {
+        payloadRef.current = payloadToSave;
+        setPayload(payloadToSave);
+      }
+
       const orgToSave = organizationLineRef.current.trim() || null;
       const revisionToSave = revisionRef.current;
       const signature = JSON.stringify({
@@ -1410,6 +1459,8 @@ export function ProcessDesignDocPage({
           setDirty(stillDirty);
           if (stillDirty) {
             saveQueuedRef.current = true;
+          } else if (!options?.silent) {
+            toast.success("Lagret");
           }
         } else {
           ok = false;
@@ -1420,6 +1471,14 @@ export function ProcessDesignDocPage({
           );
           setConflictOpen(true);
         }
+      } catch (err) {
+        ok = false;
+        const message =
+          err instanceof Error ? err.message : "Kunne ikke lagre";
+        if (!options?.silent) {
+          toast.error(message);
+        }
+        console.error("[pdd] Lagring feilet", err);
       } finally {
         saveInFlightRef.current = false;
         setSaving(false);
@@ -1625,7 +1684,7 @@ export function ProcessDesignDocPage({
   const sectionCompletion = useMemo(() => {
     return {
       overview: Boolean(
-        payload.processTitle?.trim() ||
+        htmlToPlainText(payload.processTitle).trim() ||
           !isEmptyRichText(payload.shortDescription) ||
           !isEmptyRichText(payload.executiveSummary),
       ),
@@ -1870,7 +1929,9 @@ export function ProcessDesignDocPage({
     payload.orgOperatingUnits?.trim() || payload.orgRolloutNotes?.trim() || "";
 
   const documentTitle =
-    payload.processTitle?.trim() || assessmentTitle || "Uten tittel";
+    htmlToPlainText(payload.processTitle).trim() ||
+    htmlToPlainText(assessmentTitle).trim() ||
+    "Uten tittel";
 
   return (
     <div className="mx-auto max-w-3xl space-y-7 px-4 pb-28 sm:space-y-9 sm:px-6 lg:px-0 lg:pb-16">
@@ -2284,6 +2345,7 @@ export function ProcessDesignDocPage({
                   value={payload.processTitle ?? payload.asIsProcessName ?? ""}
                   onChange={(v) => setStr("processTitle", v)}
                   rows={1}
+                  plain
                   disabled={!canEdit}
                   placeholder="Navnet på prosessen som skal automatiseres"
                   description="Bruk et tydelig navn som matcher vurderingen eller prosessen i registeret."
@@ -2312,6 +2374,7 @@ export function ProcessDesignDocPage({
                   value={payload.shortDescription ?? ""}
                   onChange={(v) => setStr("shortDescription", v)}
                   rows={2}
+                  plain
                   disabled={!canEdit}
                   placeholder="Hva gjør prosessen, og hva er målet med automatiseringen?"
                   description="Kort oppsummering som skal være lett å skanne på mobil og i oversikter."
@@ -2355,6 +2418,7 @@ export function ProcessDesignDocPage({
                     setDirty(true);
                   }}
                   rows={1}
+                  plain
                   disabled={!canEdit}
                   placeholder="F.eks. Avdeling for digitalisering"
                   description="Vises på forsiden og gjør dokumentet enklere å plassere organisatorisk."
