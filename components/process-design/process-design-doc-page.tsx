@@ -212,7 +212,7 @@ function Field({
         rows <= 1 ? (
           <Input
             value={plainValue}
-            onChange={(e) => onChange(e.target.value)}
+            onValueChange={onChange}
             disabled={disabled}
             placeholder={placeholder}
             aria-label={label}
@@ -1322,27 +1322,45 @@ export function ProcessDesignDocPage({
     leavePromptOpenRef.current = leavePromptOpen;
   }, [leavePromptOpen]);
 
+  const lastSyncedKeyRef = useRef<string | null>(null);
+
   const syncFromServer = useCallback(() => {
     if (!docState?.document) return;
+    const doc = docState.document;
+    const serverRev = doc.revision ?? 0;
+    const syncKey = `${doc._id}:${serverRev}:${doc.updatedAt}`;
+    lastSyncedKeyRef.current = syncKey;
     setPayload(
-      (docState.document.payload as ProcessDesignDocumentPayload) ??
+      (doc.payload as ProcessDesignDocumentPayload) ??
         emptyProcessDesignPayload(),
     );
-    setOrganizationLine(docState.document.organizationLine ?? "");
-    setRevision(docState.document.revision ?? 0);
+    setOrganizationLine(doc.organizationLine ?? "");
+    setRevision(serverRev);
     setDirty(false);
   }, [docState?.document]);
 
   useEffect(() => {
-    if (docState?.document) {
-      syncFromServer();
-    } else if (docState && docState.document === null) {
+    if (docState && docState.document === null) {
+      lastSyncedKeyRef.current = null;
       setPayload(emptyProcessDesignPayload());
       setOrganizationLine("");
       setRevision(0);
       setDirty(false);
+      return;
     }
-  }, [docState?.document, syncFromServer]);
+    const doc = docState?.document;
+    if (!doc) return;
+
+    const serverRev = doc.revision ?? 0;
+    const syncKey = `${doc._id}:${serverRev}:${doc.updatedAt}`;
+
+    // Query re-emitter ofte ny objektreferanse (f.eks. auth refresh) uten
+    // ekte endring — ikke overskriv lokale redigeringer.
+    if (lastSyncedKeyRef.current === syncKey) return;
+    if (dirtyRef.current || saveInFlightRef.current) return;
+
+    syncFromServer();
+  }, [docState, syncFromServer]);
 
   const canEdit = docState?.canEdit ?? false;
   canEditRef.current = canEdit;
@@ -1450,6 +1468,8 @@ export function ProcessDesignDocPage({
         if (res.ok) {
           revisionRef.current = res.revision;
           setRevision(res.revision);
+          // Tillat syncFromServer å hente sanitert payload fra server
+          lastSyncedKeyRef.current = null;
           const latestSignature = JSON.stringify({
             organizationLine: organizationLineRef.current.trim() || null,
             payload: payloadRef.current,
@@ -2342,12 +2362,15 @@ export function ProcessDesignDocPage({
               <AccordionContent className="space-y-5 border-t border-border/35 pt-4">
                 <Field
                   label="Prosesstittel"
-                  value={payload.processTitle ?? payload.asIsProcessName ?? ""}
+                  value={payload.processTitle ?? ""}
                   onChange={(v) => setStr("processTitle", v)}
                   rows={1}
                   plain
                   disabled={!canEdit}
-                  placeholder="Navnet på prosessen som skal automatiseres"
+                  placeholder={
+                    payload.asIsProcessName?.trim() ||
+                    "Navnet på prosessen som skal automatiseres"
+                  }
                   description="Bruk et tydelig navn som matcher vurderingen eller prosessen i registeret."
                   sourceHint={
                     explicitRegistry
