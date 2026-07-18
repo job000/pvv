@@ -87,7 +87,7 @@ const FLOW_TABS = [
   { id: "analyser" as const, label: "Arbeid" },
   { id: "maler" as const, label: "Maler" },
   { id: "oversikt" as const, label: "Status" },
-  { id: "bibliotek" as const, label: "Støtte" },
+  { id: "bibliotek" as const, label: "Bibliotek" },
 ] as const;
 
 function RosFlowNav({
@@ -97,7 +97,7 @@ function RosFlowNav({
 }: {
   tab: Tab;
   onTab: (t: Tab) => void;
-  counts?: { maler: number; analyser: number };
+  counts?: { maler: number; analyser: number; bibliotek: number };
 }) {
   return (
     <nav
@@ -112,7 +112,9 @@ function RosFlowNav({
             ? counts?.maler
             : s.id === "analyser"
               ? counts?.analyser
-              : undefined;
+              : s.id === "bibliotek"
+                ? counts?.bibliotek
+                : undefined;
         return (
           <button
             key={s.id}
@@ -594,7 +596,11 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
       <RosFlowNav
         tab={tab}
         onTab={setTab}
-        counts={{ maler: templatesList.length, analyser: analysesList.length }}
+        counts={{
+          maler: templatesList.length,
+          analyser: analysesList.length,
+          bibliotek: hub?.libraryItemCount ?? 0,
+        }}
       />
 
       {tab === "bibliotek" ? (

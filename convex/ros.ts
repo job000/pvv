@@ -560,11 +560,17 @@ export const workspaceHub = query({
         };
       });
 
+    const libraryItems = await ctx.db
+      .query("rosLibraryItems")
+      .withIndex("by_workspace", (q) => q.eq("workspaceId", args.workspaceId))
+      .collect();
+
     return {
       templateCount: templateRows.length,
       analysisCount: analysisRows.length,
       axisListCount: axisRows.length,
       candidateCount: candidateRows.length,
+      libraryItemCount: libraryItems.length,
       candidatesWithoutRosCount: withoutRos.length,
       candidatesWithoutRos: withoutRos.slice(0, 16).map((c) => ({
         _id: c._id,

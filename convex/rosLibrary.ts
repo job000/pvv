@@ -1,9 +1,14 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
-import type { QueryCtx } from "./_generated/server";
+import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { getAuthUserId } from "@convex-dev/auth/server";
 import type { Doc, Id } from "./_generated/dataModel";
-import { requireUserId, requireWorkspaceMember } from "./lib/access";
+import {
+  getWorkspaceMembership,
+  isSuperAdmin,
+  requireUserId,
+  requireWorkspaceMember,
+} from "./lib/access";
 import {
   RPA_JOURNAL_SEED_CATEGORY_NAME,
   RPA_JOURNAL_SEED_ITEMS,
@@ -31,6 +36,47 @@ async function requireCategoryInWorkspace(
     throw new Error("Ugyldig kategori.");
   }
   return cat;
+}
+
+function isWorkspaceAdminRole(role: string): boolean {
+  return role === "admin" || role === "owner";
+}
+
+/** Rediger/slett: oppretter, workspace-admin/owner, eller superadmin. */
+async function canManageLibraryItem(
+  ctx: QueryCtx | MutationCtx,
+  item: Doc<"rosLibraryItems">,
+  userId: Id<"users">,
+): Promise<boolean> {
+  if (item.createdByUserId === userId) return true;
+  if (await isSuperAdmin(ctx, userId)) return true;
+  const membership = await getWorkspaceMembership(
+    ctx,
+    item.workspaceId,
+    userId,
+  );
+  return membership !== null && isWorkspaceAdminRole(membership.role);
+}
+
+async function requireLibraryItemManageAccess(
+  ctx: MutationCtx,
+  item: Doc<"rosLibraryItems">,
+  userId: Id<"users">,
+): Promise<void> {
+  if (!(await canManageLibraryItem(ctx, item, userId))) {
+    throw new Error(
+      "Kun oppretteren eller en administrator kan endre eller slette dette elementet.",
+    );
+  }
+}
+
+async function requireWorkspaceAdmin(
+  ctx: MutationCtx,
+  workspaceId: Id<"workspaces">,
+  userId: Id<"users">,
+): Promise<void> {
+  if (await isSuperAdmin(ctx, userId)) return;
+  await requireWorkspaceMember(ctx, workspaceId, userId, "admin");
 }
 
 export const listLibraryCategories = query({
@@ -94,7 +140,7 @@ export const updateLibraryCategory = mutation({
     const userId = await requireUserId(ctx);
     const row = await ctx.db.get(args.categoryId);
     if (!row) throw new Error("Kategorien finnes ikke.");
-    await requireWorkspaceMember(ctx, row.workspaceId, userId, "member");
+    await requireWorkspaceAdmin(ctx, row.workspaceId, userId);
     const patch: Record<string, unknown> = { updatedAt: Date.now() };
     if (args.name !== undefined) {
       const name = args.name.trim();
@@ -128,7 +174,7 @@ export const removeLibraryCategory = mutation({
     const userId = await requireUserId(ctx);
     const row = await ctx.db.get(args.categoryId);
     if (!row) throw new Error("Kategorien finnes ikke.");
-    await requireWorkspaceMember(ctx, row.workspaceId, userId, "member");
+    await requireWorkspaceAdmin(ctx, row.workspaceId, userId);
     const items = await ctx.db
       .query("rosLibraryItems")
       .withIndex("by_workspace", (q) => q.eq("workspaceId", row.workspaceId))
@@ -157,7 +203,14 @@ export const listLibraryItems = query({
   },
   handler: async (ctx, args) => {
     const userId = await getAuthUserId(ctx);
-    if (!userId) return [];
+    if (!userId) {
+      return {
+        items: [],
+        canCreate: false,
+        canManageCategories: false,
+        itemCountInWorkspace: 0,
+      };
+    }
     await requireWorkspaceMember(ctx, args.workspaceId, userId, "viewer");
     const memberOf = await workspaceIdsForUser(ctx, userId);
 
@@ -212,19 +265,52 @@ export const listLibraryItems = query({
       return a.title.localeCompare(b.title, "nb", { sensitivity: "base" });
     });
 
+    const creatorIds = [...new Set(merged.map((m) => m.createdByUserId))];
+    const creatorNames = new Map<Id<"users">, string | null>();
+    for (const id of creatorIds) {
+      const user = await ctx.db.get(id);
+      creatorNames.set(id, user?.name?.trim() || null);
+    }
+
+    const membership = await getWorkspaceMembership(
+      ctx,
+      args.workspaceId,
+      userId,
+    );
+    const isAdminHere =
+      (await isSuperAdmin(ctx, userId)) ||
+      (membership !== null && isWorkspaceAdminRole(membership.role));
+    const canCreate =
+      membership !== null &&
+      (membership.role === "member" ||
+        membership.role === "admin" ||
+        membership.role === "owner");
+
     const out = [];
     for (const row of merged) {
       const ws = await ctx.db.get(row.workspaceId);
       const cat = row.categoryId ? cats.get(row.categoryId) : undefined;
+      const isFromOtherWorkspace = row.workspaceId !== args.workspaceId;
+      const canManage = isFromOtherWorkspace
+        ? false
+        : row.createdByUserId === userId || isAdminHere;
       out.push({
         ...row,
-        isFromOtherWorkspace: row.workspaceId !== args.workspaceId,
+        isFromOtherWorkspace,
         sourceWorkspaceName: ws?.name ?? null,
         categoryName: cat?.name ?? null,
         categorySortOrder: cat?.sortOrder ?? null,
+        createdByName: creatorNames.get(row.createdByUserId) ?? null,
+        canManage,
+        isOwn: row.createdByUserId === userId,
       });
     }
-    return out;
+    return {
+      items: out,
+      canCreate,
+      canManageCategories: isAdminHere,
+      itemCountInWorkspace: local.length,
+    };
   },
 });
 
@@ -293,6 +379,7 @@ export const updateLibraryItem = mutation({
     const row = await ctx.db.get(args.itemId);
     if (!row) throw new Error("Elementet finnes ikke.");
     await requireWorkspaceMember(ctx, row.workspaceId, userId, "member");
+    await requireLibraryItemManageAccess(ctx, row, userId);
     const patch: Record<string, unknown> = { updatedAt: Date.now() };
     if (args.title !== undefined) {
       const t = args.title.trim();
@@ -349,6 +436,7 @@ export const removeLibraryItem = mutation({
     const row = await ctx.db.get(args.itemId);
     if (!row) throw new Error("Elementet finnes ikke.");
     await requireWorkspaceMember(ctx, row.workspaceId, userId, "member");
+    await requireLibraryItemManageAccess(ctx, row, userId);
     await ctx.db.delete(args.itemId);
     return null;
   },
@@ -429,6 +517,10 @@ export const seedRpaJournalLibraryExamples = mutation({
     await requireWorkspaceMember(ctx, args.workspaceId, userId, "member");
     const wsId = args.workspaceId;
     const replace = args.replace ?? false;
+
+    if (replace) {
+      await requireWorkspaceAdmin(ctx, wsId, userId);
+    }
 
     let workspaceItems = await ctx.db
       .query("rosLibraryItems")

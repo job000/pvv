@@ -261,10 +261,11 @@ export function RosRiskList({
     "all" | "none" | Id<"rosLibraryCategories">
   >("all");
 
-  const libraryItems = useQuery(
+  const library = useQuery(
     api.rosLibrary.listLibraryItems,
     workspaceId ? { workspaceId, sortBy: "category" } : "skip",
   );
+  const libraryItems = library?.items;
   const libraryCategories = useQuery(
     api.rosLibrary.listLibraryCategories,
     workspaceId ? { workspaceId } : "skip",
@@ -468,10 +469,23 @@ export function RosRiskList({
               Ingen risikoer ennå
             </p>
             <p className="text-muted-foreground mt-1 max-w-xs text-xs leading-relaxed">
-              Legg til risikoer for å bygge risikomatrisen. Bruk biblioteket for raskere start.
+              Legg til risikoer for å bygge risikomatrisen. Velg «Bibliotek» for å
+              gjenbruke lagrede risikoer og tiltak.
             </p>
           </div>
           {!readOnly && (
+            <div className="flex flex-wrap items-center justify-center gap-2">
+            {workspaceId ? (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setLibraryOpen(true)}
+                className="mt-1 h-10 gap-2 rounded-xl px-5 text-sm font-semibold"
+              >
+                <Library className="size-3.5" aria-hidden />
+                Fra bibliotek
+              </Button>
+            ) : null}
             <Button
               type="button"
               onClick={handleAdd}
@@ -480,6 +494,7 @@ export function RosRiskList({
               <Plus className="size-4" aria-hidden />
               Legg til risiko
             </Button>
+            </div>
           )}
         </div>
       ) : (
@@ -1051,12 +1066,23 @@ export function RosRiskList({
                 </p>
               </DialogHeader>
               <DialogBody className="space-y-4">
-                {libraryItems === undefined || libraryCategories === undefined ? (
+                {library === undefined || libraryCategories === undefined ? (
                   <p className="text-muted-foreground text-sm">Henter …</p>
-                ) : libraryItems.length === 0 ? (
-                  <p className="text-muted-foreground text-sm">
-                    Ingen elementer i biblioteket ennå. Gå til ROS → Bibliotek, eller lagre en risiko herfra.
-                  </p>
+                ) : !libraryItems || libraryItems.length === 0 ? (
+                  <div className="space-y-3 text-sm">
+                    <p className="text-muted-foreground">
+                      Biblioteket er tomt. Lagre en risiko herfra med «Lagre i
+                      biblioteket», eller administrer biblioteket under ROS → Bibliotek.
+                    </p>
+                    {workspaceId ? (
+                      <a
+                        href={`/w/${workspaceId}/ros?fane=bibliotek`}
+                        className="text-primary inline-flex items-center gap-1 text-sm font-medium underline-offset-4 hover:underline"
+                      >
+                        Åpne risiko- og tiltaksbiblioteket
+                      </a>
+                    ) : null}
+                  </div>
                 ) : (
                   <>
                     <SearchInput

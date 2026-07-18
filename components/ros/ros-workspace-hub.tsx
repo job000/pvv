@@ -11,6 +11,7 @@ import {
   AlertCircle,
   ArrowRight,
   BarChart3,
+  BookMarked,
   CalendarClock,
   ClipboardList,
   Layers,
@@ -23,6 +24,7 @@ export type RosWorkspaceHubData = {
   analysisCount: number;
   axisListCount: number;
   candidateCount: number;
+  libraryItemCount: number;
   candidatesWithoutRosCount: number;
   candidatesWithoutRos: Array<{
     _id: Id<"candidates">;
@@ -40,7 +42,7 @@ export type RosWorkspaceHubData = {
   }>;
 };
 
-type RosHubTab = "maler" | "analyser" | "oversikt";
+type RosHubTab = "maler" | "analyser" | "oversikt" | "bibliotek";
 
 function formatShort(ts: number) {
   try {
@@ -203,6 +205,21 @@ export function RosWorkspaceHub({
               <Sparkles className="size-3" aria-hidden />
               Ny mal
             </button>
+            <button
+              type="button"
+              onClick={() => onTab("bibliotek")}
+              className={buttonVariants({
+                variant: "outline",
+                size: "sm",
+                className: "h-7 gap-1 px-2 text-xs",
+              })}
+            >
+              <BookMarked className="size-3" aria-hidden />
+              Bibliotek
+              {hub.libraryItemCount > 0 ? (
+                <span className="tabular-nums">({hub.libraryItemCount})</span>
+              ) : null}
+            </button>
             </div>
           </div>
         </div>
@@ -298,6 +315,12 @@ export function RosWorkspaceHub({
             </dd>
           </div>
           <div className="flex items-baseline gap-1.5">
+            <dt className="text-muted-foreground">Bibliotek</dt>
+            <dd className="font-semibold tabular-nums text-foreground">
+              {hub.libraryItemCount}
+            </dd>
+          </div>
+          <div className="flex items-baseline gap-1.5">
             <dt className="text-muted-foreground">Uten ROS</dt>
             <dd className="font-semibold tabular-nums text-foreground">{gap}</dd>
           </div>
@@ -317,6 +340,13 @@ export function RosWorkspaceHub({
           >
             Akser
           </Link>
+          <button
+            type="button"
+            onClick={() => onTab("bibliotek")}
+            className="hover:text-foreground"
+          >
+            Bibliotek
+          </button>
           <button
             type="button"
             onClick={() => {

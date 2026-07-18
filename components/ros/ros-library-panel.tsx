@@ -45,6 +45,7 @@ import {
   Plus,
   Settings2,
   Trash2,
+  UserRound,
 } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 
@@ -62,12 +63,18 @@ type ItemRow = {
   isFromOtherWorkspace?: boolean;
   sourceWorkspaceName?: string | null;
   updatedAt: number;
+  createdByName?: string | null;
+  canManage?: boolean;
+  isOwn?: boolean;
 };
 
 export function RosLibraryPanel({ workspaceId }: { workspaceId: Id<"workspaces"> }) {
   const categories = useQuery(api.rosLibrary.listLibraryCategories, { workspaceId });
   const [sortBy, setSortBy] = useState<SortKey>("category");
-  const items = useQuery(api.rosLibrary.listLibraryItems, { workspaceId, sortBy });
+  const library = useQuery(api.rosLibrary.listLibraryItems, { workspaceId, sortBy });
+  const items = library?.items;
+  const canCreate = library?.canCreate ?? false;
+  const canManageCategories = library?.canManageCategories ?? false;
   const createItem = useMutation(api.rosLibrary.createLibraryItem);
   const updateItem = useMutation(api.rosLibrary.updateLibraryItem);
   const removeItem = useMutation(api.rosLibrary.removeLibraryItem);
@@ -130,11 +137,21 @@ export function RosLibraryPanel({ workspaceId }: { workspaceId: Id<"workspaces">
   }, []);
 
   const openNewItem = useCallback(() => {
+    if (!canCreate) {
+      toast.error("Du trenger medlemsrettigheter for å legge til i biblioteket.");
+      return;
+    }
     resetItemForm();
     setItemDialogOpen(true);
-  }, [resetItemForm]);
+  }, [canCreate, resetItemForm]);
 
   const openEditItem = useCallback((row: ItemRow) => {
+    if (!row.canManage) {
+      toast.error(
+        "Kun oppretteren eller en administrator kan redigere dette elementet.",
+      );
+      return;
+    }
     setEditingItem(row);
     setTitle(row.title);
     setRiskText(row.riskText);
@@ -192,8 +209,8 @@ export function RosLibraryPanel({ workspaceId }: { workspaceId: Id<"workspaces">
       }
       resetItemForm();
       setItemDialogOpen(false);
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Lagring feilet.");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Lagring feilet.");
     } finally {
       setBusy(false);
     }
@@ -211,8 +228,8 @@ export function RosLibraryPanel({ workspaceId }: { workspaceId: Id<"workspaces">
       await createCategory({ workspaceId, name: n });
       toast.success("Kategori opprettet.");
       setNewCategoryName("");
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Kunne ikke opprette kategori.");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Kunne ikke opprette kategori.");
     } finally {
       setCategoryBusy(false);
     }
@@ -230,8 +247,8 @@ export function RosLibraryPanel({ workspaceId }: { workspaceId: Id<"workspaces">
       await updateCategory({ categoryId: editingCategoryId, name: n });
       toast.success("Kategori oppdatert.");
       setEditingCategoryId(null);
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Kunne ikke lagre.");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Kunne ikke lagre.");
     } finally {
       setCategoryBusy(false);
     }
@@ -245,8 +262,8 @@ export function RosLibraryPanel({ workspaceId }: { workspaceId: Id<"workspaces">
       toast.success("Kategori fjernet. Elementer er uten kategori.");
       setDeleteCategoryId(null);
       if (editingCategoryId === deleteCategoryId) setEditingCategoryId(null);
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Sletting feilet.");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Sletting feilet.");
     } finally {
       setCategoryBusy(false);
     }
@@ -259,8 +276,8 @@ export function RosLibraryPanel({ workspaceId }: { workspaceId: Id<"workspaces">
       await removeItem({ itemId: deleteItemId });
       toast.success("Element slettet fra biblioteket.");
       setDeleteItemId(null);
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Sletting feilet.");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Sletting feilet.");
     } finally {
       setBusy(false);
     }
@@ -282,7 +299,8 @@ export function RosLibraryPanel({ workspaceId }: { workspaceId: Id<"workspaces">
         it.title.toLowerCase().includes(q) ||
         it.riskText.toLowerCase().includes(q) ||
         (it.tiltakText?.toLowerCase().includes(q) ?? false) ||
-        (it.categoryName?.toLowerCase().includes(q) ?? false)
+        (it.categoryName?.toLowerCase().includes(q) ?? false) ||
+        (it.createdByName?.toLowerCase().includes(q) ?? false)
       );
     });
   }, [items, filterCategory, search]);
@@ -296,7 +314,7 @@ export function RosLibraryPanel({ workspaceId }: { workspaceId: Id<"workspaces">
             <div className="flex items-center gap-2 text-primary">
               <LayoutGrid className="size-5" aria-hidden />
               <span className="text-xs font-semibold uppercase tracking-wider">
-                Gjenbruk
+                Bibliotek
               </span>
             </div>
             <h2
@@ -306,98 +324,105 @@ export function RosLibraryPanel({ workspaceId }: { workspaceId: Id<"workspaces">
               Risiko- og tiltaksbibliotek
             </h2>
             <p className="text-muted-foreground text-sm leading-relaxed">
-              Gjenbrukbare risiko- og tiltakstekster (ikke analyse-listen — den ligger under
-              «Alle ROS»). Organiser med kategorier, sorter, og bruk innhold i analyser. «Delt»
-              gjør tekst tilgjengelig på tvers av arbeidsområder du er medlem av. Under finner du
-              «Legg inn eksempler» for RPA/journalsystem.
+              Lagre risiko og tiltak her, og hent dem inn i hvilken som helst ROS-analyse
+              via knappen «Bibliotek». Alle i arbeidsområdet kan se og bruke innholdet.
+              Du kan redigere eller slette det du selv har opprettet; administratorer kan
+              administrere alt.
             </p>
           </div>
           <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="min-h-11 w-full touch-manipulation gap-1.5 sm:min-h-9 sm:w-auto"
-              onClick={() => setCategoriesDialogOpen(true)}
-            >
-              <Settings2 className="size-3.5" />
-              Kategorier
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              className="min-h-11 w-full touch-manipulation gap-1.5 sm:min-h-9 sm:w-auto"
-              onClick={openNewItem}
-            >
-              <Plus className="size-3.5" />
-              Nytt element
-            </Button>
+            {canManageCategories || canCreate ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="min-h-11 w-full touch-manipulation gap-1.5 sm:min-h-9 sm:w-auto"
+                onClick={() => setCategoriesDialogOpen(true)}
+              >
+                <Settings2 className="size-3.5" />
+                Kategorier
+              </Button>
+            ) : null}
+            {canCreate ? (
+              <Button
+                type="button"
+                size="sm"
+                className="min-h-11 w-full touch-manipulation gap-1.5 sm:min-h-9 sm:w-auto"
+                onClick={openNewItem}
+              >
+                <Plus className="size-3.5" />
+                Nytt element
+              </Button>
+            ) : null}
           </div>
         </div>
       </div>
 
-      <Card className="border-border/60 bg-muted/10">
-        <CardHeader className="pb-2">
-          <div className="flex items-start gap-3">
-            <div className="bg-primary/12 text-primary flex size-10 shrink-0 items-center justify-center rounded-xl ring-1 ring-primary/15">
-              <Sparkles className="size-5" aria-hidden />
+      {canCreate ? (
+        <Card className="border-border/60 bg-muted/10">
+          <CardHeader className="pb-2">
+            <div className="flex items-start gap-3">
+              <div className="bg-primary/12 text-primary flex size-10 shrink-0 items-center justify-center rounded-xl ring-1 ring-primary/15">
+                <Sparkles className="size-5" aria-hidden />
+              </div>
+              <div className="min-w-0 space-y-1">
+                <CardTitle className="text-base">Eksempler: RPA og journalsystemer</CardTitle>
+                <CardDescription className="text-sm leading-relaxed">
+                  Legg inn kategorien «{RPA_JOURNAL_SEED_CATEGORY_NAME}» med risiko og tiltak
+                  for{" "}
+                  <strong className="text-foreground font-medium">DIPS</strong>,{" "}
+                  <strong className="text-foreground font-medium">MetaVision</strong> og{" "}
+                  <strong className="text-foreground font-medium">Medanets</strong>. Du kan
+                  redigere eller slette elementene du oppretter; administratorer kan
+                  erstatte hele eksempelsettet.
+                </CardDescription>
+              </div>
             </div>
-            <div className="min-w-0 space-y-1">
-              <CardTitle className="text-base">Eksempler: RPA og journalsystemer</CardTitle>
-              <CardDescription className="text-sm leading-relaxed">
-                Legg inn kategorien «{RPA_JOURNAL_SEED_CATEGORY_NAME}» med risiko og tiltak
-                for{" "}
-                <strong className="text-foreground font-medium">DIPS</strong>,{" "}
-                <strong className="text-foreground font-medium">MetaVision</strong> og{" "}
-                <strong className="text-foreground font-medium">Medanets</strong>. Du kan
-                redigere eller slette hvert element etterpå — de er vanlige biblioteksposter.
-                Taggen <span className="font-mono text-[11px]">seed-rpa-journal</span> brukes
-                til å gjenkjenne innlagte eksempler (søk eller filtrer i listen).
-              </CardDescription>
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-2 pt-0 sm:flex-row sm:flex-wrap">
-          <Button
-            type="button"
-            variant="secondary"
-            className="min-h-11 touch-manipulation gap-2 sm:min-h-10"
-            disabled={seedBusy}
-            onClick={() => {
-              setSeedBusy(true);
-              void (async () => {
-                try {
-                  const r = await seedRpaJournalExamples({ workspaceId });
-                  if (r.inserted === 0) {
-                    toast.message("Alle eksempler fantes allerede.");
-                  } else {
-                    toast.success(
-                      `Lagt inn ${r.inserted} eksempler (${r.totalSeedItems} totalt i settet).`,
+          </CardHeader>
+          <CardContent className="flex flex-col gap-2 pt-0 sm:flex-row sm:flex-wrap">
+            <Button
+              type="button"
+              variant="secondary"
+              className="min-h-11 touch-manipulation gap-2 sm:min-h-10"
+              disabled={seedBusy}
+              onClick={() => {
+                setSeedBusy(true);
+                void (async () => {
+                  try {
+                    const r = await seedRpaJournalExamples({ workspaceId });
+                    if (r.inserted === 0) {
+                      toast.message("Alle eksempler fantes allerede.");
+                    } else {
+                      toast.success(
+                        `Lagt inn ${r.inserted} eksempler (${r.totalSeedItems} totalt i settet).`,
+                      );
+                    }
+                  } catch (err) {
+                    toast.error(
+                      err instanceof Error ? err.message : "Kunne ikke legge inn eksempler.",
                     );
+                  } finally {
+                    setSeedBusy(false);
                   }
-                } catch (e) {
-                  toast.error(
-                    e instanceof Error ? e.message : "Kunne ikke legge inn eksempler.",
-                  );
-                } finally {
-                  setSeedBusy(false);
-                }
-              })();
-            }}
-          >
-            {seedBusy ? "Legger inn …" : "Legg inn eksempler"}
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            className="min-h-11 touch-manipulation gap-2 sm:min-h-10"
-            disabled={seedBusy}
-            onClick={() => setSeedReplaceDialogOpen(true)}
-          >
-            Erstatt eksempler …
-          </Button>
-        </CardContent>
-      </Card>
+                })();
+              }}
+            >
+              {seedBusy ? "Legger inn …" : "Legg inn eksempler"}
+            </Button>
+            {canManageCategories ? (
+              <Button
+                type="button"
+                variant="outline"
+                className="min-h-11 touch-manipulation gap-2 sm:min-h-10"
+                disabled={seedBusy}
+                onClick={() => setSeedReplaceDialogOpen(true)}
+              >
+                Erstatt eksempler …
+              </Button>
+            ) : null}
+          </CardContent>
+        </Card>
+      ) : null}
 
       <Dialog open={seedReplaceDialogOpen} onOpenChange={setSeedReplaceDialogOpen}>
         <DialogContent size="md" titleId="seed-replace-title" descriptionId="seed-replace-desc">
@@ -412,7 +437,7 @@ export function RosLibraryPanel({ workspaceId }: { workspaceId: Id<"workspaces">
               Alle bibliotekselementer med taggen{" "}
               <span className="font-mono text-xs">seed-rpa-journal</span> i dette
               arbeidsområdet slettes, deretter legges eksemplene inn på nytt. Andre
-              elementer i biblioteket påvirkes ikke.
+              elementer i biblioteket påvirkes ikke. Kun administratorer kan gjøre dette.
             </p>
           </DialogHeader>
           <DialogFooter className="gap-2 sm:justify-end">
@@ -440,10 +465,10 @@ export function RosLibraryPanel({ workspaceId }: { workspaceId: Id<"workspaces">
                       `Eksempler oppdatert: ${r.inserted} elementer lagt inn.`,
                     );
                     setSeedReplaceDialogOpen(false);
-                  } catch (e) {
+                  } catch (err) {
                     toast.error(
-                      e instanceof Error
-                        ? e.message
+                      err instanceof Error
+                        ? err.message
                         : "Kunne ikke erstatte eksempler.",
                     );
                   } finally {
@@ -462,7 +487,7 @@ export function RosLibraryPanel({ workspaceId }: { workspaceId: Id<"workspaces">
         <CardHeader className="pb-3">
           <CardTitle className="text-base">Filtrer og sorter</CardTitle>
           <CardDescription>
-            Søk i tekst og tittel, eller begrens til én kategori.
+            Søk i tittel, risiko, tiltak eller oppretter — eller begrens til én kategori.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -475,31 +500,32 @@ export function RosLibraryPanel({ workspaceId }: { workspaceId: Id<"workspaces">
                 id="lib-search"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="Tittel, risiko, tiltak …"
+                placeholder="Tittel, risiko, tiltak, oppretter …"
                 aria-label="Søk i bibliotek"
-                autoComplete="off"
               />
             </div>
-            <NativeSelectField
-              id="lib-sort"
-              label="Sortering"
-              compactLabel={false}
-              className="w-full sm:min-w-[14rem] sm:max-w-[20rem]"
-              value={sortBy}
-              onChange={(e) => setSortBy(e.target.value as SortKey)}
-              aria-label="Sorter bibliotek"
-            >
-              <option value="category">Kategori, deretter tittel</option>
-              <option value="title">Tittel (A–Å)</option>
-              <option value="updated">Sist oppdatert</option>
-            </NativeSelectField>
+            <div className="flex w-full flex-col gap-1.5 sm:w-44">
+              <Label htmlFor="lib-sort" className="text-muted-foreground text-[10px]">
+                Sorter
+              </Label>
+              <NativeSelectField
+                id="lib-sort"
+                aria-label="Sorter bibliotek"
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value as SortKey)}
+              >
+                <option value="category">Kategori</option>
+                <option value="title">Tittel</option>
+                <option value="updated">Sist oppdatert</option>
+              </NativeSelectField>
+            </div>
           </div>
           <div className="flex flex-wrap gap-2">
             <button
               type="button"
               onClick={() => setFilterCategory("all")}
               className={cn(
-                "min-h-10 touch-manipulation rounded-full border px-3 py-1.5 text-xs font-medium transition-colors",
+                "rounded-full border px-3 py-1.5 text-xs font-medium transition-colors",
                 filterCategory === "all"
                   ? "border-primary bg-primary/10 text-foreground"
                   : "border-border/60 bg-muted/30 text-muted-foreground hover:bg-muted/60",
@@ -511,7 +537,7 @@ export function RosLibraryPanel({ workspaceId }: { workspaceId: Id<"workspaces">
               type="button"
               onClick={() => setFilterCategory("none")}
               className={cn(
-                "min-h-10 touch-manipulation rounded-full border px-3 py-1.5 text-xs font-medium transition-colors",
+                "rounded-full border px-3 py-1.5 text-xs font-medium transition-colors",
                 filterCategory === "none"
                   ? "border-primary bg-primary/10 text-foreground"
                   : "border-border/60 bg-muted/30 text-muted-foreground hover:bg-muted/60",
@@ -519,13 +545,13 @@ export function RosLibraryPanel({ workspaceId }: { workspaceId: Id<"workspaces">
             >
               Uten kategori
             </button>
-              {(categories ?? []).map((c) => (
-                <button
-                  key={c._id}
-                  type="button"
-                  onClick={() => setFilterCategory(c._id)}
-                  className={cn(
-                    "min-h-10 touch-manipulation rounded-full border px-3 py-1.5 text-xs font-medium transition-colors",
+            {(categories ?? []).map((c) => (
+              <button
+                key={c._id}
+                type="button"
+                onClick={() => setFilterCategory(c._id)}
+                className={cn(
+                  "rounded-full border px-3 py-1.5 text-xs font-medium transition-colors",
                   filterCategory === c._id
                     ? "border-primary bg-primary/10 text-foreground"
                     : "border-border/60 bg-muted/30 text-muted-foreground hover:bg-muted/60",
@@ -548,15 +574,33 @@ export function RosLibraryPanel({ workspaceId }: { workspaceId: Id<"workspaces">
               : ""}
           </span>
         </h3>
-        {items === undefined || categories === undefined ? (
+        {library === undefined || categories === undefined ? (
           <p className="text-muted-foreground text-sm">Henter bibliotek …</p>
         ) : filteredItems.length === 0 ? (
           <div className="text-muted-foreground rounded-2xl border border-dashed border-primary/25 bg-primary/[0.02] px-6 py-14 text-center text-sm">
             <BookMarked className="text-muted-foreground/60 mx-auto mb-3 size-10" />
-            <p className="text-foreground font-medium">Ingen treff</p>
-            <p className="mt-1 text-xs">
-              Juster søk eller filter, eller legg til et nytt element.
+            <p className="text-foreground font-medium">
+              {items && items.length === 0
+                ? "Biblioteket er tomt"
+                : "Ingen treff"}
             </p>
+            <p className="mt-1 text-xs">
+              {items && items.length === 0
+                ? canCreate
+                  ? "Legg til risiko og tiltak her, eller lagre dem direkte fra en ROS-analyse."
+                  : "Når noen legger til elementer, vises de her for hele arbeidsområdet."
+                : "Juster søk eller filter, eller legg til et nytt element."}
+            </p>
+            {canCreate && items && items.length === 0 ? (
+              <Button
+                type="button"
+                className="mt-4 min-h-11 gap-1.5"
+                onClick={openNewItem}
+              >
+                <Plus className="size-3.5" />
+                Nytt element
+              </Button>
+            ) : null}
           </div>
         ) : (
           <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4">
@@ -588,6 +632,11 @@ export function RosLibraryPanel({ workspaceId }: { workspaceId: Id<"workspaces">
                         Rom
                       </Badge>
                     )}
+                    {row.isOwn ? (
+                      <Badge variant="secondary" className="font-normal">
+                        Ditt
+                      </Badge>
+                    ) : null}
                     {row.isFromOtherWorkspace ? (
                       <Badge variant="outline" className="font-normal">
                         Fra {row.sourceWorkspaceName ?? "annet rom"}
@@ -612,7 +661,7 @@ export function RosLibraryPanel({ workspaceId }: { workspaceId: Id<"workspaces">
                       {row.tiltakText}
                     </p>
                   ) : null}
-                  <div className="flex flex-wrap gap-1.5 pt-0.5">
+                  <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
                     {row.flags?.includes(ROS_CELL_FLAG_REQUIRES_ACTION) ? (
                       <span className="inline-flex items-center gap-0.5 rounded-md bg-orange-500/10 px-1.5 py-0.5 text-[10px] font-medium text-orange-700 dark:text-orange-300">
                         <AlertTriangle className="size-3" />
@@ -625,20 +674,22 @@ export function RosLibraryPanel({ workspaceId }: { workspaceId: Id<"workspaces">
                         Følg med
                       </span>
                     ) : null}
+                    {row.createdByName ? (
+                      <span className="text-muted-foreground inline-flex items-center gap-0.5 text-[10px]">
+                        <UserRound className="size-3" aria-hidden />
+                        {row.createdByName}
+                      </span>
+                    ) : null}
                   </div>
                 </>
               );
+              const showManage = Boolean(row.canManage) && !row.isFromOtherWorkspace;
               return (
                 <li
                   key={row._id}
                   className="border-border/60 group flex flex-col overflow-hidden rounded-2xl border bg-card shadow-sm transition-shadow hover:shadow-md"
                 >
-                  {row.isFromOtherWorkspace ? (
-                    <div className="p-3 sm:p-4">
-                      {badges}
-                      <div className="min-w-0 flex-1 space-y-2">{body}</div>
-                    </div>
-                  ) : (
+                  {showManage ? (
                     <button
                       type="button"
                       className="hover:bg-muted/30 w-full flex-1 touch-manipulation px-3 pb-2 pt-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background sm:px-4 sm:pb-3 sm:pt-4"
@@ -651,6 +702,11 @@ export function RosLibraryPanel({ workspaceId }: { workspaceId: Id<"workspaces">
                         Trykk for å redigere
                       </p>
                     </button>
+                  ) : (
+                    <div className="w-full flex-1 px-3 pb-2 pt-3 sm:px-4 sm:pb-3 sm:pt-4">
+                      {badges}
+                      <div className="min-w-0 flex-1 space-y-2">{body}</div>
+                    </div>
                   )}
                   <div
                     className={cn(
@@ -659,31 +715,37 @@ export function RosLibraryPanel({ workspaceId }: { workspaceId: Id<"workspaces">
                     )}
                   >
                     {row.isFromOtherWorkspace ? (
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="secondary"
-                        className="min-h-11 touch-manipulation gap-1 sm:min-h-9"
-                        onClick={() => {
-                          void (async () => {
-                            try {
-                              await duplicateToWorkspace({
-                                itemId: row._id,
-                                targetWorkspaceId: workspaceId,
-                              });
-                              toast.success("Kopi lagret i dette arbeidsområdet.");
-                            } catch (e) {
-                              toast.error(
-                                e instanceof Error ? e.message : "Kunne ikke kopiere.",
-                              );
-                            }
-                          })();
-                        }}
-                      >
-                        <Copy className="size-3.5" />
-                        Kopier hit
-                      </Button>
-                    ) : (
+                      canCreate ? (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="secondary"
+                          className="min-h-11 touch-manipulation gap-1 sm:min-h-9"
+                          onClick={() => {
+                            void (async () => {
+                              try {
+                                await duplicateToWorkspace({
+                                  itemId: row._id,
+                                  targetWorkspaceId: workspaceId,
+                                });
+                                toast.success("Kopi lagret i dette arbeidsområdet.");
+                              } catch (err) {
+                                toast.error(
+                                  err instanceof Error ? err.message : "Kunne ikke kopiere.",
+                                );
+                              }
+                            })();
+                          }}
+                        >
+                          <Copy className="size-3.5" />
+                          Kopier hit
+                        </Button>
+                      ) : (
+                        <p className="text-muted-foreground text-xs">
+                          Delt fra annet arbeidsområde — kan brukes i analyser.
+                        </p>
+                      )
+                    ) : showManage ? (
                       <>
                         <Button
                           type="button"
@@ -706,6 +768,10 @@ export function RosLibraryPanel({ workspaceId }: { workspaceId: Id<"workspaces">
                           Slett
                         </Button>
                       </>
+                    ) : (
+                      <p className="text-muted-foreground text-xs">
+                        Kan brukes i analyser. Kun oppretter eller admin kan endre.
+                      </p>
                     )}
                   </div>
                 </li>
@@ -737,7 +803,7 @@ export function RosLibraryPanel({ workspaceId }: { workspaceId: Id<"workspaces">
             </h2>
             <p className="text-muted-foreground text-sm">
               Samme struktur som i analysen: risiko, valgfritt tiltak og
-              markeringer.
+              markeringer. Lagres i biblioteket og kan gjenbrukes i andre ROS.
             </p>
           </DialogHeader>
           <form onSubmit={(e) => void onSubmitItem(e)}>
@@ -748,7 +814,7 @@ export function RosLibraryPanel({ workspaceId }: { workspaceId: Id<"workspaces">
                   id="lib-d-title"
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
-                  placeholder="F.eks. Tap av taushetsplikt"
+                  required
                 />
               </div>
               <div className="space-y-1.5">
@@ -757,18 +823,17 @@ export function RosLibraryPanel({ workspaceId }: { workspaceId: Id<"workspaces">
                   id="lib-d-risk"
                   value={riskText}
                   onChange={(e) => setRiskText(e.target.value)}
-                  rows={3}
-                  placeholder="Hva kan gå galt?"
+                  rows={4}
+                  required
                 />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="lib-d-tiltak">Tiltak / plan (valgfritt)</Label>
+                <Label htmlFor="lib-d-tiltak">Tiltak (valgfritt)</Label>
                 <Textarea
                   id="lib-d-tiltak"
                   value={tiltakText}
                   onChange={(e) => setTiltakText(e.target.value)}
-                  rows={2}
-                  placeholder="Foreslått håndtering — settes inn som eget punkt i cellen"
+                  rows={3}
                 />
               </div>
               <div className="grid gap-4 sm:grid-cols-2">
@@ -780,20 +845,19 @@ export function RosLibraryPanel({ workspaceId }: { workspaceId: Id<"workspaces">
                     value={categoryId}
                     onChange={(e) =>
                       setCategoryId(
-                        (e.target.value || "") as Id<"rosLibraryCategories"> | "",
+                        e.target.value
+                          ? (e.target.value as Id<"rosLibraryCategories">)
+                          : "",
                       )
                     }
                   >
-                    <option value="">— Ingen —</option>
+                    <option value="">Uten kategori</option>
                     {(categories ?? []).map((c) => (
                       <option key={c._id} value={c._id}>
                         {c.name}
                       </option>
                     ))}
                   </select>
-                  <p className="text-muted-foreground text-[10px]">
-                    Opprett kategorier under «Kategorier».
-                  </p>
                 </div>
                 <div className="space-y-1.5">
                   <Label htmlFor="lib-d-vis">Synlighet</Label>
@@ -860,27 +924,32 @@ export function RosLibraryPanel({ workspaceId }: { workspaceId: Id<"workspaces">
               Kategorier
             </h2>
             <p className="text-muted-foreground text-sm">
-              Kategorier brukes til filtrering og sortering i biblioteket. Sletting
-              fjerner bare kategorien — elementene beholdes uten kategori.
+              Kategorier brukes til filtrering og sortering.{" "}
+              {canManageCategories
+                ? "Administratorer kan endre og slette kategorier."
+                : "Du kan legge til nye. Kun administratorer kan endre eller slette."}
             </p>
           </DialogHeader>
           <DialogBody className="space-y-6">
-            <form onSubmit={addCategory} className="flex flex-col gap-2 sm:flex-row">
-              <Input
-                value={newCategoryName}
-                onChange={(e) => setNewCategoryName(e.target.value)}
-                placeholder="Ny kategori …"
-                className="flex-1"
-              />
-              <Button type="submit" disabled={categoryBusy} className="shrink-0 gap-1">
-                <Plus className="size-3.5" />
-                Legg til
-              </Button>
-            </form>
+            {canCreate ? (
+              <form onSubmit={addCategory} className="flex flex-col gap-2 sm:flex-row">
+                <Input
+                  value={newCategoryName}
+                  onChange={(e) => setNewCategoryName(e.target.value)}
+                  placeholder="Ny kategori …"
+                  className="flex-1"
+                />
+                <Button type="submit" disabled={categoryBusy} className="shrink-0 gap-1">
+                  <Plus className="size-3.5" />
+                  Legg til
+                </Button>
+              </form>
+            ) : null}
             <ul className="max-h-64 space-y-2 overflow-y-auto pr-1">
               {(categories ?? []).length === 0 ? (
                 <li className="text-muted-foreground text-sm">
-                  Ingen kategorier ennå — legg til over.
+                  Ingen kategorier ennå
+                  {canCreate ? " — legg til over." : "."}
                 </li>
               ) : (
                 (categories ?? []).map((c) => (
@@ -915,25 +984,27 @@ export function RosLibraryPanel({ workspaceId }: { workspaceId: Id<"workspaces">
                     ) : (
                       <>
                         <span className="min-w-0 flex-1 font-medium">{c.name}</span>
-                        <div className="flex shrink-0 gap-2">
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            onClick={() => loadCategoryForEdit(c)}
-                          >
-                            Endre navn
-                          </Button>
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="ghost"
-                            className="text-destructive"
-                            onClick={() => setDeleteCategoryId(c._id)}
-                          >
-                            <Trash2 className="size-3.5" />
-                          </Button>
-                        </div>
+                        {canManageCategories ? (
+                          <div className="flex shrink-0 gap-2">
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              onClick={() => loadCategoryForEdit(c)}
+                            >
+                              Endre navn
+                            </Button>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="ghost"
+                              className="text-destructive"
+                              onClick={() => setDeleteCategoryId(c._id)}
+                            >
+                              <Trash2 className="size-3.5" />
+                            </Button>
+                          </div>
+                        ) : null}
                       </>
                     )}
                   </li>
@@ -961,7 +1032,8 @@ export function RosLibraryPanel({ workspaceId }: { workspaceId: Id<"workspaces">
               Slette element?
             </h2>
             <p className="text-muted-foreground text-sm">
-              Dette kan ikke angres. Elementet fjernes fra biblioteket.
+              Dette kan ikke angres. Elementet fjernes fra biblioteket. Analyser som
+              allerede har kopiert teksten beholdes uendret.
             </p>
           </DialogHeader>
           <DialogFooter>
