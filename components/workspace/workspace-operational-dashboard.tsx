@@ -7,7 +7,14 @@ import { useMutation, useQuery } from "convex/react";
 import { ListViewModeToggle } from "@/components/ui/list-view-mode-toggle";
 import { RpaLifecycleGuide } from "@/components/workspace/rpa-lifecycle-guide";
 import { formatRelativeUpdatedAt } from "@/lib/assessment-ui-helpers";
+import {
+  dedupeDashboardRows,
+  homeNextActionForAssessment,
+  isRosDue,
+  sortByHomeUrgency,
+} from "@/lib/home-next-action";
 import type { ListViewMode } from "@/lib/list-view-mode";
+import { RPA_LIFECYCLE_STAGES } from "@/lib/rpa-lifecycle";
 import { useStickyState } from "@/lib/use-sticky-state";
 import { cn } from "@/lib/utils";
 import {
@@ -188,10 +195,26 @@ export function WorkspaceOperationalDashboard({
   } = dash;
 
   const latestWork = recentlyUpdated[0] ?? priorityTop[0] ?? null;
-  const rosTarget = assessmentsWithoutRos[0] ?? null;
   const followUpCount = readyForPrioritizationCount + onHoldCount;
-  const nextFollowUp =
-    readyForPrioritization[0] ?? blockedItems[0] ?? null;
+
+  /** Unike saker fra alle køer — én rad per vurdering. */
+  const uniqueRows = dedupeDashboardRows([
+    ...blockedItems,
+    ...readyForPrioritization,
+    ...assessmentsWithoutRos,
+    ...(showPriority ? priorityTop : []),
+    ...(showRecent ? recentlyUpdated : []),
+  ]);
+  const rankedActions = sortByHomeUrgency(uniqueRows, wid);
+  const rosDueRows = uniqueRows
+    .filter((r) => isRosDue(r.pipelineStatus, r.rosLinked))
+    .sort((a, b) => b.effectivePriority - a.effectivePriority);
+  const nextNeedsAssessment =
+    rankedActions.find((x) => x.row.pipelineStatus === "not_assessed")?.row ??
+    null;
+  const nextReadyPrio = readyForPrioritization[0] ?? null;
+  const nextRosDue = rosDueRows[0] ?? null;
+  const nextOnHold = blockedItems[0] ?? null;
 
   const primarySpec: {
     key: string;
@@ -204,37 +227,63 @@ export function WorkspaceOperationalDashboard({
     icon: ComponentType<{ className?: string }>;
     tone: "default" | "warning" | "action";
   } = (() => {
-    // Flaskehals først: ventende forslag før ROS/oppfølging
+    // Livssyklus: forslag → fullfør vurdering → prioriter → ROS/design → …
     if (pendingIntake.length > 0) {
       const first = pendingIntake[0]!;
       return {
         key: "intake",
         navigationTarget: "intake",
-        eyebrow: "Gjør dette først",
+        eyebrow: "Steg 1 · Identifisering",
         title:
           pendingIntake.length === 1
             ? first.formTitle || "Nytt forslag"
             : `${pendingIntake.length} forslag venter`,
         detail:
           pendingIntake.length === 1
-            ? "Til gjennomgang i skjemaer"
-            : "Start med det eldste — identifisering er først i flyten",
+            ? "Gå gjennom forslaget og opprett vurdering"
+            : "Start med det eldste forslaget",
         href: `/w/${wid}/skjemaer`,
         cta: "Åpne forslag",
         icon: Inbox,
         tone: "action",
       };
     }
-    if (withoutRosLinkCount > 0 && rosTarget) {
-      // Én sak → koblingsdialog. Flere → liste (ikke anta hvilken av N).
-      if (withoutRosLinkCount === 1) {
+    if (nextNeedsAssessment) {
+      const action = homeNextActionForAssessment(nextNeedsAssessment, wid);
+      return {
+        key: "assess",
+        navigationTarget: "assessment",
+        eyebrow: "Gjør dette først",
+        title: nextNeedsAssessment.title,
+        detail: action.meta,
+        href: action.href,
+        cta: "Fullfør vurdering",
+        icon: ClipboardList,
+        tone: "action",
+      };
+    }
+    if (nextReadyPrio) {
+      return {
+        key: "prioritize",
+        navigationTarget: "assessment",
+        eyebrow: "Gjør dette først",
+        title: nextReadyPrio.title,
+        detail: "Vurderingen er ferdig — prioriter neste steg i porteføljen",
+        href: `/w/${wid}/a/${nextReadyPrio.assessmentId}`,
+        cta: "Prioriter",
+        icon: PlayCircle,
+        tone: "action",
+      };
+    }
+    if (nextRosDue) {
+      if (rosDueRows.length === 1) {
         return {
           key: "ros",
           navigationTarget: "ros_dialog",
-          eyebrow: "Gjør dette først",
-          title: rosTarget.title,
-          detail: "Mangler ROS-kobling",
-          href: `/w/${wid}/a/${rosTarget.assessmentId}?kobleRos=1`,
+          eyebrow: "Steg 3 · Design",
+          title: nextRosDue.title,
+          detail: "Koble ROS før utvikling",
+          href: `/w/${wid}/a/${nextRosDue.assessmentId}?kobleRos=1`,
           cta: "Koble ROS",
           icon: ShieldPlus,
           tone: "warning",
@@ -243,36 +292,37 @@ export function WorkspaceOperationalDashboard({
       return {
         key: "ros-list",
         navigationTarget: "vurderinger_list",
-        eyebrow: "Gjør dette først",
-        title: `${withoutRosLinkCount} vurderinger uten ROS`,
-        detail: "Åpne listen og velg hvilken vurdering du vil koble.",
+        eyebrow: "Steg 3 · Design",
+        title: `${rosDueRows.length} vurderinger mangler ROS`,
+        detail: "Prioritert arbeid uten ROS-kobling",
         href: `/w/${wid}/vurderinger?utenRos=1`,
         cta: "Se listen",
         icon: ShieldPlus,
         tone: "warning",
       };
     }
-    if (followUpCount > 0 && nextFollowUp) {
+    if (nextOnHold) {
       return {
-        key: "followup",
+        key: "hold",
         navigationTarget: "assessment",
         eyebrow: "Gjør dette først",
-        title: nextFollowUp.title,
-        detail: nextFollowUp.nextStepHint,
-        href: `/w/${wid}/a/${nextFollowUp.assessmentId}`,
-        cta: "Fortsett",
+        title: nextOnHold.title,
+        detail: nextOnHold.nextStepHint,
+        href: `/w/${wid}/a/${nextOnHold.assessmentId}`,
+        cta: "Avklar",
         icon: PlayCircle,
-        tone: "action",
+        tone: "warning",
       };
     }
     if (latestWork) {
+      const action = homeNextActionForAssessment(latestWork, wid);
       return {
         key: "recent",
         navigationTarget: "assessment",
         eyebrow: "Fortsett der du slapp",
         title: latestWork.title,
-        detail: formatRelativeUpdatedAt(latestWork.updatedAt),
-        href: `/w/${wid}/a/${latestWork.assessmentId}`,
+        detail: action.meta || formatRelativeUpdatedAt(latestWork.updatedAt),
+        href: action.href,
         cta: "Åpne",
         icon: ClipboardList,
         tone: "default",
@@ -282,8 +332,8 @@ export function WorkspaceOperationalDashboard({
       key: "start",
       navigationTarget: "vurderinger_list",
       eyebrow: "Kom i gang",
-      title: "Opprett eller åpne en vurdering",
-      detail: "",
+      title: "Opprett en vurdering",
+      detail: "Start med steg 2: vurder kandidaten, deretter prioritering og ROS",
       href: `/w/${wid}/vurderinger`,
       cta: "Til vurderinger",
       icon: ClipboardList,
@@ -291,83 +341,30 @@ export function WorkspaceOperationalDashboard({
     };
   })();
 
-  /** Kø + valgfritt prioritet/aktivitet, begrenset av sidevisning. */
   const actionItems: ActionItem[] = [];
-  const seen = new Set<string>();
-
-  const push = (item: ActionItem) => {
-    if (actionItems.length >= pageSize) return;
-    if (seen.has(item.key)) return;
-    seen.add(item.key);
-    actionItems.push(item);
-  };
-
   if (pendingIntake.length > 0) {
-    push({
+    actionItems.push({
       key: "intake-queue",
       title:
         pendingIntake.length === 1
           ? pendingIntake[0]!.formTitle || "Forslag"
           : `${pendingIntake.length} forslag til gjennomgang`,
-      reason: "Identifisering",
+      reason: "Steg 1 · Identifisering",
       href: `/w/${wid}/skjemaer`,
       meta: pendingIntake.length === 1 ? "Venter" : undefined,
     });
   }
-
-  for (const row of assessmentsWithoutRos) {
-    push({
-      key: `ros-${row.assessmentId}`,
+  for (const { row, action } of rankedActions) {
+    if (actionItems.length >= pageSize) break;
+    actionItems.push({
+      key: String(row.assessmentId),
       title: row.title,
-      reason: "Mangler ROS",
-      href: `/w/${wid}/a/${row.assessmentId}?kobleRos=1`,
-      meta: "Koble ROS",
+      reason: action.reason,
+      href: action.href,
+      meta: action.meta,
     });
   }
 
-  for (const row of readyForPrioritization) {
-    push({
-      key: `prio-${row.assessmentId}`,
-      title: row.title,
-      reason: "Klar for prioritering",
-      href: `/w/${wid}/a/${row.assessmentId}`,
-      meta: row.nextStepHint,
-    });
-  }
-
-  for (const row of blockedItems) {
-    push({
-      key: `hold-${row.assessmentId}`,
-      title: row.title,
-      reason: "På vent / blokkert",
-      href: `/w/${wid}/a/${row.assessmentId}`,
-      meta: row.nextStepHint,
-    });
-  }
-
-  if (showPriority) {
-    for (const row of priorityTop) {
-      push({
-        key: `top-${row.assessmentId}`,
-        title: row.title,
-        reason: "Prioritet",
-        href: `/w/${wid}/a/${row.assessmentId}`,
-        meta: row.nextStepHint,
-      });
-    }
-  }
-
-  if (showRecent) {
-    for (const row of recentlyUpdated) {
-      push({
-        key: `recent-${row.assessmentId}`,
-        title: row.title,
-        reason: "Sist oppdatert",
-        href: `/w/${wid}/a/${row.assessmentId}`,
-        meta: formatRelativeUpdatedAt(row.updatedAt),
-      });
-    }
-  }
   const overviewStats = [
     {
       label: "Forslag",
@@ -382,17 +379,31 @@ export function WorkspaceOperationalDashboard({
         withoutRosLinkCount > 0
           ? `/w/${wid}/vurderinger?utenRos=1`
           : `/w/${wid}/ros`,
-      emphasize: withoutRosLinkCount > 0,
+      /** Fremhev bare når ROS er neste steg (etter prioritering) */
+      emphasize: rosDueRows.length > 0,
     },
     {
       label: "Oppfølging",
       value: followUpCount,
-      href: nextFollowUp
-        ? `/w/${wid}/a/${nextFollowUp.assessmentId}`
-        : `/w/${wid}/puls`,
+      href: nextReadyPrio
+        ? `/w/${wid}/a/${nextReadyPrio.assessmentId}`
+        : nextOnHold
+          ? `/w/${wid}/a/${nextOnHold.assessmentId}`
+          : `/w/${wid}/puls`,
       emphasize: followUpCount > 0,
     },
   ] as const;
+
+  const highlightedFlowStage =
+    primarySpec.key === "intake"
+      ? 1
+      : primarySpec.key === "assess" || primarySpec.key === "prioritize"
+        ? 2
+        : primarySpec.key === "ros" || primarySpec.key === "ros-list"
+          ? 3
+          : primarySpec.key === "hold"
+            ? 2
+            : null;
 
   return (
     <div
@@ -401,20 +412,70 @@ export function WorkspaceOperationalDashboard({
         viewMode === "table" ? "max-w-4xl" : "max-w-2xl",
       )}
     >
-      {lifecycleHidden ? (
-        <button
-          type="button"
-          onClick={() => setLifecycleHidden(false)}
-          className="text-muted-foreground hover:text-foreground inline-flex min-h-9 items-center gap-2 rounded-full border border-border/40 px-3 text-xs font-medium touch-manipulation"
-        >
-          Vis guide: slik fungerer RPA
-        </button>
-      ) : (
+      <section
+        className="rounded-2xl border border-border/40 bg-muted/15 px-3 py-3 sm:px-4"
+        aria-labelledby="home-flow-heading"
+      >
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <div className="min-w-0">
+            <h2
+              id="home-flow-heading"
+              className="text-xs font-semibold tracking-tight text-foreground"
+            >
+              Fra start til slutt
+            </h2>
+            <p className="text-muted-foreground mt-0.5 text-[11px] leading-snug">
+              Én sak om gangen: fullfør steget før du går videre.
+            </p>
+          </div>
+          {lifecycleHidden ? (
+            <button
+              type="button"
+              onClick={() => setLifecycleHidden(false)}
+              className="text-muted-foreground hover:text-foreground shrink-0 text-[11px] font-medium underline-offset-2 hover:underline"
+            >
+              Vis hele guiden
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setLifecycleHidden(true)}
+              className="text-muted-foreground hover:text-foreground shrink-0 text-[11px] font-medium underline-offset-2 hover:underline"
+            >
+              Skjul guide
+            </button>
+          )}
+        </div>
+        <ol className="mt-2.5 flex flex-wrap items-center gap-x-1 gap-y-1.5 text-[11px]">
+          {RPA_LIFECYCLE_STAGES.map((stage, i) => (
+            <li key={stage.id} className="inline-flex items-center gap-1">
+              {i > 0 ? (
+                <span className="text-muted-foreground/50" aria-hidden>
+                  →
+                </span>
+              ) : null}
+              <span
+                className={cn(
+                  "rounded-full px-2 py-0.5 font-medium",
+                  highlightedFlowStage === stage.index
+                    ? "bg-foreground/90 text-background"
+                    : "bg-background text-muted-foreground ring-1 ring-border/50",
+                )}
+                title={stage.summary}
+              >
+                {stage.index}. {stage.title}
+              </span>
+            </li>
+          ))}
+        </ol>
+      </section>
+
+      {!lifecycleHidden ? (
         <RpaLifecycleGuide
           workspaceId={workspaceId}
           onHide={() => setLifecycleHidden(true)}
         />
-      )}
+      ) : null}
 
       {showFocus ? (
         <section className="space-y-3" aria-labelledby="workspace-focus-heading">
@@ -470,7 +531,7 @@ export function WorkspaceOperationalDashboard({
                 Ta tak i først
               </h2>
               <p className="text-muted-foreground text-xs">
-                Kø etter hva som stopper flyten — ikke hele tavlen.
+                Én rad per sak — med neste steg i rekkefølgen.
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
