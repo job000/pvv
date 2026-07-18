@@ -35,6 +35,7 @@ function VurderingerHubBody() {
     ? (rediger as Id<"candidates">)
     : null;
   const initialEditFullscreen = searchParams.get("fullskjerm") === "1";
+  const initialUtenRos = searchParams.get("utenRos") === "1";
 
   return (
     <WorkspacePvvHub
@@ -43,6 +44,7 @@ function VurderingerHubBody() {
       initialOrgUnit={orgUnit}
       initialEditCandidateId={initialEditCandidateId}
       initialEditFullscreen={initialEditFullscreen}
+      initialUtenRos={initialUtenRos}
     />
   );
 }

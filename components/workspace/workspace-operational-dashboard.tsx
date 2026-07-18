@@ -226,17 +226,28 @@ export function WorkspaceOperationalDashboard({
       };
     }
     if (withoutRosLinkCount > 0 && rosTarget) {
+      // Én sak → koblingsdialog. Flere → liste (ikke anta hvilken av N).
+      if (withoutRosLinkCount === 1) {
+        return {
+          key: "ros",
+          navigationTarget: "ros_dialog",
+          eyebrow: "Gjør dette først",
+          title: rosTarget.title,
+          detail: "Mangler ROS-kobling",
+          href: `/w/${wid}?kobleRos=1&assessmentId=${rosTarget.assessmentId}`,
+          cta: "Koble ROS",
+          icon: ShieldPlus,
+          tone: "warning",
+        };
+      }
       return {
-        key: "ros",
-        navigationTarget: "ros_dialog",
+        key: "ros-list",
+        navigationTarget: "vurderinger_list",
         eyebrow: "Gjør dette først",
-        title: rosTarget.title,
-        detail:
-          withoutRosLinkCount === 1
-            ? "Mangler ROS-kobling"
-            : `${withoutRosLinkCount} vurderinger uten ROS`,
-        href: `/w/${wid}?kobleRos=1&assessmentId=${rosTarget.assessmentId}`,
-        cta: "Koble ROS",
+        title: `${withoutRosLinkCount} vurderinger uten ROS`,
+        detail: "Åpne listen og velg hvilken vurdering du vil koble.",
+        href: `/w/${wid}/vurderinger?utenRos=1`,
+        cta: "Se listen",
         icon: ShieldPlus,
         tone: "warning",
       };
@@ -367,8 +378,8 @@ export function WorkspaceOperationalDashboard({
       label: "Uten ROS",
       value: withoutRosLinkCount,
       href:
-        rosTarget != null
-          ? `/w/${wid}?kobleRos=1&assessmentId=${rosTarget.assessmentId}`
+        withoutRosLinkCount > 0
+          ? `/w/${wid}/vurderinger?utenRos=1`
           : `/w/${wid}/ros`,
       emphasize: withoutRosLinkCount > 0,
     },

@@ -4339,6 +4339,7 @@ export function WorkspaceAssessmentsPanel({
   hubMode = false,
   approvedIntakeForProcessregister,
   initialOrgUnit,
+  initialUtenRos = false,
 }: {
   workspaceId: Id<"workspaces">;
   hubMode?: boolean;
@@ -4348,12 +4349,19 @@ export function WorkspaceAssessmentsPanel({
     | ApprovedIntakeProcessregisterRow[];
   /** Pre-select org unit filter from URL deep-link. */
   initialOrgUnit?: Id<"orgUnits"> | null;
+  /** Fra hjem: kun vurderinger uten ROS-kobling. */
+  initialUtenRos?: boolean;
 }) {
   const workspace = useQuery(api.workspaces.get, { workspaceId });
   const membership = useQuery(api.workspaces.getMyMembership, { workspaceId });
   const assessments = useQuery(api.assessments.listByWorkspace, {
     workspaceId,
   });
+  const [utenRosFilter, setUtenRosFilter] = useState(initialUtenRos);
+  const assessmentIdsWithRos = useQuery(
+    api.assessments.assessmentIdsWithRosLink,
+    utenRosFilter || initialUtenRos ? { workspaceId } : "skip",
+  );
   const orgUnits = useQuery(api.orgUnits.listByWorkspace, { workspaceId });
   const deleteAssessment = useMutation(api.assessments.deleteAssessment);
 
@@ -4386,6 +4394,15 @@ export function WorkspaceAssessmentsPanel({
     }
   }, [initialOrgUnit, setOrgUnitFilter]);
 
+  useEffect(() => {
+    setUtenRosFilter(initialUtenRos);
+  }, [initialUtenRos]);
+
+  const idsWithRos = useMemo(
+    () => new Set(assessmentIdsWithRos ?? []),
+    [assessmentIdsWithRos],
+  );
+
   const filteredAssessments = useMemo(() => {
     let rows = assessments ?? [];
     const units = orgUnits ?? [];
@@ -4408,6 +4425,14 @@ export function WorkspaceAssessmentsPanel({
       rows = rows.filter(
         (a) => normalizePipelineStatus(a.pipelineStatus) === statusFilter,
       );
+    }
+    if (utenRosFilter) {
+      // Vent på ROS-data før vi filtrerer bort alt midlertidig
+      if (assessmentIdsWithRos === undefined) {
+        rows = [];
+      } else {
+        rows = rows.filter((a) => !idsWithRos.has(a._id));
+      }
     }
     const copy = [...rows];
     switch (sortBy) {
@@ -4447,7 +4472,17 @@ export function WorkspaceAssessmentsPanel({
         break;
     }
     return copy;
-  }, [assessments, search, statusFilter, sortBy, orgUnitFilter, orgUnits]);
+  }, [
+    assessments,
+    search,
+    statusFilter,
+    sortBy,
+    orgUnitFilter,
+    orgUnits,
+    utenRosFilter,
+    assessmentIdsWithRos,
+    idsWithRos,
+  ]);
 
   const priorityDistribution = useMemo(() => {
     let high = 0;
@@ -4499,7 +4534,8 @@ export function WorkspaceAssessmentsPanel({
   const hasActiveFilter =
     search.trim().length > 0 ||
     statusFilter !== "all" ||
-    orgUnitFilter !== "";
+    orgUnitFilter !== "" ||
+    utenRosFilter;
 
   return (
     <div className="space-y-6">
@@ -4589,6 +4625,17 @@ export function WorkspaceAssessmentsPanel({
                   aria-label="Søk i vurderinger"
                   className="h-11 w-full min-w-0 rounded-full border-border/50 sm:max-w-sm"
                 />
+              ) : null}
+              {assessments.length >= 2 || utenRosFilter ? (
+                <label className="border-input inline-flex h-11 cursor-pointer items-center gap-2 rounded-full border border-border/50 bg-background px-4 text-sm touch-manipulation">
+                  <input
+                    type="checkbox"
+                    className="size-4 accent-foreground"
+                    checked={utenRosFilter}
+                    onChange={(e) => setUtenRosFilter(e.target.checked)}
+                  />
+                  Uten ROS
+                </label>
               ) : null}
               {assessments.length >= 8 ? (
                 <>
@@ -4686,6 +4733,7 @@ export function WorkspaceAssessmentsPanel({
                 setSearch("");
                 setStatusFilter("all");
                 setOrgUnitFilter("");
+                setUtenRosFilter(false);
               }}
             >
               Nullstill

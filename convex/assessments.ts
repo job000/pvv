@@ -106,6 +106,26 @@ export const listByWorkspace = query({
   },
 });
 
+/** Vurderings-ID-er som allerede har minst én ROS-kobling i arbeidsområdet. */
+export const assessmentIdsWithRosLink = query({
+  args: { workspaceId: v.id("workspaces") },
+  returns: v.array(v.id("assessments")),
+  handler: async (ctx, args) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) {
+      return [];
+    }
+    await requireWorkspaceMember(ctx, args.workspaceId, userId, "viewer");
+    const links = await ctx.db
+      .query("rosAnalysisAssessments")
+      .withIndex("by_workspace", (q) =>
+        q.eq("workspaceId", args.workspaceId),
+      )
+      .collect();
+    return [...new Set(links.map((l) => l.assessmentId))];
+  },
+});
+
 function effectivePriorityFromAssessment(a: Doc<"assessments">): number {
   if (
     a.manualPriorityOverride !== undefined &&

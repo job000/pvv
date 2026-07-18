@@ -143,6 +143,10 @@ export function AssessmentRosLinkDialog({
           >
             Koble ROS til vurderingen
           </p>
+          <p className="text-foreground mt-1 text-sm font-medium leading-snug">
+            Vurdering:{" "}
+            <span className="font-semibold">{assessmentTitle}</span>
+          </p>
           <p
             id="assessment-ros-link-desc"
             className="text-muted-foreground text-sm leading-relaxed"
