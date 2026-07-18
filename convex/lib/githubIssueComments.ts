@@ -45,6 +45,8 @@ export type GithubIssueDetails = {
   htmlUrl: string | null;
   assignees: { login: string; name: string | null }[];
   labels: string[];
+  /** GitHub issue type name when API returns it */
+  issueType: string | null;
   milestoneTitle: string | null;
   /** Milestone due_on (ISO date) → brukes som sluttdato-fallback */
   milestoneDueOn: string | null;
@@ -102,6 +104,10 @@ export async function fetchGithubIssueDetails(
     j.milestone && typeof j.milestone === "object"
       ? (j.milestone as Record<string, unknown>)
       : null;
+  const typeObj =
+    j.type && typeof j.type === "object"
+      ? (j.type as Record<string, unknown>)
+      : null;
 
   return {
     title:
@@ -125,6 +131,10 @@ export async function fetchGithubIssueDetails(
         return typeof o.name === "string" ? o.name : "";
       })
       .filter(Boolean),
+    issueType:
+      typeObj && typeof typeObj.name === "string" && typeObj.name.trim()
+        ? typeObj.name.trim()
+        : null,
     milestoneTitle:
       milestone && typeof milestone.title === "string"
         ? milestone.title
@@ -213,13 +223,34 @@ export function looksLikeDueDateFieldName(name: string): boolean {
   );
 }
 
-/** Bygg beskrivelse: issue-body + metadata som ikke mapper direkte til Puls-felt. */
+export function looksLikePriorityFieldName(name: string): boolean {
+  const n = name.trim().toLowerCase();
+  return n === "priority" || n === "prioritet" || n.includes("priority");
+}
+
+export function looksLikeSizeFieldName(name: string): boolean {
+  const n = name.trim().toLowerCase();
+  return n === "size" || n === "størrelse" || n === "storrelse";
+}
+
+export function looksLikeEstimateFieldName(name: string): boolean {
+  const n = name.trim().toLowerCase();
+  return (
+    n === "estimate" ||
+    n === "estimat" ||
+    n === "story points" ||
+    n === "points" ||
+    n.includes("estimate")
+  );
+}
+
+/**
+ * Bygg beskrivelse: issue-body + kort metadata.
+ * Labels/milestone lagres som egne felt — ikke i beskrivelsen.
+ */
 export function buildImportedDescription(args: {
   body: string | null;
   htmlUrl?: string | null;
-  labels?: string[];
-  milestoneTitle?: string | null;
-  assigneeLogins?: string[];
   unmatchedAssigneeLogins?: string[];
 }): string | undefined {
   const parts: string[] = [];
@@ -230,20 +261,10 @@ export function buildImportedDescription(args: {
   if (args.htmlUrl?.trim()) {
     meta.push(`GitHub: ${args.htmlUrl.trim()}`);
   }
-  if (args.labels && args.labels.length > 0) {
-    meta.push(`Labels: ${args.labels.join(", ")}`);
-  }
-  if (args.milestoneTitle?.trim()) {
-    meta.push(`Milestone: ${args.milestoneTitle.trim()}`);
-  }
   const unmatched = args.unmatchedAssigneeLogins ?? [];
   if (unmatched.length > 0) {
     meta.push(
       `Tildelt på GitHub (ikke match i Puls): ${unmatched.map((l) => `@${l}`).join(", ")}`,
-    );
-  } else if (args.assigneeLogins && args.assigneeLogins.length > 0) {
-    meta.push(
-      `Tildelt på GitHub: ${args.assigneeLogins.map((l) => `@${l}`).join(", ")}`,
     );
   }
   if (meta.length > 0) {

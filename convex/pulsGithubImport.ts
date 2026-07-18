@@ -27,6 +27,9 @@ import {
   fetchGithubIssueDetails,
   formatImportedGithubCommentBody,
   looksLikeDueDateFieldName,
+  looksLikeEstimateFieldName,
+  looksLikePriorityFieldName,
+  looksLikeSizeFieldName,
   looksLikeStartDateFieldName,
   parseGithubDateToMs,
 } from "./lib/githubIssueComments";
@@ -78,6 +81,9 @@ const PROJECT_ITEMS_PAGE_QUERY = `query($id: ID!, $after: String) {
                   name
                 }
               }
+              issueType {
+                name
+              }
               milestone {
                 title
                 dueOn
@@ -125,6 +131,15 @@ const PROJECT_ITEMS_PAGE_QUERY = `query($id: ID!, $after: String) {
               }
               ... on ProjectV2ItemFieldTextValue {
                 text
+                field {
+                  ... on ProjectV2FieldCommon {
+                    id
+                    name
+                  }
+                }
+              }
+              ... on ProjectV2ItemFieldNumberValue {
+                number
                 field {
                   ... on ProjectV2FieldCommon {
                     id
@@ -191,6 +206,45 @@ function getProjectDateFields(fieldNodes: unknown[]): {
   return { startAt, dueAt };
 }
 
+function getProjectPropertyFields(fieldNodes: unknown[]): {
+  priorityLabel?: string;
+  size?: string;
+  estimate?: number;
+} {
+  let priorityLabel: string | undefined;
+  let size: string | undefined;
+  let estimate: number | undefined;
+  for (const raw of fieldNodes) {
+    if (!raw || typeof raw !== "object") continue;
+    const fv = raw as {
+      __typename?: string;
+      name?: string;
+      number?: number;
+      field?: { name?: string } | null;
+    };
+    const fieldName = fv.field?.name?.trim() ?? "";
+    if (fv.__typename === "ProjectV2ItemFieldSingleSelectValue") {
+      const optionName = fv.name?.trim();
+      if (!optionName) continue;
+      if (looksLikePriorityFieldName(fieldName) && priorityLabel === undefined) {
+        priorityLabel = optionName.slice(0, 80);
+      } else if (looksLikeSizeFieldName(fieldName) && size === undefined) {
+        size = optionName.slice(0, 80);
+      }
+    } else if (fv.__typename === "ProjectV2ItemFieldNumberValue") {
+      if (
+        looksLikeEstimateFieldName(fieldName) &&
+        estimate === undefined &&
+        typeof fv.number === "number" &&
+        Number.isFinite(fv.number)
+      ) {
+        estimate = Math.max(0, Math.round(fv.number * 100) / 100);
+      }
+    }
+  }
+  return { priorityLabel, size, estimate };
+}
+
 function issueKey(repoFullName: string, issueNumber: number): string {
   return `${repoFullName.toLowerCase()}#${issueNumber}`;
 }
@@ -207,8 +261,12 @@ type ParsedImportItem = {
   htmlUrl?: string | null;
   assigneeLogins?: string[];
   labels?: string[];
+  issueType?: string | null;
   milestoneTitle?: string | null;
   milestoneDueOn?: string | null;
+  priorityLabel?: string;
+  size?: string;
+  estimate?: number;
   projectStartAt?: number;
   projectDueAt?: number;
 };
@@ -222,6 +280,7 @@ function parseImportItem(
   const statusOptionId = getItemStatusOptionId(fieldNodes, statusFieldId);
   if (!statusOptionId) return null;
   const projectDates = getProjectDateFields(fieldNodes);
+  const projectProps = getProjectPropertyFields(fieldNodes);
 
   const content = (item as { content?: Record<string, unknown> | null })
     .content;
@@ -233,6 +292,9 @@ function parseImportItem(
       contentKind: "draft_issue",
       statusOptionId,
       body: typeof c.body === "string" ? c.body : null,
+      priorityLabel: projectProps.priorityLabel,
+      size: projectProps.size,
+      estimate: projectProps.estimate,
       projectStartAt: projectDates.startAt,
       projectDueAt: projectDates.dueAt,
     };
@@ -247,6 +309,7 @@ function parseImportItem(
       url?: string;
       assignees?: { nodes?: { login?: string; name?: string | null }[] };
       labels?: { nodes?: { name?: string }[] };
+      issueType?: { name?: string } | null;
       milestone?: { title?: string; dueOn?: string | null } | null;
       repository?: { nameWithOwner?: string };
     };
@@ -265,6 +328,10 @@ function parseImportItem(
     const labels = (c.labels?.nodes ?? [])
       .map((n) => n.name?.trim() ?? "")
       .filter(Boolean);
+    const issueType =
+      typeof c.issueType?.name === "string" && c.issueType.name.trim()
+        ? c.issueType.name.trim()
+        : null;
     return {
       title: typeof c.title === "string" ? c.title : "(Uten tittel)",
       contentKind: tn === "Issue" ? "issue" : "pull_request",
@@ -277,8 +344,12 @@ function parseImportItem(
       htmlUrl: typeof c.url === "string" ? c.url : null,
       assigneeLogins,
       labels,
+      issueType,
       milestoneTitle: c.milestone?.title ?? null,
       milestoneDueOn: c.milestone?.dueOn ?? null,
+      priorityLabel: projectProps.priorityLabel,
+      size: projectProps.size,
+      estimate: projectProps.estimate,
       projectStartAt: projectDates.startAt,
       projectDueAt: projectDates.dueAt,
     };
@@ -374,6 +445,39 @@ export const listWorkspaceMembersForImport = internalQuery({
  * Bulk-insert for GitHub → Puls import (tillater kort i ferdig-kolonne).
  * Skriver kun til Puls/Convex — aldri tilbake til GitHub.
  */
+function normalizeImportLabels(
+  raw: string[] | undefined,
+): string[] | undefined {
+  if (!raw || raw.length === 0) return undefined;
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const item of raw) {
+    const t = item.trim().slice(0, 40);
+    if (!t) continue;
+    const key = t.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(t);
+    if (out.length >= 20) break;
+  }
+  return out.length > 0 ? out : undefined;
+}
+
+function normalizeImportMeta(
+  raw: string | null | undefined,
+): string | undefined {
+  if (raw == null) return undefined;
+  const t = raw.trim().slice(0, 80);
+  return t || undefined;
+}
+
+function normalizeImportEstimate(
+  raw: number | undefined,
+): number | undefined {
+  if (raw === undefined || !Number.isFinite(raw)) return undefined;
+  return Math.max(0, Math.round(raw * 100) / 100);
+}
+
 export const insertImportedGithubCard = internalMutation({
   args: {
     workspaceId: v.id("workspaces"),
@@ -387,6 +491,12 @@ export const insertImportedGithubCard = internalMutation({
     startAt: v.optional(v.number()),
     dueAt: v.optional(v.number()),
     assigneeUserIds: v.optional(v.array(v.id("users"))),
+    labels: v.optional(v.array(v.string())),
+    issueType: v.optional(v.string()),
+    priorityLabel: v.optional(v.string()),
+    size: v.optional(v.string()),
+    estimate: v.optional(v.number()),
+    milestone: v.optional(v.string()),
     githubRepoFullName: v.optional(v.string()),
     githubIssueNumber: v.optional(v.number()),
     githubIssueNodeId: v.optional(v.string()),
@@ -465,6 +575,12 @@ export const insertImportedGithubCard = internalMutation({
       priority: 3,
       startAt,
       dueAt,
+      labels: normalizeImportLabels(args.labels),
+      issueType: normalizeImportMeta(args.issueType),
+      priorityLabel: normalizeImportMeta(args.priorityLabel),
+      size: normalizeImportMeta(args.size),
+      estimate: normalizeImportEstimate(args.estimate),
+      milestone: normalizeImportMeta(args.milestone),
       dashboardRank: now,
       createdAt: now,
       githubRepoFullName: args.githubRepoFullName,
@@ -488,6 +604,12 @@ export const patchImportedGithubCard = internalMutation({
     dueAt: v.optional(v.number()),
     status: v.optional(v.union(v.literal("open"), v.literal("done"))),
     assigneeUserIds: v.optional(v.array(v.id("users"))),
+    labels: v.optional(v.array(v.string())),
+    issueType: v.optional(v.string()),
+    priorityLabel: v.optional(v.string()),
+    size: v.optional(v.string()),
+    estimate: v.optional(v.number()),
+    milestone: v.optional(v.string()),
   },
   returns: v.object({ ok: v.literal(true) }),
   handler: async (ctx, args) => {
@@ -532,6 +654,24 @@ export const patchImportedGithubCard = internalMutation({
               now: Date.now(),
             })
           : undefined;
+    }
+    if (args.labels !== undefined) {
+      patch.labels = normalizeImportLabels(args.labels);
+    }
+    if (args.issueType !== undefined) {
+      patch.issueType = normalizeImportMeta(args.issueType);
+    }
+    if (args.priorityLabel !== undefined) {
+      patch.priorityLabel = normalizeImportMeta(args.priorityLabel);
+    }
+    if (args.size !== undefined) {
+      patch.size = normalizeImportMeta(args.size);
+    }
+    if (args.estimate !== undefined) {
+      patch.estimate = normalizeImportEstimate(args.estimate);
+    }
+    if (args.milestone !== undefined) {
+      patch.milestone = normalizeImportMeta(args.milestone);
     }
     if (
       typeof patch.startAt === "number" &&
@@ -744,9 +884,6 @@ export const importGithubProjectItemsToBoard = action({
       const description = buildImportedDescription({
         body: row.body ?? null,
         htmlUrl: row.htmlUrl,
-        labels: row.labels,
-        milestoneTitle: row.milestoneTitle,
-        assigneeLogins: logins,
         unmatchedAssigneeLogins: unmatched,
       });
 
@@ -765,6 +902,12 @@ export const importGithubProjectItemsToBoard = action({
             startAt,
             dueAt,
             assigneeUserIds: matched.length > 0 ? matched : undefined,
+            labels: row.labels,
+            issueType: row.issueType ?? undefined,
+            priorityLabel: row.priorityLabel,
+            size: row.size,
+            estimate: row.estimate,
+            milestone: row.milestoneTitle ?? undefined,
             githubRepoFullName:
               row.contentKind === "issue" || row.contentKind === "pull_request"
                 ? row.githubRepoFullName
@@ -827,9 +970,6 @@ export const importGithubProjectItemsToBoard = action({
           const description = buildImportedDescription({
             body: details.body,
             htmlUrl: details.htmlUrl,
-            labels: details.labels,
-            milestoneTitle: details.milestoneTitle,
-            assigneeLogins: details.assignees.map((a) => a.login),
             unmatchedAssigneeLogins: unmatched,
           });
           await ctx.runMutation(
@@ -842,6 +982,16 @@ export const importGithubProjectItemsToBoard = action({
               dueAt,
               status: details.state === "closed" ? "done" : undefined,
               assigneeUserIds: matched.length > 0 ? matched : undefined,
+              labels: details.labels,
+              issueType:
+                details.issueType ?? target.seed.issueType ?? undefined,
+              priorityLabel: target.seed.priorityLabel,
+              size: target.seed.size,
+              estimate: target.seed.estimate,
+              milestone:
+                details.milestoneTitle ??
+                target.seed.milestoneTitle ??
+                undefined,
             },
           );
         }
@@ -921,9 +1071,6 @@ export const importGithubProjectItemsToBoard = action({
         const description = buildImportedDescription({
           body: sub.body,
           htmlUrl: sub.htmlUrl,
-          labels: sub.labels,
-          milestoneTitle: sub.milestoneTitle,
-          assigneeLogins: sub.assignees.map((a) => a.login),
           unmatchedAssigneeLogins: unmatched,
         });
 
@@ -941,6 +1088,9 @@ export const importGithubProjectItemsToBoard = action({
               parentTaskId: target.taskId,
               dueAt: parseGithubDateToMs(sub.milestoneDueOn ?? undefined),
               assigneeUserIds: matched.length > 0 ? matched : undefined,
+              labels: sub.labels,
+              issueType: sub.issueType ?? undefined,
+              milestone: sub.milestoneTitle ?? undefined,
               githubRepoFullName: sub.repoFullName,
               githubIssueNumber: sub.number,
               githubIssueNodeId: sub.nodeId,

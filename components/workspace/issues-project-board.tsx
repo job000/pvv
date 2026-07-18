@@ -14,6 +14,7 @@ import { Label } from "@/components/ui/label";
 import { CardDescriptionEditor } from "@/components/ui/card-description-editor";
 import { MarkdownView } from "@/components/ui/markdown-view";
 import { Textarea } from "@/components/ui/textarea";
+import { UserAvatar } from "@/components/user-avatar";
 import { AssessmentTaskCommentThreads } from "@/components/workspace/assessment-task-comment-threads";
 import { TaskFileAttachments } from "@/components/workspace/task-file-attachments";
 import { api } from "@/convex/_generated/api";
@@ -45,6 +46,7 @@ import {
   CalendarRange,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
   Circle,
   Columns3,
   ExternalLink,
@@ -60,6 +62,7 @@ import {
   Table2,
   Unlink,
   User,
+  UserPlus,
   UserRoundX,
   Workflow,
   X,
@@ -99,6 +102,12 @@ type BoardCard = {
   priority: number;
   startAt?: number;
   dueAt?: number;
+  labels?: string[];
+  issueType?: string;
+  priorityLabel?: string;
+  size?: string;
+  estimate?: number;
+  milestone?: string;
   dashboardRank?: number;
   createdAt: number;
   assessmentTitle: string;
@@ -114,6 +123,308 @@ type BoardCard = {
   canEdit: boolean;
 };
 
+/** Kortflate: priority/size/labels — maks 3 badges. */
+function cardPropertyBadges(card: BoardCard): string[] {
+  const out: string[] = [];
+  if (card.priorityLabel?.trim()) out.push(card.priorityLabel.trim());
+  if (out.length < 3 && card.size?.trim()) out.push(card.size.trim());
+  for (const label of card.labels ?? []) {
+    if (out.length >= 3) break;
+    const t = label.trim();
+    if (t) out.push(t);
+  }
+  return out;
+}
+
+/** Norske valg for egenskap-dropdowns (map også vanlige GitHub-engelske verdier). */
+const ISSUE_TYPE_OPTIONS = ["Funksjon", "Feil", "Oppgave"] as const;
+const PRIORITY_LABEL_OPTIONS = ["Kritisk", "Høy", "Middels", "Lav"] as const;
+const SIZE_OPTIONS = ["XS", "S", "M", "L", "XL"] as const;
+const ESTIMATE_OPTIONS = ["1", "2", "3", "5", "8", "13", "21"] as const;
+
+const ISSUE_TYPE_ALIASES: Record<string, string> = {
+  feature: "Funksjon",
+  funksjon: "Funksjon",
+  bug: "Feil",
+  feil: "Feil",
+  task: "Oppgave",
+  oppgave: "Oppgave",
+};
+
+const PRIORITY_LABEL_ALIASES: Record<string, string> = {
+  urgent: "Kritisk",
+  kritisk: "Kritisk",
+  haster: "Kritisk",
+  high: "Høy",
+  høy: "Høy",
+  hoy: "Høy",
+  medium: "Middels",
+  middels: "Middels",
+  low: "Lav",
+  lav: "Lav",
+};
+
+function optionsWithCurrent(options: readonly string[], current: string): string[] {
+  const t = current.trim();
+  if (!t) return [...options];
+  if (options.some((o) => o.toLowerCase() === t.toLowerCase())) {
+    return [...options];
+  }
+  return [t, ...options];
+}
+
+/** Match preset / alias (case-insensitive); ellers behold importert verdi. */
+function matchSelectOption(
+  options: readonly string[],
+  aliases: Record<string, string>,
+  current: string | undefined,
+): string {
+  const t = current?.trim() ?? "";
+  if (!t) return "";
+  const viaAlias = aliases[t.toLowerCase()];
+  if (viaAlias) return viaAlias;
+  return options.find((o) => o.toLowerCase() === t.toLowerCase()) ?? t;
+}
+
+function matchEstimateOption(estimate: number | undefined): string {
+  if (estimate == null || !Number.isFinite(estimate)) return "";
+  const hit = ESTIMATE_OPTIONS.find((o) => Number(o) === estimate);
+  return hit ?? String(estimate);
+}
+
+type MemberOption = { userId: Id<"users">; label: string };
+
+function MetaRow({
+  label,
+  children,
+  hint,
+}: {
+  label: string;
+  children: ReactNode;
+  hint?: string;
+}) {
+  return (
+    <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-[7.5rem_minmax(0,1fr)] sm:items-center sm:gap-x-4">
+      <div className="min-w-0">
+        <p className="text-muted-foreground text-xs font-medium tracking-wide">
+          {label}
+        </p>
+        {hint ? (
+          <p className="text-muted-foreground/80 mt-0.5 hidden text-[11px] leading-snug sm:block">
+            {hint}
+          </p>
+        ) : null}
+      </div>
+      <div className="min-w-0">{children}</div>
+    </div>
+  );
+}
+
+function CompactSelect({
+  id,
+  value,
+  onChange,
+  disabled,
+  children,
+  "aria-label": ariaLabel,
+}: {
+  id: string;
+  value: string;
+  onChange: (value: string) => void;
+  disabled?: boolean;
+  children: ReactNode;
+  "aria-label": string;
+}) {
+  return (
+    <div className="relative max-w-sm">
+      <select
+        id={id}
+        aria-label={ariaLabel}
+        value={value}
+        disabled={disabled}
+        onChange={(e) => onChange(e.target.value)}
+        className={cn(
+          "border-input bg-background flex h-10 w-full min-w-0 cursor-pointer appearance-none rounded-lg border px-3 pr-9 text-sm shadow-sm transition-[border-color,box-shadow]",
+          "focus-visible:border-ring focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30",
+          "disabled:cursor-not-allowed disabled:opacity-60",
+        )}
+      >
+        {children}
+      </select>
+      <ChevronDown
+        className="text-muted-foreground pointer-events-none absolute right-2.5 top-1/2 size-3.5 -translate-y-1/2 opacity-70"
+        aria-hidden
+      />
+    </div>
+  );
+}
+
+function AssigneePicker({
+  selectedIds,
+  members,
+  canEdit,
+  onChange,
+  emptyLabel = "Ingen tildelt",
+}: {
+  selectedIds: Id<"users">[];
+  members: MemberOption[];
+  canEdit: boolean;
+  onChange: (ids: Id<"users">[]) => void;
+  emptyLabel?: string;
+}) {
+  const selected = selectedIds
+    .map((id) => members.find((m) => m.userId === id))
+    .filter((m): m is MemberOption => Boolean(m));
+  const available = members.filter((m) => !selectedIds.includes(m.userId));
+
+  return (
+    <div className="space-y-2">
+      {selected.length === 0 ? (
+        <p className="text-muted-foreground text-sm">{emptyLabel}</p>
+      ) : (
+        <ul className="flex flex-wrap gap-1.5">
+          {selected.map((m) => (
+            <li key={m.userId}>
+              <span className="bg-muted/70 ring-border/50 inline-flex max-w-[14rem] items-center gap-1.5 rounded-full py-0.5 pl-0.5 pr-1 ring-1">
+                <UserAvatar
+                  name={m.label}
+                  size="sm"
+                  className="size-6 text-[10px] ring-1"
+                />
+                <span className="truncate text-sm font-medium">{m.label}</span>
+                {canEdit ? (
+                  <button
+                    type="button"
+                    aria-label={`Fjern ${m.label}`}
+                    className="text-muted-foreground hover:bg-background hover:text-foreground touch-manipulation rounded-full p-1"
+                    onClick={() =>
+                      onChange(selectedIds.filter((id) => id !== m.userId))
+                    }
+                  >
+                    <X className="size-3.5" aria-hidden />
+                  </button>
+                ) : null}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+      {canEdit && available.length > 0 ? (
+        <div className="relative max-w-xs">
+          <UserPlus
+            className="text-muted-foreground pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2"
+            aria-hidden
+          />
+          <select
+            aria-label="Legg til tildelt"
+            value=""
+            onChange={(e) => {
+              const id = e.target.value as Id<"users">;
+              if (!id) return;
+              if (selectedIds.includes(id)) return;
+              onChange([...selectedIds, id]);
+            }}
+            className={cn(
+              "border-input bg-background flex h-9 w-full cursor-pointer appearance-none rounded-lg border pl-8 pr-8 text-sm",
+              "text-muted-foreground focus-visible:border-ring focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30",
+            )}
+          >
+            <option value="">Legg til person…</option>
+            {available.map((m) => (
+              <option key={m.userId} value={m.userId}>
+                {m.label}
+              </option>
+            ))}
+          </select>
+          <ChevronDown
+            className="text-muted-foreground pointer-events-none absolute right-2.5 top-1/2 size-3.5 -translate-y-1/2 opacity-70"
+            aria-hidden
+          />
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function LabelChipsEditor({
+  labels,
+  canEdit,
+  draft,
+  onDraftChange,
+  onChange,
+}: {
+  labels: string[];
+  canEdit: boolean;
+  draft: string;
+  onDraftChange: (value: string) => void;
+  onChange: (labels: string[]) => void;
+}) {
+  const addLabel = () => {
+    const t = draft.trim().slice(0, 40);
+    if (!t) return;
+    if (labels.some((l) => l.toLowerCase() === t.toLowerCase())) {
+      onDraftChange("");
+      return;
+    }
+    onChange([...labels, t].slice(0, 20));
+    onDraftChange("");
+  };
+
+  return (
+    <div className="space-y-2">
+      {labels.length > 0 ? (
+        <ul className="flex flex-wrap gap-1.5">
+          {labels.map((label) => (
+            <li key={label}>
+              <span className="bg-sky-500/10 text-sky-950 dark:text-sky-100 ring-sky-500/20 inline-flex max-w-full items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium ring-1">
+                <span className="truncate">{label}</span>
+                {canEdit ? (
+                  <button
+                    type="button"
+                    aria-label={`Fjern ${label}`}
+                    className="hover:bg-sky-500/15 touch-manipulation rounded-full p-0.5"
+                    onClick={() => onChange(labels.filter((l) => l !== label))}
+                  >
+                    <X className="size-3" aria-hidden />
+                  </button>
+                ) : null}
+              </span>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="text-muted-foreground text-sm">Ingen etiketter</p>
+      )}
+      {canEdit ? (
+        <div className="flex max-w-sm min-w-0 gap-2">
+          <Input
+            value={draft}
+            onChange={(e) => onDraftChange(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key !== "Enter") return;
+              e.preventDefault();
+              addLabel();
+            }}
+            placeholder="Ny etikett…"
+            className="h-9 min-w-0 flex-1"
+            aria-label="Ny etikett"
+          />
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={!draft.trim()}
+            className="h-9 shrink-0"
+            onClick={addLabel}
+          >
+            Legg til
+          </Button>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 type BoardColumnDoc = {
   _id: Id<"pulsBoardColumns">;
   name: string;
@@ -127,6 +438,7 @@ function normalizeBoardCard(raw: BoardCard): BoardCard {
     ...raw,
     depth: raw.depth ?? 0,
     columnId: raw.columnId ?? null,
+    labels: Array.isArray(raw.labels) ? raw.labels : undefined,
     linkedProcesses: Array.isArray(raw.linkedProcesses)
       ? raw.linkedProcesses
       : [],
@@ -167,13 +479,6 @@ function formatDateRange(startAt?: number, dueAt?: number) {
   if (start) return `Fra ${start}`;
   if (end) return `Til ${end}`;
   return null;
-}
-
-function initials(name: string): string {
-  const parts = name.trim().split(/\s+/).filter(Boolean);
-  if (parts.length === 0) return "?";
-  if (parts.length === 1) return parts[0]!.slice(0, 2).toUpperCase();
-  return `${parts[0]![0] ?? ""}${parts[1]![0] ?? ""}`.toUpperCase();
 }
 
 function parentOptionLabel(card: BoardCard) {
@@ -241,13 +546,12 @@ function AssigneeStack({ names }: { names: string[] }) {
   return (
     <div className="flex items-center -space-x-1.5">
       {shown.map((name) => (
-        <span
+        <UserAvatar
           key={name}
-          title={name}
-          className="bg-foreground/70 flex size-5 items-center justify-center rounded-full border-2 border-card text-[9px] font-semibold text-background"
-        >
-          {initials(name)}
-        </span>
+          name={name}
+          size="sm"
+          className="size-5 border-2 border-card text-[9px] ring-0"
+        />
       ))}
       {names.length > 3 ? (
         <span className="text-muted-foreground pl-1.5 text-[10px] tabular-nums">
@@ -335,6 +639,9 @@ function IssueCardView({
             {formatDateRange(card.startAt, card.dueAt)}
           </FieldChip>
         ) : null}
+        {cardPropertyBadges(card).map((badge) => (
+          <FieldChip key={badge}>{badge}</FieldChip>
+        ))}
         {process ? (
           <FieldChip tone="violet">
             <Workflow className="mr-0.5 size-2.5" aria-hidden />
@@ -994,6 +1301,13 @@ export function IssuesProjectBoard({
   const [editStart, setEditStart] = useState("");
   const [editDue, setEditDue] = useState("");
   const [editAssigneeIds, setEditAssigneeIds] = useState<Id<"users">[]>([]);
+  const [editLabels, setEditLabels] = useState<string[]>([]);
+  const [editLabelDraft, setEditLabelDraft] = useState("");
+  const [editIssueType, setEditIssueType] = useState("");
+  const [editPriorityLabel, setEditPriorityLabel] = useState("");
+  const [editSize, setEditSize] = useState("");
+  const [editEstimate, setEditEstimate] = useState("");
+  const [editMilestone, setEditMilestone] = useState("");
   const [editParentId, setEditParentId] = useState<Id<"assessmentTasks"> | "">(
     "",
   );
@@ -1010,6 +1324,9 @@ export function IssuesProjectBoard({
   >("");
   const [createParentId, setCreateParentId] = useState<
     Id<"assessmentTasks"> | ""
+  >("");
+  const [createColumnId, setCreateColumnId] = useState<
+    Id<"pulsBoardColumns"> | ""
   >("");
   const [createStart, setCreateStart] = useState("");
   const [createDue, setCreateDue] = useState("");
@@ -1262,6 +1579,15 @@ export function IssuesProjectBoard({
       .sort((a, b) => a.order - b.order);
   }, [columnsRaw]);
 
+  const createColumnOptions = useMemo(
+    () => columns.filter((c) => !c.isDone),
+    [columns],
+  );
+
+  const defaultCreateColumnId = useMemo((): Id<"pulsBoardColumns"> | "" => {
+    return createColumnOptions[0]?._id ?? "";
+  }, [createColumnOptions]);
+
   const byColumn = useMemo(() => {
     const map = new Map<string, BoardCard[]>();
     for (const col of columns) map.set(col._id, []);
@@ -1375,6 +1701,21 @@ export function IssuesProjectBoard({
     setEditStart(toDateInput(card.startAt));
     setEditDue(toDateInput(card.dueAt));
     setEditAssigneeIds(card.assignees.map((a) => a.userId));
+    setEditLabels(card.labels ?? []);
+    setEditLabelDraft("");
+    setEditIssueType(
+      matchSelectOption(ISSUE_TYPE_OPTIONS, ISSUE_TYPE_ALIASES, card.issueType),
+    );
+    setEditPriorityLabel(
+      matchSelectOption(
+        PRIORITY_LABEL_OPTIONS,
+        PRIORITY_LABEL_ALIASES,
+        card.priorityLabel,
+      ),
+    );
+    setEditSize(matchSelectOption(SIZE_OPTIONS, {}, card.size));
+    setEditEstimate(matchEstimateOption(card.estimate));
+    setEditMilestone(card.milestone ?? "");
     setEditParentId(card.parentTaskId ?? "");
     setLinkCandidateId("");
     setLinkRosId("");
@@ -1433,6 +1774,11 @@ export function IssuesProjectBoard({
     setCreateTitle("");
     setCreateAssessmentId(parent.assessmentId);
     setCreateParentId(parent._id);
+    const parentCol =
+      parent.columnId && createColumnOptions.some((c) => c._id === parent.columnId)
+        ? parent.columnId
+        : defaultCreateColumnId;
+    setCreateColumnId(parentCol);
     // Datoer er valgfrie for delkort — ikke arv fra forelder
     setCreateStart("");
     setCreateDue("");
@@ -1485,6 +1831,16 @@ export function IssuesProjectBoard({
       toast.error("Startdato kan ikke være etter sluttdato");
       return;
     }
+    const estimateRaw = editEstimate.trim();
+    let estimate: number | null = null;
+    if (estimateRaw) {
+      const n = Number(estimateRaw.replace(",", "."));
+      if (!Number.isFinite(n) || n < 0) {
+        toast.error("Estimat må være et tall (0 eller høyere)");
+        return;
+      }
+      estimate = n;
+    }
     setBusy(true);
     try {
       await updateTask({
@@ -1497,6 +1853,12 @@ export function IssuesProjectBoard({
         startAt: startAt ?? null,
         dueAt: dueAt ?? null,
         assigneeUserIds: editAssigneeIds,
+        labels: editLabels,
+        issueType: editIssueType.trim() || null,
+        priorityLabel: editPriorityLabel.trim() || null,
+        size: editSize.trim() || null,
+        estimate,
+        milestone: editMilestone.trim() || null,
       });
       if (editColumnId && editColumnId !== (selected.columnId ?? "")) {
         const col = columns.find((c) => c._id === editColumnId);
@@ -1551,6 +1913,7 @@ export function IssuesProjectBoard({
         assessmentId: createAssessmentId,
         boardId,
         title,
+        columnId: createColumnId || undefined,
         parentTaskId: createParentId || undefined,
         startAt: startAt ?? undefined,
         dueAt: dueAt ?? undefined,
@@ -1563,6 +1926,7 @@ export function IssuesProjectBoard({
       setCreateOpen(false);
       setCreateTitle("");
       setCreateParentId("");
+      setCreateColumnId(defaultCreateColumnId);
       setCreateStart("");
       setCreateDue("");
       setCreateAssigneeIds([]);
@@ -1842,6 +2206,7 @@ export function IssuesProjectBoard({
               setCreateOpen(true);
               setCreateTitle("");
               setCreateParentId("");
+              setCreateColumnId(defaultCreateColumnId);
               setCreateStart("");
               setCreateDue("");
               setCreateAssessmentId(assessmentOptions[0]?.id ?? "");
@@ -2414,6 +2779,33 @@ export function IssuesProjectBoard({
                 {pulsBoardCopy.parentHint}
               </p>
             </div>
+            <div className="space-y-1">
+              <Label htmlFor="create-column">Kolonne / status</Label>
+              <select
+                id="create-column"
+                className="border-input bg-background flex min-h-11 w-full rounded-lg border px-2 text-sm sm:min-h-9"
+                value={createColumnId}
+                onChange={(e) =>
+                  setCreateColumnId(
+                    e.target.value as Id<"pulsBoardColumns"> | "",
+                  )
+                }
+              >
+                {createColumnOptions.length === 0 ? (
+                  <option value="">Ingen kolonner</option>
+                ) : (
+                  createColumnOptions.map((c) => (
+                    <option key={c._id} value={c._id}>
+                      {c.name}
+                    </option>
+                  ))
+                )}
+              </select>
+              <p className="text-muted-foreground text-[11px]">
+                Velg hvor kortet skal ligge. Ferdig-kolonnen er ikke tilgjengelig
+                for nye kort.
+              </p>
+            </div>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div className="space-y-1">
                 <Label htmlFor="create-start">Startdato (valgfritt)</Label>
@@ -2441,32 +2833,18 @@ export function IssuesProjectBoard({
                 ? "Datoer er valgfrie for delkort — du kan la dem stå tomme."
                 : "Datoer er valgfrie — du kan la dem stå tomme."}
             </p>
-            <div className="space-y-1">
-              <Label>Tildel (valgfritt)</Label>
-              <div className="flex max-h-36 flex-col gap-1 overflow-y-auto rounded-lg border border-border/50 p-1.5">
-                {memberOptions.map((m) => {
-                  const selectedM = createAssigneeIds.includes(m.userId);
-                  return (
-                    <button
-                      key={m.userId}
-                      type="button"
-                      onClick={() =>
-                        setCreateAssigneeIds((prev) =>
-                          selectedM
-                            ? prev.filter((id) => id !== m.userId)
-                            : [...prev, m.userId],
-                        )
-                      }
-                      className={cn(
-                        "min-h-11 rounded-lg px-2.5 py-2 text-left text-sm touch-manipulation sm:min-h-9",
-                        selectedM ? "bg-muted" : "hover:bg-muted/50",
-                      )}
-                    >
-                      {m.label}
-                    </button>
-                  );
-                })}
-              </div>
+            <div className="space-y-1.5">
+              <Label>Tildelt</Label>
+              <p className="text-muted-foreground text-[11px]">
+                Valgfritt — nye tildelte får varsel.
+              </p>
+              <AssigneePicker
+                selectedIds={createAssigneeIds}
+                members={memberOptions}
+                canEdit
+                onChange={setCreateAssigneeIds}
+                emptyLabel="Ingen tildelt ennå"
+              />
             </div>
           </DialogBody>
           <DialogFooter>
@@ -2638,84 +3016,152 @@ export function IssuesProjectBoard({
                         }
                       />
                     </div>
-                    <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-3">
-                      <div className="min-w-0 space-y-1">
-                        <Label htmlFor="detail-col">Kolonne</Label>
-                        <select
+                    <div className="border-border/50 bg-muted/15 space-y-4 rounded-xl border p-3.5 sm:p-4">
+                      <MetaRow label="Kolonne">
+                        <CompactSelect
                           id="detail-col"
-                          className="border-input bg-background h-11 w-full min-w-0 max-w-full rounded-lg border px-2 text-sm sm:h-9"
+                          aria-label="Kolonne"
                           value={editColumnId}
-                          onChange={(e) =>
-                            setEditColumnId(
-                              e.target.value as Id<"pulsBoardColumns"> | "",
-                            )
-                          }
                           disabled={!selected.canEdit}
+                          onChange={(v) =>
+                            setEditColumnId(v as Id<"pulsBoardColumns"> | "")
+                          }
                         >
                           {columns.map((c) => (
                             <option key={c._id} value={c._id}>
                               {c.name}
                             </option>
                           ))}
-                        </select>
-                      </div>
-                      <div className="min-w-0 space-y-1">
-                        <Label htmlFor="detail-start">Startdato (valgfritt)</Label>
-                        <Input
-                          id="detail-start"
-                          type="date"
-                          value={editStart}
-                          onChange={(e) => setEditStart(e.target.value)}
-                          disabled={!selected.canEdit}
-                          className="min-h-11 min-w-0 sm:min-h-9"
+                        </CompactSelect>
+                      </MetaRow>
+                      <MetaRow label="Datoer" hint="Valgfritt">
+                        <div className="grid max-w-sm grid-cols-1 gap-2 sm:grid-cols-2">
+                          <Input
+                            id="detail-start"
+                            type="date"
+                            aria-label="Startdato"
+                            value={editStart}
+                            onChange={(e) => setEditStart(e.target.value)}
+                            disabled={!selected.canEdit}
+                            className="h-10"
+                          />
+                          <Input
+                            id="detail-due"
+                            type="date"
+                            aria-label="Sluttdato"
+                            value={editDue}
+                            onChange={(e) => setEditDue(e.target.value)}
+                            disabled={!selected.canEdit}
+                            className="h-10"
+                          />
+                        </div>
+                      </MetaRow>
+                      <MetaRow
+                        label="Tildelt"
+                        hint="Får varsel ved tildeling og kommentarer"
+                      >
+                        <AssigneePicker
+                          selectedIds={editAssigneeIds}
+                          members={memberOptions}
+                          canEdit={selected.canEdit}
+                          onChange={setEditAssigneeIds}
                         />
-                      </div>
-                      <div className="space-y-1">
-                        <Label htmlFor="detail-due">Sluttdato (valgfritt)</Label>
-                        <Input
-                          id="detail-due"
-                          type="date"
-                          value={editDue}
-                          onChange={(e) => setEditDue(e.target.value)}
+                      </MetaRow>
+                      <div className="border-border/40 border-t" />
+                      <MetaRow label="Type">
+                        <CompactSelect
+                          id="detail-issue-type"
+                          aria-label="Type"
+                          value={editIssueType}
                           disabled={!selected.canEdit}
-                          className="min-h-11 sm:min-h-9"
+                          onChange={setEditIssueType}
+                        >
+                          <option value="">Ingen</option>
+                          {optionsWithCurrent(
+                            ISSUE_TYPE_OPTIONS,
+                            editIssueType,
+                          ).map((opt) => (
+                            <option key={opt} value={opt}>
+                              {opt}
+                            </option>
+                          ))}
+                        </CompactSelect>
+                      </MetaRow>
+                      <MetaRow label="Prioritet">
+                        <CompactSelect
+                          id="detail-priority-label"
+                          aria-label="Prioritet"
+                          value={editPriorityLabel}
+                          disabled={!selected.canEdit}
+                          onChange={setEditPriorityLabel}
+                        >
+                          <option value="">Ingen</option>
+                          {optionsWithCurrent(
+                            PRIORITY_LABEL_OPTIONS,
+                            editPriorityLabel,
+                          ).map((opt) => (
+                            <option key={opt} value={opt}>
+                              {opt}
+                            </option>
+                          ))}
+                        </CompactSelect>
+                      </MetaRow>
+                      <MetaRow label="Størrelse">
+                        <CompactSelect
+                          id="detail-size"
+                          aria-label="Størrelse"
+                          value={editSize}
+                          disabled={!selected.canEdit}
+                          onChange={setEditSize}
+                        >
+                          <option value="">Ingen</option>
+                          {optionsWithCurrent(SIZE_OPTIONS, editSize).map(
+                            (opt) => (
+                              <option key={opt} value={opt}>
+                                {opt}
+                              </option>
+                            ),
+                          )}
+                        </CompactSelect>
+                      </MetaRow>
+                      <MetaRow label="Estimat">
+                        <CompactSelect
+                          id="detail-estimate"
+                          aria-label="Estimat"
+                          value={editEstimate}
+                          disabled={!selected.canEdit}
+                          onChange={setEditEstimate}
+                        >
+                          <option value="">Ingen</option>
+                          {optionsWithCurrent(
+                            ESTIMATE_OPTIONS,
+                            editEstimate,
+                          ).map((opt) => (
+                            <option key={opt} value={opt}>
+                              {opt}
+                            </option>
+                          ))}
+                        </CompactSelect>
+                      </MetaRow>
+                      <MetaRow label="Milepæl">
+                        <Input
+                          id="detail-milestone"
+                          value={editMilestone}
+                          onChange={(e) => setEditMilestone(e.target.value)}
+                          disabled={!selected.canEdit}
+                          placeholder="F.eks. v1.0"
+                          className="h-10 max-w-sm"
                         />
-                      </div>
-                    </div>
-                    <p className="text-muted-foreground -mt-2 text-[11px]">
-                      Start- og sluttdato er valgfrie.
-                    </p>
-                    <div className="space-y-1.5">
-                      <Label>Tildelt</Label>
-                      <p className="text-muted-foreground text-[11px]">
-                        Nye tildelte får varsel ved tildeling og kommentarer.
-                      </p>
-                      <div className="flex max-h-36 flex-col gap-1 overflow-y-auto rounded-lg border border-border/50 p-1.5">
-                        {memberOptions.map((m) => {
-                          const on = editAssigneeIds.includes(m.userId);
-                          return (
-                            <button
-                              key={m.userId}
-                              type="button"
-                              disabled={!selected.canEdit}
-                              onClick={() =>
-                                setEditAssigneeIds((prev) =>
-                                  on
-                                    ? prev.filter((id) => id !== m.userId)
-                                    : [...prev, m.userId],
-                                )
-                              }
-                              className={cn(
-                                "min-h-11 rounded-lg px-2.5 py-2 text-left text-sm touch-manipulation sm:min-h-9",
-                                on ? "bg-muted" : "hover:bg-muted/50",
-                                !selected.canEdit && "opacity-60",
-                              )}
-                            >
-                              {m.label}
-                            </button>
-                          );
-                        })}
-                      </div>
+                      </MetaRow>
+                      <MetaRow label="Etiketter">
+                        <LabelChipsEditor
+                          labels={editLabels}
+                          canEdit={selected.canEdit}
+                          draft={editLabelDraft}
+                          onDraftChange={setEditLabelDraft}
+                          onChange={setEditLabels}
+                        />
+                      </MetaRow>
                     </div>
                     {commentsPlacement === "overview" ? (
                       <div className="border-border/40 mt-2 space-y-3 border-t pt-5">

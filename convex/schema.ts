@@ -1148,6 +1148,18 @@ export default defineSchema({
     startAt: v.optional(v.number()),
     /** Sluttdato / frist (ms) */
     dueAt: v.optional(v.number()),
+    /** GitHub labels / fritekst-etiketter */
+    labels: v.optional(v.array(v.string())),
+    /** GitHub issue type (f.eks. Feature, Bug) */
+    issueType: v.optional(v.string()),
+    /** Navngitt prioritet fra GitHub Projects (f.eks. High) — separat fra tall-priority */
+    priorityLabel: v.optional(v.string()),
+    /** GitHub Projects Size */
+    size: v.optional(v.string()),
+    /** GitHub Projects Estimate */
+    estimate: v.optional(v.number()),
+    /** GitHub milestone-tittel */
+    milestone: v.optional(v.string()),
     /** Global rekkefølge på tvers (lavere = høyere i listen) */
     dashboardRank: v.optional(v.number()),
     createdAt: v.number(),

@@ -20,6 +20,7 @@ export type GithubSubIssueRow = {
   body: string | null;
   assignees: { login: string; name: string | null }[];
   labels: string[];
+  issueType: string | null;
   milestoneTitle: string | null;
   milestoneDueOn: string | null;
   htmlUrl: string | null;
@@ -176,6 +177,7 @@ export async function listGithubSubIssues(
         pull_request?: unknown;
         assignees?: unknown[];
         labels?: unknown[];
+        type?: { name?: string } | null;
         milestone?: { title?: string; due_on?: string | null } | null;
       };
       if (it.pull_request) continue;
@@ -212,6 +214,10 @@ export async function listGithubSubIssues(
         body: typeof it.body === "string" ? it.body : null,
         assignees,
         labels,
+        issueType:
+          typeof it.type?.name === "string" && it.type.name.trim()
+            ? it.type.name.trim()
+            : null,
         milestoneTitle:
           typeof it.milestone?.title === "string" ? it.milestone.title : null,
         milestoneDueOn:

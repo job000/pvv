@@ -47,6 +47,42 @@ function clampPriority(p: number | undefined): number {
   return Math.min(5, Math.max(1, Math.round(p)));
 }
 
+const LABEL_MAX = 40;
+const LABEL_COUNT_MAX = 20;
+const META_STR_MAX = 80;
+
+function normalizeLabels(raw: string[] | undefined | null): string[] | undefined {
+  if (raw === null || raw === undefined) return undefined;
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const item of raw) {
+    const t = item.trim().slice(0, LABEL_MAX);
+    if (!t) continue;
+    const key = t.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(t);
+    if (out.length >= LABEL_COUNT_MAX) break;
+  }
+  return out.length > 0 ? out : undefined;
+}
+
+function normalizeMetaString(
+  raw: string | undefined | null,
+): string | undefined {
+  if (raw === null || raw === undefined) return undefined;
+  const t = raw.trim().slice(0, META_STR_MAX);
+  return t || undefined;
+}
+
+function normalizeEstimate(
+  raw: number | undefined | null,
+): number | undefined {
+  if (raw === null || raw === undefined) return undefined;
+  if (!Number.isFinite(raw)) return undefined;
+  return Math.max(0, Math.round(raw * 100) / 100);
+}
+
 function assertDateRange(startAt?: number, dueAt?: number) {
   if (
     startAt !== undefined &&
@@ -283,6 +319,12 @@ const boardCardValidator = v.object({
   priority: v.number(),
   startAt: v.optional(v.number()),
   dueAt: v.optional(v.number()),
+  labels: v.optional(v.array(v.string())),
+  issueType: v.optional(v.string()),
+  priorityLabel: v.optional(v.string()),
+  size: v.optional(v.string()),
+  estimate: v.optional(v.number()),
+  milestone: v.optional(v.string()),
   dashboardRank: v.optional(v.number()),
   createdAt: v.number(),
   assessmentTitle: v.string(),
@@ -385,6 +427,12 @@ async function buildBoardCards(
       priority: number;
       startAt?: number;
       dueAt?: number;
+      labels?: string[];
+      issueType?: string;
+      priorityLabel?: string;
+      size?: string;
+      estimate?: number;
+      milestone?: string;
       dashboardRank?: number;
       createdAt: number;
       assessmentTitle: string;
@@ -446,6 +494,12 @@ async function buildBoardCards(
         priority: clampPriority(t.priority),
         startAt: t.startAt,
         dueAt: t.dueAt,
+        labels: t.labels,
+        issueType: t.issueType,
+        priorityLabel: t.priorityLabel,
+        size: t.size,
+        estimate: t.estimate,
+        milestone: t.milestone,
         dashboardRank: t.dashboardRank,
         createdAt: t.createdAt,
         assessmentTitle: assessment.title,
@@ -615,6 +669,12 @@ export const create = mutation({
     priority: v.optional(v.number()),
     startAt: v.optional(v.number()),
     dueAt: v.optional(v.number()),
+    labels: v.optional(v.array(v.string())),
+    issueType: v.optional(v.string()),
+    priorityLabel: v.optional(v.string()),
+    size: v.optional(v.string()),
+    estimate: v.optional(v.number()),
+    milestone: v.optional(v.string()),
     /** Opprett som delkort under denne saken (flernivå tillatt) */
     parentTaskId: v.optional(v.id("assessmentTasks")),
   },
@@ -715,6 +775,12 @@ export const create = mutation({
       priority,
       startAt: args.startAt,
       dueAt: args.dueAt,
+      labels: normalizeLabels(args.labels),
+      issueType: normalizeMetaString(args.issueType),
+      priorityLabel: normalizeMetaString(args.priorityLabel),
+      size: normalizeMetaString(args.size),
+      estimate: normalizeEstimate(args.estimate),
+      milestone: normalizeMetaString(args.milestone),
       dashboardRank: now,
       createdAt: now,
     });
@@ -776,6 +842,12 @@ export const update = mutation({
     priority: v.optional(v.number()),
     startAt: v.optional(v.union(v.number(), v.null())),
     dueAt: v.optional(v.union(v.number(), v.null())),
+    labels: v.optional(v.union(v.array(v.string()), v.null())),
+    issueType: v.optional(v.union(v.string(), v.null())),
+    priorityLabel: v.optional(v.union(v.string(), v.null())),
+    size: v.optional(v.union(v.string(), v.null())),
+    estimate: v.optional(v.union(v.number(), v.null())),
+    milestone: v.optional(v.union(v.string(), v.null())),
     status: v.optional(v.union(v.literal("open"), v.literal("done"))),
     /** Når status settes til done: også fullfør hele subtreet */
     completeSubIssues: v.optional(v.boolean()),
@@ -867,6 +939,36 @@ export const update = mutation({
     }
     if (args.dueAt !== undefined) {
       patch.dueAt = args.dueAt === null ? undefined : args.dueAt;
+    }
+    if (args.labels !== undefined) {
+      patch.labels =
+        args.labels === null ? undefined : normalizeLabels(args.labels);
+    }
+    if (args.issueType !== undefined) {
+      patch.issueType =
+        args.issueType === null
+          ? undefined
+          : normalizeMetaString(args.issueType);
+    }
+    if (args.priorityLabel !== undefined) {
+      patch.priorityLabel =
+        args.priorityLabel === null
+          ? undefined
+          : normalizeMetaString(args.priorityLabel);
+    }
+    if (args.size !== undefined) {
+      patch.size =
+        args.size === null ? undefined : normalizeMetaString(args.size);
+    }
+    if (args.estimate !== undefined) {
+      patch.estimate =
+        args.estimate === null ? undefined : normalizeEstimate(args.estimate);
+    }
+    if (args.milestone !== undefined) {
+      patch.milestone =
+        args.milestone === null
+          ? undefined
+          : normalizeMetaString(args.milestone);
     }
     const nextStart =
       args.startAt !== undefined
