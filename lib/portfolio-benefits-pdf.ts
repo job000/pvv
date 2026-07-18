@@ -1,10 +1,8 @@
 import { jsPDF } from "jspdf";
-import {
-  applyCorporatePdfFooters,
-  PDF_CORPORATE_THEME as T,
-} from "@/lib/pdf-corporate";
-import { REALIZATION_LABELS } from "@/lib/portfolio-benefit-copy";
+
 import { PIPELINE_STATUS_LABELS, type PipelineStatus } from "@/lib/assessment-pipeline";
+import { createPdfLayout, formatPdfTimestamp } from "@/lib/pdf-layout";
+import { REALIZATION_LABELS } from "@/lib/portfolio-benefit-copy";
 
 function moneyNb(n: number): string {
   if (!Number.isFinite(n) || n === 0) return "0 kr";
@@ -47,142 +45,142 @@ export type PortfolioBenefitsPdfInput = {
   }>;
 };
 
-/** Kompakt ledelses-PDF for gevinster — eksporter når du trenger hele bildet. */
+/** Ledelses-PDF for gevinster — moderne, lesbar for hvem som helst. */
 export function downloadPortfolioBenefitsPdf(input: PortfolioBenefitsPdfInput): void {
   const doc = new jsPDF({ unit: "mm", format: "a4" });
-  const margin = 16;
-  const pw = doc.internal.pageSize.getWidth();
-  let y = 22;
+  const L = createPdfLayout(doc);
+  const generatedAt = new Date();
+  const isoDate = generatedAt.toISOString().slice(0, 10);
+  const docRef = `GEV-${isoDate}`;
+  const shortTitle = (input.workspaceName || "Portefølje").trim().slice(0, 60);
 
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(16);
-  doc.setTextColor(T.slate900[0], T.slate900[1], T.slate900[2]);
-  doc.text("Gevinster og besparelser", margin, y);
-  y += 7;
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(10);
-  doc.setTextColor(T.slate500[0], T.slate500[1], T.slate500[2]);
-  doc.text(`${input.workspaceName} · ${new Date().toLocaleDateString("nb-NO")}`, margin, y);
-  y += 10;
-
-  const kpis = [
-    ["Timer / år", hoursNb(input.totals.hoursSavedPerYear)],
-    ["Besparelse / år", moneyNb(input.totals.currencySavedPerYear)],
-    ["FTE frigjort", input.totals.fteFreed.toLocaleString("nb-NO", { maximumFractionDigits: 2 })],
-    ["Netto / år", moneyNb(input.totals.netBenefitAnnual)],
-  ] as const;
-
-  const colW = (pw - margin * 2) / 2;
-  kpis.forEach(([label, value], i) => {
-    const col = i % 2;
-    const row = Math.floor(i / 2);
-    const x = margin + col * colW;
-    const yy = y + row * 18;
-    doc.setFillColor(T.surface[0], T.surface[1], T.surface[2]);
-    doc.roundedRect(x, yy, colW - 4, 15, 2, 2, "F");
-    doc.setFontSize(8);
-    doc.setTextColor(T.slate500[0], T.slate500[1], T.slate500[2]);
-    doc.text(label, x + 3, yy + 5);
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(12);
-    doc.setTextColor(T.slate900[0], T.slate900[1], T.slate900[2]);
-    doc.text(value, x + 3, yy + 11);
-    doc.setFont("helvetica", "normal");
+  doc.setProperties({
+    title: `Gevinster: ${input.workspaceName}`,
+    subject: "Porteføljegevinster og besparelser",
+    keywords: "PVV, gevinster, besparelser, portefølje",
+    creator: "PVV",
   });
-  y += 42;
 
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(11);
-  doc.text("Realisering", margin, y);
-  y += 6;
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(9);
+  L.drawCover({
+    eyebrow: "PVV · GEVINSTER OG BESPARELSER",
+    metaLine: `${formatPdfTimestamp(generatedAt)}  ·  ${docRef}`,
+    subtitle:
+      "Samlet bilde av estimert verdi på tvers av vurderinger i arbeidsområdet.",
+    title: "Gevinster og besparelser",
+    lead:
+      "Rapporten oppsummerer timer, kroner og FTE, fordelt på realiseringsfase og pipeline. Tall er veiledende estimater fra PVV-modellen.",
+  });
+
+  L.drawMetaPanel("Dokumentkontroll", [
+    { label: "Arbeidsområde", value: input.workspaceName.trim() || "—" },
+    { label: "Dokumentreferanse", value: docRef },
+    {
+      label: "Antall kandidater i uttrekk",
+      value: String(input.candidates.length),
+    },
+  ]);
+
+  L.drawToc([
+    "Nøkkeltall",
+    "Realisering",
+    "Per fase",
+    "Kvalitet og sikkerhet",
+    "Kandidater",
+  ]);
+
+  L.addHeading("Nøkkeltall", 12);
+  L.addKpiTiles([
+    { label: "Timer / år", value: hoursNb(input.totals.hoursSavedPerYear) },
+    {
+      label: "Besparelse / år",
+      value: moneyNb(input.totals.currencySavedPerYear),
+    },
+    {
+      label: "FTE frigjort",
+      value: input.totals.fteFreed.toLocaleString("nb-NO", {
+        maximumFractionDigits: 2,
+      }),
+    },
+    { label: "Netto / år", value: moneyNb(input.totals.netBenefitAnnual) },
+    { label: "Byggekostnad", value: moneyNb(input.totals.buildCost) },
+    {
+      label: "Driftskostnad / år",
+      value: moneyNb(input.totals.annualRunCost),
+    },
+  ]);
+
+  L.addHeading("Realisering", 12);
+  L.addPara(
+    "Fordeling etter hvor langt gevinsten er kommet i leveranseløpet.",
+    9,
+  );
   const buckets = [
     [REALIZATION_LABELS.potential, input.potential],
     [REALIZATION_LABELS.in_delivery, input.inDelivery],
     [REALIZATION_LABELS.realized, input.realized],
   ] as const;
   for (const [label, t] of buckets) {
-    doc.setTextColor(T.slate700[0], T.slate700[1], T.slate700[2]);
-    doc.text(
-      `${label}: ${moneyNb(t.currencySavedPerYear)} · ${hoursNb(t.hoursSavedPerYear)} · ${t.fteFreed.toFixed(2)} FTE`,
-      margin,
-      y,
+    L.addRow(
+      label,
+      `${moneyNb(t.currencySavedPerYear)}  ·  ${hoursNb(t.hoursSavedPerYear)}  ·  ${t.fteFreed.toFixed(2)} FTE`,
     );
-    y += 5;
   }
-  y += 4;
 
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(11);
-  doc.setTextColor(T.slate900[0], T.slate900[1], T.slate900[2]);
-  doc.text("Per fase", margin, y);
-  y += 6;
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(9);
-  for (const row of input.byPipeline.filter((r) => r.count > 0)) {
-    const name =
-      PIPELINE_STATUS_LABELS[row.status as PipelineStatus] ?? row.status;
-    doc.text(
-      `${name}: ${row.count} · ${moneyNb(row.currencySavedPerYear)} · ${hoursNb(row.hoursSavedPerYear)}`,
-      margin,
-      y,
-    );
-    y += 5;
-    if (y > 260) {
-      doc.addPage();
-      y = 20;
+  L.addHeading("Per fase", 12);
+  const pipelineRows = input.byPipeline.filter((r) => r.count > 0);
+  if (pipelineRows.length === 0) {
+    L.addMutedNote("Ingen vurderinger med pipeline-status i uttrekket.");
+  } else {
+    for (const row of pipelineRows) {
+      const name =
+        PIPELINE_STATUS_LABELS[row.status as PipelineStatus] ?? row.status;
+      L.addRow(
+        name,
+        `${row.count} stk  ·  ${moneyNb(row.currencySavedPerYear)}  ·  ${hoursNb(row.hoursSavedPerYear)}`,
+      );
     }
   }
 
-  y += 4;
   const soft = input.softGains.filter((g) => g.soft && g.count > 0);
-  if (soft.length > 0) {
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(11);
-    doc.text("Kvalitet og sikkerhet (ikke tallfestet)", margin, y);
-    y += 6;
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(9);
-    for (const g of soft.slice(0, 8)) {
-      doc.text(`${g.label}: ${g.count} vurderinger`, margin, y);
-      y += 5;
+  L.addHeading("Kvalitet og sikkerhet (ikke tallfestet)", 12);
+  if (soft.length === 0) {
+    L.addMutedNote("Ingen myke gevinster registrert i uttrekket.");
+  } else {
+    L.addPara(
+      "Disse gevinstene er bevisst uten kroneverdi — de dokumenterer kvalitets- og sikkerhetsgevinster.",
+      9,
+    );
+    for (const g of soft.slice(0, 12)) {
+      L.addRow(g.label, `${g.count} vurderinger`);
     }
   }
 
-  y += 4;
-  if (y > 230) {
-    doc.addPage();
-    y = 20;
-  }
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(11);
-  doc.text("Kandidater", margin, y);
-  y += 6;
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(8);
-  for (const c of input.candidates.slice(0, 40)) {
-    const phase =
-      PIPELINE_STATUS_LABELS[c.pipelineStatus as PipelineStatus] ??
-      c.pipelineStatus;
-    const line = `${c.title.slice(0, 42)} · ${phase} · ${moneyNb(c.currencySavedPerYear)}`;
-    doc.text(line, margin, y, { maxWidth: pw - margin * 2 });
-    y += 4.5;
-    if (y > 270) {
-      doc.addPage();
-      y = 20;
+  L.addHeading("Kandidater", 12);
+  if (input.candidates.length === 0) {
+    L.addMutedNote("Ingen kandidater i uttrekket.");
+  } else {
+    L.addPara(
+      `Viser opptil 40 av ${input.candidates.length} kandidater (sortert som i appen).`,
+      9,
+    );
+    for (const c of input.candidates.slice(0, 40)) {
+      const phase =
+        PIPELINE_STATUS_LABELS[c.pipelineStatus as PipelineStatus] ??
+        c.pipelineStatus;
+      L.addRow(
+        c.title.trim() || "Uten tittel",
+        `${phase}  ·  ${moneyNb(c.currencySavedPerYear)}  ·  ${hoursNb(c.hoursSavedPerYear)}  ·  ${c.fteFreed.toFixed(2)} FTE`,
+      );
     }
   }
 
-  y += 6;
-  doc.setFontSize(8);
-  doc.setTextColor(T.slate500[0], T.slate500[1], T.slate500[2]);
-  const note =
-    "Tall er ca.-estimater fra PVV-modellen. Myke gevinster er bevisst uten kroneverdi. Erstatter ikke faglig vurdering.";
-  doc.text(doc.splitTextToSize(note, pw - margin * 2), margin, y);
+  L.addSoftDivider();
+  L.addMutedNote(
+    "Tall er ca.-estimater fra PVV-modellen. Myke gevinster er bevisst uten kroneverdi. Rapporten erstatter ikke faglig eller økonomisk vurdering i egen organisasjon.",
+  );
 
-  applyCorporatePdfFooters(doc, margin, {
-    shortTitle: input.workspaceName,
+  L.finish({
+    shortTitle,
     docTypeLabel: "Gevinster",
   });
 

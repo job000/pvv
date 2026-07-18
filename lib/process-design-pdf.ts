@@ -7,17 +7,15 @@ import {
   rasterizePddDiagramSnapshot,
 } from "@/lib/pdd-diagram-rasterize";
 import {
-  applyCorporatePdfFooters,
-  bodyLineHeightMm,
-  PDF_CORPORATE_THEME,
-} from "@/lib/pdf-corporate";
+  createPdfLayout,
+  formatPdfTimestamp,
+  type PdfLayout,
+} from "@/lib/pdf-layout";
 import {
   extractHtmlDataImages,
   htmlToPlainText,
   isEmptyRichText,
 } from "@/lib/rich-text";
-
-const T = PDF_CORPORATE_THEME;
 
 export type ProcessDesignPdfInput = {
   assessmentTitle: string;
@@ -30,31 +28,30 @@ export type ProcessDesignPdfInput = {
   diagramCacheKey?: string;
 };
 
-function formatTs(d: Date) {
-  try {
-    return d.toLocaleString("nb-NO", { dateStyle: "long", timeStyle: "short" });
-  } catch {
-    return d.toISOString();
-  }
-}
-
 type DiagramRasters = {
   asIs: PddDiagramRaster[] | null;
   toBe: PddDiagramRaster[] | null;
 };
+
+function plainOrEmpty(body: string | undefined): string {
+  if (isEmptyRichText(body)) return "";
+  return htmlToPlainText(body);
+}
 
 function buildProcessDesignPdfDocument(
   data: ProcessDesignPdfInput,
   diagrams: DiagramRasters,
 ): jsPDF {
   const doc = new jsPDF({ unit: "mm", format: "a4" });
-  const margin = 16;
-  let cursor = margin;
-  const pageW = () => doc.internal.pageSize.getWidth();
-  const pageH = () => doc.internal.pageSize.getHeight();
-  const contentW = () => pageW() - margin * 2;
+  const L = createPdfLayout(doc);
   const shortTitle = (data.assessmentTitle || "Prosessdesign").trim().slice(0, 60);
   const p = data.payload;
+  const isoDate = data.generatedAt.toISOString().slice(0, 10);
+  const ver =
+    data.publishedVersion != null && data.publishedVersion > 0
+      ? ` · v${data.publishedVersion}`
+      : "";
+  const docRef = `RPA-PDD-${isoDate}${ver}`;
 
   doc.setProperties({
     title: `RPA prosessdesign: ${data.assessmentTitle}`,
@@ -63,77 +60,33 @@ function buildProcessDesignPdfDocument(
     creator: "PVV",
   });
 
-  const ensureSpace = (needMm: number) => {
-    if (cursor + needMm > pageH() - margin) {
-      doc.addPage();
-      cursor = margin;
-    }
-  };
-
-  const addHeading = (text: string, size = 13) => {
-    ensureSpace(18);
-    const barW = 2.8;
-    doc.setFillColor(T.brand[0], T.brand[1], T.brand[2]);
-    doc.rect(margin, cursor - size * 0.36, barW, size * 0.72, "F");
-    const textX = margin + barW + 3.5;
-    doc.setFontSize(size);
-    doc.setFont("helvetica", "bold");
-    doc.setTextColor(T.slate900[0], T.slate900[1], T.slate900[2]);
-    doc.text(text, textX, cursor);
-    cursor += size * 0.55 + 4;
-    doc.setDrawColor(T.slate200[0], T.slate200[1], T.slate200[2]);
-    doc.setLineWidth(0.35);
-    doc.line(textX, cursor, pageW() - margin, cursor);
-    cursor += 5;
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(10);
-    doc.setTextColor(0);
-  };
-
   const addInlineDataImage = (dataUrl: string) => {
-    const maxW = contentW();
+    const maxW = L.contentW();
     const maxH = 70;
-    // Approximate aspect from data URL size isn't available — use a sensible box.
-    let drawW = Math.min(maxW, 120);
-    let drawH = Math.min(maxH, 55);
-    ensureSpace(drawH + 8);
+    const drawW = Math.min(maxW, 120);
+    const drawH = Math.min(maxH, 55);
+    L.ensureSpace(drawH + 8);
     try {
       const format = dataUrl.includes("image/png") ? "PNG" : "JPEG";
-      doc.addImage(dataUrl, format, margin, cursor, drawW, drawH);
-      cursor += drawH + 6;
+      doc.addImage(dataUrl, format, L.margin, L.getY(), drawW, drawH);
+      L.setY(L.getY() + drawH + 6);
     } catch {
       /* bilde hoppes over hvis format ikke støttes */
     }
   };
 
-  const addFieldBlock = (fieldLabel: string, body: string | undefined) => {
-    if (isEmptyRichText(body)) return;
-    const plain = htmlToPlainText(body);
+  /** Feltkort med plain tekst + eventuelle innebygde bilder. Tomme felt vises. */
+  const addRichField = (fieldLabel: string, body: string | undefined) => {
+    const plain = plainOrEmpty(body);
     const images = extractHtmlDataImages(body ?? "");
-    ensureSpace(14);
-    doc.setFontSize(10);
-    doc.setFont("helvetica", "bold");
-    doc.setTextColor(T.slate700[0], T.slate700[1], T.slate700[2]);
-    doc.text(fieldLabel, margin, cursor);
-    cursor += 5;
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(10);
-    if (plain) {
-      const lh = bodyLineHeightMm(10);
-      const lines = doc.splitTextToSize(plain, contentW());
-      ensureSpace(lines.length * lh + 6);
-      doc.setTextColor(T.slate800[0], T.slate800[1], T.slate800[2]);
-      doc.text(lines, margin, cursor);
-      cursor += lines.length * lh + 4;
-    }
+    L.addFieldCard(fieldLabel, plain, { showEmpty: true });
     for (const img of images.slice(0, 8)) {
       addInlineDataImage(img.dataUrl);
     }
-    doc.setTextColor(0);
   };
 
   const addSingleRasterImage = (raster: PddDiagramRaster) => {
-    const maxW = contentW();
+    const maxW = L.contentW();
     const maxH = 115;
     const pxW = Math.max(raster.width, 1);
     const pxH = raster.height;
@@ -144,23 +97,13 @@ function buildProcessDesignPdfDocument(
       drawH = maxH;
       drawW = drawH / ratio;
     }
-    ensureSpace(drawH + 10);
+    L.ensureSpace(drawH + 10);
     try {
-      doc.addImage(raster.dataUrl, "PNG", margin, cursor, drawW, drawH);
-      cursor += drawH + 8;
+      doc.addImage(raster.dataUrl, "PNG", L.margin, L.getY(), drawW, drawH);
+      L.setY(L.getY() + drawH + 8);
     } catch {
-      doc.setFontSize(9);
-      doc.setTextColor(T.slate700[0], T.slate700[1], T.slate700[2]);
-      const errLines = doc.splitTextToSize(
-        "Kunne ikke legge inn diagram som bilde i PDF.",
-        contentW(),
-      );
-      const elh = bodyLineHeightMm(9);
-      ensureSpace(errLines.length * elh + 4);
-      doc.text(errLines, margin, cursor);
-      cursor += errLines.length * elh + 6;
+      L.addMutedNote("Kunne ikke legge inn diagram som bilde i PDF.");
     }
-    doc.setTextColor(0);
   };
 
   const addRasterDiagram = (
@@ -168,141 +111,107 @@ function buildProcessDesignPdfDocument(
     rasters: PddDiagramRaster[] | null,
     snapshotPresent: boolean,
   ) => {
-    if (!snapshotPresent) return;
-    ensureSpace(14);
-    doc.setFontSize(10);
-    doc.setFont("helvetica", "bold");
-    doc.setTextColor(T.slate700[0], T.slate700[1], T.slate700[2]);
-    doc.text(fieldLabel, margin, cursor);
-    cursor += 6;
-    doc.setFont("helvetica", "normal");
+    if (!snapshotPresent) {
+      L.addFieldCard(fieldLabel, "", {
+        showEmpty: true,
+        emptyLabel: "Ingen diagram lagret",
+      });
+      return;
+    }
+    L.addHeading(fieldLabel, 10);
     if (!rasters || rasters.length === 0) {
-      const lh = bodyLineHeightMm(9);
-      const msg = doc.splitTextToSize(
+      L.addMutedNote(
         "Diagrammet kunne ikke eksporteres som bilde (nettleser eller tomt diagram). Åpne Prosessdesign i PVV for interaktiv visning.",
-        contentW(),
       );
-      ensureSpace(msg.length * lh + 4);
-      doc.setFontSize(9);
-      doc.setTextColor(T.slate500[0], T.slate500[1], T.slate500[2]);
-      doc.text(msg, margin, cursor);
-      cursor += msg.length * lh + 6;
-      doc.setTextColor(0);
       return;
     }
     for (const raster of rasters) {
       if (rasters.length > 1) {
-        ensureSpace(12);
-        doc.setFontSize(9);
-        doc.setFont("helvetica", "italic");
-        doc.setTextColor(T.slate500[0], T.slate500[1], T.slate500[2]);
-        doc.text(raster.pageName, margin, cursor);
-        cursor += 5;
-        doc.setFont("helvetica", "normal");
+        L.addPara(raster.pageName, 9);
       }
       addSingleRasterImage(raster);
     }
   };
 
-  const isoDate = data.generatedAt.toISOString().slice(0, 10);
-  const ver =
-    data.publishedVersion != null && data.publishedVersion > 0
-      ? ` · v${data.publishedVersion}`
-      : "";
-  const docRef = `RPA-PDD-${isoDate}${ver}`;
+  const addEmptySectionNote = (Lref: PdfLayout, label: string) => {
+    Lref.addMutedNote(`${label}: ingen oppføringer.`);
+  };
 
-  doc.setFillColor(T.brand[0], T.brand[1], T.brand[2]);
-  doc.rect(0, 0, pageW(), 30, "F");
-  doc.setFillColor(T.brandAccent[0], T.brandAccent[1], T.brandAccent[2]);
-  doc.rect(0, 30, pageW(), 0.9, "F");
-  doc.setTextColor(255, 255, 255);
-  doc.setFontSize(8);
-  doc.setFont("helvetica", "bold");
-  doc.text("PVV · RPA PROSESSDESIGN (PDD)", margin, 10);
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(7);
-  doc.text(`${formatTs(data.generatedAt)}  ·  ${docRef}`, margin, 16);
-  doc.text(
-    "Process Design Document — As-Is / To-Be, omfang, unntak og feilhåndtering for RPA-leveranser.",
-    margin,
-    22,
-    { maxWidth: pageW() - margin * 2 },
+  L.drawCover({
+    eyebrow: "PVV · RPA PROSESSDESIGN (PDD)",
+    metaLine: `${formatPdfTimestamp(data.generatedAt)}  ·  ${docRef}`,
+    subtitle:
+      "Process Design Document — As-Is / To-Be, omfang, unntak og feilhåndtering for RPA-leveranser.",
+    title: shortTitle,
+    lead:
+      "Strukturert prosessdesign for utvikling, test og drift. Tomme felt vises som «Ikke utfylt» slik at leseren ser hva som mangler.",
+  });
+
+  const metaRows = [
+    ...(data.organizationLine?.trim()
+      ? [{ label: "Organisasjon", value: data.organizationLine.trim() }]
+      : []),
+    ...(data.workspaceName?.trim()
+      ? [{ label: "Arbeidsområde", value: data.workspaceName.trim() }]
+      : []),
+    {
+      label: "Kandidat / vurdering",
+      value: data.assessmentTitle.trim() || "—",
+    },
+    ...(data.publishedVersion != null && data.publishedVersion > 0
+      ? [{ label: "Publisert versjon", value: `v${data.publishedVersion}` }]
+      : []),
+    { label: "Dokumentreferanse", value: docRef },
+  ];
+  L.drawMetaPanel("Dokumentkontroll", metaRows);
+
+  L.drawToc([
+    "Prosessoversikt",
+    "As-Is — nåværende prosess",
+    "To-Be — fremtidig prosess",
+    "HUKI — roller og ansvar",
+    "Risiko og feilhåndtering",
+    "Tilleggsinformasjon",
+  ]);
+
+  L.addHeading("Formål og anvendelse", 11);
+  L.addPara(
+    "Dokumentet beskriver hvordan prosessen skal automatiseres med RPA: nåværende flyt (As-Is), ønsket flyt (To-Be), omfang, unntak og feilhåndtering. Egnet for utviklere, forretningseiere, test og revisjon.",
+    9.5,
   );
-  doc.setTextColor(0);
-  cursor = 36;
-
-  if (data.organizationLine?.trim()) {
-    doc.setFontSize(9);
-    doc.setTextColor(T.slate500[0], T.slate500[1], T.slate500[2]);
-    const ol = doc.splitTextToSize(data.organizationLine.trim(), contentW());
-    ensureSpace(ol.length * 4 + 4);
-    doc.text(ol, margin, cursor);
-    cursor += ol.length * 4 + 6;
-    doc.setTextColor(0);
-  }
-
-  doc.setFontSize(18);
-  doc.setFont("helvetica", "bold");
-  doc.setTextColor(T.slate900[0], T.slate900[1], T.slate900[2]);
-  const titleLines = doc.splitTextToSize(shortTitle, contentW());
-  ensureSpace(titleLines.length * 7 + 6);
-  doc.text(titleLines, margin, cursor);
-  cursor += titleLines.length * 7 + 8;
-  doc.setFont("helvetica", "normal");
-
-  if (data.workspaceName?.trim()) {
-    doc.setFontSize(9);
-    doc.setTextColor(T.slate700[0], T.slate700[1], T.slate700[2]);
-    doc.text(`Arbeidsområde: ${data.workspaceName.trim()}`, margin, cursor);
-    cursor += 6;
-    doc.setTextColor(0);
-  }
 
   /* ---- 1. Prosessoversikt ---- */
-  addHeading("1. Prosessoversikt", 12);
-  addFieldBlock("Prosesstittel", p.processTitle ?? p.asIsProcessName);
-  addFieldBlock("Kort beskrivelse", p.shortDescription);
-  addFieldBlock("Detaljert beskrivelse", p.executiveSummary);
-  addFieldBlock("Formål", p.purpose);
-  addFieldBlock("Mål og forventet nytte", p.objectives);
-  addFieldBlock("Forutsetninger", p.prerequisites);
-  addFieldBlock("Primær enhet / eierlinje", p.orgPrimaryUnit);
-  addFieldBlock("Hvor prosessen kjøres", p.orgOperatingUnits);
-  addFieldBlock("ROS gjelder for", p.orgRosCoverage);
+  L.addHeading("1. Prosessoversikt", 12);
+  addRichField("Prosesstittel", p.processTitle ?? p.asIsProcessName);
+  addRichField("Kort beskrivelse", p.shortDescription);
+  addRichField("Detaljert beskrivelse", p.executiveSummary);
+  addRichField("Formål", p.purpose);
+  addRichField("Mål og forventet nytte", p.objectives);
+  addRichField("Forutsetninger", p.prerequisites);
+  addRichField("Primær enhet / eierlinje", p.orgPrimaryUnit);
+  addRichField("Hvor prosessen kjøres", p.orgOperatingUnits);
+  addRichField("ROS gjelder for", p.orgRosCoverage);
 
   if (p.keyContacts?.length) {
-    ensureSpace(10);
-    doc.setFontSize(10);
-    doc.setFont("helvetica", "bold");
-    doc.text("Nøkkelkontakter", margin, cursor);
-    cursor += 6;
-    doc.setFont("helvetica", "normal");
+    L.addHeading("Nøkkelkontakter", 10);
     for (const c of p.keyContacts) {
       const line = `${c.role}: ${c.name}${c.contact ? ` — ${c.contact}` : ""}${c.notes ? ` (${c.notes})` : ""}`;
-      const lines = doc.splitTextToSize(line, contentW());
-      ensureSpace(lines.length * bodyLineHeightMm(9) + 2);
-      doc.setFontSize(9);
-      doc.text(lines, margin, cursor);
-      cursor += lines.length * bodyLineHeightMm(9) + 2;
+      L.addPara(line, 9);
     }
-    cursor += 4;
+  } else {
+    addEmptySectionNote(L, "Nøkkelkontakter");
   }
 
   /* ---- 2. As-Is prosess ---- */
-  addHeading("2. As-Is — nåværende prosess", 12);
-  addFieldBlock("Beskrivelse", p.asIsShortDescription);
-  addFieldBlock("Roller", p.asIsRoles);
-  addFieldBlock("Volum og frekvens", p.asIsVolume);
-  addFieldBlock("Behandlingstid", p.asIsHandleTime);
-  addFieldBlock("Ressurs (FTE)", p.asIsFte);
+  L.addHeading("2. As-Is — nåværende prosess", 12);
+  addRichField("Beskrivelse", p.asIsShortDescription);
+  addRichField("Roller", p.asIsRoles);
+  addRichField("Volum og frekvens", p.asIsVolume);
+  addRichField("Behandlingstid", p.asIsHandleTime);
+  addRichField("Ressurs (FTE)", p.asIsFte);
 
   if (p.asIsApplications?.length) {
-    ensureSpace(10);
-    doc.setFontSize(10);
-    doc.setFont("helvetica", "bold");
-    doc.text("Applikasjoner", margin, cursor);
-    cursor += 6;
-    doc.setFont("helvetica", "normal");
+    L.addHeading("Applikasjoner", 10);
     for (const app of p.asIsApplications) {
       const block = [
         [app.type, app.env, app.phase].filter(Boolean).join(" · "),
@@ -310,11 +219,15 @@ function buildProcessDesignPdfDocument(
       ]
         .filter(Boolean)
         .join("\n");
-      addFieldBlock(app.name, block || "—");
+      L.addFieldCard(app.name || "Applikasjon", block || "", {
+        showEmpty: true,
+      });
     }
+  } else {
+    addEmptySectionNote(L, "Applikasjoner");
   }
 
-  addFieldBlock("As-Is prosesskart (tekst)", p.asIsProcessMap);
+  addRichField("As-Is prosesskart (tekst)", p.asIsProcessMap);
   addRasterDiagram(
     "As-Is prosesskart (diagram)",
     diagrams.asIs,
@@ -322,12 +235,7 @@ function buildProcessDesignPdfDocument(
   );
 
   if (p.asIsSteps?.length) {
-    ensureSpace(10);
-    doc.setFontSize(10);
-    doc.setFont("helvetica", "bold");
-    doc.text("Detaljerte As-Is trinn", margin, cursor);
-    cursor += 6;
-    doc.setFont("helvetica", "normal");
+    L.addHeading("Detaljerte As-Is trinn", 10);
     for (const s of p.asIsSteps) {
       const head = s.stepNo ? `Trinn ${s.stepNo}` : "Trinn";
       const desc = htmlToPlainText(s.description);
@@ -340,60 +248,46 @@ function buildProcessDesignPdfDocument(
       ]
         .filter(Boolean)
         .join("\n");
-      addFieldBlock(head, body);
+      L.addFieldCard(head, body, { showEmpty: true });
     }
+  } else {
+    addEmptySectionNote(L, "Detaljerte As-Is trinn");
   }
 
   /* ---- 3. To-Be prosess ---- */
-  addHeading("3. To-Be — fremtidig prosess", 12);
-  addFieldBlock("To-Be prosesskart (tekst)", p.toBeMap);
+  L.addHeading("3. To-Be — fremtidig prosess", 12);
+  addRichField("To-Be prosesskart (tekst)", p.toBeMap);
   addRasterDiagram(
     "To-Be prosesskart (diagram)",
     diagrams.toBe,
     Boolean(p.toBeDiagramSnapshot?.trim()),
   );
-  addFieldBlock("To-Be trinn", p.toBeSteps);
-  addFieldBlock("I omfang (RPA)", p.inScope);
-  addFieldBlock("Utenfor omfang", p.outOfScope);
-  addFieldBlock("Parallelle initiativ", p.parallelInitiatives);
+  addRichField("To-Be trinn", p.toBeSteps);
+  addRichField("I omfang (RPA)", p.inScope);
+  addRichField("Utenfor omfang", p.outOfScope);
+  addRichField("Parallelle initiativ", p.parallelInitiatives);
 
   /* ---- 4. HUKI ---- */
+  L.addHeading("4. HUKI — roller og ansvar", 12);
   if (p.hukiRows?.length) {
-    addHeading("4. HUKI — roller og ansvar", 12);
-    const hukiHeader = "Aktivitet | H (Høres) | U (Utfører) | K (Kontrollerer) | I (Informeres)";
-    ensureSpace(10);
-    doc.setFontSize(9);
-    doc.setFont("helvetica", "bold");
-    doc.setTextColor(T.slate700[0], T.slate700[1], T.slate700[2]);
-    doc.text(hukiHeader, margin, cursor);
-    cursor += 5;
-    doc.setFont("helvetica", "normal");
-    doc.setDrawColor(T.slate200[0], T.slate200[1], T.slate200[2]);
-    doc.line(margin, cursor - 1, pageW() - margin, cursor - 1);
-    cursor += 2;
+    L.addMutedNote(
+      "H = Høres · U = Utfører · K = Kontrollerer · I = Informeres",
+    );
     for (const row of p.hukiRows) {
-      const line = `${row.activity || "—"} | ${row.h || "—"} | ${row.u || "—"} | ${row.k || "—"} | ${row.i || "—"}`;
-      const lines = doc.splitTextToSize(line, contentW());
-      ensureSpace(lines.length * bodyLineHeightMm(9) + 2);
-      doc.setFontSize(9);
-      doc.setTextColor(T.slate800[0], T.slate800[1], T.slate800[2]);
-      doc.text(lines, margin, cursor);
-      cursor += lines.length * bodyLineHeightMm(9) + 2;
+      L.addRow(
+        row.activity?.trim() || "Aktivitet",
+        `H: ${row.h || "—"}  ·  U: ${row.u || "—"}  ·  K: ${row.k || "—"}  ·  I: ${row.i || "—"}`,
+      );
     }
-    cursor += 4;
-    doc.setTextColor(0);
+  } else {
+    addEmptySectionNote(L, "HUKI-rader");
   }
 
   /* ---- 5. Risiko og feilhåndtering ---- */
-  addHeading("5. Risiko og feilhåndtering", 12);
+  L.addHeading("5. Risiko og feilhåndtering", 12);
 
   if (p.businessExceptionsKnown?.length) {
-    ensureSpace(10);
-    doc.setFontSize(10);
-    doc.setFont("helvetica", "bold");
-    doc.text("Kjente forretningsunntak", margin, cursor);
-    cursor += 6;
-    doc.setFont("helvetica", "normal");
+    L.addHeading("Kjente forretningsunntak", 10);
     for (const e of p.businessExceptionsKnown) {
       const action = htmlToPlainText(e.action);
       const body = [
@@ -403,18 +297,15 @@ function buildProcessDesignPdfDocument(
       ]
         .filter(Boolean)
         .join("\n");
-      addFieldBlock(e.name, body);
+      L.addFieldCard(e.name || "Unntak", body, { showEmpty: true });
     }
+  } else {
+    addEmptySectionNote(L, "Kjente forretningsunntak");
   }
-  addFieldBlock("Ukjente forretningsunntak", p.businessExceptionsUnknown);
+  addRichField("Ukjente forretningsunntak", p.businessExceptionsUnknown);
 
   if (p.appErrorsKnown?.length) {
-    ensureSpace(10);
-    doc.setFontSize(10);
-    doc.setFont("helvetica", "bold");
-    doc.text("Kjente tekniske feil", margin, cursor);
-    cursor += 6;
-    doc.setFont("helvetica", "normal");
+    L.addHeading("Kjente tekniske feil", 10);
     for (const e of p.appErrorsKnown) {
       const action = htmlToPlainText(e.action);
       const body = [
@@ -424,32 +315,35 @@ function buildProcessDesignPdfDocument(
       ]
         .filter(Boolean)
         .join("\n");
-      addFieldBlock(e.name, body);
+      L.addFieldCard(e.name || "Feil", body, { showEmpty: true });
     }
+  } else {
+    addEmptySectionNote(L, "Kjente tekniske feil");
   }
-  addFieldBlock("Ukjente tekniske feil", p.appErrorsUnknown);
-  addFieldBlock("Rapportering og logging", p.reporting);
+  addRichField("Ukjente tekniske feil", p.appErrorsUnknown);
+  addRichField("Rapportering og logging", p.reporting);
 
   /* ---- 6. Tillegg ---- */
-  addHeading("6. Tilleggsinformasjon", 12);
-  addFieldBlock("Andre observasjoner", p.otherObservations);
-  addFieldBlock("Tilleggskilder / SOP / video", p.additionalSources);
-  addFieldBlock("Tidsplan og milepæler", p.targetTimeline);
-  addFieldBlock("Vedlegg", p.appendix);
+  L.addHeading("6. Tilleggsinformasjon", 12);
+  addRichField("Andre observasjoner", p.otherObservations);
+  addRichField("Tilleggskilder / SOP / video", p.additionalSources);
+  addRichField("Tidsplan og milepæler", p.targetTimeline);
+  addRichField("Vedlegg", p.appendix);
 
   if (p.documentHistory?.length) {
-    addHeading("Dokumenthistorikk", 11);
+    L.addHeading("Dokumenthistorikk", 11);
     for (const h of p.documentHistory) {
       const line = `${h.date} · v${h.version} · ${h.role}: ${h.name}${h.organization ? ` (${h.organization})` : ""}${h.comments ? ` — ${h.comments}` : ""}`;
-      const lines = doc.splitTextToSize(line, contentW());
-      ensureSpace(lines.length * bodyLineHeightMm(9) + 2);
-      doc.setFontSize(9);
-      doc.text(lines, margin, cursor);
-      cursor += lines.length * bodyLineHeightMm(9) + 2;
+      L.addPara(line, 9);
     }
   }
 
-  applyCorporatePdfFooters(doc, margin, {
+  L.addSoftDivider();
+  L.addMutedNote(
+    "Merknad: Dette er et uttrekk fra PVV på eksporttidspunktet. Diagrammer er rasterisert for PDF; åpne Prosessdesign i appen for interaktiv visning.",
+  );
+
+  L.finish({
     shortTitle,
     docTypeLabel: "RPA prosessdesign",
   });
@@ -495,7 +389,9 @@ async function buildProcessDesignPdfBlob(
 /**
  * A4-PDF — RPA Process Design Document. Rasteriserer lagrede tldraw-diagrammer i nettleseren.
  */
-export async function downloadProcessDesignPdf(data: ProcessDesignPdfInput): Promise<void> {
+export async function downloadProcessDesignPdf(
+  data: ProcessDesignPdfInput,
+): Promise<void> {
   const blob = await buildProcessDesignPdfBlob(data);
   const url = URL.createObjectURL(blob);
   try {

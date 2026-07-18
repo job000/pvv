@@ -7,10 +7,16 @@ import type {
 import { ROS_COMPLIANCE_PDF_DISCLAIMER_NB } from "@/lib/ros-compliance";
 import { ROS_COMPLIANCE_SCOPE_TAGS } from "@/lib/ros-requirement-catalog";
 import {
-  applyCorporatePdfFooters,
   bodyLineHeightMm,
   PDF_CORPORATE_THEME,
 } from "@/lib/pdf-corporate";
+import {
+  createPdfLayout,
+  formatPdfTimestamp,
+  PDF_CONTENT_BOTTOM_INSET_MM,
+  PDF_CONTINUATION_TOP_MM,
+  PDF_MARGIN_MM,
+} from "@/lib/pdf-layout";
 import { legendItems, pdfRiskLevelStyle } from "@/lib/ros-risk-colors";
 
 const PDF_THEME = PDF_CORPORATE_THEME;
@@ -168,7 +174,8 @@ const JOURNAL_PDF_MAX = 100;
 /** Bygger A4-PDF med ROS-analyse (tekst + matrise + logg). */
 export function buildRosAnalysisPdfDocument(data: RosPdfInput): jsPDF {
   const doc = new jsPDF({ unit: "mm", format: "a4" });
-  const margin = 16;
+  const L = createPdfLayout(doc);
+  const margin = PDF_MARGIN_MM;
   let y = margin;
 
   const pageW = () => doc.internal.pageSize.getWidth();
@@ -187,11 +194,11 @@ export function buildRosAnalysisPdfDocument(data: RosPdfInput): jsPDF {
   const levelLabel = (n: number) =>
     legend.find((x) => x.level === n)?.label ?? String(n);
 
+  /** Footer-aware sideskift (synkronisert med felles layout). */
   const ensureSpace = (needMm: number) => {
-    if (y + needMm > pageH() - margin) {
-      doc.addPage();
-      y = margin;
-    }
+    if (y + needMm <= pageH() - PDF_CONTENT_BOTTOM_INSET_MM) return;
+    doc.addPage();
+    y = PDF_CONTINUATION_TOP_MM;
   };
 
   const addHeading = (
@@ -253,41 +260,6 @@ export function buildRosAnalysisPdfDocument(data: RosPdfInput): jsPDF {
     doc.setTextColor(0);
   };
 
-  /** Korte forklaringer / punktlister med tydelig luft. */
-  const addNumberedList = (items: string[], size = 9.5) => {
-    doc.setFontSize(size);
-    const lh = bodyLineHeightMm(size);
-    let n = 0;
-    for (const item of items) {
-      n += 1;
-      const prefix = `${n}. `;
-      const wrap = doc.splitTextToSize(item, contentW() - 8);
-      const blockH = wrap.length * lh + 2.5;
-      ensureSpace(blockH + 2);
-      doc.setFont("helvetica", "bold");
-      doc.setTextColor(
-        PDF_THEME.slate900[0],
-        PDF_THEME.slate900[1],
-        PDF_THEME.slate900[2],
-      );
-      doc.text(prefix, margin, y);
-      doc.setFont("helvetica", "normal");
-      doc.setTextColor(
-        PDF_THEME.slate800[0],
-        PDF_THEME.slate800[1],
-        PDF_THEME.slate800[2],
-      );
-      let yy = y;
-      for (let i = 0; i < wrap.length; i++) {
-        const line = wrap[i]!;
-        doc.text(line, margin + 7, yy);
-        yy += lh;
-      }
-      doc.setTextColor(0);
-      y = yy + 2;
-    }
-  };
-
   const addRow = (label: string, value: string) => {
     const size = 10;
     const lh = bodyLineHeightMm(size);
@@ -340,66 +312,18 @@ export function buildRosAnalysisPdfDocument(data: RosPdfInput): jsPDF {
   const isoDate = data.generatedAt.toISOString().slice(0, 10);
   const docRefLabel = `ROS-${isoDate}${data.metadata?.revision != null ? ` · Rev. ${data.metadata.revision}` : ""}`;
 
-  doc.setFillColor(
-    PDF_THEME.brand[0],
-    PDF_THEME.brand[1],
-    PDF_THEME.brand[2],
-  );
-  doc.rect(0, 0, pageW(), 31, "F");
-  doc.setFillColor(
-    PDF_THEME.brandAccent[0],
-    PDF_THEME.brandAccent[1],
-    PDF_THEME.brandAccent[2],
-  );
-  doc.rect(0, 31, pageW(), 0.9, "F");
+  L.drawCover({
+    eyebrow: "PVV · ROS · RISIKO- OG SÅRBARHETSANALYSE",
+    metaLine: `${formatPdfTimestamp(data.generatedAt)}  ·  ${docRefLabel}`,
+    subtitle:
+      "Til intern styring, dokumentasjon og etterprøving (risikostyring i tråd med god praksis).",
+    title: data.title.trim() || "ROS-analyse",
+    lead:
+      "Samlet oversikt over vurdert risiko før og etter tiltak, inkludert sporbarhet mot oppgaver, PVV-koblinger og logg der disse er i bruk.",
+  });
+  y = L.getY();
 
-  doc.setTextColor(255, 255, 255);
-  doc.setFontSize(8);
-  doc.setFont("helvetica", "bold");
-  doc.text("PVV · ROS · RISIKO- OG SÅRBARHETSANALYSE", margin, 10);
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(7);
-  doc.text(
-    `${data.generatedAt.toLocaleString("nb-NO", { dateStyle: "long", timeStyle: "short" })}  ·  ${docRefLabel}`,
-    margin,
-    16,
-  );
-  doc.text(
-    "Til intern styring, dokumentasjon og etterprøving (risikostyring i tråd med god praksis).",
-    margin,
-    22,
-    { maxWidth: pageW() - margin * 2 },
-  );
-  doc.setTextColor(0);
-  y = 38;
-
-  doc.setFontSize(19);
-  doc.setFont("helvetica", "bold");
-  doc.setTextColor(
-    PDF_THEME.slate900[0],
-    PDF_THEME.slate900[1],
-    PDF_THEME.slate900[2],
-  );
-  const titleLines = doc.splitTextToSize(data.title, contentW());
-  const titleLh = 7;
-  ensureSpace(titleLines.length * titleLh + 14);
-  doc.text(titleLines, margin, y);
-  y += titleLines.length * titleLh + 5;
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(9.5);
-  doc.setTextColor(
-    PDF_THEME.slate500[0],
-    PDF_THEME.slate500[1],
-    PDF_THEME.slate500[2],
-  );
-  addPara(
-    "Samlet oversikt over vurdert risiko før og etter tiltak, inkludert sporbarhet mot oppgaver, PVV-koblinger og logg der disse er i bruk.",
-    9.5,
-  );
-  doc.setTextColor(0);
-
-  type ControlRow = { label: string; value: string };
-  const controlRows: ControlRow[] = [];
+  const controlRows: Array<{ label: string; value: string }> = [];
   if (data.workspaceName?.trim()) {
     controlRows.push({ label: "Arbeidsområde", value: data.workspaceName.trim() });
   }
@@ -440,104 +364,25 @@ export function buildRosAnalysisPdfDocument(data: RosPdfInput): jsPDF {
     controlRows.push({ label: "Koblede PVV-vurderinger", value: pvvText });
   }
 
-  const cPad = 5;
-  const cLabelW = 48;
-  const cInnerW = contentW() - cPad * 2;
-  const cValueX = margin + cPad + cLabelW;
-  const cValueMaxW = cInnerW - cLabelW - 2;
-  const cFs = 9;
-  const cLh = bodyLineHeightMm(cFs);
-  let cBodyH = cLh + 5;
-  for (const row of controlRows) {
-    doc.setFontSize(cFs);
-    const ll = doc.splitTextToSize(row.label, cLabelW - 1);
-    const vl = doc.splitTextToSize(row.value, cValueMaxW);
-    cBodyH += Math.max(ll.length, vl.length) * cLh + 3.5;
-  }
-  const cBoxH = cPad * 2 + cBodyH + 2;
-  ensureSpace(cBoxH + 10);
-  const cBoxTop = y;
-  doc.setFillColor(
-    PDF_THEME.surface[0],
-    PDF_THEME.surface[1],
-    PDF_THEME.surface[2],
-  );
-  doc.setDrawColor(
-    PDF_THEME.slate200[0],
-    PDF_THEME.slate200[1],
-    PDF_THEME.slate200[2],
-  );
-  doc.setLineWidth(0.35);
-  doc.rect(margin, cBoxTop, contentW(), cBoxH, "FD");
-  let cY = cBoxTop + cPad + 3;
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(cFs);
-  doc.setTextColor(
-    PDF_THEME.slate900[0],
-    PDF_THEME.slate900[1],
-    PDF_THEME.slate900[2],
-  );
-  doc.text("Dokumentkontroll", margin + cPad, cY);
-  cY += cLh + 4;
-  for (const row of controlRows) {
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(cFs);
-    doc.setTextColor(
-      PDF_THEME.slate700[0],
-      PDF_THEME.slate700[1],
-      PDF_THEME.slate700[2],
-    );
-    const ll = doc.splitTextToSize(row.label, cLabelW - 1);
-    const vl = doc.splitTextToSize(row.value, cValueMaxW);
-    let lyy = cY;
-    for (const l of ll) {
-      doc.text(l, margin + cPad, lyy);
-      lyy += cLh;
-    }
-    doc.setFont("helvetica", "normal");
-    doc.setTextColor(
-      PDF_THEME.slate800[0],
-      PDF_THEME.slate800[1],
-      PDF_THEME.slate800[2],
-    );
-    let vyy = cY;
-    for (const v of vl) {
-      doc.text(v, cValueX, vyy);
-      vyy += cLh;
-    }
-    cY = Math.max(lyy, vyy) + 3.5;
-  }
-  y = cBoxTop + cBoxH + 8;
-  doc.setTextColor(0);
+  L.setY(y);
+  L.drawMetaPanel("Dokumentkontroll", controlRows);
+  y = L.getY();
 
-  y += 2;
+  L.setY(y);
+  L.drawToc([
+    "Oppsummering og analyse-notat",
+    "Risikomatrise før tiltak",
+    "Risikomatrise etter tiltak",
+    "PVV-koblinger, rammer og krav",
+    "Oppgaver, risikoer og punktliste",
+    "Kortlager, logg og merknad",
+  ]);
+  y = L.getY();
+
   addHeading("Formål og anvendelse", 12);
   addPara(
-    "Rapporten dokumenterer risikovurderingen slik den foreligger i PVV på eksporttidspunktet. Den kan deles med ledelse, revisjon, DPO eller leverandører etter interne retningslinjer for informasjonsklassifisering.",
+    "Rapporten dokumenterer risikovurderingen slik den foreligger i PVV på eksporttidspunktet. Den kan deles med ledelse, revisjon, DPO eller leverandører etter interne retningslinjer for informasjonsklassifisering. Matriser vises i breddeformat; sidetall og tittel gjentas i bunntekst.",
     9.5,
-  );
-
-  y += 4;
-  addHeading("Struktur i dokumentet", 12);
-  addPara(
-    "Innholdet følger en fast rekkefølge: kontekst på forsiden, deretter eventuell oppsummering og analyse-notat, risikomatriser i breddeformat (før og etter tiltak), og til slutt detaljer om koblinger, krav, oppgaver, risikoer, logg og juridisk/teknisk merknad.",
-    9.5,
-  );
-  addPara("Hoveddeler:", 9);
-  addNumberedList(
-    [
-      "Forside med dokumentkontroll og referanse.",
-      "Oppsummering og analyse-notat (når det finnes data).",
-      "Risikomatrise før tiltak — nivå 0–5 og celletekst.",
-      "Risikomatrise etter tiltak — restrisiko etter planlagte eller gjennomførte tiltak.",
-      "PVV-koblinger, rammer og krav, revisjon, oppgaver, identifiserte risikoer og komplett punktliste.",
-      "Kortlager, risikologg, forklaring av nivåer og ansvarsfraskrivelse / merknad.",
-    ],
-    9,
-  );
-  addPara(
-    "Sidetall og dokumenttittel gjentas i bunntekst på alle sider. Lange matriser kan deles over flere sider med gjentatte kolonneoverskrifter.",
-    8.5,
   );
 
   if (data.summaryLines && data.summaryLines.length > 0) {
@@ -603,11 +448,13 @@ export function buildRosAnalysisPdfDocument(data: RosPdfInput): jsPDF {
     doc.setTextColor(0);
   }
 
-  if (data.analysisNotes?.trim()) {
-    y += 4;
-    addHeading("Notat (analyse)", 12);
-    addPara(data.analysisNotes.trim());
-  }
+  y += 2;
+  addHeading("Notat (analyse)", 12);
+  L.setY(y);
+  L.addFieldCard("Analyse-notat", data.analysisNotes?.trim() ?? "", {
+    showEmpty: true,
+  });
+  y = L.getY();
 
   /** Maks tekstlinjer per celle (større skrift = færre linjer per radhøyde; «…» ved avkorting). */
   const ROS_PDF_MATRIX_CELL_NOTE_MAX_LINES = 18;
@@ -1374,7 +1221,7 @@ export function buildRosAnalysisPdfDocument(data: RosPdfInput): jsPDF {
   y = footTop + footBoxH + 6;
   doc.setTextColor(0);
 
-  applyCorporatePdfFooters(doc, margin, {
+  L.finish({
     shortTitle,
     docTypeLabel: "ROS-analyse",
   });
