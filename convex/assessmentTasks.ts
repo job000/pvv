@@ -33,7 +33,10 @@ function assertDateRange(startAt?: number, dueAt?: number) {
   }
 }
 
-async function markChildrenDone(
+const MAX_NESTING_DEPTH = 8;
+
+/** Fullfør hele subtreet rekursivt. */
+async function markSubtreeDone(
   ctx: MutationCtx,
   parentId: Id<"assessmentTasks">,
 ) {
@@ -45,7 +48,64 @@ async function markChildrenDone(
     if (child.status !== "done") {
       await ctx.db.patch(child._id, { status: "done" });
     }
+    await markSubtreeDone(ctx, child._id);
   }
+}
+
+function taskDepth(
+  taskId: Id<"assessmentTasks">,
+  parentById: Map<Id<"assessmentTasks">, Id<"assessmentTasks"> | undefined>,
+): number {
+  let depth = 0;
+  let cur = parentById.get(taskId);
+  const seen = new Set<Id<"assessmentTasks">>();
+  while (cur) {
+    if (seen.has(cur)) break;
+    seen.add(cur);
+    depth += 1;
+    cur = parentById.get(cur);
+  }
+  return depth;
+}
+
+function subtreeHeight(
+  rootId: Id<"assessmentTasks">,
+  childrenByParent: Map<Id<"assessmentTasks">, Id<"assessmentTasks">[]>,
+): number {
+  const kids = childrenByParent.get(rootId) ?? [];
+  if (kids.length === 0) return 0;
+  let max = 0;
+  for (const kid of kids) {
+    max = Math.max(max, 1 + subtreeHeight(kid, childrenByParent));
+  }
+  return max;
+}
+
+async function loadAssessmentParentMaps(
+  ctx: QueryCtx,
+  assessmentId: Id<"assessments">,
+) {
+  const siblings = await ctx.db
+    .query("assessmentTasks")
+    .withIndex("by_assessment", (q) => q.eq("assessmentId", assessmentId))
+    .collect();
+  const parentById = new Map<
+    Id<"assessmentTasks">,
+    Id<"assessmentTasks"> | undefined
+  >();
+  const childrenByParent = new Map<
+    Id<"assessmentTasks">,
+    Id<"assessmentTasks">[]
+  >();
+  for (const t of siblings) {
+    parentById.set(t._id, t.parentTaskId);
+    if (t.parentTaskId) {
+      const list = childrenByParent.get(t.parentTaskId) ?? [];
+      list.push(t._id);
+      childrenByParent.set(t.parentTaskId, list);
+    }
+  }
+  return { parentById, childrenByParent };
 }
 
 function resolveAssigneeIds(row: Doc<"assessmentTasks">): Id<"users">[] {
@@ -97,8 +157,8 @@ async function enrichTask(ctx: QueryCtx, row: Doc<"assessmentTasks">) {
 }
 
 /**
- * Valider at `child` kan knyttes som sub-issue under `parent`.
- * GitHub-modell: kun ett nivå — forelder må være toppnivå-issue.
+ * Valider at `child` kan knyttes som under-sak under `parent`.
+ * Flernivå tillatt: syklus forbudt, maks dybde MAX_NESTING_DEPTH.
  */
 async function assertCanSetParent(
   ctx: QueryCtx,
@@ -110,23 +170,36 @@ async function assertCanSetParent(
   }
   const parent = await ctx.db.get(parentId);
   if (!parent) {
-    throw new Error("Fant ikke hovedsaken.");
+    throw new Error("Fant ikke foreldresaken.");
   }
   if (parent.assessmentId !== child.assessmentId) {
-    throw new Error("Under-sak må være på samme vurdering som hovedsaken.");
+    throw new Error("Under-sak må være på samme vurdering som forelderen.");
   }
-  if (parent.parentTaskId) {
-    throw new Error(
-      "Kan ikke koble under en under-sak. Velg en hovedsak (issue) som ikke selv er under-sak.",
-    );
+
+  const { parentById, childrenByParent } = await loadAssessmentParentMaps(
+    ctx,
+    child.assessmentId,
+  );
+
+  // Syklus: child må ikke ligge i ancestor-kjeden til ny forelder
+  let walk: Id<"assessmentTasks"> | undefined = parentId;
+  const seen = new Set<Id<"assessmentTasks">>();
+  while (walk) {
+    if (walk === child._id) {
+      throw new Error(
+        "Kan ikke koble: dette ville laget en sirkel i sakstreet.",
+      );
+    }
+    if (seen.has(walk)) break;
+    seen.add(walk);
+    walk = parentById.get(walk);
   }
-  const childHasChildren = await ctx.db
-    .query("assessmentTasks")
-    .withIndex("by_parent", (q) => q.eq("parentTaskId", child._id))
-    .first();
-  if (childHasChildren) {
+
+  const parentDepth = taskDepth(parentId, parentById);
+  const childHeight = subtreeHeight(child._id, childrenByParent);
+  if (parentDepth + 1 + childHeight > MAX_NESTING_DEPTH) {
     throw new Error(
-      "Saken har allerede under-saker. Fjern dem eller gjør dem om til hovedsaker først.",
+      `Under-saker kan maksimalt være ${MAX_NESTING_DEPTH} nivåer dype.`,
     );
   }
 }
@@ -161,6 +234,18 @@ export const listByAssessment = query({
 /**
  * Saker-tavle for ett arbeidsområde: hvert issue og hver under-sak er eget kort.
  */
+const boardLinkedProcessValidator = v.object({
+  id: v.id("candidates"),
+  name: v.string(),
+  code: v.string(),
+});
+
+const boardLinkedRosValidator = v.object({
+  id: v.id("rosAnalyses"),
+  title: v.string(),
+  status: v.string(),
+});
+
 const boardCardValidator = v.object({
   _id: v.id("assessmentTasks"),
   workspaceId: v.id("workspaces"),
@@ -179,8 +264,11 @@ const boardCardValidator = v.object({
   assignees: v.array(v.object({ userId: v.id("users"), name: v.string() })),
   githubIssueUrl: v.union(v.string(), v.null()),
   parentTitle: v.union(v.string(), v.null()),
+  depth: v.number(),
   subIssueCount: v.number(),
   subIssueDoneCount: v.number(),
+  linkedProcesses: v.array(boardLinkedProcessValidator),
+  linkedRos: v.array(boardLinkedRosValidator),
   canEdit: v.boolean(),
 });
 
@@ -198,6 +286,57 @@ export const listBoardByWorkspace = query({
       .take(500);
 
     const titleById = new Map(tasks.map((t) => [t._id, t.title]));
+    const parentById = new Map<
+      Id<"assessmentTasks">,
+      Id<"assessmentTasks"> | undefined
+    >(tasks.map((t) => [t._id, t.parentTaskId]));
+
+    const processLinks = await ctx.db
+      .query("candidateAssessmentLinks")
+      .withIndex("by_workspace", (q) => q.eq("workspaceId", args.workspaceId))
+      .collect();
+    const processesByAssessment = new Map<
+      Id<"assessments">,
+      Array<{ id: Id<"candidates">; name: string; code: string }>
+    >();
+    for (const link of processLinks) {
+      const candidate = await ctx.db.get(link.candidateId);
+      if (!candidate) continue;
+      const list = processesByAssessment.get(link.assessmentId) ?? [];
+      if (!list.some((p) => p.id === candidate._id)) {
+        list.push({
+          id: candidate._id,
+          name: candidate.name,
+          code: candidate.code,
+        });
+      }
+      processesByAssessment.set(link.assessmentId, list);
+    }
+
+    const rosLinks = await ctx.db
+      .query("rosAnalysisAssessments")
+      .withIndex("by_workspace", (q) => q.eq("workspaceId", args.workspaceId))
+      .collect();
+    const rosByAssessment = new Map<
+      Id<"assessments">,
+      Array<{ id: Id<"rosAnalyses">; title: string; status: string }>
+    >();
+    for (const link of rosLinks) {
+      const ros = await ctx.db.get(link.rosAnalysisId);
+      if (!ros) continue;
+      const list = rosByAssessment.get(link.assessmentId) ?? [];
+      if (!list.some((r) => r.id === ros._id)) {
+        const status =
+          ros.reviewScheduleActive === false
+            ? "inaktiv"
+            : ros.nextReviewAt != null
+              ? "planlagt"
+              : "koblet";
+        list.push({ id: ros._id, title: ros.title, status });
+      }
+      rosByAssessment.set(link.assessmentId, list);
+    }
+
     const out: Array<{
       _id: Id<"assessmentTasks">;
       workspaceId: Id<"workspaces">;
@@ -216,8 +355,19 @@ export const listBoardByWorkspace = query({
       assignees: { userId: Id<"users">; name: string }[];
       githubIssueUrl: string | null;
       parentTitle: string | null;
+      depth: number;
       subIssueCount: number;
       subIssueDoneCount: number;
+      linkedProcesses: Array<{
+        id: Id<"candidates">;
+        name: string;
+        code: string;
+      }>;
+      linkedRos: Array<{
+        id: Id<"rosAnalyses">;
+        title: string;
+        status: string;
+      }>;
       canEdit: boolean;
     }> = [];
 
@@ -265,8 +415,11 @@ export const listBoardByWorkspace = query({
         parentTitle: t.parentTaskId
           ? (titleById.get(t.parentTaskId) ?? null)
           : null,
+        depth: taskDepth(t._id, parentById),
         subIssueCount: children.length,
         subIssueDoneCount: children.filter((c) => c.status === "done").length,
+        linkedProcesses: processesByAssessment.get(t.assessmentId) ?? [],
+        linkedRos: rosByAssessment.get(t.assessmentId) ?? [],
         canEdit: await canEditAssessment(ctx, assessment, userId),
       });
     }
@@ -373,7 +526,7 @@ export const create = mutation({
     priority: v.optional(v.number()),
     startAt: v.optional(v.number()),
     dueAt: v.optional(v.number()),
-    /** Opprett direkte som under-sak under denne hovedsaken */
+    /** Opprett som under-sak under denne saken (flernivå tillatt) */
     parentTaskId: v.optional(v.id("assessmentTasks")),
   },
   returns: v.id("assessmentTasks"),
@@ -409,11 +562,16 @@ export const create = mutation({
     if (args.parentTaskId) {
       const parent = await ctx.db.get(args.parentTaskId);
       if (!parent || parent.assessmentId !== args.assessmentId) {
-        throw new Error("Hovedsaken finnes ikke på denne vurderingen.");
+        throw new Error("Foreldresaken finnes ikke på denne vurderingen.");
       }
-      if (parent.parentTaskId) {
+      const { parentById } = await loadAssessmentParentMaps(
+        ctx,
+        args.assessmentId,
+      );
+      const parentDepth = taskDepth(args.parentTaskId, parentById);
+      if (parentDepth + 1 > MAX_NESTING_DEPTH) {
         throw new Error(
-          "Kan ikke opprette under-sak under en under-sak. Velg en hovedsak.",
+          `Under-saker kan maksimalt være ${MAX_NESTING_DEPTH} nivåer dype.`,
         );
       }
       parentTaskId = args.parentTaskId;
@@ -437,14 +595,14 @@ export const create = mutation({
       createdAt: now,
     });
     const atitle = assessment.title.trim() || "vurdering";
-    const sakerHref = `/w/${assessment.workspaceId}/saker?task=${taskId}`;
+    const pulsHref = `/w/${assessment.workspaceId}/puls?task=${taskId}`;
     for (const uid of uniqueIds) {
       if (uid !== userId) {
         await insertUserInAppNotification(ctx, {
           userId: uid,
           title: `Du er tildelt «${title}»`,
-          body: `På vurderingen «${atitle}». Åpne saken under Saker.`,
-          href: sakerHref,
+          body: `På vurderingen «${atitle}». Åpne kortet under Puls.`,
+          href: pulsHref,
         });
       }
     }
@@ -453,9 +611,9 @@ export const create = mutation({
 });
 
 /**
- * Koble / fjern under-sak (GitHub: issue ↔ sub-issue).
- * - `parentTaskId: id` → gjør saken til under-sak (må være hovedsak uten egne under-saker)
- * - `parentTaskId: null` → gjør under-sak om til selvstendig issue
+ * Koble / fjern under-sak (flernivå).
+ * - `parentTaskId: id` → knytt under valgt sak (syklus/maks dybde sjekkes)
+ * - `parentTaskId: null` → gjør saken om til toppnivå
  */
 export const setParent = mutation({
   args: {
@@ -495,7 +653,7 @@ export const update = mutation({
     startAt: v.optional(v.union(v.number(), v.null())),
     dueAt: v.optional(v.union(v.number(), v.null())),
     status: v.optional(v.union(v.literal("open"), v.literal("done"))),
-    /** Når status settes til done på hovedsak: også fullfør under-saker */
+    /** Når status settes til done: også fullfør hele subtreet */
     completeSubIssues: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
@@ -531,14 +689,14 @@ export const update = mutation({
       const oldIds = new Set(resolveAssigneeIds(row));
       const added = newIds.filter((id) => !oldIds.has(id));
       const atitle = assessment.title.trim() || "vurdering";
-      const sakerHref = `/w/${assessment.workspaceId}/saker?task=${args.taskId}`;
+      const pulsHref = `/w/${assessment.workspaceId}/puls?task=${args.taskId}`;
       for (const uid of added) {
         if (uid !== userId) {
           await insertUserInAppNotification(ctx, {
             userId: uid,
             title: `Du er tildelt «${row.title}»`,
-            body: `På vurderingen «${atitle}». Åpne saken under Saker.`,
-            href: sakerHref,
+            body: `På vurderingen «${atitle}». Åpne kortet under Puls.`,
+            href: pulsHref,
           });
         }
       }
@@ -562,8 +720,8 @@ export const update = mutation({
           await insertUserInAppNotification(ctx, {
             userId: args.assigneeUserId,
             title: `Du er tildelt «${row.title}»`,
-            body: `På vurderingen «${atitle}». Åpne saken under Saker.`,
-            href: `/w/${assessment.workspaceId}/saker?task=${args.taskId}`,
+            body: `På vurderingen «${atitle}». Åpne kortet under Puls.`,
+            href: `/w/${assessment.workspaceId}/puls?task=${args.taskId}`,
           });
         }
       } else {
@@ -597,12 +755,8 @@ export const update = mutation({
       patch.status = args.status;
     }
     await ctx.db.patch(args.taskId, patch);
-    if (
-      args.status === "done" &&
-      args.completeSubIssues === true &&
-      !row.parentTaskId
-    ) {
-      await markChildrenDone(ctx, args.taskId);
+    if (args.status === "done" && args.completeSubIssues === true) {
+      await markSubtreeDone(ctx, args.taskId);
     }
   },
 });
@@ -641,8 +795,8 @@ export const setStatus = mutation({
     taskId: v.id("assessmentTasks"),
     status: v.union(v.literal("open"), v.literal("done")),
     /**
-     * Ved «done» på hovedsak: true = fullfør også alle under-saker,
-     * false/undefined = kun hovedsaken.
+     * Ved «done»: true = fullfør også hele subtreet,
+     * false/undefined = kun denne saken.
      */
     completeSubIssues: v.optional(v.boolean()),
   },
@@ -654,12 +808,8 @@ export const setStatus = mutation({
     }
     await requireAssessmentEdit(ctx, row.assessmentId);
     await ctx.db.patch(args.taskId, { status: args.status });
-    if (
-      args.status === "done" &&
-      args.completeSubIssues === true &&
-      !row.parentTaskId
-    ) {
-      await markChildrenDone(ctx, args.taskId);
+    if (args.status === "done" && args.completeSubIssues === true) {
+      await markSubtreeDone(ctx, args.taskId);
     }
     return { ok: true as const };
   },
@@ -688,7 +838,7 @@ export const moveTask = mutation({
     taskId: v.id("assessmentTasks"),
     priority: v.optional(v.number()),
     status: v.optional(v.union(v.literal("open"), v.literal("done"))),
-    /** Ved flytting til ferdig på hovedsak: også fullfør under-saker */
+    /** Ved flytting til ferdig: også fullfør hele subtreet */
     completeSubIssues: v.optional(v.boolean()),
   },
   returns: v.object({ ok: v.literal(true) }),
@@ -711,12 +861,8 @@ export const moveTask = mutation({
     }
     patch.dashboardRank = Date.now();
     await ctx.db.patch(args.taskId, patch);
-    if (
-      args.status === "done" &&
-      args.completeSubIssues === true &&
-      !row.parentTaskId
-    ) {
-      await markChildrenDone(ctx, args.taskId);
+    if (args.status === "done" && args.completeSubIssues === true) {
+      await markSubtreeDone(ctx, args.taskId);
     }
     return { ok: true as const };
   },

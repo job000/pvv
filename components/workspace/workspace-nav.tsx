@@ -79,8 +79,8 @@ function navSections(wid: string): { heading: string | null; items: NavItem[] }[
           kind: "vurderinger",
         },
         {
-          href: `/w/${wid}/saker`,
-          label: "Saker",
+          href: `/w/${wid}/puls`,
+          label: "Puls",
           icon: Kanban,
           exact: false,
           kind: "default",

@@ -112,11 +112,11 @@ function DraggableTaskCard({
         {task.parentTaskId ? (
           <p className="text-sky-800 dark:text-sky-200 mb-0.5 inline-flex items-center gap-1 text-[11px] font-medium">
             <Link2 className="size-3 shrink-0" aria-hidden />
-            Under-sak av «{task.parentTitle ?? "…"}»
+            Under: {task.parentTitle ?? "…"}
           </p>
         ) : task.subIssueCount > 0 ? (
           <p className="text-muted-foreground mb-0.5 text-[11px] font-medium">
-            {task.subIssueDoneCount}/{task.subIssueCount} under-saker
+            {task.subIssueDoneCount}/{task.subIssueCount} delkort
           </p>
         ) : null}
         <p className="text-[15px] font-medium leading-snug tracking-tight">
@@ -187,7 +187,7 @@ function KanbanCard({
         <div className="min-w-0 flex-1">
           {task.parentTaskId ? (
             <p className="text-sky-800 dark:text-sky-200 mb-0.5 truncate text-[0.65rem] font-medium">
-              ↳ {task.parentTitle ?? "Under-sak"}
+              ↳ {task.parentTitle ?? "Delkort"}
             </p>
           ) : task.subIssueCount > 0 ? (
             <p className="text-muted-foreground mb-0.5 text-[0.65rem]">
@@ -340,15 +340,32 @@ export function TasksBoard() {
     setEditParentId(t.parentTaskId ?? "");
   }
 
-  /** Issues på samme vurdering som kan være forelder for editTask */
+  /** Saker på samme vurdering som kan være forelder (flernivå, uten syklus) */
   const linkParentOptions = useMemo(() => {
     if (!editTask || !tasks) return [];
+    const childrenByParent = new Map<
+      Id<"assessmentTasks">,
+      Id<"assessmentTasks">[]
+    >();
+    for (const t of tasks) {
+      if (!t.parentTaskId) continue;
+      const list = childrenByParent.get(t.parentTaskId) ?? [];
+      list.push(t._id);
+      childrenByParent.set(t.parentTaskId, list);
+    }
+    const descendants = new Set<Id<"assessmentTasks">>();
+    const stack = [...(childrenByParent.get(editTask._id) ?? [])];
+    while (stack.length > 0) {
+      const id = stack.pop()!;
+      if (descendants.has(id)) continue;
+      descendants.add(id);
+      for (const kid of childrenByParent.get(id) ?? []) stack.push(kid);
+    }
     return tasks.filter(
       (t) =>
         t.assessmentId === editTask.assessmentId &&
         t._id !== editTask._id &&
-        !t.parentTaskId &&
-        (editTask.subIssueCount ?? 0) === 0,
+        !descendants.has(t._id),
     );
   }, [editTask, tasks]);
 
@@ -673,35 +690,28 @@ export function TasksBoard() {
                   Kobling til issue
                 </Label>
                 <p className="text-muted-foreground text-xs leading-relaxed">
-                  Som GitHub: hvert kort er et eget issue. Velg et foreldre-issue
-                  for å gjøre dette kortet til under-sak — eller fjern kobling.
+                  Velg hvilket kort dette skal ligge under — også under andre
+                  delkort. Fjern kobling for å gjøre det til toppnivå.
                 </p>
-                {(editTask.subIssueCount ?? 0) > 0 ? (
-                  <p className="text-muted-foreground text-xs">
-                    Dette issue har allerede under-saker og kan ikke selv bli
-                    under-sak.
-                  </p>
-                ) : (
-                  <select
-                    id="et-parent"
-                    className="border-input bg-background flex h-9 w-full rounded-lg border px-2 text-sm"
-                    value={editParentId}
-                    onChange={(e) =>
-                      setEditParentId(
-                        e.target.value as Id<"assessmentTasks"> | "",
-                      )
-                    }
-                    disabled={!(assessmentAccessForEdit?.canEdit ?? false)}
-                  >
-                    <option value="">Ingen — selvstendig issue</option>
-                    {linkParentOptions.map((p) => (
-                      <option key={p._id} value={p._id}>
-                        Under-sak av «{p.title}»
-                      </option>
-                    ))}
-                  </select>
-                )}
-                {editTask.parentTaskId ? (
+                <select
+                  id="et-parent"
+                  className="border-input bg-background flex h-9 w-full rounded-lg border px-2 text-sm"
+                  value={editParentId}
+                  onChange={(e) =>
+                    setEditParentId(
+                      e.target.value as Id<"assessmentTasks"> | "",
+                    )
+                  }
+                  disabled={!(assessmentAccessForEdit?.canEdit ?? false)}
+                >
+                  <option value="">Ingen — toppnivå</option>
+                  {linkParentOptions.map((p) => (
+                    <option key={p._id} value={p._id}>
+                      Under: {p.title}
+                    </option>
+                  ))}
+                </select>
+                {editTask.parentTaskId || editParentId ? (
                   <Button
                     type="button"
                     size="sm"

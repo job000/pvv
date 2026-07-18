@@ -405,17 +405,17 @@ export function AssessmentCollaborationPanel({
         </CardContent>
       </Card>
 
-      {/* Issues / under-saker knyttet til denne vurderingen */}
+      {/* Puls-kort knyttet til denne vurderingen */}
       <div className="space-y-3">
         <div className="flex items-center gap-2">
           <ListTree className="text-primary size-5 shrink-0" aria-hidden />
           <div>
             <h3 className="font-heading text-base font-semibold leading-tight">
-              Saker og under-saker
+              Kort på Puls
             </h3>
             <p className="text-muted-foreground text-sm">
-              Som GitHub: hvert issue er et eget kort. Under-sak er bare en
-              kobling — opprett, koble til, eller fjern kobling.
+              Hvert kort står for seg selv. Delkort er bare en kobling — opprett,
+              koble til, eller fjern.
             </p>
           </div>
         </div>

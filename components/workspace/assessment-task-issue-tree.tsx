@@ -34,8 +34,7 @@ type EnrichedTask = {
 };
 
 /**
- * GitHub-modell: hver sak er et eget kort.
- * Under-sak = samme kort, med kobling til et foreldre-issue.
+ * Puls-kort for en vurdering: flate kort med valgfri delkort-kobling.
  */
 export function AssessmentTaskIssueTree({
   assessmentId,
@@ -99,11 +98,63 @@ export function AssessmentTaskIssueTree({
     });
   }, [enriched]);
 
-  /** Issues som kan være forelder: toppnivå (ikke selv under-sak) */
-  const parentCandidates = useMemo(
-    () => enriched.filter((t) => !t.parentTaskId),
-    [enriched],
-  );
+  const depthById = useMemo(() => {
+    const parentMap = new Map(
+      enriched.map((t) => [t._id, t.parentTaskId] as const),
+    );
+    const depths = new Map<Id<"assessmentTasks">, number>();
+    for (const t of enriched) {
+      let depth = 0;
+      let cur = t.parentTaskId;
+      const seen = new Set<Id<"assessmentTasks">>();
+      while (cur) {
+        if (seen.has(cur)) break;
+        seen.add(cur);
+        depth += 1;
+        cur = parentMap.get(cur);
+      }
+      depths.set(t._id, depth);
+    }
+    return depths;
+  }, [enriched]);
+
+  const descendantIdsOf = (rootId: Id<"assessmentTasks">) => {
+    const childrenByParent = new Map<
+      Id<"assessmentTasks">,
+      Id<"assessmentTasks">[]
+    >();
+    for (const t of enriched) {
+      if (!t.parentTaskId) continue;
+      const list = childrenByParent.get(t.parentTaskId) ?? [];
+      list.push(t._id);
+      childrenByParent.set(t.parentTaskId, list);
+    }
+    const out = new Set<Id<"assessmentTasks">>();
+    const stack = [...(childrenByParent.get(rootId) ?? [])];
+    while (stack.length > 0) {
+      const id = stack.pop()!;
+      if (out.has(id)) continue;
+      out.add(id);
+      for (const kid of childrenByParent.get(id) ?? []) stack.push(kid);
+    }
+    return out;
+  };
+
+  /** Alle saker kan være forelder (flernivå), unntatt selv og egne etterkommere */
+  const parentCandidates = useMemo(() => {
+    return [...enriched].sort((a, b) => {
+      const da = depthById.get(a._id) ?? 0;
+      const db = depthById.get(b._id) ?? 0;
+      if (da !== db) return da - db;
+      return a.title.localeCompare(b.title, "nb");
+    });
+  }, [enriched, depthById]);
+
+  const parentOptionLabel = (t: EnrichedTask) => {
+    const depth = depthById.get(t._id) ?? 0;
+    const prefix = depth > 0 ? `${"↳ ".repeat(Math.min(depth, 5))}` : "";
+    return `${prefix}${t.title}`;
+  };
 
   const toggleUser = (userId: Id<"users">) => {
     setSelectedUserIds((prev) =>
@@ -135,8 +186,8 @@ export function AssessmentTaskIssueTree({
       setCreateLinkedTo("");
       toast.success(
         createLinkedTo
-          ? "Nytt kort opprettet og koblet som under-sak"
-          : "Nytt issue-kort opprettet",
+          ? "Nytt delkort opprettet"
+          : "Nytt kort opprettet",
       );
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Kunne ikke opprette");
@@ -155,7 +206,7 @@ export function AssessmentTaskIssueTree({
       await setParent({ taskId: linkingCardId, parentTaskId: linkParentId });
       setLinkingCardId(null);
       setLinkParentId("");
-      toast.success("Kortet er koblet som under-sak");
+      toast.success("Kortet er koblet som delkort");
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Kunne ikke koble");
     } finally {
@@ -167,7 +218,7 @@ export function AssessmentTaskIssueTree({
     setBusy(true);
     try {
       await setParent({ taskId, parentTaskId: null });
-      toast.success("Kobling fjernet — kortet er et selvstendig issue");
+      toast.success("Kobling fjernet — kortet er på toppnivå");
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Kunne ikke fjerne kobling");
     } finally {
@@ -185,7 +236,7 @@ export function AssessmentTaskIssueTree({
         <div className="space-y-3 rounded-xl border border-border/50 bg-muted/10 p-3.5">
           <p className="flex items-center gap-2 text-sm font-semibold">
             <ListTree className="size-4 shrink-0" aria-hidden />
-            Nytt issue-kort
+            Nytt kort
           </p>
           <input
             value={title}
@@ -211,13 +262,16 @@ export function AssessmentTaskIssueTree({
                 )
               }
             >
-              <option value="">Ingen — eget issue</option>
+              <option value="">Ingen — toppnivå</option>
               {parentCandidates.map((p) => (
                 <option key={p._id} value={p._id}>
-                  Koble som under-sak av «{p.title}»
+                  Under: {parentOptionLabel(p)}
                 </option>
               ))}
             </select>
+            <p className="text-muted-foreground text-[11px]">
+              Du kan legge delkort under andre delkort — flere nivåer.
+            </p>
           </div>
           <div className="space-y-1.5">
             <Label className="text-sm">Tildel (valgfritt)</Label>
@@ -268,7 +322,7 @@ export function AssessmentTaskIssueTree({
       {linkingCardId && canEdit ? (
         <div className="space-y-2 rounded-xl border border-sky-500/30 bg-sky-500/5 p-3">
           <p className="text-sm font-medium">
-            Koble kort som under-sak — velg issue
+            Koble som delkort — velg forelder
           </p>
           <select
             className="border-input bg-background h-10 w-full rounded-xl border px-3 text-sm"
@@ -277,18 +331,15 @@ export function AssessmentTaskIssueTree({
               setLinkParentId(e.target.value as Id<"assessmentTasks"> | "")
             }
           >
-            <option value="">Velg issue …</option>
+            <option value="">Velg sak …</option>
             {parentCandidates
               .filter((p) => {
                 if (p._id === linkingCardId) return false;
-                // Kan ikke koble under noe som allerede er under-sak, eller
-                // under et kort som har under-saker hvis linkingCard selv har under-saker
-                // (håndteres også i backend)
-                return true;
+                return !descendantIdsOf(linkingCardId).has(p._id);
               })
               .map((p) => (
                 <option key={p._id} value={p._id}>
-                  {p.title}
+                  {parentOptionLabel(p)}
                 </option>
               ))}
           </select>
@@ -320,15 +371,18 @@ export function AssessmentTaskIssueTree({
 
       {cards.length === 0 ? (
         <p className="text-muted-foreground text-sm">
-          Ingen kort ennå. Opprett et issue — deretter kan du koble andre kort
-          som under-saker.
+          Ingen kort ennå. Opprett et kort — deretter kan du koble andre som
+          delkort.
         </p>
       ) : (
         <ul className="grid gap-2 sm:grid-cols-1">
           {cards.map((card) => {
             const isSub = Boolean(card.parentTaskId);
-            const canBecomeSub =
-              !isSub && card.subIssueCount === 0 && parentCandidates.length > 1;
+            const depth = depthById.get(card._id) ?? 0;
+            const canLinkUnderOther = parentCandidates.some(
+              (p) =>
+                p._id !== card._id && !descendantIdsOf(card._id).has(p._id),
+            );
 
             return (
               <li
@@ -347,16 +401,21 @@ export function AssessmentTaskIssueTree({
                       {isSub ? (
                         <p className="text-sky-800 dark:text-sky-200 inline-flex items-center gap-1 text-[11px] font-medium">
                           <Link2 className="size-3 shrink-0" aria-hidden />
-                          Under-sak av «{card.parentTitle ?? "…"}»
+                          Under: {card.parentTitle ?? "…"}
+                          {depth > 1 ? (
+                            <span className="text-muted-foreground font-normal">
+                              · nivå {depth}
+                            </span>
+                          ) : null}
                         </p>
                       ) : card.subIssueCount > 0 ? (
                         <p className="text-muted-foreground text-[11px] font-medium">
-                          Issue · {card.subIssueDoneCount}/{card.subIssueCount}{" "}
-                          under-saker ferdig
+                          Kort · {card.subIssueDoneCount}/{card.subIssueCount}{" "}
+                          delkort ferdig
                         </p>
                       ) : (
                         <p className="text-muted-foreground text-[11px] font-medium">
-                          Issue
+                          Kort
                         </p>
                       )}
                       <p
@@ -405,49 +464,46 @@ export function AssessmentTaskIssueTree({
                             variant="ghost"
                             className="h-8 px-2 text-xs"
                             disabled={busy}
-                            title="Fjern kobling til foreldre-issue"
+                            title="Fjern kobling til forelder"
                             onClick={() => void unlink(card._id)}
                           >
                             <Unlink className="size-3.5" />
                             Fjern kobling
                           </Button>
-                        ) : (
-                          <>
-                            {canBecomeSub ? (
-                              <Button
-                                type="button"
-                                size="sm"
-                                variant="ghost"
-                                className="h-8 px-2 text-xs"
-                                disabled={busy}
-                                title="Koble dette kortet som under-sak av et annet issue"
-                                onClick={() => {
-                                  setLinkingCardId(card._id);
-                                  setLinkParentId("");
-                                }}
-                              >
-                                <Link2 className="size-3.5" />
-                                Koble til issue
-                              </Button>
-                            ) : null}
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant="ghost"
-                              className="h-8 px-2 text-xs"
-                              disabled={busy}
-                              title="Opprett nytt kort allerede koblet hit"
-                              onClick={() => setCreateLinkedTo(card._id)}
-                            >
-                              + Under-sak
-                            </Button>
-                          </>
-                        )}
+                        ) : null}
+                        {canLinkUnderOther ? (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="ghost"
+                            className="h-8 px-2 text-xs"
+                            disabled={busy}
+                            title="Koble dette kortet som delkort under et annet"
+                            onClick={() => {
+                              setLinkingCardId(card._id);
+                              setLinkParentId("");
+                            }}
+                          >
+                            <Link2 className="size-3.5" />
+                            Koble til kort
+                          </Button>
+                        ) : null}
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="ghost"
+                          className="h-8 px-2 text-xs"
+                          disabled={busy}
+                          title="Opprett nytt delkort under dette"
+                          onClick={() => setCreateLinkedTo(card._id)}
+                        >
+                          + Delkort
+                        </Button>
                       </div>
                     ) : null}
                   </div>
 
-                  {!isSub && card.subIssueCount > 0 ? (
+                  {card.subIssueCount > 0 ? (
                     <div className="flex items-center gap-2">
                       <div className="bg-muted h-1.5 min-w-[3rem] flex-1 overflow-hidden rounded-full">
                         <div

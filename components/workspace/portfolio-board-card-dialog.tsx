@@ -182,7 +182,7 @@ export function PortfolioBoardCardDialog({
             {(
               [
                 ["oversikt", "Oversikt", "Info"],
-                ["oppgaver", `Saker (${openIssueCount})`, `Saker (${openIssueCount})`],
+                ["oppgaver", `Kort (${openIssueCount})`, `Kort (${openIssueCount})`],
                 [
                   "kommentarer",
                   `Kommentarer (${notes?.length ?? card.noteCount})`,
@@ -336,10 +336,10 @@ export function PortfolioBoardCardDialog({
                 canEdit
               />
               <Link
-                href={`/w/${workspaceId}/saker`}
+                href={`/w/${workspaceId}/puls`}
                 className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 text-xs font-medium underline-offset-2 hover:underline"
               >
-                Åpne Saker-tavlen
+                Åpne Puls
                 <ArrowUpRight className="size-3" aria-hidden />
               </Link>
             </div>

@@ -11,13 +11,13 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { Textarea } from "@/components/ui/textarea";
 import { AssessmentTaskCommentThreads } from "@/components/workspace/assessment-task-comment-threads";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import { toast } from "@/lib/app-toast";
 import { effectiveGithubDefaultRepos } from "@/lib/github-workspace-helpers";
+import { pulsBoardCopy } from "@/lib/puls-board-copy";
 import { cn } from "@/lib/utils";
 import {
   DndContext,
@@ -39,11 +39,25 @@ import {
   ListTree,
   Plus,
   Search,
+  Shield,
   Unlink,
+  Workflow,
 } from "lucide-react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+
+type LinkedProcess = {
+  id: Id<"candidates">;
+  name: string;
+  code: string;
+};
+
+type LinkedRos = {
+  id: Id<"rosAnalyses">;
+  title: string;
+  status: string;
+};
 
 type BoardCard = {
   _id: Id<"assessmentTasks">;
@@ -63,10 +77,28 @@ type BoardCard = {
   assignees: { userId: Id<"users">; name: string }[];
   githubIssueUrl: string | null;
   parentTitle: string | null;
+  depth: number;
   subIssueCount: number;
   subIssueDoneCount: number;
+  linkedProcesses: LinkedProcess[];
+  linkedRos: LinkedRos[];
   canEdit: boolean;
 };
+
+/** Normaliser kort fra API (eldre payloads uten arrays). */
+function normalizeBoardCard(raw: BoardCard): BoardCard {
+  return {
+    ...raw,
+    depth: raw.depth ?? 0,
+    linkedProcesses: Array.isArray(raw.linkedProcesses)
+      ? raw.linkedProcesses
+      : [],
+    linkedRos: Array.isArray(raw.linkedRos) ? raw.linkedRos : [],
+    assignees: Array.isArray(raw.assignees) ? raw.assignees : [],
+  };
+}
+
+type DetailTab = "oversikt" | "koblinger" | "kommentarer" | "mer";
 
 function clampP(p: number) {
   return Math.min(5, Math.max(1, Math.round(p)));
@@ -107,12 +139,47 @@ function initials(name: string): string {
   return `${parts[0]![0] ?? ""}${parts[1]![0] ?? ""}`.toUpperCase();
 }
 
+function parentOptionLabel(card: BoardCard) {
+  const prefix = card.depth > 0 ? `${"↳ ".repeat(Math.min(card.depth, 5))}` : "";
+  return `${prefix}${card.title}`;
+}
+
+function collectDescendantIds(
+  rootId: Id<"assessmentTasks">,
+  cards: BoardCard[],
+): Set<Id<"assessmentTasks">> {
+  const childrenByParent = new Map<
+    Id<"assessmentTasks">,
+    Id<"assessmentTasks">[]
+  >();
+  for (const c of cards) {
+    if (!c.parentTaskId) continue;
+    const list = childrenByParent.get(c.parentTaskId) ?? [];
+    list.push(c._id);
+    childrenByParent.set(c.parentTaskId, list);
+  }
+  const out = new Set<Id<"assessmentTasks">>();
+  const stack = [...(childrenByParent.get(rootId) ?? [])];
+  while (stack.length > 0) {
+    const id = stack.pop()!;
+    if (out.has(id)) continue;
+    out.add(id);
+    for (const kid of childrenByParent.get(id) ?? []) stack.push(kid);
+  }
+  return out;
+}
+
+function hasOpenDescendants(card: BoardCard, cards: BoardCard[]) {
+  const desc = collectDescendantIds(card._id, cards);
+  return cards.some((c) => desc.has(c._id) && c.status === "open");
+}
+
 function FieldChip({
   children,
   tone = "muted",
 }: {
   children: ReactNode;
-  tone?: "muted" | "sky" | "green";
+  tone?: "muted" | "sky" | "green" | "violet";
 }) {
   return (
     <span
@@ -122,6 +189,8 @@ function FieldChip({
         tone === "sky" && "bg-sky-500/15 text-sky-900 dark:text-sky-100",
         tone === "green" &&
           "bg-emerald-500/15 text-emerald-800 dark:text-emerald-200",
+        tone === "violet" &&
+          "bg-violet-500/15 text-violet-900 dark:text-violet-100",
       )}
     >
       {children}
@@ -166,6 +235,9 @@ function IssueCardView({
   onOpen: () => void;
 }) {
   const isSub = Boolean(card.parentTaskId);
+  const process = card.linkedProcesses[0];
+  const extraProcesses = Math.max(0, card.linkedProcesses.length - 1);
+
   return (
     <div
       role="button"
@@ -180,7 +252,7 @@ function IssueCardView({
         }
       }}
       className={cn(
-        "group cursor-grab touch-manipulation rounded-md border border-border/70 bg-card p-3 text-left shadow-[0_1px_0_rgba(27,31,36,0.04)] transition-[box-shadow,border-color,opacity] active:cursor-grabbing dark:shadow-none",
+        "group cursor-grab touch-manipulation rounded-lg border border-border/70 bg-card p-3 text-left shadow-[0_1px_0_rgba(27,31,36,0.04)] transition-[box-shadow,border-color,opacity] active:cursor-grabbing dark:shadow-none",
         "hover:border-border",
         isDragging && "opacity-40 shadow-md ring-2 ring-sky-500/30",
         isSub && "border-l-[3px] border-l-sky-500/70",
@@ -189,11 +261,16 @@ function IssueCardView({
       {isSub ? (
         <p className="text-sky-800 dark:text-sky-200 mb-1 inline-flex items-center gap-1 text-[11px] font-medium">
           <Link2 className="size-3 shrink-0" aria-hidden />
-          Under-sak av «{card.parentTitle ?? "…"}»
+          {pulsBoardCopy.underOf(card.parentTitle ?? "…")}
+          {card.depth > 1 ? (
+            <span className="text-muted-foreground font-normal">
+              · nivå {card.depth}
+            </span>
+          ) : null}
         </p>
       ) : card.subIssueCount > 0 ? (
         <p className="text-muted-foreground mb-1 text-[11px] font-medium tabular-nums">
-          {card.subIssueDoneCount}/{card.subIssueCount} under-saker
+          {card.subIssueDoneCount}/{card.subIssueCount} delkort
         </p>
       ) : null}
 
@@ -203,7 +280,9 @@ function IssueCardView({
 
       <div className="mt-2 flex flex-wrap gap-1">
         <FieldChip>P{clampP(card.priority)}</FieldChip>
-        {isSub ? <FieldChip tone="sky">Under-sak</FieldChip> : null}
+        {isSub ? (
+          <FieldChip tone="sky">{pulsBoardCopy.subcardChip}</FieldChip>
+        ) : null}
         {!isSub && card.subIssueCount > 0 ? (
           <FieldChip tone="green">
             {card.subIssueDoneCount}/{card.subIssueCount}
@@ -213,6 +292,20 @@ function IssueCardView({
           <FieldChip>
             <CalendarRange className="mr-0.5 size-2.5" aria-hidden />
             {formatDateRange(card.startAt, card.dueAt)}
+          </FieldChip>
+        ) : null}
+        {process ? (
+          <FieldChip tone="violet">
+            <Workflow className="mr-0.5 size-2.5" aria-hidden />
+            {process.code || process.name}
+            {extraProcesses > 0 ? ` +${extraProcesses}` : ""}
+          </FieldChip>
+        ) : null}
+        {card.linkedRos.length > 0 ? (
+          <FieldChip>
+            <Shield className="mr-0.5 size-2.5" aria-hidden />
+            ROS
+            {card.linkedRos.length > 1 ? ` +${card.linkedRos.length - 1}` : ""}
           </FieldChip>
         ) : null}
       </div>
@@ -268,17 +361,22 @@ function PriorityColumn({
     <div
       ref={setNodeRef}
       className={cn(
-        "flex w-[min(100%,260px)] shrink-0 flex-col rounded-lg border border-border/50 bg-muted/15",
-        isOver && "border-sky-500/40 bg-sky-500/5",
+        "flex w-[min(100%,280px)] shrink-0 flex-col rounded-xl border border-border/50 bg-muted/20",
+        isOver && "border-sky-500/50 bg-sky-500/8 ring-1 ring-sky-500/20",
       )}
     >
-      <div className="flex items-center justify-between gap-2 border-b border-border/40 px-2.5 py-2">
-        <p className="text-xs font-semibold text-foreground">P{priority}</p>
-        <span className="bg-muted text-muted-foreground rounded-full px-1.5 py-0.5 text-[10px] font-medium tabular-nums">
+      <div className="sticky top-0 z-[1] flex items-center justify-between gap-2 rounded-t-xl border-b border-border/40 bg-muted/40 px-3 py-2.5 backdrop-blur-sm">
+        <div>
+          <p className="text-xs font-semibold tracking-wide text-foreground">
+            Prioritet {priority}
+          </p>
+          <p className="text-muted-foreground text-[10px]">P{priority}</p>
+        </div>
+        <span className="bg-background/80 text-muted-foreground rounded-full px-2 py-0.5 text-[11px] font-medium tabular-nums shadow-xs">
           {count}
         </span>
       </div>
-      <div className="min-h-[120px] flex-1 p-2">{children}</div>
+      <div className="min-h-[160px] flex-1 p-2.5">{children}</div>
     </div>
   );
 }
@@ -289,20 +387,32 @@ function DoneColumn({ count, children }: { count: number; children: ReactNode })
     <div
       ref={setNodeRef}
       className={cn(
-        "flex w-[min(100%,260px)] shrink-0 flex-col rounded-lg border border-border/50 bg-muted/25",
-        isOver && "border-sky-500/40 bg-sky-500/5",
+        "flex w-[min(100%,280px)] shrink-0 flex-col rounded-xl border border-border/50 bg-muted/30",
+        isOver && "border-sky-500/50 bg-sky-500/8 ring-1 ring-sky-500/20",
       )}
     >
-      <div className="flex items-center justify-between gap-2 border-b border-border/40 px-2.5 py-2">
-        <p className="text-xs font-semibold text-foreground">Ferdig</p>
-        <span className="bg-muted text-muted-foreground rounded-full px-1.5 py-0.5 text-[10px] font-medium tabular-nums">
+      <div className="sticky top-0 z-[1] flex items-center justify-between gap-2 rounded-t-xl border-b border-border/40 bg-muted/50 px-3 py-2.5 backdrop-blur-sm">
+        <div>
+          <p className="text-xs font-semibold tracking-wide text-foreground">
+            Ferdig
+          </p>
+          <p className="text-muted-foreground text-[10px]">Fullført</p>
+        </div>
+        <span className="bg-background/80 text-muted-foreground rounded-full px-2 py-0.5 text-[11px] font-medium tabular-nums shadow-xs">
           {count}
         </span>
       </div>
-      <div className="min-h-[120px] flex-1 p-2">{children}</div>
+      <div className="min-h-[160px] flex-1 p-2.5">{children}</div>
     </div>
   );
 }
+
+const DETAIL_TABS: { id: DetailTab; label: string }[] = [
+  { id: "oversikt", label: "Oversikt" },
+  { id: "koblinger", label: "Koblinger" },
+  { id: "kommentarer", label: "Kommentarer" },
+  { id: "mer", label: "Mer" },
+];
 
 export function IssuesProjectBoard({
   workspaceId,
@@ -313,14 +423,21 @@ export function IssuesProjectBoard({
   const deepLinkTaskId = searchParams.get("task");
   const deepLinkHandled = useRef<string | null>(null);
 
-  const cards = useQuery(api.assessmentTasks.listBoardByWorkspace, {
+  const cardsRaw = useQuery(api.assessmentTasks.listBoardByWorkspace, {
     workspaceId,
   });
+  const cards = useMemo(
+    () => (cardsRaw ?? []).map((c) => normalizeBoardCard(c as BoardCard)),
+    [cardsRaw],
+  );
+  const cardsLoaded = cardsRaw !== undefined;
   const assessments = useQuery(api.assessments.listByWorkspace, {
     workspaceId,
   });
   const workspace = useQuery(api.workspaces.get, { workspaceId });
   const members = useQuery(api.workspaces.listMembers, { workspaceId });
+  const processes = useQuery(api.candidates.listByWorkspace, { workspaceId });
+  const rosAnalyses = useQuery(api.ros.listAnalyses, { workspaceId });
 
   const createTask = useMutation(api.assessmentTasks.create);
   const moveTask = useMutation(api.assessmentTasks.moveTask);
@@ -328,10 +445,16 @@ export function IssuesProjectBoard({
   const setParent = useMutation(api.assessmentTasks.setParent);
   const setStatus = useMutation(api.assessmentTasks.setStatus);
   const removeTask = useMutation(api.assessmentTasks.remove);
+  const linkProcess = useMutation(api.candidates.linkAssessment);
+  const linkRos = useMutation(api.ros.linkAssessment);
 
   const [query, setQuery] = useState("");
+  const [processFilter, setProcessFilter] = useState<Id<"candidates"> | "">(
+    "",
+  );
   const [activeDrag, setActiveDrag] = useState<BoardCard | null>(null);
   const [selected, setSelected] = useState<BoardCard | null>(null);
+  const [detailTab, setDetailTab] = useState<DetailTab>("oversikt");
   const [completePrompt, setCompletePrompt] = useState<BoardCard | null>(null);
 
   const [editTitle, setEditTitle] = useState("");
@@ -343,6 +466,10 @@ export function IssuesProjectBoard({
   const [editParentId, setEditParentId] = useState<Id<"assessmentTasks"> | "">(
     "",
   );
+  const [linkCandidateId, setLinkCandidateId] = useState<Id<"candidates"> | "">(
+    "",
+  );
+  const [linkRosId, setLinkRosId] = useState<Id<"rosAnalyses"> | "">("");
   const [busy, setBusy] = useState(false);
 
   const [createOpen, setCreateOpen] = useState(false);
@@ -360,11 +487,11 @@ export function IssuesProjectBoard({
   );
 
   useEffect(() => {
-    if (!selected || !cards) return;
+    if (!selected || !cardsLoaded) return;
     const fresh = cards.find((c) => c._id === selected._id);
     if (fresh) setSelected(fresh);
     else setSelected(null);
-  }, [cards, selected?._id]);
+  }, [cards, cardsLoaded, selected?._id]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
@@ -373,17 +500,37 @@ export function IssuesProjectBoard({
     }),
   );
 
+  const processFilterOptions = useMemo(() => {
+    const map = new Map<Id<"candidates">, LinkedProcess>();
+    for (const c of cards) {
+      for (const p of c.linkedProcesses) map.set(p.id, p);
+    }
+    return [...map.values()].sort((a, b) =>
+      (a.code || a.name).localeCompare(b.code || b.name, "nb"),
+    );
+  }, [cards]);
+
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    const list = cards ?? [];
+    let list = cards;
+    if (processFilter) {
+      list = list.filter((c) =>
+        c.linkedProcesses.some((p) => p.id === processFilter),
+      );
+    }
     if (!q) return list;
     return list.filter(
       (c) =>
         c.title.toLowerCase().includes(q) ||
         c.assessmentTitle.toLowerCase().includes(q) ||
-        (c.parentTitle?.toLowerCase().includes(q) ?? false),
+        (c.parentTitle?.toLowerCase().includes(q) ?? false) ||
+        c.linkedProcesses.some(
+          (p) =>
+            p.name.toLowerCase().includes(q) ||
+            p.code.toLowerCase().includes(q),
+        ),
     );
-  }, [cards, query]);
+  }, [cards, query, processFilter]);
 
   const byPriority = useMemo(() => {
     const open = filtered.filter((c) => c.status === "open");
@@ -400,24 +547,34 @@ export function IssuesProjectBoard({
     [filtered],
   );
 
-  const parentOptions = useMemo(() => {
-    if (!cards) return [];
-    return cards.filter((c) => !c.parentTaskId && c.status === "open");
-  }, [cards]);
+  const createParentOptions = useMemo(() => {
+    if (!createAssessmentId) return [];
+    return cards
+      .filter((c) => c.assessmentId === createAssessmentId)
+      .sort((a, b) => {
+        if (a.depth !== b.depth) return a.depth - b.depth;
+        return a.title.localeCompare(b.title, "nb");
+      });
+  }, [cards, createAssessmentId]);
 
   const linkParentOptions = useMemo(() => {
-    if (!selected || !cards) return [];
-    return cards.filter(
-      (c) =>
-        c.assessmentId === selected.assessmentId &&
-        c._id !== selected._id &&
-        !c.parentTaskId &&
-        selected.subIssueCount === 0,
-    );
+    if (!selected) return [];
+    const blocked = collectDescendantIds(selected._id, cards);
+    return cards
+      .filter(
+        (c) =>
+          c.assessmentId === selected.assessmentId &&
+          c._id !== selected._id &&
+          !blocked.has(c._id),
+      )
+      .sort((a, b) => {
+        if (a.depth !== b.depth) return a.depth - b.depth;
+        return a.title.localeCompare(b.title, "nb");
+      });
   }, [selected, cards]);
 
   const childSubIssues = useMemo(() => {
-    if (!selected || !cards || selected.parentTaskId) return [];
+    if (!selected) return [];
     return cards
       .filter((c) => c.parentTaskId === selected._id)
       .sort((a, b) => {
@@ -441,8 +598,26 @@ export function IssuesProjectBoard({
       .sort((a, b) => a.label.localeCompare(b.label, "nb"));
   }, [members]);
 
+  const availableProcessesToLink = useMemo(() => {
+    if (!selected || !processes) return [];
+    const linked = new Set(selected.linkedProcesses.map((p) => p.id));
+    return processes
+      .filter((p) => !linked.has(p._id))
+      .sort((a, b) => a.name.localeCompare(b.name, "nb"));
+  }, [selected, processes]);
+
+  const availableRosToLink = useMemo(() => {
+    if (!selected || !rosAnalyses) return [];
+    const linked = new Set(selected.linkedRos.map((r) => r.id));
+    return rosAnalyses
+      .filter((r) => !linked.has(r._id))
+      .map((r) => ({ id: r._id as Id<"rosAnalyses">, title: r.title as string }))
+      .sort((a, b) => a.title.localeCompare(b.title, "nb"));
+  }, [selected, rosAnalyses]);
+
   const openDetail = (card: BoardCard) => {
     setSelected(card);
+    setDetailTab("oversikt");
     setEditTitle(card.title);
     setEditDescription(card.description ?? "");
     setEditPriority(clampP(card.priority));
@@ -450,10 +625,16 @@ export function IssuesProjectBoard({
     setEditDue(toDateInput(card.dueAt));
     setEditAssigneeIds(card.assignees.map((a) => a.userId));
     setEditParentId(card.parentTaskId ?? "");
+    setLinkCandidateId("");
+    setLinkRosId("");
   };
 
   useEffect(() => {
-    if (!deepLinkTaskId || !cards || deepLinkHandled.current === deepLinkTaskId) {
+    if (
+      !deepLinkTaskId ||
+      !cardsLoaded ||
+      deepLinkHandled.current === deepLinkTaskId
+    ) {
       return;
     }
     const card = cards.find((c) => c._id === deepLinkTaskId);
@@ -461,17 +642,11 @@ export function IssuesProjectBoard({
       deepLinkHandled.current = deepLinkTaskId;
       openDetail(card);
     }
-    // openDetail er stabil nok for deep-link ved last
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [deepLinkTaskId, cards]);
+  }, [deepLinkTaskId, cards, cardsLoaded]);
 
   const requestComplete = (card: BoardCard) => {
-    const openChildren =
-      !card.parentTaskId &&
-      (cards ?? []).some(
-        (c) => c.parentTaskId === card._id && c.status === "open",
-      );
-    if (openChildren) {
+    if (hasOpenDescendants(card, cards)) {
       setCompletePrompt(card);
       return;
     }
@@ -491,8 +666,8 @@ export function IssuesProjectBoard({
       });
       toast.success(
         completeSubIssues
-          ? "Hovedsak og under-saker markert ferdig"
-          : "Sak markert ferdig",
+          ? pulsBoardCopy.completedTree
+          : pulsBoardCopy.completed,
       );
       setCompletePrompt(null);
       if (selected?._id === card._id) setSelected(null);
@@ -514,7 +689,7 @@ export function IssuesProjectBoard({
   };
 
   const onDragStart = (e: DragStartEvent) => {
-    const card = (cards ?? []).find((c) => c._id === e.active.id);
+    const card = cards.find((c) => c._id === e.active.id);
     setActiveDrag(card ?? null);
   };
 
@@ -522,19 +697,14 @@ export function IssuesProjectBoard({
     setActiveDrag(null);
     const { active, over } = e;
     if (!over) return;
-    const card = (cards ?? []).find((c) => c._id === active.id);
+    const card = cards.find((c) => c._id === active.id);
     if (!card || !card.canEdit) return;
 
     const overId = String(over.id);
     try {
       if (overId === "done-drop") {
         if (card.status !== "done") {
-          const openChildren =
-            !card.parentTaskId &&
-            (cards ?? []).some(
-              (c) => c.parentTaskId === card._id && c.status === "open",
-            );
-          if (openChildren) {
+          if (hasOpenDescendants(card, cards)) {
             setCompletePrompt(card);
             return;
           }
@@ -585,7 +755,7 @@ export function IssuesProjectBoard({
       if (nextParent !== prevParent) {
         await setParent({ taskId: selected._id, parentTaskId: nextParent });
       }
-      toast.success("Sak lagret");
+      toast.success(pulsBoardCopy.saved);
       setSelected(null);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Kunne ikke lagre");
@@ -601,7 +771,7 @@ export function IssuesProjectBoard({
       return;
     }
     if (!createAssessmentId) {
-      toast.error("Velg hvilken vurdering saken hører til");
+      toast.error("Velg hvilken vurdering kortet hører til");
       return;
     }
     const startAt = fromDateInput(createStart);
@@ -626,9 +796,7 @@ export function IssuesProjectBoard({
           createAssigneeIds.length > 0 ? createAssigneeIds : undefined,
       });
       toast.success(
-        createParentId
-          ? "Under-sak opprettet som eget kort"
-          : "Issue opprettet",
+        createParentId ? pulsBoardCopy.createdSub : pulsBoardCopy.created,
       );
       setCreateOpen(false);
       setCreateTitle("");
@@ -643,7 +811,7 @@ export function IssuesProjectBoard({
     }
   };
 
-  if (cards === undefined) {
+  if (!cardsLoaded) {
     return (
       <div className="space-y-3">
         <div className="bg-muted/40 h-10 animate-pulse rounded-md" />
@@ -651,7 +819,7 @@ export function IssuesProjectBoard({
           {Array.from({ length: 4 }).map((_, i) => (
             <div
               key={i}
-              className="bg-muted/40 h-72 w-[260px] shrink-0 animate-pulse rounded-lg"
+              className="bg-muted/40 h-72 w-[280px] shrink-0 animate-pulse rounded-xl"
             />
           ))}
         </div>
@@ -661,29 +829,46 @@ export function IssuesProjectBoard({
 
   return (
     <div className="flex min-h-0 min-w-0 flex-col gap-3">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <div className="relative min-w-0 flex-1 sm:max-w-xs">
-          <Search
-            className="text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2"
-            aria-hidden
-          />
-          <input
-            type="search"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Filtrer saker…"
-            aria-label="Filtrer saker"
-            className="border-input bg-background focus:border-sky-500 focus:ring-sky-500 h-8 w-full rounded-md border py-1 pr-3 pl-8 text-sm outline-none focus:ring-1"
-          />
+      <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex min-w-0 flex-1 flex-col gap-2 sm:flex-row sm:items-center">
+          <div className="relative min-w-0 flex-1 sm:max-w-xs">
+            <Search
+              className="text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2"
+              aria-hidden
+            />
+            <input
+              type="search"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder={pulsBoardCopy.filterPlaceholder}
+              aria-label={pulsBoardCopy.filterAria}
+              className="border-input bg-background focus:border-sky-500 focus:ring-sky-500 h-9 w-full rounded-lg border py-1 pr-3 pl-8 text-sm outline-none focus:ring-1"
+            />
+          </div>
+          <select
+            aria-label={pulsBoardCopy.processFilterAria}
+            className="border-input bg-background h-9 w-full rounded-lg border px-2 text-sm sm:w-auto sm:min-w-[12rem]"
+            value={processFilter}
+            onChange={(e) =>
+              setProcessFilter(e.target.value as Id<"candidates"> | "")
+            }
+          >
+            <option value="">{pulsBoardCopy.allProcesses}</option>
+            {processFilterOptions.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.code ? `${p.code} — ${p.name}` : p.name}
+              </option>
+            ))}
+          </select>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <p className="text-muted-foreground text-xs tabular-nums">
-            {filtered.length} kort
+            {pulsBoardCopy.cardCount(filtered.length)}
           </p>
           <Button
             type="button"
             size="sm"
-            className="h-8 rounded-md"
+            className="h-9 rounded-lg"
             onClick={() => {
               setCreateOpen(true);
               setCreateTitle("");
@@ -695,7 +880,7 @@ export function IssuesProjectBoard({
             }}
           >
             <Plus className="size-3.5" />
-            Nytt issue
+            {pulsBoardCopy.newCard}
           </Button>
         </div>
       </div>
@@ -733,7 +918,7 @@ export function IssuesProjectBoard({
         </div>
         <DragOverlay>
           {activeDrag ? (
-            <div className="w-[244px]">
+            <div className="w-[260px]">
               <IssueCardView
                 card={activeDrag}
                 isDragging
@@ -746,24 +931,28 @@ export function IssuesProjectBoard({
 
       {filtered.length === 0 ? (
         <p className="text-muted-foreground rounded-xl border border-dashed px-4 py-10 text-center text-sm">
-          Ingen saker ennå. Opprett et issue — under-saker blir egne kort på
-          tavlen når du kobler dem.
+          {pulsBoardCopy.emptyBoard}
         </p>
       ) : null}
 
-      {/* Create issue / sub-issue */}
-      <Sheet open={createOpen} onOpenChange={setCreateOpen}>
-        <SheetContent side="right" showOnDesktop className="w-full max-w-md">
-          <div className="border-b pb-4">
-            <h2 className="font-heading text-lg font-semibold">
-              {createParentId ? "Ny under-sak" : "Nytt issue"}
+      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+        <DialogContent size="md" titleId="create-issue-title">
+          <DialogHeader>
+            <h2
+              id="create-issue-title"
+              className="font-heading text-lg font-semibold"
+            >
+              {createParentId
+                ? pulsBoardCopy.createSubTitle
+                : pulsBoardCopy.createTitle}
             </h2>
             <p className="text-muted-foreground mt-1 text-sm">
-              Blir et eget kort på tavlen
-              {createParentId ? ", koblet til foreldre-issue" : ""}.
+              {createParentId
+                ? pulsBoardCopy.createHintSub
+                : pulsBoardCopy.createHint}
             </p>
-          </div>
-          <div className="mt-6 space-y-4 px-1">
+          </DialogHeader>
+          <DialogBody className="space-y-4">
             <div className="space-y-1">
               <Label htmlFor="create-title">Tittel</Label>
               <Input
@@ -771,13 +960,14 @@ export function IssuesProjectBoard({
                 value={createTitle}
                 onChange={(e) => setCreateTitle(e.target.value)}
                 placeholder="Hva skal gjøres?"
+                className="min-h-11 sm:min-h-9"
               />
             </div>
             <div className="space-y-1">
               <Label htmlFor="create-assessment">Vurdering</Label>
               <select
                 id="create-assessment"
-                className="border-input bg-background flex h-9 w-full rounded-lg border px-2 text-sm"
+                className="border-input bg-background flex min-h-11 w-full rounded-lg border px-2 text-sm sm:min-h-9"
                 value={createAssessmentId}
                 onChange={(e) => {
                   setCreateAssessmentId(
@@ -795,10 +985,10 @@ export function IssuesProjectBoard({
               </select>
             </div>
             <div className="space-y-1">
-              <Label htmlFor="create-parent">Kobling (valgfritt)</Label>
+              <Label htmlFor="create-parent">{pulsBoardCopy.parentLabel}</Label>
               <select
                 id="create-parent"
-                className="border-input bg-background flex h-9 w-full rounded-lg border px-2 text-sm"
+                className="border-input bg-background flex min-h-11 w-full rounded-lg border px-2 text-sm sm:min-h-9"
                 value={createParentId}
                 onChange={(e) =>
                   setCreateParentId(
@@ -807,17 +997,18 @@ export function IssuesProjectBoard({
                 }
                 disabled={!createAssessmentId}
               >
-                <option value="">Ingen — selvstendig issue</option>
-                {parentOptions
-                  .filter((p) => p.assessmentId === createAssessmentId)
-                  .map((p) => (
-                    <option key={p._id} value={p._id}>
-                      Under-sak av «{p.title}»
-                    </option>
-                  ))}
+                <option value="">{pulsBoardCopy.parentNone}</option>
+                {createParentOptions.map((p) => (
+                  <option key={p._id} value={p._id}>
+                    {pulsBoardCopy.parentUnder(parentOptionLabel(p))}
+                  </option>
+                ))}
               </select>
+              <p className="text-muted-foreground text-[11px]">
+                {pulsBoardCopy.parentHint}
+              </p>
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div className="space-y-1">
                 <Label htmlFor="create-start">Startdato</Label>
                 <Input
@@ -826,6 +1017,7 @@ export function IssuesProjectBoard({
                   value={createStart}
                   onChange={(e) => setCreateStart(e.target.value)}
                   required
+                  className="min-h-11 sm:min-h-9"
                 />
               </div>
               <div className="space-y-1">
@@ -836,6 +1028,7 @@ export function IssuesProjectBoard({
                   value={createDue}
                   onChange={(e) => setCreateDue(e.target.value)}
                   required
+                  className="min-h-11 sm:min-h-9"
                 />
               </div>
             </div>
@@ -856,7 +1049,7 @@ export function IssuesProjectBoard({
                         )
                       }
                       className={cn(
-                        "rounded-lg px-2.5 py-2 text-left text-sm",
+                        "min-h-11 rounded-lg px-2.5 py-2 text-left text-sm touch-manipulation sm:min-h-9",
                         selectedM ? "bg-muted" : "hover:bg-muted/50",
                       )}
                     >
@@ -866,8 +1059,19 @@ export function IssuesProjectBoard({
                 })}
               </div>
             </div>
+          </DialogBody>
+          <DialogFooter>
             <Button
               type="button"
+              variant="outline"
+              className="min-h-11 touch-manipulation sm:min-h-9"
+              onClick={() => setCreateOpen(false)}
+            >
+              Avbryt
+            </Button>
+            <Button
+              type="button"
+              className="min-h-11 touch-manipulation sm:min-h-9"
               disabled={
                 busy ||
                 !createTitle.trim() ||
@@ -877,281 +1081,478 @@ export function IssuesProjectBoard({
               }
               onClick={() => void submitCreate()}
             >
-              Opprett kort
+              Opprett
             </Button>
-          </div>
-        </SheetContent>
-      </Sheet>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
-      {/* Detail */}
-      <Sheet
+      <Dialog
         open={!!selected}
         onOpenChange={(o) => {
           if (!o) setSelected(null);
         }}
       >
-        <SheetContent side="right" showOnDesktop className="w-full max-w-md">
-          <div className="border-b pb-4">
-            <h2 className="font-heading text-lg font-semibold">Sak</h2>
+        <DialogContent size="lg" titleId="issue-detail-title">
+          <DialogHeader>
+            <h2
+              id="issue-detail-title"
+              className="font-heading text-lg font-semibold"
+            >
+              {pulsBoardCopy.detailTitle}
+            </h2>
             {selected ? (
-              <Link
-                href={`/w/${workspaceId}/a/${selected.assessmentId}`}
-                className="text-muted-foreground hover:text-foreground mt-1 inline-block text-xs font-medium underline-offset-2 hover:underline"
-              >
-                {selected.assessmentTitle} →
-              </Link>
+              <p className="text-muted-foreground mt-1 line-clamp-2 text-sm">
+                {selected.title}
+              </p>
             ) : null}
-          </div>
+            <div className="mt-3 flex gap-1 overflow-x-auto">
+              {DETAIL_TABS.map((tab) => (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => setDetailTab(tab.id)}
+                  className={cn(
+                    "min-h-9 shrink-0 rounded-lg px-3 text-sm font-medium touch-manipulation",
+                    detailTab === tab.id
+                      ? "bg-foreground text-background"
+                      : "text-muted-foreground hover:bg-muted",
+                  )}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+          </DialogHeader>
           {selected ? (
-            <div className="mt-6 space-y-4 px-1">
-              <div className="space-y-1">
-                <Label htmlFor="detail-title">Tittel</Label>
-                <Input
-                  id="detail-title"
-                  value={editTitle}
-                  onChange={(e) => setEditTitle(e.target.value)}
-                  disabled={!selected.canEdit}
-                />
-              </div>
-              <div className="space-y-1">
-                <Label htmlFor="detail-desc">Beskrivelse</Label>
-                <Textarea
-                  id="detail-desc"
-                  value={editDescription}
-                  onChange={(e) => setEditDescription(e.target.value)}
-                  rows={4}
-                  disabled={!selected.canEdit}
-                />
-              </div>
-              <div className="space-y-1">
-                <Label htmlFor="detail-prio">Prioritet (1–5)</Label>
-                <Input
-                  id="detail-prio"
-                  type="number"
-                  min={1}
-                  max={5}
-                  value={editPriority}
-                  onChange={(e) =>
-                    setEditPriority(Number(e.target.value) || 3)
-                  }
-                  disabled={!selected.canEdit}
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <Label htmlFor="detail-start">Startdato</Label>
-                  <Input
-                    id="detail-start"
-                    type="date"
-                    value={editStart}
-                    onChange={(e) => setEditStart(e.target.value)}
-                    disabled={!selected.canEdit}
-                    required
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label htmlFor="detail-due">Sluttdato</Label>
-                  <Input
-                    id="detail-due"
-                    type="date"
-                    value={editDue}
-                    onChange={(e) => setEditDue(e.target.value)}
-                    disabled={!selected.canEdit}
-                    required
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-1.5">
-                <Label>Tildelt</Label>
-                <p className="text-muted-foreground text-[11px]">
-                  Nye tildelte får varsel. De får også varsel ved nye
-                  kommentarer.
-                </p>
-                <div className="flex max-h-36 flex-col gap-1 overflow-y-auto rounded-lg border border-border/50 p-1.5">
-                  {memberOptions.map((m) => {
-                    const on = editAssigneeIds.includes(m.userId);
-                    return (
-                      <button
-                        key={m.userId}
-                        type="button"
+            <>
+              <DialogBody className="space-y-4">
+                {detailTab === "oversikt" ? (
+                  <>
+                    <div className="space-y-1">
+                      <Label htmlFor="detail-title">Tittel</Label>
+                      <Input
+                        id="detail-title"
+                        value={editTitle}
+                        onChange={(e) => setEditTitle(e.target.value)}
                         disabled={!selected.canEdit}
-                        onClick={() =>
-                          setEditAssigneeIds((prev) =>
-                            on
-                              ? prev.filter((id) => id !== m.userId)
-                              : [...prev, m.userId],
-                          )
-                        }
-                        className={cn(
-                          "rounded-lg px-2.5 py-2 text-left text-sm",
-                          on ? "bg-muted" : "hover:bg-muted/50",
-                          !selected.canEdit && "opacity-60",
-                        )}
-                      >
-                        {m.label}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {!selected.parentTaskId && childSubIssues.length > 0 ? (
-                <div className="space-y-2 rounded-xl border border-border/50 bg-muted/10 p-3">
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="flex items-center gap-1.5 text-sm font-medium">
-                      <ListTree className="size-3.5" aria-hidden />
-                      Under-saker
-                    </p>
-                    <span className="text-muted-foreground text-xs tabular-nums">
-                      {selected.subIssueDoneCount}/{selected.subIssueCount}{" "}
-                      ferdig
-                    </span>
-                  </div>
-                  <div className="bg-muted h-1.5 overflow-hidden rounded-full">
-                    <div
-                      className="bg-foreground/70 h-full rounded-full"
-                      style={{
-                        width: `${
-                          selected.subIssueCount > 0
-                            ? Math.round(
-                                (selected.subIssueDoneCount /
-                                  selected.subIssueCount) *
-                                  100,
-                              )
-                            : 0
-                        }%`,
-                      }}
-                    />
-                  </div>
-                  <ul className="space-y-1.5">
-                    {childSubIssues.map((child) => (
-                      <li key={child._id}>
-                        <button
-                          type="button"
-                          className="hover:bg-muted/60 flex w-full items-start justify-between gap-2 rounded-lg border border-border/40 bg-card px-2.5 py-2 text-left text-sm"
-                          onClick={() => openDetail(child)}
-                        >
-                          <span className="min-w-0">
-                            <span
+                        className="min-h-11 sm:min-h-9"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label htmlFor="detail-desc">Beskrivelse</Label>
+                      <Textarea
+                        id="detail-desc"
+                        value={editDescription}
+                        onChange={(e) => setEditDescription(e.target.value)}
+                        rows={4}
+                        disabled={!selected.canEdit}
+                      />
+                    </div>
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                      <div className="space-y-1">
+                        <Label htmlFor="detail-prio">Prioritet</Label>
+                        <Input
+                          id="detail-prio"
+                          type="number"
+                          min={1}
+                          max={5}
+                          value={editPriority}
+                          onChange={(e) =>
+                            setEditPriority(Number(e.target.value) || 3)
+                          }
+                          disabled={!selected.canEdit}
+                          className="min-h-11 sm:min-h-9"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label htmlFor="detail-start">Startdato</Label>
+                        <Input
+                          id="detail-start"
+                          type="date"
+                          value={editStart}
+                          onChange={(e) => setEditStart(e.target.value)}
+                          disabled={!selected.canEdit}
+                          required
+                          className="min-h-11 sm:min-h-9"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label htmlFor="detail-due">Sluttdato</Label>
+                        <Input
+                          id="detail-due"
+                          type="date"
+                          value={editDue}
+                          onChange={(e) => setEditDue(e.target.value)}
+                          disabled={!selected.canEdit}
+                          required
+                          className="min-h-11 sm:min-h-9"
+                        />
+                      </div>
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label>Tildelt</Label>
+                      <p className="text-muted-foreground text-[11px]">
+                        Nye tildelte får varsel ved tildeling og kommentarer.
+                      </p>
+                      <div className="flex max-h-36 flex-col gap-1 overflow-y-auto rounded-lg border border-border/50 p-1.5">
+                        {memberOptions.map((m) => {
+                          const on = editAssigneeIds.includes(m.userId);
+                          return (
+                            <button
+                              key={m.userId}
+                              type="button"
+                              disabled={!selected.canEdit}
+                              onClick={() =>
+                                setEditAssigneeIds((prev) =>
+                                  on
+                                    ? prev.filter((id) => id !== m.userId)
+                                    : [...prev, m.userId],
+                                )
+                              }
                               className={cn(
-                                "block font-medium leading-snug",
-                                child.status === "done" &&
-                                  "text-muted-foreground line-through",
+                                "min-h-11 rounded-lg px-2.5 py-2 text-left text-sm touch-manipulation sm:min-h-9",
+                                on ? "bg-muted" : "hover:bg-muted/50",
+                                !selected.canEdit && "opacity-60",
                               )}
                             >
-                              {child.title}
-                            </span>
-                            <span className="text-muted-foreground text-[11px]">
-                              {formatDateRange(child.startAt, child.dueAt) ??
-                                "Mangler datoer"}
-                              {child.assigneeName
-                                ? ` · ${child.assigneeName}`
-                                : ""}
-                            </span>
-                          </span>
-                          <span
-                            className={cn(
-                              "shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium",
-                              child.status === "done"
-                                ? "bg-emerald-500/15 text-emerald-800 dark:text-emerald-200"
-                                : "bg-muted text-muted-foreground",
-                            )}
-                          >
-                            {child.status === "done" ? "Ferdig" : "Åpen"}
-                          </span>
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              ) : null}
-
-              <div className="space-y-1.5 rounded-xl border border-border/50 bg-muted/10 p-3">
-                <Label className="flex items-center gap-1.5">
-                  <Link2 className="size-3.5" aria-hidden />
-                  Kobling til issue
-                </Label>
-                <p className="text-muted-foreground text-xs leading-relaxed">
-                  Under-sak er et eget kort. Her velger du hvilket issue det
-                  kobles til — eller fjerner koblingen.
-                </p>
-                {selected.subIssueCount > 0 ? (
-                  <p className="text-muted-foreground text-xs">
-                    Dette issue har under-saker og kan ikke selv bli under-sak.
-                  </p>
-                ) : (
-                  <select
-                    className="border-input bg-background flex h-9 w-full rounded-lg border px-2 text-sm"
-                    value={editParentId}
-                    onChange={(e) =>
-                      setEditParentId(
-                        e.target.value as Id<"assessmentTasks"> | "",
-                      )
-                    }
-                    disabled={!selected.canEdit}
-                  >
-                    <option value="">Ingen — selvstendig issue</option>
-                    {linkParentOptions.map((p) => (
-                      <option key={p._id} value={p._id}>
-                        Under-sak av «{p.title}»
-                      </option>
-                    ))}
-                  </select>
-                )}
-                {selected.parentTaskId || editParentId ? (
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="ghost"
-                    className="h-8 gap-1 px-2 text-xs"
-                    disabled={!selected.canEdit}
-                    onClick={() => setEditParentId("")}
-                  >
-                    <Unlink className="size-3.5" />
-                    Fjern kobling
-                  </Button>
+                              {m.label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </>
                 ) : null}
-              </div>
 
-              {selected.canEdit && !selected.parentTaskId ? (
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  className="w-full"
-                  onClick={() => {
-                    const parent = selected;
-                    setSelected(null);
-                    openCreateAsSub(parent);
-                  }}
-                >
-                  <Plus className="size-3.5" />
-                  Opprett under-sak (eget kort)
-                </Button>
-              ) : null}
+                {detailTab === "koblinger" ? (
+                  <>
+                    <div className="space-y-2 rounded-xl border border-border/50 bg-muted/10 p-3">
+                      <Label className="flex items-center gap-1.5">
+                        <ListTree className="size-3.5" aria-hidden />
+                        Vurdering
+                      </Label>
+                      <Link
+                        href={`/w/${workspaceId}/a/${selected.assessmentId}`}
+                        className="text-foreground hover:text-foreground/80 inline-flex min-h-10 items-center text-sm font-medium underline-offset-2 touch-manipulation hover:underline"
+                      >
+                        {selected.assessmentTitle} →
+                      </Link>
+                    </div>
 
-              <TaskGithubControls
-                taskId={selected._id}
-                canEdit={selected.canEdit}
-                githubIssueUrl={selected.githubIssueUrl}
-                workspaceDefaultRepos={effectiveGithubDefaultRepos(
-                  workspace ?? null,
-                )}
-              />
+                    <div className="space-y-2 rounded-xl border border-border/50 bg-muted/10 p-3">
+                      <Label className="flex items-center gap-1.5">
+                        <Workflow className="size-3.5" aria-hidden />
+                        Prosesser
+                      </Label>
+                      {selected.linkedProcesses.length > 0 ? (
+                        <ul className="flex flex-wrap gap-1.5">
+                          {selected.linkedProcesses.map((p) => (
+                            <li key={p.id}>
+                              <Link
+                                href={`/w/${workspaceId}/vurderinger?fane=prosesser&rediger=${p.id}`}
+                                className="bg-violet-500/15 text-violet-900 dark:text-violet-100 inline-flex min-h-8 items-center rounded-full px-2.5 text-xs font-medium"
+                              >
+                                {p.code ? `${p.code} — ` : ""}
+                                {p.name}
+                              </Link>
+                            </li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <p className="text-muted-foreground text-xs">
+                          Ingen prosess koblet til vurderingen ennå.
+                        </p>
+                      )}
+                      {selected.canEdit && availableProcessesToLink.length > 0 ? (
+                        <div className="flex flex-col gap-2 sm:flex-row">
+                          <select
+                            className="border-input bg-background min-h-11 flex-1 rounded-lg border px-2 text-sm sm:min-h-9"
+                            value={linkCandidateId}
+                            onChange={(e) =>
+                              setLinkCandidateId(
+                                e.target.value as Id<"candidates"> | "",
+                              )
+                            }
+                          >
+                            <option value="">Koble prosess …</option>
+                            {availableProcessesToLink.map((p) => (
+                              <option key={p._id} value={p._id}>
+                                {p.code ? `${p.code} — ` : ""}
+                                {p.name}
+                              </option>
+                            ))}
+                          </select>
+                          <Button
+                            type="button"
+                            size="sm"
+                            className="min-h-11 touch-manipulation sm:min-h-9"
+                            disabled={busy || !linkCandidateId}
+                            onClick={() => {
+                              if (!linkCandidateId) return;
+                              void linkProcess({
+                                candidateId: linkCandidateId,
+                                assessmentId: selected.assessmentId,
+                              })
+                                .then(() => {
+                                  toast.success("Prosess koblet til vurderingen");
+                                  setLinkCandidateId("");
+                                })
+                                .catch((err: unknown) =>
+                                  toast.error(
+                                    err instanceof Error
+                                      ? err.message
+                                      : "Kunne ikke koble",
+                                  ),
+                                );
+                            }}
+                          >
+                            Koble
+                          </Button>
+                        </div>
+                      ) : null}
+                    </div>
 
-              <div className="border-border/40 border-t pt-4">
-                <AssessmentTaskCommentThreads
-                  workspaceId={workspaceId}
-                  taskId={selected._id}
-                />
-              </div>
+                    <div className="space-y-2 rounded-xl border border-border/50 bg-muted/10 p-3">
+                      <Label className="flex items-center gap-1.5">
+                        <Shield className="size-3.5" aria-hidden />
+                        ROS
+                      </Label>
+                      {selected.linkedRos.length > 0 ? (
+                        <ul className="space-y-1.5">
+                          {selected.linkedRos.map((r) => (
+                            <li key={r.id}>
+                              <Link
+                                href={`/w/${workspaceId}/ros/a/${r.id}`}
+                                className="hover:bg-muted/60 flex min-h-10 items-center justify-between gap-2 rounded-lg border border-border/40 bg-card px-2.5 py-2 text-sm"
+                              >
+                                <span className="truncate font-medium">
+                                  {r.title}
+                                </span>
+                                <span className="text-muted-foreground shrink-0 text-[11px]">
+                                  {r.status}
+                                </span>
+                              </Link>
+                            </li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <p className="text-muted-foreground text-xs">
+                          Ingen ROS koblet til vurderingen ennå.
+                        </p>
+                      )}
+                      {selected.canEdit && availableRosToLink.length > 0 ? (
+                        <div className="flex flex-col gap-2 sm:flex-row">
+                          <select
+                            className="border-input bg-background min-h-11 flex-1 rounded-lg border px-2 text-sm sm:min-h-9"
+                            value={linkRosId}
+                            onChange={(e) =>
+                              setLinkRosId(
+                                e.target.value as Id<"rosAnalyses"> | "",
+                              )
+                            }
+                          >
+                            <option value="">Koble ROS …</option>
+                            {availableRosToLink.map((r) => (
+                              <option key={r.id} value={r.id}>
+                                {r.title}
+                              </option>
+                            ))}
+                          </select>
+                          <Button
+                            type="button"
+                            size="sm"
+                            className="min-h-11 touch-manipulation sm:min-h-9"
+                            disabled={busy || !linkRosId}
+                            onClick={() => {
+                              if (!linkRosId) return;
+                              void linkRos({
+                                analysisId: linkRosId,
+                                assessmentId: selected.assessmentId,
+                              })
+                                .then(() => {
+                                  toast.success("ROS koblet til vurderingen");
+                                  setLinkRosId("");
+                                })
+                                .catch((err: unknown) =>
+                                  toast.error(
+                                    err instanceof Error
+                                      ? err.message
+                                      : "Kunne ikke koble",
+                                  ),
+                                );
+                            }}
+                          >
+                            Koble
+                          </Button>
+                        </div>
+                      ) : null}
+                    </div>
 
-              <div className="flex flex-wrap gap-2 pt-2">
-                {selected.canEdit ? (
+                    <div className="space-y-1.5 rounded-xl border border-border/50 bg-muted/10 p-3">
+                      <Label className="flex items-center gap-1.5">
+                        <Link2 className="size-3.5" aria-hidden />
+                        {pulsBoardCopy.parentLabel}
+                      </Label>
+                      <p className="text-muted-foreground text-xs leading-relaxed">
+                        {pulsBoardCopy.parentHint}
+                      </p>
+                      <select
+                        className="border-input bg-background flex min-h-11 w-full rounded-lg border px-2 text-sm sm:min-h-9"
+                        value={editParentId}
+                        onChange={(e) =>
+                          setEditParentId(
+                            e.target.value as Id<"assessmentTasks"> | "",
+                          )
+                        }
+                        disabled={!selected.canEdit}
+                      >
+                        <option value="">{pulsBoardCopy.parentNone}</option>
+                        {linkParentOptions.map((p) => (
+                          <option key={p._id} value={p._id}>
+                            {pulsBoardCopy.parentUnder(parentOptionLabel(p))}
+                          </option>
+                        ))}
+                      </select>
+                      {selected.parentTaskId || editParentId ? (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="ghost"
+                          className="min-h-11 gap-1 px-2 text-xs touch-manipulation sm:min-h-8"
+                          disabled={!selected.canEdit}
+                          onClick={() => setEditParentId("")}
+                        >
+                          <Unlink className="size-3.5" />
+                          Fjern kobling
+                        </Button>
+                      ) : null}
+                    </div>
+
+                    {childSubIssues.length > 0 ? (
+                      <div className="space-y-2 rounded-xl border border-border/50 bg-muted/10 p-3">
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="flex items-center gap-1.5 text-sm font-medium">
+                            <ListTree className="size-3.5" aria-hidden />
+                            {pulsBoardCopy.directSubcards}
+                          </p>
+                          <span className="text-muted-foreground text-xs tabular-nums">
+                            {selected.subIssueDoneCount}/
+                            {selected.subIssueCount} ferdig
+                          </span>
+                        </div>
+                        <ul className="space-y-1.5">
+                          {childSubIssues.map((child) => (
+                            <li key={child._id}>
+                              <button
+                                type="button"
+                                className="hover:bg-muted/60 flex min-h-11 w-full items-start justify-between gap-2 rounded-lg border border-border/40 bg-card px-2.5 py-2 text-left text-sm touch-manipulation"
+                                onClick={() => openDetail(child)}
+                              >
+                                <span className="min-w-0">
+                                  <span
+                                    className={cn(
+                                      "block font-medium leading-snug",
+                                      child.status === "done" &&
+                                        "text-muted-foreground line-through",
+                                    )}
+                                  >
+                                    {child.title}
+                                  </span>
+                                  <span className="text-muted-foreground text-[11px]">
+                                    {formatDateRange(
+                                      child.startAt,
+                                      child.dueAt,
+                                    ) ?? "Mangler datoer"}
+                                    {child.subIssueCount > 0
+                                      ? ` · ${child.subIssueDoneCount}/${child.subIssueCount} under`
+                                      : ""}
+                                  </span>
+                                </span>
+                                <span
+                                  className={cn(
+                                    "shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium",
+                                    child.status === "done"
+                                      ? "bg-emerald-500/15 text-emerald-800 dark:text-emerald-200"
+                                      : "bg-muted text-muted-foreground",
+                                  )}
+                                >
+                                  {child.status === "done" ? "Ferdig" : "Åpen"}
+                                </span>
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    ) : null}
+
+                    {selected.canEdit ? (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="min-h-11 w-full touch-manipulation sm:min-h-9"
+                        onClick={() => {
+                          const parent = selected;
+                          setSelected(null);
+                          openCreateAsSub(parent);
+                        }}
+                      >
+                        <Plus className="size-3.5" />
+                        {pulsBoardCopy.createSubcardCta}
+                      </Button>
+                    ) : null}
+                  </>
+                ) : null}
+
+                {detailTab === "kommentarer" ? (
+                  <AssessmentTaskCommentThreads
+                    workspaceId={workspaceId}
+                    taskId={selected._id}
+                  />
+                ) : null}
+
+                {detailTab === "mer" ? (
+                  <>
+                    <TaskGithubControls
+                      taskId={selected._id}
+                      canEdit={selected.canEdit}
+                      githubIssueUrl={selected.githubIssueUrl}
+                      workspaceDefaultRepos={effectiveGithubDefaultRepos(
+                        workspace ?? null,
+                      )}
+                    />
+                    {selected.canEdit ? (
+                      <Button
+                        type="button"
+                        variant="destructive"
+                        className="min-h-11 w-full touch-manipulation sm:min-h-9"
+                        disabled={busy}
+                        onClick={() => {
+                          if (
+                            window.confirm("Slette dette kortet permanent?")
+                          ) {
+                            void removeTask({ taskId: selected._id }).then(
+                              () => {
+                                setSelected(null);
+                                toast.success(pulsBoardCopy.deleted);
+                              },
+                            );
+                          }
+                        }}
+                      >
+                        Slett kort
+                      </Button>
+                    ) : null}
+                  </>
+                ) : null}
+              </DialogBody>
+              <DialogFooter>
+                {selected.canEdit && detailTab === "oversikt" ? (
                   <>
                     <Button
                       type="button"
+                      className="min-h-11 touch-manipulation sm:min-h-9"
                       disabled={busy}
                       onClick={() => void saveDetail()}
                     >
@@ -1160,6 +1561,7 @@ export function IssuesProjectBoard({
                     <Button
                       type="button"
                       variant="outline"
+                      className="min-h-11 touch-manipulation sm:min-h-9"
                       disabled={busy}
                       onClick={() => {
                         if (selected.status === "open") {
@@ -1172,34 +1574,35 @@ export function IssuesProjectBoard({
                         }
                       }}
                     >
-                      {selected.status === "open" ? "Marker ferdig" : "Gjenåpne"}
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="destructive"
-                      disabled={busy}
-                      onClick={() => {
-                        if (
-                          window.confirm("Slette denne saken permanent?")
-                        ) {
-                          void removeTask({ taskId: selected._id }).then(
-                            () => {
-                              setSelected(null);
-                              toast.success("Sak slettet");
-                            },
-                          );
-                        }
-                      }}
-                    >
-                      Slett
+                      {selected.status === "open"
+                        ? "Marker ferdig"
+                        : "Gjenåpne"}
                     </Button>
                   </>
-                ) : null}
-              </div>
-            </div>
+                ) : selected.canEdit && detailTab === "koblinger" ? (
+                  <Button
+                    type="button"
+                    className="min-h-11 touch-manipulation sm:min-h-9"
+                    disabled={busy}
+                    onClick={() => void saveDetail()}
+                  >
+                    Lagre koblinger
+                  </Button>
+                ) : (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="min-h-11 touch-manipulation sm:min-h-9"
+                    onClick={() => setSelected(null)}
+                  >
+                    Lukk
+                  </Button>
+                )}
+              </DialogFooter>
+            </>
           ) : null}
-        </SheetContent>
-      </Sheet>
+        </DialogContent>
+      </Dialog>
 
       <Dialog
         open={!!completePrompt}
@@ -1207,50 +1610,52 @@ export function IssuesProjectBoard({
           if (!o) setCompletePrompt(null);
         }}
       >
-        <DialogContent size="sm" titleId="complete-parent-title">
+        <DialogContent
+          size="sm"
+          titleId="complete-parent-title"
+          portalClassName="z-[210]"
+        >
           <DialogHeader>
             <h2
               id="complete-parent-title"
               className="font-heading text-lg font-semibold"
             >
-              Marker hovedsak ferdig?
+              Marker ferdig?
             </h2>
           </DialogHeader>
           <DialogBody className="space-y-2 text-sm">
             <p>
-              «{completePrompt?.title}» har åpne under-saker. Velg om de også
-              skal markeres ferdig.
-            </p>
-            <p className="text-muted-foreground text-xs">
-              Under-saker forblir egne kort på tavlen uansett.
+              {completePrompt
+                ? pulsBoardCopy.completePromptBody(completePrompt.title)
+                : null}
             </p>
           </DialogBody>
           <DialogFooter className="flex flex-col gap-2 sm:flex-col">
             <Button
               type="button"
+              className="min-h-11 w-full touch-manipulation"
               disabled={busy || !completePrompt}
               onClick={() =>
-                completePrompt &&
-                void finishComplete(completePrompt, true)
+                completePrompt && void finishComplete(completePrompt, true)
               }
             >
-              Fullfør hovedsak og under-saker
+              {pulsBoardCopy.completeAll}
             </Button>
             <Button
               type="button"
               variant="outline"
+              className="min-h-11 w-full touch-manipulation"
               disabled={busy || !completePrompt}
               onClick={() =>
-                completePrompt &&
-                void finishComplete(completePrompt, false)
+                completePrompt && void finishComplete(completePrompt, false)
               }
             >
-              Kun hovedsak
+              {pulsBoardCopy.completeOnly}
             </Button>
             <Button
               type="button"
               variant="ghost"
-              disabled={busy}
+              className="min-h-11 w-full touch-manipulation"
               onClick={() => setCompletePrompt(null)}
             >
               Avbryt

@@ -124,7 +124,7 @@ export const add = mutation({
     });
 
     const taskTitle = task.title.trim() || "sak";
-    const href = `/w/${assessment.workspaceId}/saker?task=${args.taskId}`;
+    const href = `/w/${assessment.workspaceId}/puls?task=${args.taskId}`;
 
     /** Varsle: @-taggede, tildelte på saken, og tråd-eier ved svar */
     const notifyIds = new Set<Id<"users">>(mentioned);
