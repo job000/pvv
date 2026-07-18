@@ -61,34 +61,38 @@ export function downloadPortfolioBenefitsPdf(input: PortfolioBenefitsPdfInput): 
     creator: "PVV",
   });
 
-  L.drawCover({
-    eyebrow: "PVV · GEVINSTER OG BESPARELSER",
-    metaLine: `${formatPdfTimestamp(generatedAt)}  ·  ${docRef}`,
-    subtitle:
-      "Samlet bilde av estimert verdi på tvers av vurderinger i arbeidsområdet.",
-    title: "Gevinster og besparelser",
-    lead:
-      "Rapporten oppsummerer timer, kroner og FTE, fordelt på realiseringsfase og pipeline. Tall er veiledende estimater fra PVV-modellen.",
-  });
-
-  L.drawMetaPanel("Dokumentkontroll", [
-    { label: "Arbeidsområde", value: input.workspaceName.trim() || "—" },
-    { label: "Dokumentreferanse", value: docRef },
-    {
-      label: "Antall kandidater i uttrekk",
-      value: String(input.candidates.length),
-    },
-  ]);
-
-  L.drawToc([
+  const toc = [
+    "Dokumentkontroll",
     "Nøkkeltall",
     "Realisering",
     "Per fase",
     "Kvalitet og sikkerhet",
     "Kandidater",
-  ]);
+  ] as const;
 
-  L.addHeading("Nøkkeltall", 12);
+  L.drawFrontPage({
+    docTypeLabel: "Gevinster og besparelser",
+    eyebrow: "Porteføljeoversikt",
+    title: "Gevinster og besparelser",
+    subtitle: "Estimert verdi på tvers av vurderinger i arbeidsområdet.",
+    generatedLabel: formatPdfTimestamp(generatedAt),
+    documentRef: docRef,
+  });
+
+  L.drawTocPage([...toc]);
+
+  L.drawDocumentControlPage({
+    organizationLine: input.workspaceName.trim() || undefined,
+    metaRows: [
+      { label: "Dokumentreferanse", value: docRef },
+      {
+        label: "Antall kandidater",
+        value: String(input.candidates.length),
+      },
+    ],
+  });
+
+  L.addSection(toc[1], 12);
   L.addKpiTiles([
     { label: "Timer / år", value: hoursNb(input.totals.hoursSavedPerYear) },
     {
@@ -109,7 +113,7 @@ export function downloadPortfolioBenefitsPdf(input: PortfolioBenefitsPdfInput): 
     },
   ]);
 
-  L.addHeading("Realisering", 12);
+  L.addSection(toc[2], 12);
   L.addPara(
     "Fordeling etter hvor langt gevinsten er kommet i leveranseløpet.",
     9,
@@ -126,7 +130,7 @@ export function downloadPortfolioBenefitsPdf(input: PortfolioBenefitsPdfInput): 
     );
   }
 
-  L.addHeading("Per fase", 12);
+  L.addSection(toc[3], 12);
   const pipelineRows = input.byPipeline.filter((r) => r.count > 0);
   if (pipelineRows.length === 0) {
     L.addMutedNote("Ingen vurderinger med pipeline-status i uttrekket.");
@@ -142,7 +146,7 @@ export function downloadPortfolioBenefitsPdf(input: PortfolioBenefitsPdfInput): 
   }
 
   const soft = input.softGains.filter((g) => g.soft && g.count > 0);
-  L.addHeading("Kvalitet og sikkerhet (ikke tallfestet)", 12);
+  L.addSection(toc[4], 12);
   if (soft.length === 0) {
     L.addMutedNote("Ingen myke gevinster registrert i uttrekket.");
   } else {
@@ -155,7 +159,7 @@ export function downloadPortfolioBenefitsPdf(input: PortfolioBenefitsPdfInput): 
     }
   }
 
-  L.addHeading("Kandidater", 12);
+  L.addSection(toc[5], 12);
   if (input.candidates.length === 0) {
     L.addMutedNote("Ingen kandidater i uttrekket.");
   } else {

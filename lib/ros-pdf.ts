@@ -312,21 +312,7 @@ export function buildRosAnalysisPdfDocument(data: RosPdfInput): jsPDF {
   const isoDate = data.generatedAt.toISOString().slice(0, 10);
   const docRefLabel = `ROS-${isoDate}${data.metadata?.revision != null ? ` · Rev. ${data.metadata.revision}` : ""}`;
 
-  L.drawCover({
-    eyebrow: "PVV · ROS · RISIKO- OG SÅRBARHETSANALYSE",
-    metaLine: `${formatPdfTimestamp(data.generatedAt)}  ·  ${docRefLabel}`,
-    subtitle:
-      "Til intern styring, dokumentasjon og etterprøving (risikostyring i tråd med god praksis).",
-    title: data.title.trim() || "ROS-analyse",
-    lead:
-      "Samlet oversikt over vurdert risiko før og etter tiltak, inkludert sporbarhet mot oppgaver, PVV-koblinger og logg der disse er i bruk.",
-  });
-  y = L.getY();
-
   const controlRows: Array<{ label: string; value: string }> = [];
-  if (data.workspaceName?.trim()) {
-    controlRows.push({ label: "Arbeidsområde", value: data.workspaceName.trim() });
-  }
   if (data.candidateName?.trim()) {
     const code = data.candidateCode?.trim();
     controlRows.push({
@@ -364,27 +350,44 @@ export function buildRosAnalysisPdfDocument(data: RosPdfInput): jsPDF {
     controlRows.push({ label: "Koblede PVV-vurderinger", value: pvvText });
   }
 
-  L.setY(y);
-  L.drawMetaPanel("Dokumentkontroll", controlRows);
-  y = L.getY();
-
-  L.setY(y);
-  L.drawToc([
+  const toc = [
+    "Dokumentkontroll",
+    "Formål og anvendelse",
     "Oppsummering og analyse-notat",
     "Risikomatrise før tiltak",
     "Risikomatrise etter tiltak",
     "PVV-koblinger, rammer og krav",
     "Oppgaver, risikoer og punktliste",
     "Kortlager, logg og merknad",
-  ]);
+  ] as const;
+
+  L.drawFrontPage({
+    docTypeLabel: "ROS-analyse",
+    eyebrow: "Risiko- og sårbarhetsanalyse",
+    title: data.title.trim() || "ROS-analyse",
+    subtitle: "Intern styring, dokumentasjon og etterprøving.",
+    generatedLabel: formatPdfTimestamp(data.generatedAt),
+    documentRef: docRefLabel,
+  });
   y = L.getY();
 
+  L.drawTocPage([...toc]);
+  y = L.getY();
+
+  L.drawDocumentControlPage({
+    organizationLine: data.workspaceName?.trim() || undefined,
+    metaRows: controlRows,
+  });
+  y = L.getY();
+
+  L.markToc(toc[1]);
   addHeading("Formål og anvendelse", 12);
   addPara(
     "Rapporten dokumenterer risikovurderingen slik den foreligger i PVV på eksporttidspunktet. Den kan deles med ledelse, revisjon, DPO eller leverandører etter interne retningslinjer for informasjonsklassifisering. Matriser vises i breddeformat; sidetall og tittel gjentas i bunntekst.",
     9.5,
   );
 
+  L.markToc(toc[2]);
   if (data.summaryLines && data.summaryLines.length > 0) {
     y += 4;
     addHeading("Oppsummering (før/etter tiltak)", 12);
@@ -511,6 +514,7 @@ export function buildRosAnalysisPdfDocument(data: RosPdfInput): jsPDF {
     const phaseRibbon =
       pi === 0 ? "Matrise — før tiltak" : "Matrise — etter tiltak";
     doc.addPage("a4", "landscape");
+    L.markToc(pi === 0 ? toc[3] : toc[4]);
     const lw = pageW();
     const lh = pageH();
 
@@ -810,6 +814,7 @@ export function buildRosAnalysisPdfDocument(data: RosPdfInput): jsPDF {
 
   if (data.pvvLinksDetailed && data.pvvLinksDetailed.length > 0) {
     y += 4;
+    L.markToc(toc[5]);
     addHeading("PVV-koblinger (detaljer)", 12);
     addPara(
       "Hver kobling er en egen blokk med tydelige felt (PDD-status, notater, krav). Tomme felt er utelatt.",
@@ -874,6 +879,7 @@ export function buildRosAnalysisPdfDocument(data: RosPdfInput): jsPDF {
 
   if (hasLifecycle) {
     y += 4;
+    L.markToc(toc[5]);
     addHeading("Livssyklus, rammer og krav (tilsynspakke)", 12);
     if (data.methodologyStatement?.trim()) {
       addRow("Metodikk", data.methodologyStatement.trim());
@@ -929,6 +935,7 @@ export function buildRosAnalysisPdfDocument(data: RosPdfInput): jsPDF {
       []);
 
   y += 4;
+  L.markToc(toc[6]);
   addHeading("Oppfølgingsoppgaver (tiltak)", 12);
   if (taskLinesResolved.length === 0) {
     addPara(
@@ -1108,6 +1115,7 @@ export function buildRosAnalysisPdfDocument(data: RosPdfInput): jsPDF {
       y += 0.5;
     }
   };
+  L.markToc(toc[7]);
   addPoolHeading("Kortlager — før tiltak", data.riskPoolBeforeLines);
   addPoolHeading("Kortlager — etter tiltak", data.riskPoolAfterLines);
 
@@ -1121,6 +1129,7 @@ export function buildRosAnalysisPdfDocument(data: RosPdfInput): jsPDF {
       : journalSorted.slice(-JOURNAL_PDF_MAX);
   if (journal.length > 0) {
     y += 4;
+    L.markToc(toc[7]);
     addHeading("Risikologg (utdrag)", 12);
     addPara(
       "Eldste hendelser først i utdraget. Tidspunkt og forfatter vises øverst; innholdet under er selve loggteksten.",

@@ -137,51 +137,56 @@ function buildProcessDesignPdfDocument(
     Lref.addMutedNote(`${label}: ingen oppføringer.`);
   };
 
-  L.drawCover({
-    eyebrow: "PVV · RPA PROSESSDESIGN (PDD)",
-    metaLine: `${formatPdfTimestamp(data.generatedAt)}  ·  ${docRef}`,
-    subtitle:
-      "Process Design Document — As-Is / To-Be, omfang, unntak og feilhåndtering for RPA-leveranser.",
+  const toc = [
+    "Dokumentkontroll",
+    "Formål og anvendelse",
+    "1. Prosessoversikt",
+    "2. As-Is — nåværende prosess",
+    "3. To-Be — fremtidig prosess",
+    "4. HUKI — roller og ansvar",
+    "5. Risiko og feilhåndtering",
+    "6. Tilleggsinformasjon",
+  ] as const;
+
+  L.drawFrontPage({
+    docTypeLabel: "RPA prosessdesign (PDD)",
+    eyebrow: "Process Design Document",
     title: shortTitle,
-    lead:
-      "Strukturert prosessdesign for utvikling, test og drift. Tomme felt vises som «Ikke utfylt» slik at leseren ser hva som mangler.",
+    subtitle: "As-Is / To-Be, omfang, unntak og feilhåndtering.",
+    generatedLabel: formatPdfTimestamp(data.generatedAt),
+    documentRef: docRef,
   });
 
-  const metaRows = [
-    ...(data.organizationLine?.trim()
-      ? [{ label: "Organisasjon", value: data.organizationLine.trim() }]
-      : []),
-    ...(data.workspaceName?.trim()
-      ? [{ label: "Arbeidsområde", value: data.workspaceName.trim() }]
-      : []),
-    {
-      label: "Kandidat / vurdering",
-      value: data.assessmentTitle.trim() || "—",
-    },
-    ...(data.publishedVersion != null && data.publishedVersion > 0
-      ? [{ label: "Publisert versjon", value: `v${data.publishedVersion}` }]
-      : []),
-    { label: "Dokumentreferanse", value: docRef },
-  ];
-  L.drawMetaPanel("Dokumentkontroll", metaRows);
+  L.drawTocPage([...toc]);
 
-  L.drawToc([
-    "Prosessoversikt",
-    "As-Is — nåværende prosess",
-    "To-Be — fremtidig prosess",
-    "HUKI — roller og ansvar",
-    "Risiko og feilhåndtering",
-    "Tilleggsinformasjon",
-  ]);
+  L.drawDocumentControlPage({
+    organizationLine:
+      data.organizationLine?.trim() ||
+      data.workspaceName?.trim() ||
+      undefined,
+    metaRows: [
+      ...(data.workspaceName?.trim() && data.organizationLine?.trim()
+        ? [{ label: "Arbeidsområde", value: data.workspaceName.trim() }]
+        : []),
+      {
+        label: "Kandidat / vurdering",
+        value: data.assessmentTitle.trim() || "—",
+      },
+      ...(data.publishedVersion != null && data.publishedVersion > 0
+        ? [{ label: "Publisert versjon", value: `v${data.publishedVersion}` }]
+        : []),
+      { label: "Dokumentreferanse", value: docRef },
+    ],
+  });
 
-  L.addHeading("Formål og anvendelse", 11);
+  L.addSection(toc[1], 11);
   L.addPara(
     "Dokumentet beskriver hvordan prosessen skal automatiseres med RPA: nåværende flyt (As-Is), ønsket flyt (To-Be), omfang, unntak og feilhåndtering. Egnet for utviklere, forretningseiere, test og revisjon.",
     9.5,
   );
 
   /* ---- 1. Prosessoversikt ---- */
-  L.addHeading("1. Prosessoversikt", 12);
+  L.addSection(toc[2], 12);
   addRichField("Prosesstittel", p.processTitle ?? p.asIsProcessName);
   addRichField("Kort beskrivelse", p.shortDescription);
   addRichField("Detaljert beskrivelse", p.executiveSummary);
@@ -203,7 +208,7 @@ function buildProcessDesignPdfDocument(
   }
 
   /* ---- 2. As-Is prosess ---- */
-  L.addHeading("2. As-Is — nåværende prosess", 12);
+  L.addSection(toc[3], 12);
   addRichField("Beskrivelse", p.asIsShortDescription);
   addRichField("Roller", p.asIsRoles);
   addRichField("Volum og frekvens", p.asIsVolume);
@@ -255,7 +260,7 @@ function buildProcessDesignPdfDocument(
   }
 
   /* ---- 3. To-Be prosess ---- */
-  L.addHeading("3. To-Be — fremtidig prosess", 12);
+  L.addSection(toc[4], 12);
   addRichField("To-Be prosesskart (tekst)", p.toBeMap);
   addRasterDiagram(
     "To-Be prosesskart (diagram)",
@@ -268,7 +273,7 @@ function buildProcessDesignPdfDocument(
   addRichField("Parallelle initiativ", p.parallelInitiatives);
 
   /* ---- 4. HUKI ---- */
-  L.addHeading("4. HUKI — roller og ansvar", 12);
+  L.addSection(toc[5], 12);
   if (p.hukiRows?.length) {
     L.addMutedNote(
       "H = Høres · U = Utfører · K = Kontrollerer · I = Informeres",
@@ -284,7 +289,7 @@ function buildProcessDesignPdfDocument(
   }
 
   /* ---- 5. Risiko og feilhåndtering ---- */
-  L.addHeading("5. Risiko og feilhåndtering", 12);
+  L.addSection(toc[6], 12);
 
   if (p.businessExceptionsKnown?.length) {
     L.addHeading("Kjente forretningsunntak", 10);
@@ -324,7 +329,7 @@ function buildProcessDesignPdfDocument(
   addRichField("Rapportering og logging", p.reporting);
 
   /* ---- 6. Tillegg ---- */
-  L.addHeading("6. Tilleggsinformasjon", 12);
+  L.addSection(toc[7], 12);
   addRichField("Andre observasjoner", p.otherObservations);
   addRichField("Tilleggskilder / SOP / video", p.additionalSources);
   addRichField("Tidsplan og milepæler", p.targetTimeline);

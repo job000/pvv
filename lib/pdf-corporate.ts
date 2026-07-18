@@ -24,6 +24,18 @@ export type CorporatePdfFooterOptions = {
   shortTitle: string;
   /** Vises i bunntekst og topplinje, f.eks. «ROS-analyse» eller «PVV-vurdering». */
   docTypeLabel: string;
+  /** Hopp over forside (egen cover-footer tegnes der). */
+  skipFirstPage?: boolean;
+  /**
+   * Antall første sider uten bunntekst (cover + blank = 2).
+   * Overstyrer skipFirstPage når satt.
+   */
+  skipFirstPages?: number;
+  /**
+   * Løpende topptekst fra denne siden (1-basert).
+   * Standard: etter cover, blank og TOC (side 4).
+   */
+  headerFromPage?: number;
 };
 
 export function applyCorporatePdfFooters(
@@ -35,7 +47,12 @@ export function applyCorporatePdfFooters(
   const safe = opts.shortTitle.slice(0, 56) || "Uten tittel";
   const T = PDF_CORPORATE_THEME;
   const [s2, s3, s7] = [T.slate200, T.slate500, T.slate700];
-  for (let i = 1; i <= pageCount; i++) {
+  const skipPages =
+    opts.skipFirstPages ?? (opts.skipFirstPage ? 1 : 0);
+  const startPage = skipPages + 1;
+  const headerFrom =
+    opts.headerFromPage ?? (skipPages >= 2 ? 4 : skipPages === 1 ? 3 : 2);
+  for (let i = startPage; i <= pageCount; i++) {
     doc.setPage(i);
     const pw = doc.internal.pageSize.getWidth();
     const ph = doc.internal.pageSize.getHeight();
@@ -60,7 +77,7 @@ export function applyCorporatePdfFooters(
       align: "right",
     });
 
-    if (!landscape && i > 1) {
+    if (!landscape && i >= headerFrom) {
       doc.setDrawColor(s2[0], s2[1], s2[2]);
       doc.line(margin, 11, pw - margin, 11);
       doc.setFontSize(7);

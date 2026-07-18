@@ -1,6 +1,5 @@
 import { jsPDF } from "jspdf";
 
-import { ASSESSMENT_WIZARD_STEP_LABELS } from "@/lib/assessment-wizard-steps";
 import { OPERATIONS_SUPPORT_LEVEL_LABELS } from "@/lib/helsesector-labels";
 import {
   createPdfLayout,
@@ -91,64 +90,63 @@ export function buildAssessmentPdfDocument(data: AssessmentPdfInput): jsPDF {
     creator: "PVV",
   });
 
-  L.drawCover({
-    eyebrow: "PVV · VURDERING · 5 STEG",
-    metaLine: `${formatPdfTimestamp(data.generatedAt)}  ·  ${docRef}`,
-    subtitle:
-      "Strukturert uttrekk for arkiv, porteføljestyring, revisjon og beslutningsmøter.",
-    title: data.title || "Vurdering",
-    lead:
-      "Rapporten følger samme rekkefølge som i appen: kandidat og volum → prosess og systemer → verdi og effekt → resultat → oppfølging. Tomme felt vises eksplisitt som «Ikke utfylt».",
-  });
-
-  const metaRows = [
-    ...(data.workspaceName?.trim()
-      ? [{ label: "Arbeidsområde", value: data.workspaceName.trim() }]
-      : []),
-    {
-      label: "Prosessnavn",
-      value: data.processName.trim() || "—",
-    },
-    {
-      label: "Referanse / ID",
-      value: data.candidateId.trim() || "—",
-    },
-    { label: "Pipelinestatus", value: data.pipelineLabel },
-    { label: "Risiko (ROS)", value: data.rosLabel },
-    { label: "Personvern (PDD)", value: data.pddLabel },
-  ];
-  L.drawMetaPanel("Dokumentkontroll", metaRows);
-
-  L.drawToc([
+  const toc = [
+    "Dokumentkontroll",
+    "Formål og anvendelse",
     "Kandidat og volum",
     "Prosess og systemer",
     "Verdi og effekt",
     "Resultat (nøkkeltall)",
     "Oppfølging",
-  ]);
+  ] as const;
 
-  L.addHeading("Formål og anvendelse", 11);
+  L.drawFrontPage({
+    docTypeLabel: "PVV-vurdering",
+    eyebrow: "5-stegs vurdering · RPA / prosess",
+    title: data.title || "Vurdering",
+    subtitle: "Arkiv, porteføljestyring, revisjon og beslutningsmøter.",
+    generatedLabel: formatPdfTimestamp(data.generatedAt),
+    documentRef: docRef,
+  });
+
+  L.drawTocPage([...toc]);
+
+  L.drawDocumentControlPage({
+    organizationLine: data.workspaceName?.trim() || undefined,
+    metaRows: [
+      {
+        label: "Prosessnavn",
+        value: data.processName.trim() || "—",
+      },
+      {
+        label: "Referanse / ID",
+        value: data.candidateId.trim() || "—",
+      },
+      { label: "Pipelinestatus", value: data.pipelineLabel },
+      { label: "Risiko (ROS)", value: data.rosLabel },
+      { label: "Personvern (PDD)", value: data.pddLabel },
+    ],
+  });
+
+  L.addSection(toc[1], 11);
   L.addPara(
     "Dokumentet er et strukturert uttrekk fra PVV på eksporttidspunktet. Tall og poeng er veiledende og erstatter ikke faglig eller juridisk vurdering i egen organisasjon. Distribueres etter interne retningslinjer for informasjon og personvern.",
     9.5,
   );
 
-  const stepLabel = (i: number) =>
-    `${i + 1}. ${ASSESSMENT_WIZARD_STEP_LABELS[i] ?? `Steg ${i + 1}`}`;
-
   const field = (label: string, body?: string) =>
     L.addFieldCard(label, body, { showEmpty: true });
 
-  L.addHeading(stepLabel(0), 12);
+  L.addSection(toc[2], 12);
   field("Prosessbeskrivelse", data.processDescription);
   field("Volum og mønster", data.processVolumeNotes);
 
-  L.addHeading(stepLabel(1), 12);
+  L.addSection(toc[3], 12);
   field("Flyt og hovedtrinn", data.processFlowSummary);
   field("Roller og ansvar", data.processActors);
   field("Systemer og data", data.processSystems);
 
-  L.addHeading(stepLabel(2), 12);
+  L.addSection(toc[4], 12);
   field("Mål og verdi", data.processGoal);
   field("Begrensninger og risiko", data.processConstraints);
   field("Sikkerhet og informasjon", data.hfSecurityInformationNotes);
@@ -204,7 +202,7 @@ export function buildAssessmentPdfDocument(data: AssessmentPdfInput): jsPDF {
   }
   field("Forklaring (hindring)", data.rpaBarrierNotes);
 
-  L.addHeading(stepLabel(3), 12);
+  L.addSection(toc[5], 12);
   L.addKpiTiles([
     {
       label: "Automatiseringspotensial",
@@ -273,7 +271,7 @@ export function buildAssessmentPdfDocument(data: AssessmentPdfInput): jsPDF {
     );
   }
 
-  L.addHeading(stepLabel(4), 12);
+  L.addSection(toc[6], 12);
   field("Videre og oppfølging", data.processFollowUp);
   field(
     "Gevinst, tid, ventetid, robot vs. manuelt",
