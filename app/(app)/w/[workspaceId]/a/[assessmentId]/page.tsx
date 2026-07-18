@@ -4,8 +4,9 @@ import { AssessmentWizard } from "@/components/assessment-wizard/assessment-wiza
 import type { Id } from "@/convex/_generated/dataModel";
 import Link from "next/link";
 import { useParams } from "next/navigation";
+import { Suspense } from "react";
 
-export default function AssessmentPage() {
+function AssessmentPageBody() {
   const params = useParams();
   const workspaceId = params.workspaceId as Id<"workspaces">;
   const assessmentId = params.assessmentId as Id<"assessments">;
@@ -20,5 +21,19 @@ export default function AssessmentPage() {
       </Link>
       <AssessmentWizard assessmentId={assessmentId} />
     </div>
+  );
+}
+
+export default function AssessmentPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex min-h-[30vh] items-center justify-center">
+          <div className="border-primary size-8 animate-spin rounded-full border-2 border-t-transparent" />
+        </div>
+      }
+    >
+      <AssessmentPageBody />
+    </Suspense>
   );
 }

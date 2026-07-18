@@ -36,6 +36,7 @@ export function AssessmentObjectHeader({
   firstRosAnalysisId,
   canEditPipeline = false,
   evaluationContext,
+  onLinkRos,
   className,
 }: {
   workspaceId: Id<"workspaces">;
@@ -51,6 +52,8 @@ export function AssessmentObjectHeader({
   canEditPipeline?: boolean;
   /** Hvilken prosess/sak vurderingen gjelder — alltid synlig kontekst */
   evaluationContext?: AssessmentEvaluationContext;
+  /** Åpne dialog for å koble eksisterende eller ny ROS til denne vurderingen. */
+  onLinkRos?: () => void;
   className?: string;
 }) {
   const wid = String(workspaceId);
@@ -110,7 +113,7 @@ export function AssessmentObjectHeader({
           </a>
         ) : null}
 
-        <div className="ml-auto flex flex-wrap items-center gap-x-4 gap-y-2">
+        <div className="ml-auto flex flex-wrap items-center gap-x-3 gap-y-2">
           {processDesignHref ? (
             <Link
               href={processDesignHref}
@@ -119,12 +122,29 @@ export function AssessmentObjectHeader({
               Prosessdesign
             </Link>
           ) : null}
-          <Link
-            href={rosHref}
-            className="font-medium text-foreground underline-offset-4 hover:underline"
-          >
-            {hasRosAnalysisLink ? "Åpne ROS" : "Gå til ROS"}
-          </Link>
+          {hasRosAnalysisLink ? (
+            <Link
+              href={rosHref}
+              className="font-medium text-foreground underline-offset-4 hover:underline"
+            >
+              Åpne ROS
+            </Link>
+          ) : onLinkRos ? (
+            <button
+              type="button"
+              onClick={onLinkRos}
+              className="inline-flex h-9 items-center rounded-full bg-foreground px-3.5 text-xs font-semibold text-background touch-manipulation hover:opacity-90"
+            >
+              Koble ROS
+            </button>
+          ) : (
+            <Link
+              href={rosHref}
+              className="font-medium text-foreground underline-offset-4 hover:underline"
+            >
+              Gå til ROS
+            </Link>
+          )}
         </div>
       </div>
 

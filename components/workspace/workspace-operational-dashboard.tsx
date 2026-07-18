@@ -234,7 +234,7 @@ export function WorkspaceOperationalDashboard({
           eyebrow: "Gjør dette først",
           title: rosTarget.title,
           detail: "Mangler ROS-kobling",
-          href: `/w/${wid}?kobleRos=1&assessmentId=${rosTarget.assessmentId}`,
+          href: `/w/${wid}/a/${rosTarget.assessmentId}?kobleRos=1`,
           cta: "Koble ROS",
           icon: ShieldPlus,
           tone: "warning",
@@ -320,7 +320,8 @@ export function WorkspaceOperationalDashboard({
       key: `ros-${row.assessmentId}`,
       title: row.title,
       reason: "Mangler ROS",
-      href: `/w/${wid}?kobleRos=1&assessmentId=${row.assessmentId}`,
+      href: `/w/${wid}/a/${row.assessmentId}?kobleRos=1`,
+      meta: "Koble ROS",
     });
   }
 

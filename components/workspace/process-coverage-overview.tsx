@@ -491,26 +491,36 @@ function ProcessCoverageDetailDialog({
                             {formatRelativeUpdatedAt(a.updatedAt)}
                           </p>
                         </div>
-                        {canEditPipelineStatus ? (
-                          <PipelineStatusSelect
-                            assessmentId={a.assessmentId}
-                            value={normalizePipelineStatus(
-                              a.pipelineStatus as PipelineStatus,
-                            )}
-                            compact
-                            className="w-fit shrink-0"
-                          />
-                        ) : (
-                          <Badge variant="outline" className="w-fit shrink-0">
-                            {
-                              PIPELINE_STATUS_LABELS[
-                                normalizePipelineStatus(
-                                  a.pipelineStatus as PipelineStatus,
-                                )
-                              ]
-                            }
-                          </Badge>
-                        )}
+                        <div className="flex flex-wrap items-center gap-2">
+                          {row.ros.count === 0 ? (
+                            <Link
+                              href={`/w/${workspaceId}/a/${a.assessmentId}?kobleRos=1`}
+                              className="inline-flex h-9 items-center rounded-full bg-foreground px-3 text-xs font-semibold text-background hover:opacity-90"
+                            >
+                              Koble ROS
+                            </Link>
+                          ) : null}
+                          {canEditPipelineStatus ? (
+                            <PipelineStatusSelect
+                              assessmentId={a.assessmentId}
+                              value={normalizePipelineStatus(
+                                a.pipelineStatus as PipelineStatus,
+                              )}
+                              compact
+                              className="w-fit shrink-0"
+                            />
+                          ) : (
+                            <Badge variant="outline" className="w-fit shrink-0">
+                              {
+                                PIPELINE_STATUS_LABELS[
+                                  normalizePipelineStatus(
+                                    a.pipelineStatus as PipelineStatus,
+                                  )
+                                ]
+                              }
+                            </Badge>
+                          )}
+                        </div>
                       </li>
                     ))}
                   </ul>

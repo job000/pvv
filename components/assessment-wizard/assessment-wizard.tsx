@@ -7,6 +7,7 @@ import {
 import { AssessmentCollaborationPanel } from "@/components/assessment-wizard/assessment-collaboration-panel";
 import { AssessmentContextCard } from "@/components/assessment-wizard/assessment-context-card";
 import { AssessmentExportPanel } from "@/components/assessment-wizard/assessment-export-panel";
+import { AssessmentRosLinkDialog } from "@/components/assessment-wizard/assessment-ros-link-dialog";
 import { HfRequirementsSection } from "@/components/assessment-wizard/hf-requirements-section";
 import { ProcessProfileSection } from "@/components/assessment-wizard/process-profile-section";
 import { AssessmentPortfolioSummarySection } from "@/components/assessment-wizard/assessment-portfolio-summary-section";
@@ -54,7 +55,7 @@ import { clampLikert5, computeAllResults } from "@/lib/rpa-assessment/scoring";
 import { useMutation, useQuery } from "convex/react";
 import useEmblaCarousel from "embla-carousel-react";
 import { ChevronLeft, ChevronRight, Trash2 } from "lucide-react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useStickyState } from "@/lib/use-sticky-state";
 
@@ -376,6 +377,9 @@ function compactStepLabel(label: string): string {
 
 export function AssessmentWizard({ assessmentId }: Props) {
   const params = useParams();
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const workspaceIdParam = params.workspaceId as Id<"workspaces"> | undefined;
   const data = useQuery(api.assessments.getDraft, { assessmentId });
   const access = useQuery(api.assessments.getMyAccess, { assessmentId });
@@ -397,6 +401,7 @@ export function AssessmentWizard({ assessmentId }: Props) {
   );
   const saveDraft = useMutation(api.assessments.saveDraft);
   const updateAssessmentTitle = useMutation(api.assessments.updateAssessmentTitle);
+  const [rosLinkOpen, setRosLinkOpen] = useState(false);
   const deleteAssessment = useMutation(api.assessments.deleteAssessment);
 
   const [payload, setPayload] = useState<AssessmentPayload | null>(null);
@@ -414,7 +419,6 @@ export function AssessmentWizard({ assessmentId }: Props) {
   const [leaveWizardOpen, setLeaveWizardOpen] = useState(false);
   /** Eksplisitt lagring før navigasjon (Ferdig / forlat veiviser). */
   const [leavingBusy, setLeavingBusy] = useState(false);
-  const router = useRouter();
   const assessmentRow = data?.assessment ?? null;
   const stepLabels = ASSESSMENT_WIZARD_STEP_LABELS;
   const detailsSlideIndex = stepLabels.indexOf("Valgfritt mer");
@@ -430,6 +434,28 @@ export function AssessmentWizard({ assessmentId }: Props) {
       router.replace(`/w/${workspaceIdParam}/vurderinger`);
     }
   }, [goneFromServer, router, workspaceIdParam]);
+
+  useEffect(() => {
+    if (searchParams.get("kobleRos") !== "1") return;
+    if (rosContext === undefined) return;
+    if (rosContext.length > 0) {
+      const sp = new URLSearchParams(searchParams.toString());
+      sp.delete("kobleRos");
+      const q = sp.toString();
+      router.replace(q ? `${pathname}?${q}` : pathname, { scroll: false });
+      return;
+    }
+    setRosLinkOpen(true);
+  }, [searchParams, rosContext, pathname, router]);
+
+  const clearKobleRosParam = useCallback(() => {
+    if (searchParams.get("kobleRos") !== "1") return;
+    const sp = new URLSearchParams(searchParams.toString());
+    sp.delete("kobleRos");
+    const q = sp.toString();
+    router.replace(q ? `${pathname}?${q}` : pathname, { scroll: false });
+  }, [pathname, router, searchParams]);
+
   const payloadRef = useRef<AssessmentPayload | null>(null);
   const draftRevisionRef = useRef<number | null>(null);
   /** Seriell kø — hindrer to auto-lagre med samme revisjon (falsk «konflikt» mot seg selv) */
@@ -1054,10 +1080,29 @@ export function AssessmentWizard({ assessmentId }: Props) {
           firstRosAnalysisId={firstRosAnalysisId}
           canEditPipeline={canEdit}
           evaluationContext={evaluationContext}
+          onLinkRos={
+            canEdit && !hasRosAnalysisLink
+              ? () => setRosLinkOpen(true)
+              : undefined
+          }
         />
       ) : (
         <div className="bg-muted/30 h-12 animate-pulse rounded-xl border border-border/50" />
       )}
+
+      {canEdit && !hasRosAnalysisLink && rosContext !== undefined ? (
+        <AssessmentRosLinkDialog
+          open={rosLinkOpen}
+          onOpenChange={(open) => {
+            setRosLinkOpen(open);
+            if (!open) clearKobleRosParam();
+          }}
+          workspaceId={assessment.workspaceId}
+          assessmentId={assessment._id}
+          assessmentTitle={assessment.title}
+          linkedRosAnalysisIds={rosContext.map((x) => x.rosAnalysisId)}
+        />
+      ) : null}
 
       {/* Sekundær-info samlet i én lukket disclosure. Tidligere lå dette
           alltid synlig som to tunge kort («MED I VURDERINGEN» + «Eksport og

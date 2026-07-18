@@ -4801,36 +4801,47 @@ export function WorkspaceAssessmentsPanel({
                           {PIPELINE_STATUS_LABELS[pipeline]}
                         </Badge>
                       )}
-                      <button
-                        type="button"
-                        className="flex size-9 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
-                        title="Slett vurdering"
-                        aria-label={`Slett vurdering ${a.title}`}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          if (
-                            !window.confirm(
-                              `Slette «${a.title}»?\n\nAlle data fjernes permanent.`,
-                            )
-                          ) {
-                            return;
-                          }
-                          void (async () => {
-                            try {
-                              await deleteAssessment({ assessmentId: a._id });
-                              toast.success("Vurdering slettet.");
-                            } catch (err) {
-                              toast.error(
-                                err instanceof Error
-                                  ? err.message
-                                  : "Kunne ikke slette vurderingen.",
-                              );
+                      <div className="flex items-center gap-1">
+                        {utenRosFilter ? (
+                          <Link
+                            href={`/w/${workspaceId}/a/${a._id}?kobleRos=1`}
+                            className="inline-flex h-9 items-center rounded-full bg-foreground px-3 text-xs font-semibold text-background hover:opacity-90"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            Koble ROS
+                          </Link>
+                        ) : null}
+                        <button
+                          type="button"
+                          className="flex size-9 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+                          title="Slett vurdering"
+                          aria-label={`Slett vurdering ${a.title}`}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (
+                              !window.confirm(
+                                `Slette «${a.title}»?\n\nAlle data fjernes permanent.`,
+                              )
+                            ) {
+                              return;
                             }
-                          })();
-                        }}
-                      >
-                        <Trash2 className="size-3.5" aria-hidden />
-                      </button>
+                            void (async () => {
+                              try {
+                                await deleteAssessment({ assessmentId: a._id });
+                                toast.success("Vurdering slettet.");
+                              } catch (err) {
+                                toast.error(
+                                  err instanceof Error
+                                    ? err.message
+                                    : "Kunne ikke slette vurderingen.",
+                                );
+                              }
+                            })();
+                          }}
+                        >
+                          <Trash2 className="size-3.5" aria-hidden />
+                        </button>
+                      </div>
                     </div>
                   </div>
                 </li>
@@ -4848,7 +4859,9 @@ export function WorkspaceAssessmentsPanel({
                     <th className="px-4 py-2.5 font-medium">Enhet</th>
                     <th className="px-4 py-2.5 font-medium">Status</th>
                     <th className="px-4 py-2.5 font-medium">Oppdatert</th>
-                    <th className="px-4 py-2.5 text-right font-medium"> </th>
+                    <th className="px-4 py-2.5 text-right font-medium">
+                      {utenRosFilter ? "ROS" : " "}
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
@@ -4895,36 +4908,46 @@ export function WorkspaceAssessmentsPanel({
                           {formatRelativeUpdatedAt(a.updatedAt)}
                         </td>
                         <td className="px-4 py-3 text-right">
-                          <button
-                            type="button"
-                            className="inline-flex size-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
-                            aria-label={`Slett ${a.title}`}
-                            onClick={() => {
-                              if (
-                                !window.confirm(
-                                  `Slette «${a.title}»?\n\nAlle data fjernes permanent.`,
-                                )
-                              ) {
-                                return;
-                              }
-                              void (async () => {
-                                try {
-                                  await deleteAssessment({
-                                    assessmentId: a._id,
-                                  });
-                                  toast.success("Vurdering slettet.");
-                                } catch (err) {
-                                  toast.error(
-                                    err instanceof Error
-                                      ? err.message
-                                      : "Kunne ikke slette vurderingen.",
-                                  );
+                          <div className="inline-flex items-center justify-end gap-2">
+                            {utenRosFilter ? (
+                              <Link
+                                href={`/w/${workspaceId}/a/${a._id}?kobleRos=1`}
+                                className="inline-flex h-8 items-center rounded-full bg-foreground px-3 text-xs font-semibold text-background hover:opacity-90"
+                              >
+                                Koble ROS
+                              </Link>
+                            ) : null}
+                            <button
+                              type="button"
+                              className="inline-flex size-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+                              aria-label={`Slett ${a.title}`}
+                              onClick={() => {
+                                if (
+                                  !window.confirm(
+                                    `Slette «${a.title}»?\n\nAlle data fjernes permanent.`,
+                                  )
+                                ) {
+                                  return;
                                 }
-                              })();
-                            }}
-                          >
-                            <Trash2 className="size-3.5" aria-hidden />
-                          </button>
+                                void (async () => {
+                                  try {
+                                    await deleteAssessment({
+                                      assessmentId: a._id,
+                                    });
+                                    toast.success("Vurdering slettet.");
+                                  } catch (err) {
+                                    toast.error(
+                                      err instanceof Error
+                                        ? err.message
+                                        : "Kunne ikke slette vurderingen.",
+                                    );
+                                  }
+                                })();
+                              }}
+                            >
+                              <Trash2 className="size-3.5" aria-hidden />
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     );
@@ -4987,6 +5010,15 @@ export function WorkspaceAssessmentsPanel({
                           {PIPELINE_STATUS_LABELS[pipeline]}
                         </Badge>
                       )}
+                      {utenRosFilter ? (
+                        <Link
+                          href={`/w/${workspaceId}/a/${a._id}?kobleRos=1`}
+                          className="inline-flex h-9 items-center rounded-full bg-foreground px-3 text-xs font-semibold text-background hover:opacity-90"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          Koble ROS
+                        </Link>
+                      ) : null}
                       <button
                         type="button"
                         className="flex size-9 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
