@@ -86,6 +86,8 @@ export function MarkdownEditor({
         <div className="min-h-[10rem] px-3.5 py-3">
           <MarkdownView
             value={value}
+            onChange={onChange}
+            disabled={disabled}
             emptyLabel="Ingenting å forhåndsvise ennå."
           />
         </div>
