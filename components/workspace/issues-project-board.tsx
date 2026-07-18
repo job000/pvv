@@ -1137,40 +1137,50 @@ export function IssuesProjectBoard({
     const onWheel = (e: WheelEvent) => {
       if (el.scrollWidth <= el.clientWidth + 2) return;
 
-      // Trackpad horizontal / shift+scroll → horizontal, no snap fighting
-      const horizontalIntent =
-        e.shiftKey || Math.abs(e.deltaX) > Math.abs(e.deltaY);
-      if (horizontalIntent) {
-        const dx = e.shiftKey && e.deltaY !== 0 ? e.deltaY : e.deltaX || e.deltaY;
+      const absX = Math.abs(e.deltaX);
+      const absY = Math.abs(e.deltaY);
+      // absX / absY: >2 ≈ horisontal, 0.35–2 ≈ diagonal, ellers vertikal
+      const axisRatio = absY < 0.5 ? (absX > 0.5 ? Infinity : 0) : absX / absY;
+
+      const scrollBoardX = (dx: number) => {
         if (dx === 0) return;
-        e.preventDefault();
         pending += dx;
         if (!raf) raf = requestAnimationFrame(flush);
+      };
+
+      const cardsEl = (e.target as HTMLElement | null)?.closest(
+        "[data-column-cards]",
+      ) as HTMLElement | null;
+
+      // Shift+hjul = klassisk horisontal (bruker deltaY som X)
+      if (e.shiftKey) {
+        const dx = e.deltaY !== 0 ? e.deltaY : e.deltaX;
+        if (dx === 0) return;
+        e.preventDefault();
+        scrollBoardX(dx);
         return;
       }
 
-      if (e.deltaY === 0) return;
-
-      const target = e.target as HTMLElement | null;
-      const cardsEl = target?.closest(
-        "[data-column-cards]",
-      ) as HTMLElement | null;
-      if (cardsEl) {
-        const canScrollY = cardsEl.scrollHeight > cardsEl.clientHeight + 2;
-        if (canScrollY) {
-          const atTop = cardsEl.scrollTop <= 0;
-          const atBottom =
-            cardsEl.scrollTop + cardsEl.clientHeight >=
-            cardsEl.scrollHeight - 1;
-          if ((e.deltaY < 0 && !atTop) || (e.deltaY > 0 && !atBottom)) {
-            return;
-          }
-        }
+      // Tydelig horisontal: kun tavle sideveis
+      if (axisRatio > 2) {
+        if (e.deltaX === 0) return;
+        e.preventDefault();
+        scrollBoardX(e.deltaX);
+        return;
       }
 
-      e.preventDefault();
-      pending += e.deltaY;
-      if (!raf) raf = requestAnimationFrame(flush);
+      // Diagonal: X → tavle, Y → kolonne (hver for seg)
+      if (axisRatio >= 0.35) {
+        e.preventDefault();
+        if (cardsEl && e.deltaY !== 0) {
+          cardsEl.scrollTop += e.deltaY;
+        }
+        scrollBoardX(e.deltaX);
+        return;
+      }
+
+      // Vertikal: la kolonnen scrolle naturlig.
+      // Aldri konverter overscroll i Y til horisontal tavle-scroll.
     };
     el.addEventListener("wheel", onWheel, { passive: false });
 

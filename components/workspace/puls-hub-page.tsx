@@ -1,6 +1,7 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogBody,
@@ -17,11 +18,12 @@ import type { Id } from "@/convex/_generated/dataModel";
 import { toast } from "@/lib/app-toast";
 import { pulsBoardCopy, pulsBoardPath } from "@/lib/puls-board-copy";
 import { cn } from "@/lib/utils";
-import { useMutation, useQuery } from "convex/react";
+import { useAction, useMutation, useQuery } from "convex/react";
 import {
   Activity,
   ArrowRight,
   Kanban,
+  Loader2,
   Plus,
   Users,
 } from "lucide-react";
@@ -34,6 +36,10 @@ function roleLabel(role: "owner" | "editor" | "viewer") {
   if (role === "editor") return "Skriver";
   return "Leser";
 }
+
+type ColumnSource = "template" | "github";
+
+type GithubColumnPreview = { id: string; name: string; isDone: boolean };
 
 export function PulsHubPage({
   workspaceId,
@@ -48,22 +54,133 @@ export function PulsHubPage({
   const [createTemplate, setCreateTemplate] = useState<
     "empty" | "priority" | "phases"
   >("priority");
+  const [columnSource, setColumnSource] = useState<ColumnSource>("template");
+  const [githubProjects, setGithubProjects] = useState<
+    { id: string; title: string }[]
+  >([]);
+  const [githubProjectId, setGithubProjectId] = useState("");
+  const [githubColumns, setGithubColumns] = useState<GithubColumnPreview[]>(
+    [],
+  );
+  const [githubFieldId, setGithubFieldId] = useState("");
+  const [githubFieldName, setGithubFieldName] = useState("");
+  const [importTasks, setImportTasks] = useState(false);
+  const [assessmentChoice, setAssessmentChoice] = useState<"new" | "existing">(
+    "new",
+  );
+  const [existingAssessmentId, setExistingAssessmentId] = useState<
+    Id<"assessments"> | ""
+  >("");
+  const [githubBusy, setGithubBusy] = useState(false);
   const [busy, setBusy] = useState(false);
 
   const ensureDefaults = useMutation(api.pulsBoards.ensureDefaults);
   const createBoard = useMutation(api.pulsBoards.create);
+  const createAssessment = useMutation(api.assessments.create);
   const acceptInvite = useMutation(api.pulsBoards.acceptInvite);
+  const listGithubProjects = useAction(
+    api.githubTasks.listGithubProjectsForPulsImport,
+  );
+  const previewGithubColumns = useAction(
+    api.githubCandidateProject.previewGithubProjectColumnsForPuls,
+  );
+  const importGithubTasks = useAction(
+    api.pulsGithubImport.importGithubProjectItemsToBoard,
+  );
 
   const data = useQuery(api.pulsBoards.listMineInWorkspace, { workspaceId });
+  const workspace = useQuery(api.workspaces.get, { workspaceId });
+  const assessments = useQuery(api.assessments.listByWorkspace, {
+    workspaceId,
+  });
   const createTemplates = useQuery(api.pulsBoardColumns.listTemplates, {
     includeEmpty: true,
   });
+
+  const workspaceGithubProjectId =
+    workspace?.githubProjectNodeId?.trim() ?? "";
 
   useEffect(() => {
     void ensureDefaults({ workspaceId }).catch(() => {
       /* viewer uten rettigheter — ignore */
     });
   }, [ensureDefaults, workspaceId]);
+
+  const resetCreateForm = () => {
+    setName("");
+    setDescription("");
+    setCreateTemplate("priority");
+    setColumnSource("template");
+    setGithubProjects([]);
+    setGithubProjectId("");
+    setGithubColumns([]);
+    setGithubFieldId("");
+    setGithubFieldName("");
+    setImportTasks(false);
+    setAssessmentChoice("new");
+    setExistingAssessmentId("");
+  };
+
+  const loadGithubProjects = async () => {
+    setGithubBusy(true);
+    try {
+      const list = await listGithubProjects({ workspaceId });
+      setGithubProjects(list);
+      const preferred =
+        list.find(
+          (p: { id: string; title: string }) =>
+            p.id === workspaceGithubProjectId,
+        )?.id ??
+        list[0]?.id ??
+        "";
+      setGithubProjectId(preferred);
+      if (preferred) {
+        await loadGithubColumns(preferred);
+      } else if (workspaceGithubProjectId) {
+        setGithubProjectId(workspaceGithubProjectId);
+        await loadGithubColumns(workspaceGithubProjectId);
+      } else {
+        setGithubColumns([]);
+        setGithubFieldId("");
+        setGithubFieldName("");
+      }
+    } catch (err) {
+      toast.error(
+        err instanceof Error
+          ? err.message
+          : "Kunne ikke hente GitHub-prosjekter",
+      );
+    } finally {
+      setGithubBusy(false);
+    }
+  };
+
+  const loadGithubColumns = async (projectNodeId: string) => {
+    const id = projectNodeId.trim();
+    if (!id) return;
+    setGithubBusy(true);
+    try {
+      const preview = await previewGithubColumns({
+        workspaceId,
+        projectNodeId: id,
+      });
+      setGithubColumns(preview.columns);
+      setGithubFieldId(preview.fieldId);
+      setGithubFieldName(preview.fieldName);
+      setGithubProjectId(preview.projectNodeId);
+    } catch (err) {
+      setGithubColumns([]);
+      setGithubFieldId("");
+      setGithubFieldName("");
+      toast.error(
+        err instanceof Error
+          ? err.message
+          : "Kunne ikke hente kolonner fra prosjektet",
+      );
+    } finally {
+      setGithubBusy(false);
+    }
+  };
 
   const boards = data?.boards ?? [];
   const pending = data?.pendingInvites ?? [];
@@ -74,19 +191,72 @@ export function PulsHubPage({
       toast.error("Gi tavlen et navn");
       return;
     }
+    if (columnSource === "github" && githubColumns.length === 0) {
+      toast.error("Hent kolonner fra et GitHub-prosjekt først");
+      return;
+    }
+    const shouldImportTasks =
+      columnSource === "github" && importTasks && githubFieldId.trim() !== "";
+    if (shouldImportTasks) {
+      if (assessmentChoice === "existing" && !existingAssessmentId) {
+        toast.error("Velg en vurdering for oppgavene");
+        return;
+      }
+    }
     setBusy(true);
     try {
       const boardId = await createBoard({
         workspaceId,
         name: n,
         description: description.trim() || undefined,
-        columnTemplate: createTemplate,
+        columnTemplate:
+          columnSource === "template" ? createTemplate : undefined,
+        columnNames:
+          columnSource === "github"
+            ? githubColumns.map((c) => c.name)
+            : undefined,
       });
-      toast.success("Tavle opprettet");
+
+      if (shouldImportTasks) {
+        let assessmentId: Id<"assessments">;
+        if (assessmentChoice === "existing" && existingAssessmentId) {
+          assessmentId = existingAssessmentId;
+        } else {
+          assessmentId = await createAssessment({
+            workspaceId,
+            title: n,
+            shareWithWorkspace: true,
+          });
+        }
+        const result = await importGithubTasks({
+          workspaceId,
+          boardId,
+          assessmentId,
+          projectNodeId: githubProjectId,
+          fieldId: githubFieldId,
+          columnMap: githubColumns.map((c) => ({
+            githubOptionId: c.id,
+            columnName: c.name,
+          })),
+        });
+        const parts = [
+          `${result.imported} oppgaver`,
+          result.subIssues > 0 ? `${result.subIssues} under-saker` : null,
+          result.comments > 0 ? `${result.comments} kommentarer` : null,
+        ].filter(Boolean);
+        const capNote = result.capped
+          ? " (maks antall hentet — resten ble hoppet over)"
+          : "";
+        toast.success(`Tavle opprettet · ${parts.join(" · ")}${capNote}`);
+      } else {
+        toast.success(
+          columnSource === "github"
+            ? "Tavle opprettet med kolonner fra GitHub"
+            : "Tavle opprettet",
+        );
+      }
       setCreateOpen(false);
-      setName("");
-      setDescription("");
-      setCreateTemplate("priority");
+      resetCreateForm();
       router.push(pulsBoardPath(workspaceId, boardId));
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Kunne ikke opprette");
@@ -288,14 +458,10 @@ export function PulsHubPage({
         open={createOpen}
         onOpenChange={(open) => {
           setCreateOpen(open);
-          if (!open) {
-            setName("");
-            setDescription("");
-            setCreateTemplate("priority");
-          }
+          if (!open) resetCreateForm();
         }}
       >
-        <DialogContent size="md" titleId="create-puls-board-title">
+        <DialogContent size="lg" titleId="create-puls-board-title">
           <DialogHeader>
             <h2
               id="create-puls-board-title"
@@ -304,7 +470,8 @@ export function PulsHubPage({
               Ny Puls-tavle
             </h2>
             <p className="text-muted-foreground mt-1 text-sm">
-              Velg kolonnestruktur. Du blir eier og kan invitere andre etterpå.
+              Velg kolonnestruktur — mal eller importer fra GitHub Project. Du
+              blir eier og kan invitere andre etterpå.
             </p>
           </DialogHeader>
           <DialogBody className="min-w-0 space-y-4">
@@ -327,36 +494,248 @@ export function PulsHubPage({
                 rows={2}
               />
             </div>
+
             <div className="space-y-2">
-              <Label>Kolonnestruktur</Label>
-              <div className="grid min-w-0 gap-2">
-                {(createTemplates ?? []).map((t) => (
-                  <button
-                    key={t.id}
-                    type="button"
-                    onClick={() =>
-                      setCreateTemplate(
-                        t.id as "empty" | "priority" | "phases",
-                      )
+              <Label>Kolonnekilde</Label>
+              <div className="bg-muted/30 inline-flex rounded-xl border border-border/50 p-1">
+                <button
+                  type="button"
+                  onClick={() => setColumnSource("template")}
+                  className={cn(
+                    "min-h-9 rounded-lg px-3 text-xs font-medium",
+                    columnSource === "template"
+                      ? "bg-background text-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  Mal
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setColumnSource("github");
+                    if (githubColumns.length === 0 && !githubBusy) {
+                      void loadGithubProjects();
                     }
-                    className={cn(
-                      "min-w-0 rounded-xl border p-3 text-left transition-colors",
-                      createTemplate === t.id
-                        ? "border-sky-500/40 bg-sky-500/5 ring-1 ring-sky-500/20"
-                        : "border-border/50 hover:bg-muted/40",
-                    )}
-                  >
-                    <p className="text-sm font-medium">{t.label}</p>
-                    <p className="text-muted-foreground mt-0.5 text-xs leading-relaxed">
-                      {t.description}
-                    </p>
-                    <p className="text-muted-foreground mt-1 truncate text-[11px]">
-                      {t.columnNames.join(" → ")}
-                    </p>
-                  </button>
-                ))}
+                  }}
+                  className={cn(
+                    "min-h-9 rounded-lg px-3 text-xs font-medium",
+                    columnSource === "github"
+                      ? "bg-background text-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  GitHub Project
+                </button>
               </div>
             </div>
+
+            {columnSource === "template" ? (
+              <div className="space-y-2">
+                <Label>Kolonnestruktur</Label>
+                <div className="grid min-w-0 gap-2">
+                  {(createTemplates ?? []).map((t) => (
+                    <button
+                      key={t.id}
+                      type="button"
+                      onClick={() =>
+                        setCreateTemplate(
+                          t.id as "empty" | "priority" | "phases",
+                        )
+                      }
+                      className={cn(
+                        "min-w-0 rounded-xl border p-3 text-left transition-colors",
+                        createTemplate === t.id
+                          ? "border-sky-500/40 bg-sky-500/5 ring-1 ring-sky-500/20"
+                          : "border-border/50 hover:bg-muted/40",
+                      )}
+                    >
+                      <p className="text-sm font-medium">{t.label}</p>
+                      <p className="text-muted-foreground mt-0.5 text-xs leading-relaxed">
+                        {t.description}
+                      </p>
+                      <p className="text-muted-foreground mt-1 truncate text-[11px]">
+                        {t.columnNames.join(" → ")}
+                      </p>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-3 rounded-xl border border-border/50 p-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <p className="text-sm font-medium">
+                      Importer kolonner fra GitHub
+                    </p>
+                    <p className="text-muted-foreground mt-0.5 text-xs leading-relaxed">
+                      Statusvalg fra Projects v2 blir Puls-kolonner. Krever
+                      GitHub-token på arbeidsområdet.
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="min-h-9 gap-1.5"
+                    disabled={githubBusy}
+                    onClick={() => void loadGithubProjects()}
+                  >
+                    {githubBusy ? (
+                      <Loader2 className="size-3.5 animate-spin" aria-hidden />
+                    ) : null}
+                    Hent prosjekter
+                  </Button>
+                </div>
+
+                {githubProjects.length > 0 ? (
+                  <div className="space-y-1">
+                    <Label htmlFor="puls-gh-project">GitHub-prosjekt</Label>
+                    <select
+                      id="puls-gh-project"
+                      className="border-input bg-background flex h-10 w-full min-w-0 rounded-lg border px-2 text-sm"
+                      value={githubProjectId}
+                      disabled={githubBusy}
+                      onChange={(e) => {
+                        const id = e.target.value;
+                        setGithubProjectId(id);
+                        void loadGithubColumns(id);
+                      }}
+                    >
+                      {githubProjects.map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.title}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                ) : workspaceGithubProjectId ? (
+                  <p className="text-muted-foreground text-xs">
+                    Bruker arbeidsområdets koblede prosjekt. Trykk «Hent
+                    prosjekter» for å velge et annet.
+                  </p>
+                ) : (
+                  <p className="text-muted-foreground text-xs">
+                    Ingen prosjekter lastet ennå. Trykk «Hent prosjekter», eller
+                    koble prosjekt under arbeidsområdets GitHub-innstillinger.
+                  </p>
+                )}
+
+                {githubColumns.length > 0 ? (
+                  <div className="space-y-1.5">
+                    <p className="text-xs font-medium">
+                      Kolonner
+                      {githubFieldName ? (
+                        <span className="text-muted-foreground font-normal">
+                          {" "}
+                          · felt «{githubFieldName}»
+                        </span>
+                      ) : null}
+                    </p>
+                    <p className="text-muted-foreground text-[11px] leading-relaxed">
+                      {githubColumns.map((c) => c.name).join(" → ")}
+                    </p>
+                    <ul className="flex max-h-36 flex-wrap gap-1.5 overflow-y-auto">
+                      {githubColumns.map((c) => (
+                        <li
+                          key={c.id || c.name}
+                          className={cn(
+                            "rounded-full px-2.5 py-1 text-[11px] font-medium",
+                            c.isDone
+                              ? "bg-emerald-500/15 text-emerald-900 dark:text-emerald-100"
+                              : "bg-muted text-muted-foreground",
+                          )}
+                        >
+                          {c.name}
+                          {c.isDone ? " · ferdig" : ""}
+                        </li>
+                      ))}
+                    </ul>
+
+                    <label className="mt-2 flex cursor-pointer items-start gap-2.5 rounded-lg border border-border/40 bg-muted/20 px-3 py-2.5">
+                      <Checkbox
+                        checked={importTasks}
+                        onCheckedChange={(checked) =>
+                          setImportTasks(checked === true)
+                        }
+                        className="mt-0.5"
+                      />
+                      <span className="min-w-0">
+                        <span className="block text-sm font-medium">
+                          Hent oppgaver også
+                        </span>
+                        <span className="text-muted-foreground mt-0.5 block text-xs leading-relaxed">
+                          Kun lesing fra GitHub — ingen endringer der. Henter
+                          tittel, beskrivelse, tildelte, start-/sluttdato,
+                          labels, under-saker og kommentarer. Pull requests
+                          hoppes over.
+                        </span>
+                      </span>
+                    </label>
+
+                    {importTasks ? (
+                      <div className="space-y-2 rounded-lg border border-border/40 p-3">
+                        <p className="text-xs font-medium">
+                          Vurdering for oppgavene
+                        </p>
+                        <div className="bg-muted/30 inline-flex rounded-lg border border-border/50 p-0.5">
+                          <button
+                            type="button"
+                            onClick={() => setAssessmentChoice("new")}
+                            className={cn(
+                              "min-h-8 rounded-md px-2.5 text-xs font-medium",
+                              assessmentChoice === "new"
+                                ? "bg-background text-foreground shadow-sm"
+                                : "text-muted-foreground hover:text-foreground",
+                            )}
+                          >
+                            Ny vurdering
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setAssessmentChoice("existing")}
+                            className={cn(
+                              "min-h-8 rounded-md px-2.5 text-xs font-medium",
+                              assessmentChoice === "existing"
+                                ? "bg-background text-foreground shadow-sm"
+                                : "text-muted-foreground hover:text-foreground",
+                            )}
+                          >
+                            Eksisterende
+                          </button>
+                        </div>
+                        {assessmentChoice === "new" ? (
+                          <p className="text-muted-foreground text-xs leading-relaxed">
+                            Oppretter en vurdering med samme navn som tavlen.
+                          </p>
+                        ) : (
+                          <div className="space-y-1">
+                            <Label htmlFor="puls-gh-assessment">Vurdering</Label>
+                            <select
+                              id="puls-gh-assessment"
+                              className="border-input bg-background flex h-10 w-full min-w-0 rounded-lg border px-2 text-sm"
+                              value={existingAssessmentId}
+                              onChange={(e) =>
+                                setExistingAssessmentId(
+                                  e.target.value as Id<"assessments"> | "",
+                                )
+                              }
+                            >
+                              <option value="">Velg vurdering…</option>
+                              {(assessments ?? []).map((a) => (
+                                <option key={a._id} value={a._id}>
+                                  {a.title}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        )}
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
+              </div>
+            )}
           </DialogBody>
           <DialogFooter>
             <Button
@@ -368,10 +747,23 @@ export function PulsHubPage({
             </Button>
             <Button
               type="button"
-              disabled={busy || !name.trim()}
+              disabled={
+                busy ||
+                !name.trim() ||
+                (columnSource === "github" && githubColumns.length === 0) ||
+                (columnSource === "github" &&
+                  importTasks &&
+                  assessmentChoice === "existing" &&
+                  !existingAssessmentId)
+              }
               onClick={() => void submitCreate()}
             >
-              Opprett tavle
+              {busy ? (
+                <Loader2 className="mr-1.5 size-3.5 animate-spin" aria-hidden />
+              ) : null}
+              {importTasks && columnSource === "github"
+                ? "Opprett og hent oppgaver"
+                : "Opprett tavle"}
             </Button>
           </DialogFooter>
         </DialogContent>

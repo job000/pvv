@@ -14,6 +14,7 @@ import {
 } from "./lib/access";
 import {
   ensureDefaultColumns,
+  seedColumnsFromNames,
   seedColumnsFromTemplate,
   type ColumnTemplateId,
 } from "./pulsBoardColumns";
@@ -322,6 +323,11 @@ export const create = mutation({
         v.literal("phases"),
       ),
     ),
+    /**
+     * Importerte kolonnenavn (f.eks. fra GitHub Projects statusfelt).
+     * Når satt, brukes disse i stedet for columnTemplate.
+     */
+    columnNames: v.optional(v.array(v.string())),
   },
   returns: v.id("pulsBoards"),
   handler: async (ctx, args) => {
@@ -329,6 +335,11 @@ export const create = mutation({
     await requireWorkspaceMember(ctx, args.workspaceId, userId, "member");
     const name = args.name.trim();
     if (!name) throw new Error("Navn mangler.");
+
+    const importedNames = (args.columnNames ?? [])
+      .map((n) => n.trim())
+      .filter((n) => n.length > 0);
+    const useImport = importedNames.length > 0;
     const templateId: ColumnTemplateId = args.columnTemplate ?? "priority";
     const now = Date.now();
     const boardId = await ctx.db.insert("pulsBoards", {
@@ -338,7 +349,7 @@ export const create = mutation({
       createdByUserId: userId,
       createdAt: now,
       updatedAt: now,
-      columnTemplate: templateId,
+      columnTemplate: useImport ? "custom" : templateId,
     });
     await ctx.db.insert("pulsBoardMembers", {
       boardId,
@@ -349,7 +360,11 @@ export const create = mutation({
     });
     const board = await ctx.db.get(boardId);
     if (board) {
-      await seedColumnsFromTemplate(ctx, board, templateId);
+      if (useImport) {
+        await seedColumnsFromNames(ctx, board, importedNames);
+      } else {
+        await seedColumnsFromTemplate(ctx, board, templateId);
+      }
     }
     return boardId;
   },
@@ -381,9 +396,46 @@ export const update = mutation({
   },
 });
 
+/**
+ * Slett Puls-kort og tilhørende notater/filer.
+ * Berører aldri GitHub — kun Convex/Puls-data.
+ */
+async function deletePulsBoardTaskCascade(
+  ctx: MutationCtx,
+  taskId: Id<"assessmentTasks">,
+) {
+  const notes = await ctx.db
+    .query("assessmentTaskNotes")
+    .withIndex("by_task", (q) => q.eq("taskId", taskId))
+    .collect();
+  for (const n of notes) {
+    await ctx.db.delete(n._id);
+  }
+  const files = await ctx.db
+    .query("assessmentTaskFiles")
+    .withIndex("by_task", (q) => q.eq("taskId", taskId))
+    .collect();
+  for (const f of files) {
+    try {
+      await ctx.storage.delete(f.storageId);
+    } catch {
+      /* storage kan allerede være borte */
+    }
+    await ctx.db.delete(f._id);
+  }
+  await ctx.db.delete(taskId);
+}
+
+/**
+ * Slett Puls-tavle (eier).
+ * Kun lokal Puls-data — ingen sletting/endring i GitHub Projects eller issues.
+ */
 export const remove = mutation({
   args: { boardId: v.id("pulsBoards") },
-  returns: v.object({ ok: v.literal(true) }),
+  returns: v.object({
+    ok: v.literal(true),
+    deletedCards: v.number(),
+  }),
   handler: async (ctx, args) => {
     const { board } = await requirePulsBoardAccess(ctx, args.boardId, "owner");
     const siblings = await ctx.db
@@ -396,21 +448,39 @@ export const remove = mutation({
       throw new Error("Du kan ikke slette den siste tavlen i arbeidsområdet.");
     }
 
-    const tasks = await ctx.db
-      .query("assessmentTasks")
-      .withIndex("by_board", (q) => q.eq("boardId", args.boardId))
-      .take(500);
-    if (tasks.length > 0) {
-      throw new Error(
-        "Flytt eller slett alle kort før du sletter tavlen.",
-      );
+    // Slett Puls-kort på tavlen (kopier/lokale kort — GitHub urørt)
+    let deletedCards = 0;
+    for (;;) {
+      const batch = await ctx.db
+        .query("assessmentTasks")
+        .withIndex("by_board", (q) => q.eq("boardId", args.boardId))
+        .take(40);
+      if (batch.length === 0) break;
+      for (const t of batch) {
+        await deletePulsBoardTaskCascade(ctx, t._id);
+        deletedCards += 1;
+      }
+      if (deletedCards > 2_000) {
+        throw new Error(
+          "Tavlen har for mange kort til å slettes i ett steg. Slett noen kort manuelt og prøv igjen.",
+        );
+      }
     }
 
     const members = await ctx.db
       .query("pulsBoardMembers")
       .withIndex("by_board", (q) => q.eq("boardId", args.boardId))
       .collect();
-    for (const m of members) await ctx.db.delete(m._id);
+    for (const m of members) {
+      const pref = await ctx.db
+        .query("pulsBoardUserPrefs")
+        .withIndex("by_user_board", (q) =>
+          q.eq("userId", m.userId).eq("boardId", args.boardId),
+        )
+        .unique();
+      if (pref) await ctx.db.delete(pref._id);
+      await ctx.db.delete(m._id);
+    }
 
     const invites = await ctx.db
       .query("pulsBoardInvites")
@@ -425,7 +495,7 @@ export const remove = mutation({
     for (const c of cols) await ctx.db.delete(c._id);
 
     await ctx.db.delete(args.boardId);
-    return { ok: true as const };
+    return { ok: true as const, deletedCards };
   },
 });
 

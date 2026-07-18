@@ -88,6 +88,65 @@ export const COLUMN_TEMPLATES: Record<
   },
 };
 
+export function looksLikeDoneColumnName(name: string): boolean {
+  const n = name.trim().toLowerCase();
+  if (!n) return false;
+  return (
+    n === "done" ||
+    n === "ferdig" ||
+    n === "complete" ||
+    n === "completed" ||
+    n === "closed" ||
+    n === "avsluttet" ||
+    n === "shipped" ||
+    /\b(done|ferdig|complete|closed)\b/.test(n)
+  );
+}
+
+/** Opprett kolonner fra eksplisitte navn (f.eks. importert fra GitHub Projects). */
+export async function seedColumnsFromNames(
+  ctx: MutationCtx,
+  board: Doc<"pulsBoards">,
+  columnNames: string[],
+): Promise<Doc<"pulsBoardColumns">[]> {
+  const existing = await listColumnsForBoard(ctx, board._id);
+  if (existing.length > 0) return existing;
+
+  const names = columnNames
+    .map((n) => n.trim())
+    .filter((n) => n.length > 0)
+    .slice(0, 24);
+  if (names.length === 0) {
+    throw new Error("Ingen kolonnenavn å importere.");
+  }
+
+  let defs: TemplateColumn[] = names.map((name) => ({
+    name: name.slice(0, 80),
+    isDone: looksLikeDoneColumnName(name),
+  }));
+  if (!defs.some((d) => d.isDone)) {
+    defs = [...defs, { name: "Ferdig", isDone: true }];
+  }
+
+  const now = Date.now();
+  for (let i = 0; i < defs.length; i++) {
+    const def = defs[i]!;
+    await ctx.db.insert("pulsBoardColumns", {
+      boardId: board._id,
+      workspaceId: board.workspaceId,
+      name: def.name,
+      order: i,
+      isDone: def.isDone,
+      createdAt: now,
+    });
+  }
+  await ctx.db.patch(board._id, {
+    columnTemplate: "custom",
+    updatedAt: now,
+  });
+  return await listColumnsForBoard(ctx, board._id);
+}
+
 /** Opprett kolonner fra mal på en tavle uten eksisterende kolonner. */
 export async function seedColumnsFromTemplate(
   ctx: MutationCtx,

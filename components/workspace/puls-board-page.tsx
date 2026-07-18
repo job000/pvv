@@ -181,11 +181,18 @@ export function PulsBoardPage({
             boardId={boardId}
             canManage={board.canManage}
           />
+        </div>
+      ) : null}
+
+      {tab === "innstillinger" ? (
+        <div className="max-w-2xl space-y-6">
+          <PulsBoardUserSettings boardId={boardId} />
           {board.canManage ? (
             <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-4">
               <p className="text-sm font-medium">Slett tavle</p>
-              <p className="text-muted-foreground mt-1 text-xs">
-                Kun tomme tavler kan slettes. Flytt eller slett kort først.
+              <p className="text-muted-foreground mt-1 text-xs leading-relaxed">
+                Sletter tavlen og Puls-kortene her. GitHub Projects, issues og
+                kommentarer på GitHub endres ikke.
               </p>
               <Button
                 type="button"
@@ -196,15 +203,22 @@ export function PulsBoardPage({
                 onClick={() => {
                   if (
                     !window.confirm(
-                      `Er du sikker på at du vil slette tavlen «${board.name}»?\n\nDette kan ikke angres.`,
+                      `Slette Puls-tavlen «${board.name}»?\n\n` +
+                        `Puls-kort på tavlen slettes her.\n` +
+                        `Ingenting slettes eller endres i GitHub.\n\n` +
+                        `Dette kan ikke angres.`,
                     )
                   ) {
                     return;
                   }
                   setBusy(true);
                   void removeBoard({ boardId })
-                    .then(() => {
-                      toast.success("Tavle slettet");
+                    .then((r) => {
+                      toast.success(
+                        r.deletedCards > 0
+                          ? `Tavle slettet · ${r.deletedCards} Puls-kort fjernet (GitHub urørt)`
+                          : "Tavle slettet (GitHub urørt)",
+                      );
                       router.push(`/w/${workspaceId}/puls`);
                     })
                     .catch((err: unknown) =>
@@ -218,15 +232,11 @@ export function PulsBoardPage({
                 }}
               >
                 <Trash2 className="size-3.5" />
-                Slett
+                Slett Puls-tavle
               </Button>
             </div>
           ) : null}
         </div>
-      ) : null}
-
-      {tab === "innstillinger" ? (
-        <PulsBoardUserSettings boardId={boardId} />
       ) : null}
     </div>
   );

@@ -994,9 +994,69 @@ async function githubRestAuthenticatedLogin(token: string): Promise<string | nul
   return typeof j.login === "string" ? j.login : null;
 }
 
+async function fetchGithubProjectsV2ListForToken(
+  token: string,
+): Promise<{ id: string; title: string }[]> {
+  /** REST: bruker + org-prosjekter (GraphQL viewer.projectsV2 feiler ofte med fine-grained). */
+  const restList = await listAllProjectsV2ViaRest(token);
+  if (restList !== null && restList.length > 0) {
+    return restList;
+  }
+
+  const res = await fetch("https://api.github.com/graphql", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      query: `query {
+          viewer {
+            projectsV2(first: 50) {
+              nodes { id title }
+            }
+          }
+        }`,
+    }),
+  });
+  if (!res.ok) {
+    const t = await res.text();
+    const friendly = graphqlProjectsAccessDeniedMessage(t);
+    const restHint =
+      restList === null
+        ? " (REST fikk ikke listet prosjekter — sjekk «Account»-fanen på fine-grained token og sett Projects.)"
+        : restList.length === 0
+          ? " (REST returnerte 0 prosjekter — mangler ofte Account → Projects på PAT, eller ingen tavler.)"
+          : "";
+    throw new Error(
+      (friendly ?? `GitHub (${res.status}): ${t.slice(0, 200)}`) + restHint,
+    );
+  }
+  const json = (await res.json()) as {
+    data?: {
+      viewer?: { projectsV2?: { nodes?: { id: string; title: string }[] } };
+    };
+    errors?: { message: string }[];
+  };
+  if (json.errors?.length) {
+    const raw = json.errors[0]?.message ?? "GitHub GraphQL feilet.";
+    const friendly = graphqlProjectsAccessDeniedMessage(raw);
+    const restHint =
+      restList === null
+        ? " (REST fikk ikke listet — fine-grained: «Account» → Projects.)"
+        : restList.length === 0
+          ? " (REST var tom — sjekk Account-fanen på tokenet, eller org-tilgang for org-prosjekter.)"
+          : "";
+    throw new Error((friendly ?? raw) + restHint);
+  }
+  const nodes = json.data?.viewer?.projectsV2?.nodes ?? [];
+  return nodes.map((n) => ({ id: n.id, title: n.title }));
+}
+
 /** Lister prosjekter tilknyttet innlogget GitHub-bruker (Projects v2). Krever prosjekttilgang på PAT. */
 export const listGithubProjectsForWorkspace = action({
   args: { workspaceId: v.id("workspaces") },
+  returns: v.array(v.object({ id: v.string(), title: v.string() })),
   handler: async (ctx, args) => {
     const userId = await getAuthUserId(ctx);
     if (!userId) {
@@ -1010,61 +1070,28 @@ export const listGithubProjectsForWorkspace = action({
       throw new Error("Kun administratorer kan hente prosjekter.");
     }
     const token = await resolveGithubToken(ctx, args.workspaceId);
+    return await fetchGithubProjectsV2ListForToken(token);
+  },
+});
 
-    /** REST: bruker + org-prosjekter (GraphQL viewer.projectsV2 feiler ofte med fine-grained). */
-    const restList = await listAllProjectsV2ViaRest(token);
-    if (restList !== null && restList.length > 0) {
-      return restList;
+/**
+ * Samme prosjektliste som admin-visningen, men for medlemmer som oppretter Puls-tavle
+ * og vil importere kolonner fra et GitHub Project.
+ */
+export const listGithubProjectsForPulsImport = action({
+  args: { workspaceId: v.id("workspaces") },
+  returns: v.array(v.object({ id: v.string(), title: v.string() })),
+  handler: async (ctx, args) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) {
+      throw new Error("Du må være innlogget.");
     }
-
-    const res = await fetch("https://api.github.com/graphql", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        query: `query {
-          viewer {
-            projectsV2(first: 50) {
-              nodes { id title }
-            }
-          }
-        }`,
-      }),
+    await ctx.runQuery(internal.candidates.assertMemberForWorkspace, {
+      workspaceId: args.workspaceId,
+      userId,
     });
-    if (!res.ok) {
-      const t = await res.text();
-      const friendly = graphqlProjectsAccessDeniedMessage(t);
-      const restHint =
-        restList === null
-          ? " (REST fikk ikke listet prosjekter — sjekk «Account»-fanen på fine-grained token og sett Projects.)"
-          : restList.length === 0
-            ? " (REST returnerte 0 prosjekter — mangler ofte Account → Projects på PAT, eller ingen tavler.)"
-            : "";
-      throw new Error(
-        (friendly ?? `GitHub (${res.status}): ${t.slice(0, 200)}`) + restHint,
-      );
-    }
-    const json = (await res.json()) as {
-      data?: {
-        viewer?: { projectsV2?: { nodes?: { id: string; title: string }[] } };
-      };
-      errors?: { message: string }[];
-    };
-    if (json.errors?.length) {
-      const raw = json.errors[0]?.message ?? "GitHub GraphQL feilet.";
-      const friendly = graphqlProjectsAccessDeniedMessage(raw);
-      const restHint =
-        restList === null
-          ? " (REST fikk ikke listet — fine-grained: «Account» → Projects.)"
-          : restList.length === 0
-            ? " (REST var tom — sjekk Account-fanen på tokenet, eller org-tilgang for org-prosjekter.)"
-            : "";
-      throw new Error((friendly ?? raw) + restHint);
-    }
-    const nodes = json.data?.viewer?.projectsV2?.nodes ?? [];
-    return nodes.map((n) => ({ id: n.id, title: n.title }));
+    const token = await resolveGithubToken(ctx, args.workspaceId);
+    return await fetchGithubProjectsV2ListForToken(token);
   },
 });
 

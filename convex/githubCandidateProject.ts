@@ -1927,3 +1927,118 @@ export const createGithubRepoIssueForIntakeSubmission = action({
     };
   },
 });
+
+function looksLikeGithubDoneStatus(name: string): boolean {
+  const n = name.trim().toLowerCase();
+  if (!n) return false;
+  return (
+    n === "done" ||
+    n === "ferdig" ||
+    n === "complete" ||
+    n === "completed" ||
+    n === "closed" ||
+    n === "avsluttet" ||
+    n === "shipped" ||
+    /\b(done|ferdig|complete|closed)\b/.test(n)
+  );
+}
+
+type PulsGithubColumnPreview = {
+  projectNodeId: string;
+  fieldId: string;
+  fieldName: string;
+  columns: { id: string; name: string; isDone: boolean }[];
+};
+
+/**
+ * Forhåndsvis Puls-kolonner fra et GitHub Projects v2-statusfelt
+ * (brukes ved oppretting av ny Puls-tavle).
+ */
+export const previewGithubProjectColumnsForPuls = action({
+  args: {
+    workspaceId: v.id("workspaces"),
+    /** Projects v2 node-ID (PVT_…). Tom = bruk arbeidsområdets lagrede prosjekt. */
+    projectNodeId: v.optional(v.string()),
+    /** Valgfritt enkeltvalg-felt; ellers Status / første felt. */
+    fieldId: v.optional(v.string()),
+  },
+  returns: v.object({
+    projectNodeId: v.string(),
+    fieldId: v.string(),
+    fieldName: v.string(),
+    columns: v.array(
+      v.object({
+        id: v.string(),
+        name: v.string(),
+        isDone: v.boolean(),
+      }),
+    ),
+  }),
+  handler: async (ctx, args): Promise<PulsGithubColumnPreview> => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) {
+      throw new Error("Du må være innlogget.");
+    }
+    await ctx.runQuery(internal.candidates.assertMemberForWorkspace, {
+      workspaceId: args.workspaceId,
+      userId,
+    });
+    const workspace: Doc<"workspaces"> | null = await ctx.runQuery(
+      internal.githubTasks.getWorkspaceDoc,
+      { workspaceId: args.workspaceId },
+    );
+    if (!workspace) {
+      throw new Error("Arbeidsområde finnes ikke.");
+    }
+
+    const resolvedProjectId: string =
+      args.projectNodeId?.trim() ||
+      workspace.githubProjectNodeId?.trim() ||
+      "";
+    if (!resolvedProjectId) {
+      throw new Error(
+        "Velg et GitHub-prosjekt, eller koble prosjekt under Innstillinger → GitHub.",
+      );
+    }
+
+    const preferredFieldId =
+      args.fieldId?.trim() ||
+      workspace.githubProjectSingleSelectFieldId?.trim() ||
+      null;
+
+    const token = await resolveGithubToken(ctx, args.workspaceId);
+    const meta = await fetchProjectStatusFieldOptions(
+      token,
+      resolvedProjectId,
+      preferredFieldId,
+    );
+
+    const columns: { id: string; name: string; isDone: boolean }[] =
+      meta.options.map((o) => ({
+        id: o.id,
+        name: o.name.trim().slice(0, 80),
+        isDone: looksLikeGithubDoneStatus(o.name),
+      }));
+    if (columns.length === 0) {
+      throw new Error("Prosjektet har ingen statusvalg å importere.");
+    }
+    // Synthetic Done is only for empty column boards — not for task import mapping
+    const withDone = columns.some((c) => c.isDone)
+      ? columns
+      : [
+          ...columns,
+          {
+            id: "__puls_synthetic_done__",
+            name: "Ferdig",
+            isDone: true,
+          },
+        ];
+
+    return {
+      projectNodeId: resolvedProjectId,
+      fieldId: meta.fieldId,
+      fieldName: meta.fieldName,
+      columns: withDone,
+    };
+  },
+});

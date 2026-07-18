@@ -7,6 +7,11 @@ export type GithubGraphqlPayload = {
   errors?: { message: string }[];
 };
 
+/**
+ * GraphQL over HTTP bruker alltid POST — dette er fortsatt kun lesing
+ * så lenge `query` ikke inneholder mutation/subscription.
+ * Bruk `githubGraphqlReadOnly` for Puls-import og lignende.
+ */
 export async function githubGraphql(
   token: string,
   query: string,
@@ -91,4 +96,25 @@ export function isGithubGraphqlRateLimitError(e: unknown): boolean {
 export function isGithubGraphqlNodeNotFoundError(e: unknown): boolean {
   const msg = errorMessageFromUnknown(e);
   return /could not resolve to a node with the global id/i.test(msg);
+}
+
+/**
+ * Samme som `githubGraphql`, men nekter mutation/subscription i dokumentet.
+ * Brukes når vi kun skal hente data fra GitHub (f.eks. Puls-import).
+ */
+export async function githubGraphqlReadOnly(
+  token: string,
+  query: string,
+  variables: Record<string, unknown>,
+): Promise<GithubGraphqlPayload> {
+  const stripped = query
+    .replace(/#[^\n]*/g, "")
+    .replace(/"""[\s\S]*?"""/g, "")
+    .replace(/"(?:\\.|[^"\\])*"/g, '""');
+  if (/\bmutation\b/i.test(stripped) || /\bsubscription\b/i.test(stripped)) {
+    throw new Error(
+      "Intern feil: kun GraphQL-query (lesing) er tillatt mot GitHub her.",
+    );
+  }
+  return await githubGraphql(token, query, variables);
 }
