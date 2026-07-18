@@ -102,7 +102,12 @@ export const attach = mutation({
     storageId: v.id("_storage"),
     fileName: v.string(),
   },
-  returns: v.id("assessmentTaskFiles"),
+  returns: v.object({
+    fileId: v.id("assessmentTaskFiles"),
+    url: v.union(v.string(), v.null()),
+    fileName: v.string(),
+    isImage: v.boolean(),
+  }),
   handler: async (ctx, args) => {
     const task = await ctx.db.get(args.taskId);
     if (!task) throw new Error("Fant ikke saken.");
@@ -161,7 +166,7 @@ export const attach = mutation({
       );
     }
 
-    return await ctx.db.insert("assessmentTaskFiles", {
+    const fileId = await ctx.db.insert("assessmentTaskFiles", {
       workspaceId: assessment.workspaceId,
       taskId: args.taskId,
       noteId: args.noteId,
@@ -172,6 +177,13 @@ export const attach = mutation({
       uploadedByUserId: userId,
       createdAt: Date.now(),
     });
+    const url = await ctx.storage.getUrl(args.storageId);
+    return {
+      fileId,
+      url,
+      fileName,
+      isImage: contentType.startsWith("image/"),
+    };
   },
 });
 

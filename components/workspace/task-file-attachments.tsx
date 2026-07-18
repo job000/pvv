@@ -315,7 +315,7 @@ export async function attachPendingToNote(
     noteId: Id<"assessmentTaskNotes">;
     storageId: Id<"_storage">;
     fileName: string;
-  }) => Promise<Id<"assessmentTaskFiles">>,
+  }) => Promise<{ fileId: Id<"assessmentTaskFiles"> }>,
   taskId: Id<"assessmentTasks">,
   noteId: Id<"assessmentTaskNotes">,
   pending: PendingUpload[],

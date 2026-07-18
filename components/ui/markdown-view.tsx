@@ -1,7 +1,11 @@
 "use client";
 
 import { RichTextView } from "@/components/ui/rich-text-view";
-import { toggleMarkdownTaskAtIndex } from "@/lib/markdown-tasks";
+import {
+  normalizeMarkdownNewlines,
+  toggleMarkdownTaskAtLine,
+  toggleMarkdownTaskByLabel,
+} from "@/lib/markdown-tasks";
 import { isLikelyHtml, isLikelyMarkdown } from "@/lib/rich-text";
 import { cn } from "@/lib/utils";
 import type { Components } from "react-markdown";
@@ -13,13 +17,19 @@ const mdClass = cn(
   "[&>*:first-child]:mt-0 [&>*:last-child]:mb-0",
 );
 
+function hastLine(node: unknown): number | null {
+  if (!node || typeof node !== "object") return null;
+  const pos = (node as { position?: { start?: { line?: number } } }).position;
+  const line = pos?.start?.line;
+  return typeof line === "number" && line >= 1 ? line : null;
+}
+
 function buildComponents(options: {
   interactive: boolean;
   source: string;
   onToggleTask?: (next: string) => void;
-  taskCounter: { current: number };
 }): Components {
-  const { interactive, source, onToggleTask, taskCounter } = options;
+  const { interactive, source, onToggleTask } = options;
 
   return {
     h1: ({ children }) => (
@@ -55,12 +65,7 @@ function buildComponents(options: {
       );
     },
     ol: ({ className, children }) => (
-      <ol
-        className={cn(
-          "my-1.5 list-decimal space-y-0.5 pl-5",
-          className,
-        )}
-      >
+      <ol className={cn("my-1.5 list-decimal space-y-0.5 pl-5", className)}>
         {children}
       </ol>
     ),
@@ -72,7 +77,8 @@ function buildComponents(options: {
         <li
           className={cn(
             "leading-relaxed",
-            isTask && "flex list-none items-start gap-2",
+            isTask &&
+              "flex list-none items-start gap-2 [&:has(input:checked)]:text-muted-foreground [&:has(input:checked)]:line-through",
             className,
           )}
         >
@@ -80,12 +86,11 @@ function buildComponents(options: {
         </li>
       );
     },
-    input: ({ type, checked }) => {
+    input: ({ type, checked, node }) => {
       if (type !== "checkbox") return null;
 
-      const taskIndex = taskCounter.current;
-      taskCounter.current += 1;
       const isChecked = Boolean(checked);
+      const line = hastLine(node);
 
       if (!interactive || !onToggleTask) {
         return (
@@ -104,10 +109,27 @@ function buildComponents(options: {
         <input
           type="checkbox"
           checked={isChecked}
-          onChange={() => {
-            onToggleTask(toggleMarkdownTaskAtIndex(source, taskIndex));
+          onChange={(e) => {
+            const li = e.currentTarget.closest("li");
+            const label = (li?.textContent ?? "").replace(/\s+/g, " ").trim();
+
+            // 1) Match by visible label — avoids index/line drift from remark
+            const byLabel = toggleMarkdownTaskByLabel(
+              source,
+              label,
+              isChecked,
+            );
+            if (byLabel !== source) {
+              onToggleTask(byLabel);
+              return;
+            }
+
+            // 2) Fallback: AST source line when label match fails
+            if (line != null) {
+              onToggleTask(toggleMarkdownTaskAtLine(source, line));
+            }
           }}
-          className="mt-1 size-3.5 shrink-0 cursor-pointer rounded border-border accent-sky-600"
+          className="mt-1 size-3.5 shrink-0 cursor-pointer rounded border-border accent-sky-600 touch-manipulation"
           aria-label={isChecked ? "Fjern avkryssing" : "Kryss av"}
         />
       );
@@ -213,10 +235,10 @@ export function MarkdownView({
   onChange?: (next: string) => void;
   disabled?: boolean;
 }) {
-  const raw = value?.trim() ?? "";
+  const source = normalizeMarkdownNewlines(value ?? "");
   const interactive = Boolean(onChange) && !disabled;
 
-  if (!raw) {
+  if (!source.trim()) {
     return emptyLabel ? (
       <p className={cn("text-muted-foreground text-sm", className)}>
         {emptyLabel}
@@ -225,23 +247,21 @@ export function MarkdownView({
   }
 
   // GitHub-markdown (sjekklister m.m.) skal aldri tvinges gjennom HTML-visning
-  if (isLikelyHtml(raw) && !isLikelyMarkdown(raw)) {
-    return <RichTextView value={raw} className={className} />;
+  if (isLikelyHtml(source) && !isLikelyMarkdown(source)) {
+    return <RichTextView value={source} className={className} />;
   }
 
-  // Fresh counter per render so checkbox indices stay in document order.
-  const taskCounter = { current: 0 };
   const components = buildComponents({
     interactive,
-    source: value,
+    source,
     onToggleTask: onChange,
-    taskCounter,
   });
 
   return (
     <div className={cn(mdClass, className)}>
+      {/* Same string for parse + toggle — no trim offset between view and source */}
       <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
-        {raw}
+        {source}
       </ReactMarkdown>
     </div>
   );

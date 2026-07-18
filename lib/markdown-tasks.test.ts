@@ -2,6 +2,8 @@ import { describe, expect, test } from "vitest";
 import {
   countMarkdownTasks,
   toggleMarkdownTaskAtIndex,
+  toggleMarkdownTaskAtLine,
+  toggleMarkdownTaskByLabel,
 } from "./markdown-tasks";
 
 describe("markdown tasks", () => {
@@ -55,5 +57,40 @@ describe("markdown tasks", () => {
   test("returns original markdown when index is out of range", () => {
     expect(toggleMarkdownTaskAtIndex(sample, 99)).toBe(sample);
     expect(toggleMarkdownTaskAtIndex(sample, -1)).toBe(sample);
+  });
+
+  test("toggles by label text (avoids index drift)", () => {
+    expect(
+      toggleMarkdownTaskByLabel(sample, "Tilgang til MV test og prod", false),
+    ).toBe(
+      [
+        "Intro",
+        "- [ ] RPAbruker (PMA)",
+        "- [x] Utviklings-VM",
+        "- [x] Tilgang til MV test og prod",
+        "",
+        "https://example.com",
+      ].join("\n"),
+    );
+  });
+
+  test("toggles by 1-based source line", () => {
+    expect(toggleMarkdownTaskAtLine(sample, 2)).toBe(
+      [
+        "Intro",
+        "- [x] RPAbruker (PMA)",
+        "- [x] Utviklings-VM",
+        "- [ ] Tilgang til MV test og prod",
+        "",
+        "https://example.com",
+      ].join("\n"),
+    );
+  });
+
+  test("handles CRLF without shifting targets", () => {
+    const crlf = sample.replace(/\n/g, "\r\n");
+    expect(
+      toggleMarkdownTaskByLabel(crlf, "Utviklings-VM", true),
+    ).toContain("- [ ] Utviklings-VM");
   });
 });

@@ -252,6 +252,7 @@ export function AssessmentTaskIssueTree({
             onChange={setDescription}
             rows={4}
             aria-label="Beskrivelse"
+            startInEditMode
           />
           <div className="space-y-1.5">
             <Label className="text-sm">Kobling (valgfritt)</Label>

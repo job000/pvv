@@ -12,7 +12,6 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { CardDescriptionEditor } from "@/components/ui/card-description-editor";
-import { MarkdownView } from "@/components/ui/markdown-view";
 import { Textarea } from "@/components/ui/textarea";
 import { UserAvatar } from "@/components/user-avatar";
 import { AssessmentTaskCommentThreads } from "@/components/workspace/assessment-task-comment-threads";
@@ -1214,6 +1213,10 @@ export function IssuesProjectBoard({
   const moveTask = useMutation(api.assessmentTasks.moveTask);
   const moveToBoard = useMutation(api.assessmentTasks.moveToBoard);
   const updateTask = useMutation(api.assessmentTasks.update);
+  const generateTaskFileUploadUrl = useMutation(
+    api.assessmentTaskFiles.generateUploadUrl,
+  );
+  const attachTaskFile = useMutation(api.assessmentTaskFiles.attach);
   const setParent = useMutation(api.assessmentTasks.setParent);
   const setStatus = useMutation(api.assessmentTasks.setStatus);
   const completeTask = useMutation(api.assessmentTasks.completeTask);
@@ -3439,24 +3442,76 @@ export function IssuesProjectBoard({
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="detail-desc">Beskrivelse</Label>
-                      {selected.canEdit ? (
-                        <CardDescriptionEditor
-                          key={selected._id}
-                          aria-label="Beskrivelse"
-                          value={editDescription}
-                          onChange={setEditDescription}
-                          rows={6}
-                          insertToken={descInsertToken}
-                          onInsertConsumed={() => setDescInsertToken(null)}
-                        />
-                      ) : (
-                        <div className="rounded-xl border border-border/40 bg-muted/10 px-3.5 py-3">
-                          <MarkdownView
-                            value={editDescription}
-                            emptyLabel="Ingen beskrivelse."
-                          />
-                        </div>
-                      )}
+                      <CardDescriptionEditor
+                        key={selected._id}
+                        aria-label="Beskrivelse"
+                        value={editDescription}
+                        onChange={setEditDescription}
+                        disabled={!selected.canEdit}
+                        rows={6}
+                        insertToken={
+                          selected.canEdit ? descInsertToken : null
+                        }
+                        onInsertConsumed={() => setDescInsertToken(null)}
+                        onUploadImage={
+                          selected.canEdit
+                            ? async (file) => {
+                                const postUrl =
+                                  await generateTaskFileUploadUrl({
+                                    taskId: selected._id,
+                                  });
+                                const res = await fetch(postUrl, {
+                                  method: "POST",
+                                  headers: {
+                                    "Content-Type":
+                                      file.type || "application/octet-stream",
+                                  },
+                                  body: file,
+                                });
+                                if (!res.ok) {
+                                  throw new Error("Opplasting feilet");
+                                }
+                                const json = (await res.json()) as {
+                                  storageId: Id<"_storage">;
+                                };
+                                const attached = await attachTaskFile({
+                                  taskId: selected._id,
+                                  storageId: json.storageId,
+                                  fileName: file.name || "bilde.jpg",
+                                });
+                                if (!attached.url) {
+                                  throw new Error(
+                                    "Bildet ble lastet opp, men mangler URL",
+                                  );
+                                }
+                                const alt = (attached.fileName || "bilde")
+                                  .replace(/[\[\]]/g, "");
+                                return `![${alt}](${attached.url})`;
+                              }
+                            : undefined
+                        }
+                        onCommit={
+                          selected.canEdit
+                            ? async (next) => {
+                                try {
+                                  await updateTask({
+                                    taskId: selected._id,
+                                    description: isEmptyRichText(next)
+                                      ? null
+                                      : next,
+                                  });
+                                } catch (err) {
+                                  toast.error(
+                                    err instanceof Error
+                                      ? err.message
+                                      : "Kunne ikke lagre avkryssing",
+                                  );
+                                  throw err;
+                                }
+                              }
+                            : undefined
+                        }
+                      />
                       <TaskFileAttachments
                         taskId={selected._id}
                         canEdit={selected.canEdit}
