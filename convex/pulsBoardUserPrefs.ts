@@ -68,6 +68,7 @@ const DEFAULT_FILTERS = {
 const prefsReturnValidator = v.object({
   _id: v.id("pulsBoardUserPrefs"),
   viewMode: v.optional(viewModeValidator),
+  activeViewId: v.optional(v.id("pulsBoardViews")),
   commentsPlacement: v.optional(commentsPlacementValidator),
   detailSize: v.optional(detailSizeValidator),
   filters: filtersValidator,
@@ -94,6 +95,7 @@ export const getMine = query({
     return {
       _id: row._id,
       viewMode: row.viewMode,
+      activeViewId: row.activeViewId,
       commentsPlacement: row.commentsPlacement,
       detailSize: row.detailSize,
       filters: row.filters,
@@ -107,6 +109,7 @@ export const setMine = mutation({
     boardId: v.id("pulsBoards"),
     filters: filtersValidator,
     viewMode: v.optional(viewModeValidator),
+    activeViewId: v.optional(v.union(v.id("pulsBoardViews"), v.null())),
     commentsPlacement: v.optional(commentsPlacementValidator),
     detailSize: v.optional(detailSizeValidator),
   },
@@ -124,6 +127,12 @@ export const setMine = mutation({
       filters: args.filters,
       updatedAt: now,
       ...(args.viewMode !== undefined ? { viewMode: args.viewMode } : {}),
+      ...(args.activeViewId !== undefined
+        ? {
+            activeViewId:
+              args.activeViewId === null ? undefined : args.activeViewId,
+          }
+        : {}),
       ...(args.commentsPlacement !== undefined
         ? { commentsPlacement: args.commentsPlacement }
         : {}),
@@ -139,6 +148,10 @@ export const setMine = mutation({
         boardId: args.boardId,
         filters: args.filters,
         viewMode: args.viewMode,
+        activeViewId:
+          args.activeViewId === null || args.activeViewId === undefined
+            ? undefined
+            : args.activeViewId,
         commentsPlacement: args.commentsPlacement,
         detailSize: args.detailSize,
         updatedAt: now,
@@ -153,6 +166,7 @@ export const setUiMine = mutation({
   args: {
     boardId: v.id("pulsBoards"),
     viewMode: v.optional(viewModeValidator),
+    activeViewId: v.optional(v.union(v.id("pulsBoardViews"), v.null())),
     commentsPlacement: v.optional(commentsPlacementValidator),
     detailSize: v.optional(detailSizeValidator),
   },
@@ -170,6 +184,12 @@ export const setUiMine = mutation({
     const patch = {
       updatedAt: now,
       ...(args.viewMode !== undefined ? { viewMode: args.viewMode } : {}),
+      ...(args.activeViewId !== undefined
+        ? {
+            activeViewId:
+              args.activeViewId === null ? undefined : args.activeViewId,
+          }
+        : {}),
       ...(args.commentsPlacement !== undefined
         ? { commentsPlacement: args.commentsPlacement }
         : {}),
@@ -186,6 +206,10 @@ export const setUiMine = mutation({
         boardId: args.boardId,
         filters: DEFAULT_FILTERS,
         viewMode: args.viewMode,
+        activeViewId:
+          args.activeViewId === null || args.activeViewId === undefined
+            ? undefined
+            : args.activeViewId,
         commentsPlacement: args.commentsPlacement,
         detailSize: args.detailSize,
         updatedAt: now,

@@ -46,12 +46,12 @@ import {
   CalendarRange,
   ChevronLeft,
   ChevronRight,
+  AlignStartHorizontal,
   ChevronDown,
   Circle,
   Columns3,
   ExternalLink,
   Filter,
-  LayoutList,
   Link2,
   ListTree,
   Maximize2,
@@ -60,6 +60,7 @@ import {
   Search,
   Shield,
   Table2,
+  Trash2,
   Unlink,
   User,
   UserPlus,
@@ -698,7 +699,7 @@ function DraggableIssueCard({
   );
 }
 
-type BoardViewMode = "columns" | "table" | "list";
+type BoardViewLayout = "board" | "table" | "roadmap";
 
 type AssigneeFilter = "all" | "me" | "unassigned" | Id<"users">;
 type CardTypeFilter = "all" | "top" | "sub";
@@ -728,34 +729,6 @@ const DEFAULT_FILTERS: BoardFilters = {
 };
 
 const COLUMN_PAGE_SIZE = 24;
-
-function viewStorageKey(boardId: string) {
-  return `puls-board-view:${boardId}`;
-}
-
-function filterStorageKey(boardId: string, userId?: string) {
-  return userId
-    ? `puls-board-filters:${userId}:${boardId}`
-    : `puls-board-filters:${boardId}`;
-}
-
-function isBoardFilters(value: unknown): value is BoardFilters {
-  if (!value || typeof value !== "object") return false;
-  const o = value as Record<string, unknown>;
-  return (
-    typeof o.query === "string" &&
-    typeof o.assignee === "string" &&
-    typeof o.columnId === "string" &&
-    (o.cardType === "all" || o.cardType === "top" || o.cardType === "sub") &&
-    (o.status === "all" || o.status === "open" || o.status === "done") &&
-    (o.due === "all" ||
-      o.due === "overdue" ||
-      o.due === "week" ||
-      o.due === "none") &&
-    typeof o.processId === "string" &&
-    typeof o.assessmentId === "string"
-  );
-}
 
 function filtersToPersist(filters: BoardFilters) {
   return {
@@ -813,6 +786,208 @@ function endOfWeekMs() {
   d.setHours(23, 59, 59, 999);
   d.setDate(d.getDate() + 7);
   return d.getTime();
+}
+
+type BoardViewDoc = {
+  _id: Id<"pulsBoardViews">;
+  boardId: Id<"pulsBoards">;
+  name: string;
+  layout: BoardViewLayout;
+  filters: {
+    query: string;
+    assignee: string;
+    columnId: string;
+    cardType: CardTypeFilter;
+    status: StatusFilter;
+    due: DueFilter;
+    processId: string;
+    assessmentId: string;
+  };
+  order: number;
+};
+
+function layoutFromLegacy(mode: string | undefined): BoardViewLayout {
+  if (mode === "table") return "table";
+  if (mode === "list" || mode === "roadmap") return "roadmap";
+  return "board";
+}
+
+function filtersFromView(view: BoardViewDoc): BoardFilters {
+  return filtersFromPersist(view.filters);
+}
+
+function layoutIcon(layout: BoardViewLayout) {
+  if (layout === "table") return Table2;
+  if (layout === "roadmap") return AlignStartHorizontal;
+  return Columns3;
+}
+
+function RoadmapView({
+  cards,
+  onOpenCard,
+}: {
+  cards: BoardCard[];
+  onOpenCard: (card: BoardCard) => void;
+}) {
+  const range = useMemo(() => {
+    let min = Number.POSITIVE_INFINITY;
+    let max = Number.NEGATIVE_INFINITY;
+    for (const c of cards) {
+      if (c.startAt != null) {
+        min = Math.min(min, c.startAt);
+        max = Math.max(max, c.startAt);
+      }
+      if (c.dueAt != null) {
+        min = Math.min(min, c.dueAt);
+        max = Math.max(max, c.dueAt);
+      }
+    }
+    if (!Number.isFinite(min) || !Number.isFinite(max)) {
+      const now = Date.now();
+      const start = new Date(now);
+      start.setDate(1);
+      start.setHours(0, 0, 0, 0);
+      const end = new Date(start);
+      end.setMonth(end.getMonth() + 3);
+      return { startMs: start.getTime(), endMs: end.getTime() };
+    }
+    const start = new Date(min);
+    start.setDate(1);
+    start.setHours(0, 0, 0, 0);
+    const end = new Date(max);
+    end.setMonth(end.getMonth() + 1);
+    end.setDate(1);
+    end.setHours(0, 0, 0, 0);
+    if (end.getTime() <= start.getTime()) {
+      end.setMonth(end.getMonth() + 2);
+    }
+    return { startMs: start.getTime(), endMs: end.getTime() };
+  }, [cards]);
+
+  const months = useMemo(() => {
+    const out: { label: string; ms: number }[] = [];
+    const cur = new Date(range.startMs);
+    while (cur.getTime() < range.endMs) {
+      out.push({
+        label: cur.toLocaleDateString("nb-NO", {
+          month: "short",
+          year: "2-digit",
+        }),
+        ms: cur.getTime(),
+      });
+      cur.setMonth(cur.getMonth() + 1);
+    }
+    return out.length > 0 ? out : [{ label: "—", ms: range.startMs }];
+  }, [range]);
+
+  const span = Math.max(1, range.endMs - range.startMs);
+  const withDates = cards.filter((c) => c.startAt != null || c.dueAt != null);
+  const withoutDates = cards.filter((c) => c.startAt == null && c.dueAt == null);
+
+  const barStyle = (card: BoardCard) => {
+    const start = card.startAt ?? card.dueAt!;
+    const end = card.dueAt ?? card.startAt!;
+    const left = Math.max(0, Math.min(1, (start - range.startMs) / span));
+    const right = Math.max(left, Math.min(1, (end - range.startMs) / span));
+    const width = Math.max(0.02, right - left);
+    return {
+      left: `${left * 100}%`,
+      width: `${width * 100}%`,
+    };
+  };
+
+  return (
+    <div className="min-w-0 space-y-3">
+      {withoutDates.length > 0 ? (
+        <div className="rounded-xl border border-border/50 bg-card/40 p-3">
+          <p className="text-muted-foreground mb-2 text-xs font-medium">
+            Uten dato ({withoutDates.length})
+          </p>
+          <ul className="flex flex-wrap gap-1.5">
+            {withoutDates.map((card) => (
+              <li key={card._id}>
+                <button
+                  type="button"
+                  onClick={() => onOpenCard(card)}
+                  className="bg-muted/70 hover:bg-muted max-w-[14rem] truncate rounded-lg px-2.5 py-1.5 text-left text-xs font-medium touch-manipulation"
+                >
+                  {card.title}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+
+      <div className="min-w-0 overflow-x-auto rounded-xl border border-border/50">
+        <div className="min-w-[720px]">
+          <div
+            className="bg-muted/30 text-muted-foreground grid border-b border-border/50 text-[11px] font-medium"
+            style={{ gridTemplateColumns: "11rem 1fr" }}
+          >
+            <div className="px-3 py-2">Kort</div>
+            <div
+              className="grid border-l border-border/40"
+              style={{
+                gridTemplateColumns: `repeat(${months.length}, minmax(4.5rem, 1fr))`,
+              }}
+            >
+              {months.map((m) => (
+                <div key={m.ms} className="border-l border-border/30 px-2 py-2 first:border-l-0">
+                  {m.label}
+                </div>
+              ))}
+            </div>
+          </div>
+          <ul className="divide-border/40 divide-y">
+            {withDates.map((card) => (
+              <li
+                key={card._id}
+                className="grid min-h-11 items-center"
+                style={{ gridTemplateColumns: "11rem 1fr" }}
+              >
+                <button
+                  type="button"
+                  onClick={() => onOpenCard(card)}
+                  className="truncate px-3 py-2 text-left text-sm font-medium hover:underline touch-manipulation"
+                >
+                  {card.title}
+                </button>
+                <div className="relative h-8 border-l border-border/40">
+                  <div
+                    className="pointer-events-none absolute inset-0 grid"
+                    style={{
+                      gridTemplateColumns: `repeat(${months.length}, minmax(4.5rem, 1fr))`,
+                    }}
+                    aria-hidden
+                  >
+                    {months.map((m) => (
+                      <div
+                        key={m.ms}
+                        className="border-l border-border/30 first:border-l-0"
+                      />
+                    ))}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => onOpenCard(card)}
+                    title={`${card.title}${formatDateRange(card.startAt, card.dueAt) ? ` · ${formatDateRange(card.startAt, card.dueAt)}` : ""}`}
+                    className="bg-sky-500/80 hover:bg-sky-500 absolute top-1.5 h-5 rounded-md touch-manipulation"
+                    style={barStyle(card)}
+                  />
+                </div>
+              </li>
+            ))}
+          </ul>
+          {withDates.length === 0 ? (
+            <p className="text-muted-foreground px-4 py-8 text-center text-sm">
+              Ingen kort med start- eller sluttdato i denne viewen.
+            </p>
+          ) : null}
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function BoardColumn({
@@ -1046,12 +1221,26 @@ export function IssuesProjectBoard({
   const linkProcess = useMutation(api.candidates.linkAssessment);
   const linkRos = useMutation(api.ros.linkAssessment);
   const savedPrefs = useQuery(api.pulsBoardUserPrefs.getMine, { boardId });
-  const setPrefs = useMutation(api.pulsBoardUserPrefs.setMine);
+  const setUiPrefs = useMutation(api.pulsBoardUserPrefs.setUiMine);
+  const boardViewsRaw = useQuery(api.pulsBoardViews.listByBoard, { boardId });
+  const ensureViews = useMutation(api.pulsBoardViews.ensureDefaults);
+  const createViewMut = useMutation(api.pulsBoardViews.create);
+  const updateViewMut = useMutation(api.pulsBoardViews.update);
+  const removeViewMut = useMutation(api.pulsBoardViews.remove);
+
   useEffect(() => {
     void ensureColumns({ boardId }).catch(() => {
       /* ignore */
     });
-  }, [boardId, ensureColumns]);
+    void ensureViews({ boardId }).catch(() => {
+      /* ignore */
+    });
+  }, [boardId, ensureColumns, ensureViews]);
+
+  const boardViews = useMemo(
+    (): BoardViewDoc[] => (boardViewsRaw ?? []) as BoardViewDoc[],
+    [boardViewsRaw],
+  );
 
   const [filters, setFilters] = useState<BoardFilters>(DEFAULT_FILTERS);
   const [filtersOpen, setFiltersOpen] = useState(false);
@@ -1064,41 +1253,58 @@ export function IssuesProjectBoard({
   const [moveBoardId, setMoveBoardId] = useState<Id<"pulsBoards"> | "">("");
   const [columnsOpen, setColumnsOpen] = useState(false);
   const [newColumnName, setNewColumnName] = useState("");
-  const [viewMode, setViewMode] = useState<BoardViewMode>("columns");
+  const [viewLayout, setViewLayout] = useState<BoardViewLayout>("board");
+  const [activeViewId, setActiveViewId] = useState<Id<"pulsBoardViews"> | "">(
+    "",
+  );
+  const [viewMenuOpen, setViewMenuOpen] = useState(false);
+  const [createViewOpen, setCreateViewOpen] = useState(false);
+  const [createViewName, setCreateViewName] = useState("");
+  const [createViewLayout, setCreateViewLayout] =
+    useState<BoardViewLayout>("board");
+  const [renameViewOpen, setRenameViewOpen] = useState(false);
+  const [renameViewName, setRenameViewName] = useState("");
+  /** Inline rename via dobbeltklikk på fane */
+  const [renamingViewId, setRenamingViewId] = useState<
+    Id<"pulsBoardViews"> | ""
+  >("");
+  const renameInputRef = useRef<HTMLInputElement>(null);
+  const renameCancelRef = useRef(false);
   const [commentsPlacement, setCommentsPlacement] =
     useState<CommentsPlacement>("tab");
   const [detailSize, setDetailSize] = useState<DetailSize>("large");
   const [descInsertToken, setDescInsertToken] = useState<string | null>(null);
   const [prefsHydrated, setPrefsHydrated] = useState(false);
+  const [viewsHydrated, setViewsHydrated] = useState(false);
   const boardScrollRef = useRef<HTMLDivElement>(null);
   const [boardCanScroll, setBoardCanScroll] = useState(false);
   const [boardScrollAtStart, setBoardScrollAtStart] = useState(true);
   const [boardScrollAtEnd, setBoardScrollAtEnd] = useState(false);
   const persistTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const viewFilterTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const uiPrefsRef = useRef({ commentsPlacement, detailSize });
   uiPrefsRef.current = { commentsPlacement, detailSize };
+  const activeViewIdRef = useRef(activeViewId);
+  activeViewIdRef.current = activeViewId;
   const myUserId = myProfile?.user?._id as Id<"users"> | undefined;
+  const canEditViews = boardMeta?.canEdit === true;
 
-  const persistLocal = (
-    next: BoardFilters,
-    mode: BoardViewMode,
-    extras?: {
-      commentsPlacement?: CommentsPlacement;
-      detailSize?: DetailSize;
-    },
-  ) => {
+  const persistUiLocal = (extras?: {
+    commentsPlacement?: CommentsPlacement;
+    detailSize?: DetailSize;
+    activeViewId?: Id<"pulsBoardViews"> | "";
+  }) => {
     try {
-      localStorage.setItem(viewStorageKey(boardId), mode);
-      localStorage.setItem(
-        filterStorageKey(boardId, myUserId),
-        JSON.stringify(next),
-      );
       localStorage.setItem(
         `puls-board-ui:${boardId}`,
         JSON.stringify({
           commentsPlacement:
             extras?.commentsPlacement ?? uiPrefsRef.current.commentsPlacement,
           detailSize: extras?.detailSize ?? uiPrefsRef.current.detailSize,
+          activeViewId:
+            extras?.activeViewId !== undefined
+              ? extras.activeViewId
+              : activeViewIdRef.current,
         }),
       );
     } catch {
@@ -1106,52 +1312,36 @@ export function IssuesProjectBoard({
     }
   };
 
-  const persistRemote = (
-    next: BoardFilters,
-    mode: BoardViewMode,
-    extras?: {
-      commentsPlacement?: CommentsPlacement;
-      detailSize?: DetailSize;
-    },
-  ) => {
-    if (persistTimer.current) clearTimeout(persistTimer.current);
-    persistTimer.current = setTimeout(() => {
-      void setPrefs({
-        boardId,
+  const persistViewFilters = (next: BoardFilters) => {
+    const viewId = activeViewIdRef.current;
+    if (!viewId) return;
+    if (viewFilterTimer.current) clearTimeout(viewFilterTimer.current);
+    viewFilterTimer.current = setTimeout(() => {
+      void updateViewMut({
+        viewId,
         filters: filtersToPersist(next),
-        viewMode: mode,
-        commentsPlacement:
-          extras?.commentsPlacement ?? uiPrefsRef.current.commentsPlacement,
-        detailSize: extras?.detailSize ?? uiPrefsRef.current.detailSize,
       }).catch(() => {
         /* ignore */
       });
-    }, 350);
+    }, 400);
   };
 
   useEffect(() => {
     return () => {
       if (persistTimer.current) clearTimeout(persistTimer.current);
+      if (viewFilterTimer.current) clearTimeout(viewFilterTimer.current);
     };
   }, []);
 
   useEffect(() => {
     setPrefsHydrated(false);
+    setViewsHydrated(false);
+    setActiveViewId("");
   }, [boardId]);
 
   useEffect(() => {
     if (prefsHydrated || savedPrefs === undefined) return;
-
     if (savedPrefs) {
-      const next = filtersFromPersist(savedPrefs.filters);
-      const mode =
-        savedPrefs.viewMode === "columns" ||
-        savedPrefs.viewMode === "table" ||
-        savedPrefs.viewMode === "list"
-          ? savedPrefs.viewMode
-          : "columns";
-      setFilters(next);
-      setViewMode(mode);
       if (
         savedPrefs.commentsPlacement === "tab" ||
         savedPrefs.commentsPlacement === "overview"
@@ -1165,75 +1355,63 @@ export function IssuesProjectBoard({
       ) {
         setDetailSize(savedPrefs.detailSize);
       }
+    } else {
       try {
-        localStorage.setItem(viewStorageKey(boardId), mode);
-        localStorage.setItem(
-          filterStorageKey(boardId, myUserId),
-          JSON.stringify(next),
-        );
+        const uiRaw = localStorage.getItem(`puls-board-ui:${boardId}`);
+        if (uiRaw) {
+          const ui = JSON.parse(uiRaw) as {
+            commentsPlacement?: CommentsPlacement;
+            detailSize?: DetailSize;
+          };
+          if (
+            ui.commentsPlacement === "tab" ||
+            ui.commentsPlacement === "overview"
+          ) {
+            setCommentsPlacement(ui.commentsPlacement);
+          }
+          if (
+            ui.detailSize === "normal" ||
+            ui.detailSize === "large" ||
+            ui.detailSize === "full"
+          ) {
+            setDetailSize(ui.detailSize);
+          }
+        }
       } catch {
         /* ignore */
       }
-      setPrefsHydrated(true);
-      return;
-    }
-
-    try {
-      const savedView = localStorage.getItem(viewStorageKey(boardId));
-      let mode: BoardViewMode = "columns";
-      if (
-        savedView === "columns" ||
-        savedView === "table" ||
-        savedView === "list"
-      ) {
-        mode = savedView;
-        setViewMode(savedView);
-      }
-      const uiRaw = localStorage.getItem(`puls-board-ui:${boardId}`);
-      if (uiRaw) {
-        const ui = JSON.parse(uiRaw) as {
-          commentsPlacement?: CommentsPlacement;
-          detailSize?: DetailSize;
-        };
-        if (ui.commentsPlacement === "tab" || ui.commentsPlacement === "overview") {
-          setCommentsPlacement(ui.commentsPlacement);
-        }
-        if (
-          ui.detailSize === "normal" ||
-          ui.detailSize === "large" ||
-          ui.detailSize === "full"
-        ) {
-          setDetailSize(ui.detailSize);
-        }
-      }
-      const raw =
-        localStorage.getItem(filterStorageKey(boardId, myUserId)) ??
-        localStorage.getItem(filterStorageKey(boardId));
-      if (raw) {
-        const parsed: unknown = JSON.parse(raw);
-        const next = isBoardFilters(parsed)
-          ? parsed
-          : {
-              ...DEFAULT_FILTERS,
-              ...(parsed as Partial<BoardFilters>),
-            };
-        setFilters(next);
-        void setPrefs({
-          boardId,
-          filters: filtersToPersist(next),
-          viewMode: mode,
-        }).catch(() => {
-          /* ignore */
-        });
-      }
-    } catch {
-      /* ignore */
     }
     setPrefsHydrated(true);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- hydrate once per board/prefs load
-  }, [savedPrefs, prefsHydrated, boardId, myUserId, setPrefs]);
+  }, [savedPrefs, prefsHydrated, boardId]);
 
-  // Hold UI-valg i sync når de endres under Innstillinger (samme Convex-prefs)
+  useEffect(() => {
+    if (!prefsHydrated || viewsHydrated || boardViewsRaw === undefined) return;
+    if (boardViews.length === 0) return;
+
+    let pick =
+      (savedPrefs?.activeViewId
+        ? boardViews.find((v) => v._id === savedPrefs.activeViewId)
+        : undefined) ?? boardViews[0]!;
+
+    if (!savedPrefs?.activeViewId && savedPrefs?.viewMode) {
+      const legacy = layoutFromLegacy(savedPrefs.viewMode);
+      pick = boardViews.find((v) => v.layout === legacy) ?? pick;
+    }
+
+    setActiveViewId(pick._id);
+    setViewLayout(pick.layout);
+    setFilters(filtersFromView(pick));
+    persistUiLocal({ activeViewId: pick._id });
+    void setUiPrefs({
+      boardId,
+      activeViewId: pick._id,
+    }).catch(() => {
+      /* ignore */
+    });
+    setViewsHydrated(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [prefsHydrated, viewsHydrated, boardViewsRaw, boardViews, savedPrefs, boardId]);
+
   useEffect(() => {
     if (!prefsHydrated || !savedPrefs) return;
     if (
@@ -1249,48 +1427,87 @@ export function IssuesProjectBoard({
     ) {
       setDetailSize(savedPrefs.detailSize);
     }
-    if (
-      savedPrefs.viewMode === "columns" ||
-      savedPrefs.viewMode === "table" ||
-      savedPrefs.viewMode === "list"
-    ) {
-      setViewMode(savedPrefs.viewMode);
-    }
   }, [
     prefsHydrated,
     savedPrefs?.updatedAt,
     savedPrefs?.commentsPlacement,
     savedPrefs?.detailSize,
-    savedPrefs?.viewMode,
   ]);
 
-  const setViewModePersist = (mode: BoardViewMode) => {
-    setViewMode(mode);
-    persistLocal(filters, mode);
-    persistRemote(filters, mode);
+  const selectView = (view: BoardViewDoc) => {
+    setActiveViewId(view._id);
+    setViewLayout(view.layout);
+    setFilters(filtersFromView(view));
+    setViewMenuOpen(false);
+    if (renamingViewId && renamingViewId !== view._id) {
+      setRenamingViewId("");
+    }
+    persistUiLocal({ activeViewId: view._id });
+    void setUiPrefs({ boardId, activeViewId: view._id }).catch(() => {
+      /* ignore */
+    });
   };
+
+  const beginInlineRename = (view: BoardViewDoc) => {
+    if (!canEditViews) return;
+    if (view._id !== activeViewId) selectView(view);
+    setViewMenuOpen(false);
+    renameCancelRef.current = false;
+    setRenameViewName(view.name);
+    setRenamingViewId(view._id);
+  };
+
+  const commitInlineRename = () => {
+    if (renameCancelRef.current) {
+      renameCancelRef.current = false;
+      setRenamingViewId("");
+      return;
+    }
+    const viewId = renamingViewId;
+    const name = renameViewName.trim();
+    if (!viewId) return;
+    setRenamingViewId("");
+    if (!name) return;
+    const current = boardViews.find((v) => v._id === viewId);
+    if (current && current.name === name) return;
+    void updateViewMut({ viewId, name })
+      .then(() => toast.success("Navn oppdatert"))
+      .catch((err: unknown) =>
+        toast.error(err instanceof Error ? err.message : "Kunne ikke lagre"),
+      );
+  };
+
+  useEffect(() => {
+    if (!renamingViewId) return;
+    const el = renameInputRef.current;
+    if (!el) return;
+    el.focus();
+    el.select();
+  }, [renamingViewId]);
 
   const patchFilters = (patch: Partial<BoardFilters>) => {
     setFilters((prev) => {
       const next = { ...prev, ...patch };
-      persistLocal(next, viewMode);
-      persistRemote(next, viewMode);
+      persistViewFilters(next);
       return next;
     });
   };
 
   const clearFilters = () => {
     setFilters(DEFAULT_FILTERS);
-    persistLocal(DEFAULT_FILTERS, viewMode);
-    if (persistTimer.current) clearTimeout(persistTimer.current);
-    void setPrefs({
-      boardId,
-      filters: filtersToPersist(DEFAULT_FILTERS),
-      viewMode,
-    }).catch(() => {
-      /* ignore */
-    });
+    if (viewFilterTimer.current) clearTimeout(viewFilterTimer.current);
+    const viewId = activeViewIdRef.current;
+    if (viewId) {
+      void updateViewMut({
+        viewId,
+        filters: filtersToPersist(DEFAULT_FILTERS),
+      }).catch(() => {
+        /* ignore */
+      });
+    }
   };
+
+  const activeView = boardViews.find((v) => v._id === activeViewId) ?? null;
 
   const [editTitle, setEditTitle] = useState("");
   const [editDescription, setEditDescription] = useState("");
@@ -1467,7 +1684,7 @@ export function IssuesProjectBoard({
 
   useEffect(() => {
     const el = boardScrollRef.current;
-    if (!el || viewMode !== "columns") return;
+    if (!el || viewLayout !== "board") return;
 
     updateBoardScrollState();
     const onScroll = () => updateBoardScrollState();
@@ -1544,7 +1761,7 @@ export function IssuesProjectBoard({
       ro.disconnect();
       window.removeEventListener("resize", updateBoardScrollState);
     };
-  }, [viewMode, columnsRaw?.length, filtered.length]);
+  }, [viewLayout, columnsRaw?.length, filtered.length]);
 
   const activeFilterCount = useMemo(() => {
     let n = 0;
@@ -1561,7 +1778,7 @@ export function IssuesProjectBoard({
 
   useEffect(() => {
     setListVisible(80);
-  }, [filters, viewMode, boardId]);
+  }, [filters, viewLayout, boardId]);
 
   const visibleRows = useMemo(
     () => filtered.slice(0, listVisible),
@@ -2116,6 +2333,172 @@ export function IssuesProjectBoard({
         </div>
       ) : null}
       <div className={isPageDetail ? "hidden" : "contents"}>
+      {/* View-faner (GitHub-stil) */}
+      <div className="relative flex min-w-0 items-end gap-1 overflow-x-auto border-b border-border/50 pb-px">
+        {boardViews.map((view) => {
+          const Icon = layoutIcon(view.layout);
+          const active = view._id === activeViewId;
+          const editing = renamingViewId === view._id;
+          return (
+            <div key={view._id} className="relative flex shrink-0 items-center">
+              {editing ? (
+                <div
+                  className={cn(
+                    "inline-flex h-9 items-center gap-1.5 rounded-t-lg border border-b-0 px-2",
+                    "bg-background text-foreground border-border/60",
+                  )}
+                >
+                  <Icon className="size-3.5 shrink-0 opacity-80" aria-hidden />
+                  <input
+                    ref={renameInputRef}
+                    value={renameViewName}
+                    onChange={(e) => setRenameViewName(e.target.value)}
+                    onBlur={() => commitInlineRename()}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        (e.target as HTMLInputElement).blur();
+                      } else if (e.key === "Escape") {
+                        e.preventDefault();
+                        renameCancelRef.current = true;
+                        setRenamingViewId("");
+                      }
+                    }}
+                    maxLength={40}
+                    aria-label="Nytt view-navn"
+                    className="bg-background h-7 w-[9rem] min-w-0 rounded-md border border-border/50 px-1.5 text-sm font-medium outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500/40"
+                  />
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  title={
+                    canEditViews
+                      ? "Dobbeltklikk for å gi nytt navn"
+                      : undefined
+                  }
+                  onClick={() => selectView(view)}
+                  onDoubleClick={(e) => {
+                    e.preventDefault();
+                    beginInlineRename(view);
+                  }}
+                  className={cn(
+                    "inline-flex h-9 items-center gap-1.5 rounded-t-lg border border-b-0 px-3 text-sm font-medium touch-manipulation",
+                    active
+                      ? "bg-background text-foreground border-border/60"
+                      : "text-muted-foreground border-transparent hover:text-foreground hover:bg-muted/40",
+                  )}
+                >
+                  <Icon className="size-3.5 shrink-0 opacity-80" aria-hidden />
+                  <span className="max-w-[9rem] truncate">{view.name}</span>
+                </button>
+              )}
+              {active && canEditViews && !editing ? (
+                <button
+                  type="button"
+                  aria-label="View-meny"
+                  aria-expanded={viewMenuOpen}
+                  onClick={() => setViewMenuOpen((o) => !o)}
+                  className="text-muted-foreground hover:text-foreground -ml-1 inline-flex size-8 items-center justify-center rounded-md"
+                >
+                  <ChevronDown className="size-3.5" aria-hidden />
+                </button>
+              ) : null}
+            </div>
+          );
+        })}
+        {canEditViews ? (
+          <button
+            type="button"
+            onClick={() => {
+              setCreateViewName("");
+              setCreateViewLayout(viewLayout);
+              setCreateViewOpen(true);
+            }}
+            className="text-muted-foreground hover:text-foreground inline-flex h-9 shrink-0 items-center gap-1 rounded-t-lg px-2.5 text-sm font-medium touch-manipulation"
+          >
+            <Plus className="size-3.5" aria-hidden />
+            Ny view
+          </button>
+        ) : null}
+      </div>
+      {viewMenuOpen && activeView && canEditViews ? (
+        <div className="bg-popover text-popover-foreground absolute z-20 mt-0.5 w-56 rounded-lg border border-border/60 p-1 shadow-md">
+          <button
+            type="button"
+            className="hover:bg-muted flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-sm"
+            onClick={() => {
+              setRenameViewName(activeView.name);
+              setRenameViewOpen(true);
+              setViewMenuOpen(false);
+            }}
+          >
+            Gi nytt navn
+          </button>
+          <div className="text-muted-foreground px-2.5 py-1.5 text-[11px] font-medium">
+            Layout
+          </div>
+          {(
+            [
+              ["board", "Tavle"],
+              ["table", "Tabell"],
+              ["roadmap", "Roadmap"],
+            ] as const
+          ).map(([layout, label]) => (
+            <button
+              key={layout}
+              type="button"
+              className={cn(
+                "hover:bg-muted flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-sm",
+                activeView.layout === layout && "bg-muted",
+              )}
+              onClick={() => {
+                void updateViewMut({ viewId: activeView._id, layout })
+                  .then(() => {
+                    setViewLayout(layout);
+                    setViewMenuOpen(false);
+                    toast.success("Layout oppdatert");
+                  })
+                  .catch((err: unknown) =>
+                    toast.error(
+                      err instanceof Error ? err.message : "Kunne ikke oppdatere",
+                    ),
+                  );
+              }}
+            >
+              {label}
+            </button>
+          ))}
+          <button
+            type="button"
+            className="text-destructive hover:bg-muted flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-sm"
+            onClick={() => {
+              if (
+                !window.confirm(
+                  `Slette viewen «${activeView.name}»? Kortene slettes ikke.`,
+                )
+              ) {
+                return;
+              }
+              void removeViewMut({ viewId: activeView._id })
+                .then(() => {
+                  setViewMenuOpen(false);
+                  setViewsHydrated(false);
+                  toast.success("View slettet");
+                })
+                .catch((err: unknown) =>
+                  toast.error(
+                    err instanceof Error ? err.message : "Kunne ikke slette",
+                  ),
+                );
+            }}
+          >
+            <Trash2 className="size-3.5" aria-hidden />
+            Slett view
+          </button>
+        </div>
+      ) : null}
+
       {/* Én ren verktøylinje */}
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex min-w-0 flex-1 items-center gap-2">
@@ -2157,36 +2540,6 @@ export function IssuesProjectBoard({
               ? `${filtered.length} av ${cards.length} kort`
               : pulsBoardCopy.cardCount(filtered.length)}
           </p>
-          <div
-            role="group"
-            aria-label="Visning"
-            className="bg-muted/40 inline-flex rounded-lg border border-border/50 p-0.5"
-          >
-            {(
-              [
-                ["columns", "Kolonner", Columns3],
-                ["table", "Tabell", Table2],
-                ["list", "Liste", LayoutList],
-              ] as const
-            ).map(([id, label, Icon]) => (
-              <button
-                key={id}
-                type="button"
-                title={label}
-                aria-pressed={viewMode === id}
-                onClick={() => setViewModePersist(id)}
-                className={cn(
-                  "inline-flex h-8 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium",
-                  viewMode === id
-                    ? "bg-card text-foreground shadow-sm"
-                    : "text-muted-foreground hover:text-foreground",
-                )}
-              >
-                <Icon className="size-3.5" aria-hidden />
-                <span className="hidden sm:inline">{label}</span>
-              </button>
-            ))}
-          </div>
           {canManageColumns ? (
             <Button
               type="button"
@@ -2454,7 +2807,7 @@ export function IssuesProjectBoard({
         </div>
       ) : null}
 
-      {viewMode === "columns" ? (
+      {viewLayout === "board" ? (
         <DndContext
           sensors={sensors}
           collisionDetection={closestCorners}
@@ -2561,7 +2914,7 @@ export function IssuesProjectBoard({
         </DndContext>
       ) : null}
 
-      {viewMode === "table" ? (
+      {viewLayout === "table" ? (
         <div className="min-w-0 overflow-x-auto rounded-xl border border-border/50">
           <table className="w-full min-w-[640px] text-left text-sm">
             <thead className="bg-muted/40 border-b border-border/50 text-xs">
@@ -2653,47 +3006,8 @@ export function IssuesProjectBoard({
         </div>
       ) : null}
 
-      {viewMode === "list" ? (
-        <div className="min-w-0 space-y-2">
-          <ul className="divide-border/50 divide-y rounded-xl border border-border/50 bg-card/40">
-            {visibleRows.map((card) => (
-              <li key={card._id}>
-                <button
-                  type="button"
-                  className="hover:bg-muted/30 flex w-full min-w-0 items-start gap-3 px-3 py-3 text-left touch-manipulation"
-                  onClick={() => openDetail(card)}
-                >
-                  <span className="bg-muted text-muted-foreground mt-0.5 shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-medium">
-                    {labelForCard(card)}
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-sm font-medium">
-                      {card.title}
-                    </span>
-                    <span className="text-muted-foreground block truncate text-xs">
-                      {card.assessmentTitle}
-                      {card.assigneeName ? ` · ${card.assigneeName}` : ""}
-                      {card.dueAt
-                        ? ` · ${formatDateNb(card.dueAt)}`
-                        : ""}
-                    </span>
-                  </span>
-                </button>
-              </li>
-            ))}
-          </ul>
-          {filtered.length > listVisible ? (
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              className="h-9 w-full"
-              onClick={() => setListVisible((v) => v + 80)}
-            >
-              Vis flere ({filtered.length - listVisible} igjen)
-            </Button>
-          ) : null}
-        </div>
+      {viewLayout === "roadmap" ? (
+        <RoadmapView cards={filtered} onOpenCard={openDetail} />
       ) : null}
 
       {filtered.length === 0 ? (
@@ -2705,6 +3019,138 @@ export function IssuesProjectBoard({
       ) : null}
 
       </div>
+
+      <Dialog open={createViewOpen} onOpenChange={setCreateViewOpen}>
+        <DialogContent size="sm" titleId="create-view-title">
+          <DialogHeader>
+            <h2
+              id="create-view-title"
+              className="font-heading text-lg font-semibold"
+            >
+              Ny view
+            </h2>
+            <p className="text-muted-foreground mt-1 text-sm">
+              Views er delt på tavlen. Velg navn og layout.
+            </p>
+          </DialogHeader>
+          <DialogBody className="space-y-3">
+            <div className="space-y-1">
+              <Label htmlFor="create-view-name">Navn</Label>
+              <Input
+                id="create-view-name"
+                value={createViewName}
+                onChange={(e) => setCreateViewName(e.target.value)}
+                placeholder="F.eks. Mine oppgaver"
+                className="h-10"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="create-view-layout">Layout</Label>
+              <select
+                id="create-view-layout"
+                className="border-input bg-background h-10 w-full rounded-lg border px-3 text-sm"
+                value={createViewLayout}
+                onChange={(e) =>
+                  setCreateViewLayout(e.target.value as BoardViewLayout)
+                }
+              >
+                <option value="board">Tavle</option>
+                <option value="table">Tabell</option>
+                <option value="roadmap">Roadmap</option>
+              </select>
+            </div>
+          </DialogBody>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setCreateViewOpen(false)}
+            >
+              Avbryt
+            </Button>
+            <Button
+              type="button"
+              disabled={!createViewName.trim()}
+              onClick={() => {
+                const name = createViewName.trim();
+                if (!name) return;
+                void createViewMut({
+                  boardId,
+                  name,
+                  layout: createViewLayout,
+                  filters: filtersToPersist(filters),
+                })
+                  .then((id) => {
+                    setCreateViewOpen(false);
+                    setActiveViewId(id);
+                    setViewLayout(createViewLayout);
+                    void setUiPrefs({ boardId, activeViewId: id });
+                    toast.success("View opprettet");
+                  })
+                  .catch((err: unknown) =>
+                    toast.error(
+                      err instanceof Error ? err.message : "Kunne ikke opprette",
+                    ),
+                  );
+              }}
+            >
+              Opprett
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={renameViewOpen} onOpenChange={setRenameViewOpen}>
+        <DialogContent size="sm" titleId="rename-view-title">
+          <DialogHeader>
+            <h2
+              id="rename-view-title"
+              className="font-heading text-lg font-semibold"
+            >
+              Gi view nytt navn
+            </h2>
+          </DialogHeader>
+          <DialogBody>
+            <Input
+              value={renameViewName}
+              onChange={(e) => setRenameViewName(e.target.value)}
+              className="h-10"
+              aria-label="View-navn"
+            />
+          </DialogBody>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setRenameViewOpen(false)}
+            >
+              Avbryt
+            </Button>
+            <Button
+              type="button"
+              disabled={!renameViewName.trim() || !activeViewId}
+              onClick={() => {
+                if (!activeViewId) return;
+                void updateViewMut({
+                  viewId: activeViewId,
+                  name: renameViewName.trim(),
+                })
+                  .then(() => {
+                    setRenameViewOpen(false);
+                    toast.success("Navn oppdatert");
+                  })
+                  .catch((err: unknown) =>
+                    toast.error(
+                      err instanceof Error ? err.message : "Kunne ikke lagre",
+                    ),
+                  );
+              }}
+            >
+              Lagre
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
         <DialogContent size="md" titleId="create-issue-title">
@@ -2924,8 +3370,13 @@ export function IssuesProjectBoard({
                       const next: DetailSize =
                         detailSize === "full" ? "large" : "full";
                       setDetailSize(next);
-                      persistLocal(filters, viewMode);
-                      persistRemote(filters, viewMode, { detailSize: next });
+                      persistUiLocal({ detailSize: next });
+                      void setUiPrefs({
+                        boardId,
+                        detailSize: next,
+                      }).catch(() => {
+                        /* ignore */
+                      });
                     }}
                   >
                     {detailSize === "full" ? (

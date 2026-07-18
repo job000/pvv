@@ -1031,6 +1031,48 @@ export default defineSchema({
     createdAt: v.number(),
   }).index("by_board", ["boardId"]),
 
+  /**
+   * Lagrede views på en Puls-tavle (GitHub Projects-stil).
+   * Delt for alle med tilgang til tavlen.
+   */
+  pulsBoardViews: defineTable({
+    boardId: v.id("pulsBoards"),
+    workspaceId: v.id("workspaces"),
+    name: v.string(),
+    layout: v.union(
+      v.literal("board"),
+      v.literal("table"),
+      v.literal("roadmap"),
+    ),
+    filters: v.object({
+      query: v.string(),
+      assignee: v.string(),
+      columnId: v.string(),
+      cardType: v.union(
+        v.literal("all"),
+        v.literal("top"),
+        v.literal("sub"),
+      ),
+      status: v.union(
+        v.literal("all"),
+        v.literal("open"),
+        v.literal("done"),
+      ),
+      due: v.union(
+        v.literal("all"),
+        v.literal("overdue"),
+        v.literal("week"),
+        v.literal("none"),
+      ),
+      processId: v.string(),
+      assessmentId: v.string(),
+    }),
+    order: v.number(),
+    createdByUserId: v.id("users"),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_board", ["boardId", "order"]),
+
   /** Per-bruker filter- og visningsvalg for en Puls-tavle */
   pulsBoardUserPrefs: defineTable({
     userId: v.id("users"),
@@ -1038,6 +1080,8 @@ export default defineSchema({
     viewMode: v.optional(
       v.union(v.literal("columns"), v.literal("table"), v.literal("list")),
     ),
+    /** Aktiv lagret view (GitHub-stil faner). */
+    activeViewId: v.optional(v.id("pulsBoardViews")),
     /** Kommentarer i egen fane, eller under oversikt (GitHub-stil). */
     commentsPlacement: v.optional(
       v.union(v.literal("tab"), v.literal("overview")),

@@ -58,6 +58,7 @@ import type * as portfolioBenefits from "../portfolioBenefits.js";
 import type * as processDesignDocs from "../processDesignDocs.js";
 import type * as pulsBoardColumns from "../pulsBoardColumns.js";
 import type * as pulsBoardUserPrefs from "../pulsBoardUserPrefs.js";
+import type * as pulsBoardViews from "../pulsBoardViews.js";
 import type * as pulsBoards from "../pulsBoards.js";
 import type * as pulsGithubImport from "../pulsGithubImport.js";
 import type * as reminderInternal from "../reminderInternal.js";
@@ -132,6 +133,7 @@ declare const fullApi: ApiFromModules<{
   processDesignDocs: typeof processDesignDocs;
   pulsBoardColumns: typeof pulsBoardColumns;
   pulsBoardUserPrefs: typeof pulsBoardUserPrefs;
+  pulsBoardViews: typeof pulsBoardViews;
   pulsBoards: typeof pulsBoards;
   pulsGithubImport: typeof pulsGithubImport;
   reminderInternal: typeof reminderInternal;

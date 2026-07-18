@@ -18,6 +18,7 @@ import {
   seedColumnsFromTemplate,
   type ColumnTemplateId,
 } from "./pulsBoardColumns";
+import { ensureDefaultViews } from "./pulsBoardViews";
 import { queryUsersForInviteSuggest } from "./lib/userSearch";
 import { insertUserInAppNotification } from "./userInAppNotifications";
 
@@ -84,6 +85,7 @@ export async function ensureDefaultPulsBoard(
       }
     }
     await ensureDefaultColumns(ctx, existing);
+    await ensureDefaultViews(ctx, existing, actorUserId);
     return existing._id;
   }
 
@@ -138,6 +140,7 @@ export async function ensureDefaultPulsBoard(
   const board = await ctx.db.get(boardId);
   if (board) {
     await ensureDefaultColumns(ctx, board);
+    await ensureDefaultViews(ctx, board, actorUserId);
   }
 
   return boardId;
@@ -365,6 +368,7 @@ export const create = mutation({
       } else {
         await seedColumnsFromTemplate(ctx, board, templateId);
       }
+      await ensureDefaultViews(ctx, board, userId);
     }
     return boardId;
   },
@@ -493,6 +497,12 @@ export const remove = mutation({
       .withIndex("by_board", (q) => q.eq("boardId", args.boardId))
       .collect();
     for (const c of cols) await ctx.db.delete(c._id);
+
+    const views = await ctx.db
+      .query("pulsBoardViews")
+      .withIndex("by_board", (q) => q.eq("boardId", args.boardId))
+      .collect();
+    for (const view of views) await ctx.db.delete(view._id);
 
     await ctx.db.delete(args.boardId);
     return { ok: true as const, deletedCards };
