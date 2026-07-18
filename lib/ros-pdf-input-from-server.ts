@@ -1,5 +1,6 @@
 import type { Doc } from "@/convex/_generated/dataModel";
 import {
+  buildMatrixCellDetailsForPdf,
   collectAllCellRiskPointsForPdf,
   collectIdentifiedRisksForPdf,
   flattenCellItemsMatrixToLegacyNotes,
@@ -240,8 +241,10 @@ export function buildRosPdfInputForPreview(args: {
     colLabels: data.colLabels,
     matrixValues: matrix,
     cellNotes: flattenCellItemsMatrixToLegacyNotes(cellItemsMatrix),
+    matrixCellDetails: buildMatrixCellDetailsForPdf(cellItemsMatrix),
     matrixValuesAfter: mvAfterPdf,
     cellNotesAfter: flattenCellItemsMatrixToLegacyNotes(cellItemsAfterPdf),
+    matrixCellDetailsAfter: buildMatrixCellDetailsForPdf(cellItemsAfterPdf),
     afterRowLabels: afterRowLabelsPdf,
     afterColLabels: afterColLabelsPdf,
     afterRowAxisTitle: useSeparateAfterAxes

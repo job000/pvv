@@ -44,8 +44,51 @@ export function sampleDocumentationRosPdfInput(): RosPdfInput {
     colLabels,
     matrixValues,
     cellNotes: notes,
+    matrixCellDetails: rowLabels.map((_, r) =>
+      colLabels.map((__, c) => {
+        if (r === 1 && c === 2) {
+          return {
+            points: [
+              {
+                text: "Manuell kontroll ved avvik; logging ikke samlet.",
+                hasTiltak: true,
+                hasFolg: true,
+              },
+            ],
+          };
+        }
+        if (r === 2 && c === 0) {
+          return {
+            points: [
+              {
+                text: "Tilgang styrt via AD-grupper; årlig recertification.",
+                hasTiltak: false,
+                hasFolg: true,
+              },
+            ],
+          };
+        }
+        return { points: [] };
+      }),
+    ),
     matrixValuesAfter,
     cellNotesAfter: emptyNotes(),
+    matrixCellDetailsAfter: rowLabels.map((_, r) =>
+      colLabels.map((__, c) => {
+        if (r === 1 && c === 2) {
+          return {
+            points: [
+              {
+                text: "Felles avviksmal innført; gjenstående oppfølging av logging.",
+                hasTiltak: false,
+                hasFolg: true,
+              },
+            ],
+          };
+        }
+        return { points: [] };
+      }),
+    ),
     afterRowLabels: rowLabels,
     afterColLabels: colLabels,
     afterRowAxisTitle: "Faser i prosessen",

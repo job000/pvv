@@ -282,9 +282,9 @@ export function buildAssessmentPdfDocument(data: AssessmentPdfInput): jsPDF {
   field("Manuell reserve ved robotfeil", data.rpaManualFallbackWhenRobotFails);
 
   L.addSoftDivider();
-  L.addMutedNote(
-    "Juridisk merknad: Dette dokumentet er et forenklet uttrekk fra PVV. Tall og poengsummer er veiledende og bygger på oppgitte data i veiviseren; de erstatter ikke egen faglig vurdering, intern godkjenning eller kontraktsmessige forpliktelser.",
-  );
+  L.addNoteBox("Juridisk merknad", [
+    "Dette dokumentet er et forenklet uttrekk fra PVV. Tall og poengsummer er veiledende og bygger på oppgitte data i veiviseren; de erstatter ikke egen faglig vurdering, intern godkjenning eller kontraktsmessige forpliktelser.",
+  ]);
 
   L.finish({ shortTitle, docTypeLabel: "PVV-vurdering" });
   return doc;

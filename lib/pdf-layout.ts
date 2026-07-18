@@ -3,7 +3,10 @@ import type { jsPDF } from "jspdf";
 import {
   applyCorporatePdfFooters,
   bodyLineHeightMm,
+  drawPdfTextLines,
   PDF_CORPORATE_THEME,
+  sanitizePdfText,
+  splitPdfText,
   type CorporatePdfFooterOptions,
 } from "@/lib/pdf-corporate";
 import { resolvePdfCoverBackgroundDataUrl } from "@/lib/pdf-cover-background";
@@ -108,6 +111,8 @@ export type PdfLayout = {
     body: string | undefined | null,
     opts?: { showEmpty?: boolean; emptyLabel?: string },
   ) => void;
+  /** Merkeboks med tittel + ett eller flere avsnitt (holder seg innenfor sidemarg). */
+  addNoteBox: (title: string, paragraphs: string[]) => void;
   addKpiTiles: (tiles: Array<{ label: string; value: string }>) => void;
   /** HUKI som lesbar matrise (Aktivitet × H/U/K/I). */
   addHukiMatrix: (rows: PdfHukiRow[]) => void;
@@ -136,11 +141,14 @@ export function createPdfLayout(doc: jsPDF): PdfLayout {
   const pageW = () => doc.internal.pageSize.getWidth();
   const pageH = () => doc.internal.pageSize.getHeight();
   const contentW = () => pageW() - margin * 2;
+  /** Brødtekst: aldri bredere enn stående A4 (unngår at landskap-linjebredde lekker inn). */
+  const textContentW = () => Math.min(contentW(), 210 - margin * 2);
   const contentBottom = () => pageH() - PDF_CONTENT_BOTTOM_INSET_MM;
 
   const ensureSpace = (needMm: number) => {
     if (y + needMm <= contentBottom()) return;
-    doc.addPage();
+    // Eksplisitt stående — doc.addPage() arver ellers landskap etter matrise-sider.
+    doc.addPage("a4", "portrait");
     y = PDF_CONTINUATION_TOP_MM;
   };
 
@@ -161,8 +169,8 @@ export function createPdfLayout(doc: jsPDF): PdfLayout {
     let bodyH = lh + 4;
     for (const row of rows) {
       doc.setFontSize(fs);
-      const ll = doc.splitTextToSize(row.label, labelW - 1);
-      const vl = doc.splitTextToSize(row.value || "—", valueMaxW);
+      const ll = splitPdfText(doc, row.label, labelW - 1);
+      const vl = splitPdfText(doc, row.value || "-", valueMaxW);
       bodyH += Math.max(ll.length, vl.length) * lh + 2.8;
     }
     const boxH = pad * 2 + bodyH;
@@ -185,8 +193,8 @@ export function createPdfLayout(doc: jsPDF): PdfLayout {
       doc.setFont("helvetica", "bold");
       doc.setFontSize(fs);
       doc.setTextColor(T.slate700[0], T.slate700[1], T.slate700[2]);
-      const ll = doc.splitTextToSize(row.label, labelW - 1);
-      const vl = doc.splitTextToSize(row.value || "—", valueMaxW);
+      const ll = splitPdfText(doc, row.label, labelW - 1);
+      const vl = splitPdfText(doc, row.value || "-", valueMaxW);
       let lyy = cy;
       for (const line of ll) {
         doc.text(line, margin + pad + 2, lyy);
@@ -276,7 +284,8 @@ export function createPdfLayout(doc: jsPDF): PdfLayout {
     doc.setFont("helvetica", "bold");
     doc.setFontSize(22);
     doc.setTextColor(T.slate900[0], T.slate900[1], T.slate900[2]);
-    const titleLines = doc.splitTextToSize(
+    const titleLines = splitPdfText(
+      doc,
       opts.title.trim() || "Uten tittel",
       textMaxW,
     );
@@ -292,7 +301,7 @@ export function createPdfLayout(doc: jsPDF): PdfLayout {
       doc.setFont("helvetica", "normal");
       doc.setFontSize(11);
       doc.setTextColor(T.slate700[0], T.slate700[1], T.slate700[2]);
-      const subLines = doc.splitTextToSize(opts.subtitle.trim(), textMaxW);
+      const subLines = splitPdfText(doc, opts.subtitle.trim(), textMaxW);
       for (const line of subLines.slice(0, 3)) {
         doc.text(line, cx, ty);
         ty += 5.6;
@@ -308,7 +317,7 @@ export function createPdfLayout(doc: jsPDF): PdfLayout {
       doc.setFont("helvetica", "normal");
       doc.setFontSize(10);
       doc.setTextColor(T.slate700[0], T.slate700[1], T.slate700[2]);
-      const leadLines = doc.splitTextToSize(opts.lead.trim(), textMaxW);
+      const leadLines = splitPdfText(doc, opts.lead.trim(), textMaxW);
       for (const line of leadLines.slice(0, 2)) {
         doc.text(line, cx, ty);
         ty += 5.2;
@@ -337,7 +346,7 @@ export function createPdfLayout(doc: jsPDF): PdfLayout {
       doc.setFont("helvetica", "bold");
       doc.setFontSize(9);
       doc.setTextColor(T.slate900[0], T.slate900[1], T.slate900[2]);
-      const lines = doc.splitTextToSize(col.value, colW - 4);
+      const lines = splitPdfText(doc, col.value, colW - 4);
       doc.text(lines[0] ?? "—", x, bandY + 21);
     });
 
@@ -370,7 +379,7 @@ export function createPdfLayout(doc: jsPDF): PdfLayout {
       doc.setFont("helvetica", "normal");
       doc.setFontSize(12);
       doc.setTextColor(T.slate900[0], T.slate900[1], T.slate900[2]);
-      const orgLines = doc.splitTextToSize(org, contentW());
+      const orgLines = splitPdfText(doc, org, contentW());
       ensureSpace(orgLines.length * 5.5 + 8);
       doc.text(orgLines, margin, y);
       y += orgLines.length * 5.5 + 8;
@@ -400,7 +409,7 @@ export function createPdfLayout(doc: jsPDF): PdfLayout {
         doc.setFont("helvetica", "bold");
         doc.setFontSize(9);
         doc.setTextColor(T.slate900[0], T.slate900[1], T.slate900[2]);
-        const val = doc.splitTextToSize(row.value, tileW - 7);
+        const val = splitPdfText(doc, row.value, tileW - 7);
         doc.text(val[0] ?? "—", x + 3.5, yy + 11);
       });
       y += tileRows * (tileH + gap) + 6;
@@ -446,7 +455,7 @@ export function createPdfLayout(doc: jsPDF): PdfLayout {
       doc.setFont("helvetica", "normal");
       doc.setFontSize(11);
       doc.setTextColor(T.slate800[0], T.slate800[1], T.slate800[2]);
-      const titleLines = doc.splitTextToSize(entry.title, titleMaxW);
+      const titleLines = splitPdfText(doc, entry.title, titleMaxW);
       const title = titleLines[0] ?? entry.title;
       doc.text(title, margin + numW, ty);
 
@@ -562,12 +571,11 @@ export function createPdfLayout(doc: jsPDF): PdfLayout {
     if (!t) return;
     doc.setFontSize(size);
     const lh = bodyLineHeightMm(size);
-    const lines = doc.splitTextToSize(t, contentW());
+    const lines = splitPdfText(doc, t, textContentW());
     ensureSpace(lines.length * lh + 4);
     doc.setFont("helvetica", "normal");
     doc.setTextColor(T.slate800[0], T.slate800[1], T.slate800[2]);
-    doc.text(lines, margin, y);
-    y += lines.length * lh + 3.5;
+    y = drawPdfTextLines(doc, lines, margin, y, lh) + 3.5;
     doc.setTextColor(0);
   };
 
@@ -585,16 +593,17 @@ export function createPdfLayout(doc: jsPDF): PdfLayout {
     const lh = bodyLineHeightMm(size);
     const labelW = 52;
     doc.setFontSize(size);
-    const labelLines = doc.splitTextToSize(label, labelW - 1);
-    const valueLines = doc.splitTextToSize(
-      value || "—",
-      contentW() - labelW - 2,
+    const labelLines = splitPdfText(doc, label, labelW - 1);
+    const valueLines = splitPdfText(
+      doc,
+      value || "-",
+      textContentW() - labelW - 2,
     );
     const blockH = Math.max(labelLines.length, valueLines.length) * lh + 3;
     ensureSpace(blockH + 2);
 
     doc.setFillColor(T.mutedBg[0], T.mutedBg[1], T.mutedBg[2]);
-    doc.roundedRect(margin, y - 3.2, contentW(), blockH + 1.5, 1, 1, "F");
+    doc.roundedRect(margin, y - 3.2, textContentW(), blockH + 1.5, 1, 1, "F");
 
     doc.setFont("helvetica", "bold");
     doc.setTextColor(T.slate700[0], T.slate700[1], T.slate700[2]);
@@ -632,7 +641,8 @@ export function createPdfLayout(doc: jsPDF): PdfLayout {
     const bodyLh = bodyLineHeightMm(bodyFs);
 
     doc.setFontSize(bodyFs);
-    const bodyLines = doc.splitTextToSize(content, contentW() - pad * 2);
+    const boxW = textContentW();
+    const bodyLines = splitPdfText(doc, content, boxW - pad * 2);
     const boxH = pad + 4.5 + bodyLines.length * bodyLh + pad + 1;
     ensureSpace(boxH + 4);
 
@@ -644,12 +654,12 @@ export function createPdfLayout(doc: jsPDF): PdfLayout {
     );
     doc.setDrawColor(T.mutedBorder[0], T.mutedBorder[1], T.mutedBorder[2]);
     doc.setLineWidth(0.25);
-    doc.roundedRect(margin, top, contentW(), boxH, 1.2, 1.2, "FD");
+    doc.roundedRect(margin, top, boxW, boxH, 1.2, 1.2, "FD");
 
     doc.setFontSize(labelFs);
     doc.setFont("helvetica", "bold");
     doc.setTextColor(T.slate700[0], T.slate700[1], T.slate700[2]);
-    doc.text(label, margin + pad, top + pad + 2.5);
+    doc.text(sanitizePdfText(label), margin + pad, top + pad + 2.5);
 
     doc.setFont("helvetica", isEmpty ? "italic" : "normal");
     doc.setFontSize(bodyFs);
@@ -658,9 +668,63 @@ export function createPdfLayout(doc: jsPDF): PdfLayout {
       isEmpty ? T.slate500[1] : T.slate800[1],
       isEmpty ? T.slate500[2] : T.slate800[2],
     );
-    doc.text(bodyLines, margin + pad, top + pad + 7.5);
+    drawPdfTextLines(doc, bodyLines, margin + pad, top + pad + 7.5, bodyLh);
     y = top + boxH + 3.5;
     doc.setFont("helvetica", "normal");
+    doc.setTextColor(0);
+  };
+
+  const addNoteBox = (title: string, paragraphs: string[]) => {
+    const paras = paragraphs.map((p) => p.trim()).filter(Boolean);
+    if (paras.length === 0) return;
+    const pad = 5;
+    const titleFs = 7.5;
+    const bodyFs = 6.8;
+    const bodyLh = bodyLineHeightMm(bodyFs);
+    const boxW = textContentW();
+    const textW = boxW - pad * 2;
+
+    // Splitt etter eventuell sideskift, slik at linjebredde matcher aktiv side.
+    doc.setFontSize(bodyFs);
+    let wrapped = paras.map((p) => splitPdfText(doc, p, textW));
+    let innerH = titleFs * 0.55 + 4;
+    for (const lines of wrapped) {
+      innerH += lines.length * bodyLh + 3;
+    }
+    const boxH = pad * 2 + innerH;
+    ensureSpace(boxH + 6);
+
+    // Re-wrap hvis ensureSpace byttet side/bredde
+    const boxW2 = textContentW();
+    const textW2 = boxW2 - pad * 2;
+    if (Math.abs(boxW2 - boxW) > 0.5) {
+      wrapped = paras.map((p) => splitPdfText(doc, p, textW2));
+      innerH = titleFs * 0.55 + 4;
+      for (const lines of wrapped) {
+        innerH += lines.length * bodyLh + 3;
+      }
+    }
+    const boxH2 = pad * 2 + innerH;
+
+    const top = y;
+    doc.setFillColor(T.mutedBg[0], T.mutedBg[1], T.mutedBg[2]);
+    doc.setDrawColor(T.mutedBorder[0], T.mutedBorder[1], T.mutedBorder[2]);
+    doc.setLineWidth(0.25);
+    doc.rect(margin, top, boxW2, boxH2, "FD");
+
+    let fy = top + pad + 2.5;
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(titleFs);
+    doc.setTextColor(T.slate700[0], T.slate700[1], T.slate700[2]);
+    doc.text(sanitizePdfText(title), margin + pad, fy);
+    fy += titleFs * 0.55 + 3.5;
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(bodyFs);
+    for (const lines of wrapped) {
+      fy = drawPdfTextLines(doc, lines, margin + pad, fy, bodyLh) + 3;
+    }
+    y = top + boxH2 + 6;
     doc.setTextColor(0);
   };
 
@@ -693,7 +757,7 @@ export function createPdfLayout(doc: jsPDF): PdfLayout {
       doc.setFont("helvetica", "bold");
       doc.setFontSize(11);
       doc.setTextColor(T.slate900[0], T.slate900[1], T.slate900[2]);
-      const valLines = doc.splitTextToSize(tile.value, tileW - 6);
+      const valLines = splitPdfText(doc, tile.value, tileW - 6);
       doc.text(valLines[0] ?? "—", x + 3, yy + 11.5);
     });
     y += rows * (tileH + gap) + 4;
@@ -775,7 +839,7 @@ export function createPdfLayout(doc: jsPDF): PdfLayout {
     rows.forEach((row, idx) => {
       const activity = row.activity?.trim() || "Aktivitet";
       doc.setFontSize(9);
-      const actLines = doc.splitTextToSize(activity, actW - cellPad * 2);
+      const actLines = splitPdfText(doc, activity, actW - cellPad * 2);
       const values = [row.h, row.u, row.k, row.i].map((v) => {
         const t = (v ?? "").trim();
         return t || "—";
@@ -783,7 +847,7 @@ export function createPdfLayout(doc: jsPDF): PdfLayout {
       let maxValLines = 1;
       for (const v of values) {
         doc.setFontSize(8);
-        const vl = doc.splitTextToSize(v, roleW - 3);
+        const vl = splitPdfText(doc, v, roleW - 3);
         maxValLines = Math.max(maxValLines, vl.length);
       }
       const rowH = Math.max(
@@ -830,7 +894,7 @@ export function createPdfLayout(doc: jsPDF): PdfLayout {
           empty ? T.slate500[1] : T.slate800[1],
           empty ? T.slate500[2] : T.slate800[2],
         );
-        const vl = doc.splitTextToSize(val, roleW - 3);
+        const vl = splitPdfText(doc, val, roleW - 3);
         const textH = vl.length * bodyLineHeightMm(8);
         doc.text(vl, x, y + (rowH - textH) / 2 + 3.2, { align: "center" });
       });
@@ -894,6 +958,7 @@ export function createPdfLayout(doc: jsPDF): PdfLayout {
     addMutedNote,
     addRow,
     addFieldCard,
+    addNoteBox,
     addKpiTiles,
     addHukiMatrix,
     addSoftDivider,

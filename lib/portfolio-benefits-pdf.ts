@@ -180,9 +180,9 @@ export function downloadPortfolioBenefitsPdf(input: PortfolioBenefitsPdfInput): 
   }
 
   L.addSoftDivider();
-  L.addMutedNote(
+  L.addNoteBox("Merknad", [
     "Tall er ca.-estimater fra PVV-modellen. Myke gevinster er bevisst uten kroneverdi. Rapporten erstatter ikke faglig eller økonomisk vurdering i egen organisasjon.",
-  );
+  ]);
 
   L.finish({
     shortTitle,

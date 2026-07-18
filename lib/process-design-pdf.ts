@@ -345,9 +345,9 @@ function buildProcessDesignPdfDocument(
   }
 
   L.addSoftDivider();
-  L.addMutedNote(
-    "Merknad: Dette er et uttrekk fra PVV på eksporttidspunktet. Diagrammer er rasterisert for PDF; åpne Prosessdesign i appen for interaktiv visning.",
-  );
+  L.addNoteBox("Merknad", [
+    "Dette er et uttrekk fra PVV på eksporttidspunktet. Diagrammer er rasterisert for PDF; åpne Prosessdesign i appen for interaktiv visning.",
+  ]);
 
   L.finish({
     shortTitle,

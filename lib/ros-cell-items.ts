@@ -281,6 +281,73 @@ export function flattenCellItemsMatrixToLegacyNotes(
   return items.map((row) => row.map((cell) => flattenCellItemsToNote(cell)));
 }
 
+/** Ett risikopunkt i en matrise-celle for PDF (tydelig risiko vs tiltak/følg). */
+export type RosPdfMatrixCellPoint = {
+  text: string;
+  hasTiltak: boolean;
+  hasFolg: boolean;
+};
+
+/** Strukturert innhold per matrise-celle (brukes i ROS-PDF-matrisen). */
+export type RosPdfMatrixCellDetail = {
+  points: RosPdfMatrixCellPoint[];
+};
+
+/** Bygger strukturert celleinnhold for PDF-matrise (risiko + tiltak/følg per punkt). */
+export function buildMatrixCellDetailsForPdf(
+  items: RosCellItemMatrix,
+): RosPdfMatrixCellDetail[][] {
+  return items.map((row) =>
+    row.map((cell) => {
+      const points: RosPdfMatrixCellPoint[] = [];
+      for (const item of cell) {
+        const t = item.text.trim();
+        const hasTiltak = Boolean(
+          item.flags?.includes(ROS_CELL_FLAG_REQUIRES_ACTION),
+        );
+        const hasFolg = Boolean(item.flags?.includes(ROS_CELL_FLAG_WATCH));
+        const bandBits = [item.economicBand, item.frequencyBand]
+          .map((s) => s?.trim())
+          .filter((s): s is string => Boolean(s));
+        const hasBands = bandBits.length > 0;
+        if (!t && !hasTiltak && !hasFolg && !hasBands) continue;
+        const text =
+          hasBands && t
+            ? `${t} (${bandBits.join(" · ")})`
+            : hasBands && !t
+              ? bandBits.join(" · ")
+              : t || "(uten beskrivelse)";
+        points.push({ text, hasTiltak, hasFolg });
+      }
+      return { points };
+    }),
+  );
+}
+
+/** Fallback når kun flat `cellNotes`-streng finnes (eldre PDF-input). */
+export function parseLegacyNoteToMatrixCellDetail(
+  note: string,
+): RosPdfMatrixCellDetail {
+  const trimmed = note.trim();
+  if (!trimmed) return { points: [] };
+  return {
+    points: trimmed.split(/\n\n+/).map((chunk) => {
+      const hasTiltak = chunk.includes("Må håndteres (tiltak)");
+      const hasFolg = chunk.includes("Følg med");
+      let text = chunk
+        .replace(
+          /^(?:Må håndteres \(tiltak\)|Følg med)(?:\s*·\s*(?:Må håndteres \(tiltak\)|Følg med))*\s*:\s*/i,
+          "",
+        )
+        .trim();
+      if (!text) {
+        text = hasTiltak || hasFolg ? "(uten beskrivelse)" : chunk.trim();
+      }
+      return { text, hasTiltak, hasFolg };
+    }),
+  };
+}
+
 /**
  * Bygger cellItems fra lagret struktur eller fra eldre cellNotes (én streng per celle).
  */

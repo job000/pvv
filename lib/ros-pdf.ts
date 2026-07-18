@@ -1,14 +1,19 @@
 import { jsPDF } from "jspdf";
 
-import type {
-  RosCellRiskPointPdfRow,
-  RosIdentifiedRiskPdfRow,
+import {
+  parseLegacyNoteToMatrixCellDetail,
+  type RosCellRiskPointPdfRow,
+  type RosIdentifiedRiskPdfRow,
+  type RosPdfMatrixCellDetail,
 } from "@/lib/ros-cell-items";
 import { ROS_COMPLIANCE_PDF_DISCLAIMER_NB } from "@/lib/ros-compliance";
 import { ROS_COMPLIANCE_SCOPE_TAGS } from "@/lib/ros-requirement-catalog";
 import {
   bodyLineHeightMm,
+  drawPdfTextLines,
   PDF_CORPORATE_THEME,
+  sanitizePdfText,
+  splitPdfText,
 } from "@/lib/pdf-corporate";
 import {
   createPdfLayout,
@@ -80,9 +85,16 @@ export type RosPdfInput = {
   /** Før tiltak */
   matrixValues: number[][];
   cellNotes: string[][];
+  /**
+   * Strukturert celleinnhold (risiko + tiltak/følg) for før-matrisen.
+   * Hvis mangler, utledes fra `cellNotes`.
+   */
+  matrixCellDetails?: RosPdfMatrixCellDetail[][];
   /** Etter tiltak (rest) */
   matrixValuesAfter: number[][];
   cellNotesAfter: string[][];
+  /** Strukturert celleinnhold for etter-matrisen (valgfritt). */
+  matrixCellDetailsAfter?: RosPdfMatrixCellDetail[][];
   /** Akser for etter-matrise (kopier fra før hvis ikke eget rutenett) */
   afterRowLabels: string[];
   afterColLabels: string[];
@@ -181,6 +193,8 @@ export function buildRosAnalysisPdfDocument(data: RosPdfInput): jsPDF {
   const pageW = () => doc.internal.pageSize.getWidth();
   const pageH = () => doc.internal.pageSize.getHeight();
   const contentW = () => pageW() - margin * 2;
+  /** Brødtekst: aldri bredere enn stående A4. */
+  const textContentW = () => Math.min(contentW(), 210 - margin * 2);
   const shortTitle = (data.title || "ROS-analyse").trim().slice(0, 60);
 
   doc.setProperties({
@@ -197,7 +211,8 @@ export function buildRosAnalysisPdfDocument(data: RosPdfInput): jsPDF {
   /** Footer-aware sideskift (synkronisert med felles layout). */
   const ensureSpace = (needMm: number) => {
     if (y + needMm <= pageH() - PDF_CONTENT_BOTTOM_INSET_MM) return;
-    doc.addPage();
+    // Eksplisitt stående — ellers arves landskap etter matrise-sider.
+    doc.addPage("a4", "portrait");
     y = PDF_CONTINUATION_TOP_MM;
   };
 
@@ -248,15 +263,14 @@ export function buildRosAnalysisPdfDocument(data: RosPdfInput): jsPDF {
   const addPara = (text: string, size = 10) => {
     doc.setFontSize(size);
     const lh = bodyLineHeightMm(size);
-    const lines = doc.splitTextToSize(text, contentW());
+    const lines = splitPdfText(doc, text, textContentW());
     ensureSpace(lines.length * lh + 5);
     doc.setTextColor(
       PDF_THEME.slate800[0],
       PDF_THEME.slate800[1],
       PDF_THEME.slate800[2],
     );
-    doc.text(lines, margin, y);
-    y += lines.length * lh + 3.5;
+    y = drawPdfTextLines(doc, lines, margin, y, lh) + 3.5;
     doc.setTextColor(0);
   };
 
@@ -270,8 +284,8 @@ export function buildRosAnalysisPdfDocument(data: RosPdfInput): jsPDF {
       PDF_THEME.slate700[1],
       PDF_THEME.slate700[2],
     );
-    const labelLines = doc.splitTextToSize(label, 42);
-    const vlines = doc.splitTextToSize(value, contentW() - 48);
+    const labelLines = splitPdfText(doc, label, 42);
+    const vlines = splitPdfText(doc, value, textContentW() - 48);
     const labelH = labelLines.length * lh;
     const valueH = vlines.length * lh;
     const block = Math.max(labelH, valueH) + 4;
@@ -402,7 +416,7 @@ export function buildRosAnalysisPdfDocument(data: RosPdfInput): jsPDF {
     let sInner = sPad * 2 + 5;
     doc.setFontSize(sFs);
     for (const line of data.summaryLines) {
-      const wrapped = doc.splitTextToSize(
+      const wrapped = splitPdfText(doc, 
         `• ${line}`,
         contentW() - sPad * 2 - 4,
       );
@@ -441,12 +455,12 @@ export function buildRosAnalysisPdfDocument(data: RosPdfInput): jsPDF {
       PDF_THEME.slate800[2],
     );
     for (const line of data.summaryLines) {
-      const wrapped = doc.splitTextToSize(
+      const wrapped = splitPdfText(
+        doc,
         `• ${line}`,
         contentW() - sPad * 2 - 4,
       );
-      doc.text(wrapped, margin + sPad, sY);
-      sY += wrapped.length * sLh + 1;
+      sY = drawPdfTextLines(doc, wrapped, margin + sPad, sY, sLh) + 1;
     }
     y = sTop + sInner + 6;
     doc.setTextColor(0);
@@ -460,17 +474,18 @@ export function buildRosAnalysisPdfDocument(data: RosPdfInput): jsPDF {
   });
   y = L.getY();
 
-  /** Maks tekstlinjer per celle (større skrift = færre linjer per radhøyde; «…» ved avkorting). */
-  const ROS_PDF_MATRIX_CELL_NOTE_MAX_LINES = 18;
-  const splitMatrixCellNote = (note: string, maxW: number) => {
-    if (!note.trim()) return [];
-    doc.setFontSize(6);
-    doc.setFont("helvetica", "normal");
-    const all = doc.splitTextToSize(note, maxW);
-    if (all.length <= ROS_PDF_MATRIX_CELL_NOTE_MAX_LINES) return all;
-    const head = all.slice(0, ROS_PDF_MATRIX_CELL_NOTE_MAX_LINES - 1);
-    head.push("…");
-    return head;
+  /** Maks tekstlinjer for risiko-punkter per celle («…» ved avkorting). */
+  const ROS_PDF_MATRIX_CELL_RISK_MAX_LINES = 10;
+
+  const resolveMatrixCellDetail = (
+    details: RosPdfMatrixCellDetail[][] | undefined,
+    notes: string[][],
+    row: number,
+    col: number,
+  ): RosPdfMatrixCellDetail => {
+    const structured = details?.[row]?.[col];
+    if (structured) return structured;
+    return parseLegacyNoteToMatrixCellDetail(notes[row]?.[col] ?? "");
   };
 
   /** To matriser i landskap: før tiltak og etter tiltak (rest) — plassert tidlig for full ROS-oversikt */
@@ -479,6 +494,7 @@ export function buildRosAnalysisPdfDocument(data: RosPdfInput): jsPDF {
     sub: string;
     mv: number[][];
     cn: string[][];
+    details?: RosPdfMatrixCellDetail[][];
     rowLabels: string[];
     colLabels: string[];
     rowAxisTitle: string;
@@ -486,9 +502,10 @@ export function buildRosAnalysisPdfDocument(data: RosPdfInput): jsPDF {
   }> = [
     {
       heading: "Risikomatrise — før tiltak (utgangspunkt)",
-      sub: `${data.rowAxisTitle} (rader) × ${data.colAxisTitle} (kolonner). Utgangspunkt før planlagte eller gjennomførte tiltak. Stort tall i cellen = risikonivå 0–5 (farge viser alvor). Teksten under er samlet beskrivelse av risiko i den cellen.`,
+      sub: `${data.rowAxisTitle} (rader) × ${data.colAxisTitle} (kolonner). Farge og tall = risikonivå. Under vises risiko-beskrivelse og merker for tiltak / følg med.`,
       mv: data.matrixValues,
       cn: data.cellNotes,
+      details: data.matrixCellDetails,
       rowLabels: data.rowLabels,
       colLabels: data.colLabels,
       rowAxisTitle: data.rowAxisTitle,
@@ -497,10 +514,11 @@ export function buildRosAnalysisPdfDocument(data: RosPdfInput): jsPDF {
     {
       heading: "Risikomatrise — etter tiltak (rest)",
       sub: data.afterSeparateLayout
-        ? `${data.afterRowAxisTitle} (rader) × ${data.afterColAxisTitle} (kolonner). Eget rutenett for restrisiko. Stort tall = nivå; farge = alvor; tekst = beskrivelse i cellen.`
-        : `${data.rowAxisTitle} (rader) × ${data.colAxisTitle} (kolonner). Samme akser som før-matrisen; her vises restrisiko etter tiltak.`,
+        ? `${data.afterRowAxisTitle} (rader) × ${data.afterColAxisTitle} (kolonner). Restrisiko etter tiltak — samme lesemønster: nivå, risiko, tiltak/følg.`
+        : `${data.rowAxisTitle} (rader) × ${data.colAxisTitle} (kolonner). Restrisiko etter tiltak — nivå, risiko-tekst og tiltak/følg i hver celle.`,
       mv: data.matrixValuesAfter,
       cn: data.cellNotesAfter,
+      details: data.matrixCellDetailsAfter,
       rowLabels: data.afterRowLabels,
       colLabels: data.afterColLabels,
       rowAxisTitle: data.afterRowAxisTitle,
@@ -598,35 +616,127 @@ export function buildRosAnalysisPdfDocument(data: RosPdfInput): jsPDF {
       doc.rect(x, yy, w, h, "FD");
     };
 
-    const drawCenteredInCell = (
-      lines: { text: string; size: number; bold: boolean }[],
-      cx: number,
-      top: number,
-      cellH: number,
-      maxW: number,
+    const measureCellContentHeight = (
+      detail: RosPdfMatrixCellDetail,
+      cellW: number,
     ) => {
-      const flat: { text: string; size: number; bold: boolean }[] = [];
-      for (const ln of lines) {
-        doc.setFontSize(ln.size);
-        doc.setFont("helvetica", ln.bold ? "bold" : "normal");
-        const parts = doc.splitTextToSize(ln.text, maxW);
-        for (const p of parts) {
-          flat.push({ text: p, size: ln.size, bold: ln.bold });
+      const maxW = cellW - 3.2;
+      let h = 7.2; // nivå + etikett
+      if (detail.points.length === 0) return h + 3.5;
+      h += 2.8; // «Risiko»-label
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(5.8);
+      let linesUsed = 0;
+      let truncated = false;
+      for (const pt of detail.points) {
+        const parts = splitPdfText(doc, `• ${pt.text}`, maxW);
+        for (const _p of parts) {
+          if (linesUsed >= ROS_PDF_MATRIX_CELL_RISK_MAX_LINES) {
+            truncated = true;
+            break;
+          }
+          h += 2.55;
+          linesUsed += 1;
+        }
+        if (truncated) break;
+        if (pt.hasTiltak || pt.hasFolg) {
+          if (linesUsed >= ROS_PDF_MATRIX_CELL_RISK_MAX_LINES) {
+            truncated = true;
+            break;
+          }
+          h += 2.35;
+          linesUsed += 1;
         }
       }
-      if (flat.length === 0) return;
-      let totalH = 0;
-      for (const f of flat) {
-        totalH += f.size * 0.46 + 0.55;
+      if (truncated) h += 2.4;
+      return h + 2.2;
+    };
+
+    const drawMatrixCellContent = (
+      detail: RosPdfMatrixCellDetail,
+      level: number,
+      cellX: number,
+      cellTop: number,
+      cellW: number,
+      cellH: number,
+      style: ReturnType<typeof pdfRiskLevelStyle>,
+    ) => {
+      const padX = 1.6;
+      const maxW = cellW - padX * 2;
+      let yy = cellTop + 3.4;
+      doc.setTextColor(style.text[0], style.text[1], style.text[2]);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(11);
+      doc.text(String(level), cellX + padX, yy);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(6.4);
+      doc.text(levelLabel(level), cellX + padX + 5.8, yy);
+      yy += 3.6;
+
+      if (detail.points.length === 0) {
+        doc.setFontSize(6);
+        doc.setTextColor(
+          Math.min(120, style.text[0] + 30),
+          Math.min(120, style.text[1] + 30),
+          Math.min(140, style.text[2] + 30),
+        );
+        doc.text("Ingen risiko registrert", cellX + padX, yy);
+        doc.setFont("helvetica", "normal");
+        doc.setTextColor(0);
+        return;
       }
-      let yy = top + (cellH - totalH) / 2 + flat[0]!.size * 0.36;
-      for (const f of flat) {
-        doc.setFontSize(f.size);
-        doc.setFont("helvetica", f.bold ? "bold" : "normal");
-        doc.text(f.text, cx, yy, { align: "center", maxWidth: maxW });
-        yy += f.size * 0.46 + 0.55;
+
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(5.4);
+      doc.setTextColor(style.text[0], style.text[1], style.text[2]);
+      doc.text("RISIKO", cellX + padX, yy);
+      yy += 2.7;
+
+      let linesUsed = 0;
+      let stop = false;
+      for (const pt of detail.points) {
+        if (stop || yy > cellTop + cellH - 2.5) break;
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(5.8);
+        doc.setTextColor(style.text[0], style.text[1], style.text[2]);
+        const parts = splitPdfText(doc, `• ${pt.text}`, maxW);
+        for (const part of parts) {
+          if (
+            linesUsed >= ROS_PDF_MATRIX_CELL_RISK_MAX_LINES ||
+            yy > cellTop + cellH - 2.5
+          ) {
+            doc.text("…", cellX + padX, yy);
+            stop = true;
+            break;
+          }
+          doc.text(part, cellX + padX, yy);
+          yy += 2.55;
+          linesUsed += 1;
+        }
+        if (stop) break;
+        if (pt.hasTiltak || pt.hasFolg) {
+          if (
+            linesUsed >= ROS_PDF_MATRIX_CELL_RISK_MAX_LINES ||
+            yy > cellTop + cellH - 2.5
+          ) {
+            doc.text("…", cellX + padX, yy);
+            break;
+          }
+          const tags = [
+            pt.hasTiltak ? "Tiltak" : null,
+            pt.hasFolg ? "Følg med" : null,
+          ]
+            .filter((t): t is string => Boolean(t))
+            .join(" · ");
+          doc.setFont("helvetica", "bold");
+          doc.setFontSize(5.2);
+          doc.text(tags, cellX + padX + 1.2, yy);
+          yy += 2.35;
+          linesUsed += 1;
+        }
       }
       doc.setFont("helvetica", "normal");
+      doc.setTextColor(0);
     };
 
     doc.setFont("helvetica", "normal");
@@ -636,16 +746,16 @@ export function buildRosAnalysisPdfDocument(data: RosPdfInput): jsPDF {
       PDF_THEME.slate700[1],
       PDF_THEME.slate700[2],
     );
-    const subLines = doc.splitTextToSize(phase.sub, lw - margin * 2);
+    const subLines = splitPdfText(doc, phase.sub, lw - margin * 2);
     doc.text(subLines, margin, my);
-    my += subLines.length * 3.6 + 5;
+    my += subLines.length * 3.6 + 4;
     doc.setTextColor(0);
 
     const legendBoxY = my;
     doc.setFontSize(7.5);
     doc.setTextColor(71, 85, 105);
-    doc.text("Nivåskala (0–5):", margin, legendBoxY + 2.4);
-    let legX = margin + 28;
+    doc.text("Nivå (0–5):", margin, legendBoxY + 2.4);
+    let legX = margin + 22;
     for (let lev = 0; lev <= 5; lev++) {
       const s = pdfRiskLevelStyle(lev);
       drawCellRect(legX, legendBoxY, 6, 4.2, s.fill, s.stroke);
@@ -657,12 +767,16 @@ export function buildRosAnalysisPdfDocument(data: RosPdfInput): jsPDF {
     }
     doc.setFont("helvetica", "normal");
     doc.setTextColor(71, 85, 105);
-    doc.setFontSize(7);
-    const legRest = legend.map((x) => `${x.level} = ${x.label}`).join("  ·  ");
-    const legLines = doc.splitTextToSize(legRest, lw - margin * 2);
+    doc.setFontSize(6.8);
+    const legRest = [
+      ...legend.map((x) => `${x.level}=${x.label}`),
+      "Tiltak = må håndteres",
+      "Følg med = overvåk",
+    ].join("  ·  ");
+    const legLines = splitPdfText(doc, legRest, lw - margin * 2);
     doc.text(legLines, margin, legendBoxY + 7.5);
     doc.setTextColor(0);
-    my = legendBoxY + 7.5 + legLines.length * 3.4 + 3;
+    my = legendBoxY + 7.5 + legLines.length * 3.3 + 2.5;
 
     doc.setFontSize(7.2);
     doc.setFont("helvetica", "bold");
@@ -670,33 +784,36 @@ export function buildRosAnalysisPdfDocument(data: RosPdfInput): jsPDF {
     const colHeaderLines: string[][] = [];
     for (let j = 0; j < cols; j++) {
       doc.setFontSize(7.2);
-      const lines = doc.splitTextToSize(phase.colLabels[j] ?? "", colW - 2);
+      const lines = splitPdfText(doc, phase.colLabels[j] ?? "", colW - 2.5);
       colHeaderLines.push(lines);
       headerLabelMaxLines = Math.max(headerLabelMaxLines, lines.length);
     }
-    doc.setFontSize(7);
+    doc.setFontSize(6.4);
     const cornerLines = [
-      ...doc.splitTextToSize(phase.rowAxisTitle, labelColW - 3),
-      ...doc.splitTextToSize(phase.colAxisTitle, labelColW - 3),
+      "v Rader",
+      ...splitPdfText(doc, phase.rowAxisTitle, labelColW - 3),
+      "> Kolonner",
+      ...splitPdfText(doc, phase.colAxisTitle, labelColW - 3),
     ];
     headerLabelMaxLines = Math.max(headerLabelMaxLines, cornerLines.length);
-    const headerRowH = Math.max(14, headerLabelMaxLines * 3.2 + 5);
+    const headerRowH = Math.max(16, headerLabelMaxLines * 3.1 + 5);
 
     const footerReserve = 22;
     let continuation = false;
 
     const drawMatrixHeaderRow = (atY: number) => {
       drawCellRect(margin, atY, labelColW, headerRowH, HEADER_BG, HEADER_STROKE);
-      doc.setFontSize(6.8);
+      doc.setFontSize(6.2);
       doc.setFont("helvetica", "bold");
       doc.setTextColor(51, 65, 85);
-      let hy = atY + 3.5;
+      let hy = atY + 3.2;
       for (const line of cornerLines) {
-        doc.text(line, margin + labelColW / 2, hy, {
-          align: "center",
-          maxWidth: labelColW - 3,
-        });
-        hy += 3.2;
+        const isHint = line.startsWith("v ") || line.startsWith("> ");
+        doc.setFont("helvetica", isHint ? "bold" : "normal");
+        doc.setFontSize(isHint ? 5.8 : 6.4);
+        doc.setTextColor(isHint ? 100 : 51, isHint ? 116 : 65, isHint ? 139 : 85);
+        doc.text(sanitizePdfText(line), margin + 1.8, hy);
+        hy += 3.05;
       }
       doc.setFont("helvetica", "normal");
       for (let j = 0; j < cols; j++) {
@@ -708,18 +825,15 @@ export function buildRosAnalysisPdfDocument(data: RosPdfInput): jsPDF {
           HEADER_BG,
           HEADER_STROKE,
         );
-        doc.setFontSize(7.2);
+        doc.setFontSize(7);
         doc.setFont("helvetica", "bold");
         doc.setTextColor(51, 65, 85);
         const lines = colHeaderLines[j] ?? [];
-        const blockH = lines.length * 3.2;
-        let cy = atY + (headerRowH - blockH) / 2 + 2.4;
+        const blockH = lines.length * 3.1;
+        let cy = atY + (headerRowH - blockH) / 2 + 2.3;
         for (const line of lines) {
-          doc.text(line, x0 + j * colW + colW / 2, cy, {
-            align: "center",
-            maxWidth: colW - 2,
-          });
-          cy += 3.2;
+          doc.text(line, x0 + j * colW + 1.4, cy);
+          cy += 3.1;
         }
       }
       doc.setTextColor(0);
@@ -727,23 +841,22 @@ export function buildRosAnalysisPdfDocument(data: RosPdfInput): jsPDF {
 
     const measureDataRowHeight = (i: number) => {
       doc.setFontSize(7);
-      const rl = doc.splitTextToSize(
+      const rl = splitPdfText(doc, 
         phase.rowLabels[i] ?? "",
         labelColW - 3,
       );
       const rowLabelH = Math.max(rl.length * 3.4, 9);
-      let maxInner = 11;
+      let maxInner = 12;
       for (let j = 0; j < cols; j++) {
-        const note = (phase.cn[i]?.[j] ?? "").trim();
-        const noteLines = splitMatrixCellNote(note, colW - 2.4);
-        const inner =
-          6 +
-          4.2 +
-          noteLines.length * 3.25 +
-          (noteLines.length > 0 ? 1.5 : 0);
-        maxInner = Math.max(maxInner, inner);
+        const detail = resolveMatrixCellDetail(
+          phase.details,
+          phase.cn,
+          i,
+          j,
+        );
+        maxInner = Math.max(maxInner, measureCellContentHeight(detail, colW));
       }
-      return Math.max(rowLabelH + 2, maxInner + 3.5);
+      return Math.max(rowLabelH + 2, maxInner);
     };
 
     drawMatrixHeaderRow(my);
@@ -764,34 +877,34 @@ export function buildRosAnalysisPdfDocument(data: RosPdfInput): jsPDF {
       doc.setFontSize(7);
       doc.setFont("helvetica", "bold");
       doc.setTextColor(51, 65, 85);
-      const rl = doc.splitTextToSize(phase.rowLabels[i] ?? "", labelColW - 3);
+      const rl = splitPdfText(doc, phase.rowLabels[i] ?? "", labelColW - 3);
       const rlBlock = rl.length * 3.4;
       let rly = my + (rowH - rlBlock) / 2 + 2.6;
       for (const line of rl) {
-        doc.text(line, margin + 1.5, rly, { maxWidth: labelColW - 3 });
+        doc.text(line, margin + 1.5, rly);
         rly += 3.4;
       }
       doc.setFont("helvetica", "normal");
 
       for (let j = 0; j < cols; j++) {
         const v = phase.mv[i]?.[j] ?? 0;
-        const note = (phase.cn[i]?.[j] ?? "").trim();
+        const detail = resolveMatrixCellDetail(
+          phase.details,
+          phase.cn,
+          i,
+          j,
+        );
         const style = pdfRiskLevelStyle(v);
-        const cx = x0 + j * colW + colW / 2;
         drawCellRect(x0 + j * colW, my, colW, rowH, style.fill, style.stroke);
-        doc.setTextColor(style.text[0], style.text[1], style.text[2]);
-        const lines: { text: string; size: number; bold: boolean }[] = [
-          { text: String(v), size: 12, bold: true },
-          { text: levelLabel(v), size: 7, bold: false },
-        ];
-        if (note) {
-          const noteLines = splitMatrixCellNote(note, colW - 2.4);
-          for (const nl of noteLines) {
-            lines.push({ text: nl, size: 6, bold: false });
-          }
-        }
-        drawCenteredInCell(lines, cx, my, rowH, colW - 2.4);
-        doc.setTextColor(0);
+        drawMatrixCellContent(
+          detail,
+          v,
+          x0 + j * colW,
+          my,
+          colW,
+          rowH,
+          style,
+        );
       }
       my += rowH;
     }
@@ -800,7 +913,7 @@ export function buildRosAnalysisPdfDocument(data: RosPdfInput): jsPDF {
       my += 2;
       doc.setFontSize(8);
       doc.setTextColor(100, 116, 139);
-      const contLines = doc.splitTextToSize(
+      const contLines = splitPdfText(doc, 
         "Tabellen fortsetter på neste side. Kolonneoverskriftene er gjentatt øverst slik at du slipper å bla tilbake.",
         lw - margin * 2,
       );
@@ -1003,7 +1116,7 @@ export function buildRosAnalysisPdfDocument(data: RosPdfInput): jsPDF {
     y += 4;
     addHeading("Identifiserte risikoer (beskrivelse og plassering)", 12);
     addPara(
-      "Hver risiko er listet for seg med tydelige felt. «Før/etter tiltak» viser celle og nivå slik det også framgår i matrisene. Økonomi/frekvens og begrunnelse for endring vises når de er utfylt i appen.",
+      "Hver rad under er én risiko. Feltet «Risiko» er beskrivelsen; «Tiltak / følg» viser om punktet må håndteres eller overvåkes. Plassering før/etter matcher matrisene.",
       9,
     );
     const totalR = data.identifiedRisks.length;
@@ -1024,23 +1137,26 @@ export function buildRosAnalysisPdfDocument(data: RosPdfInput): jsPDF {
       doc.setFont("helvetica", "normal");
       doc.setTextColor(0);
       addRow(
-        "Beskrivelse",
-        r.text.trim() ? r.text.trim() : "(Ingen fritekst — se markeringer og matrise.)",
+        "Risiko",
+        r.text.trim()
+          ? r.text.trim()
+          : "(Ingen fritekst — se tiltak/følg og matrise.)",
+      );
+      const marks: string[] = [];
+      if (r.hasTiltak) marks.push("Tiltak (må håndteres)");
+      if (r.hasFølg) marks.push("Følg med");
+      addRow(
+        "Tiltak / følg",
+        marks.length > 0 ? marks.join(" · ") : "Ingen merking",
       );
       addRow(
-        "Før tiltak (celle og nivå)",
+        "Før tiltak",
         `${r.beforeRowLabel} × ${r.beforeColLabel} — nivå ${r.beforeLevel} (${levelLabel(r.beforeLevel)})`,
       );
       addRow(
-        "Etter tiltak (celle og nivå)",
+        "Etter tiltak",
         `${r.afterRowLabel} × ${r.afterColLabel} — nivå ${r.afterLevel} (${levelLabel(r.afterLevel)})`,
       );
-      const marks: string[] = [];
-      if (r.hasTiltak) marks.push("Må håndteres (tiltak)");
-      if (r.hasFølg) marks.push("Følg med");
-      if (marks.length > 0) {
-        addRow("Markeringer", marks.join(" · "));
-      }
       const note = r.afterChangeNote?.trim();
       if (note) {
         addRow("Begrunnelse for endring", note);
@@ -1053,14 +1169,14 @@ export function buildRosAnalysisPdfDocument(data: RosPdfInput): jsPDF {
     y += 4;
     addHeading("Alle registrerte punkt i matrisen (komplett liste)", 12);
     addPara(
-      "Her listes hvert enkelt punkt som ligger i en celle (før eller etter tiltak). Bruk denne listen om du trenger full tekst punkt for punkt — matrisen gir oversikt, denne delen gir detalj.",
+      "Full liste punkt for punkt. Matrisen gir oversikt; her ser du risiko-tekst og tiltak/følg for hvert enkelt punkt.",
       9,
     );
     const flagNb = (flags: string[]) => {
       const out: string[] = [];
-      if (flags.includes("requires_action")) out.push("Må håndteres");
+      if (flags.includes("requires_action")) out.push("Tiltak (må håndteres)");
       if (flags.includes("watch")) out.push("Følg med");
-      return out.length ? out.join(" · ") : "";
+      return out.length ? out.join(" · ") : "Ingen merking";
     };
     const totalP = data.cellRiskPointsComplete.length;
     let pi = 0;
@@ -1086,10 +1202,11 @@ export function buildRosAnalysisPdfDocument(data: RosPdfInput): jsPDF {
         "Celle og nivå",
         `${p.rowLabel} × ${p.colLabel} — nivå ${p.level} (${levelLabel(p.level)})`,
       );
-      addRow("Tekst", p.text?.trim() ? p.text.trim() : "(Ingen fritekst)");
-      if (flagStr) {
-        addRow("Markeringer", flagStr);
-      }
+      addRow(
+        "Risiko",
+        p.text?.trim() ? p.text.trim() : "(Ingen fritekst)",
+      );
+      addRow("Tiltak / følg", flagStr);
       if (p.afterChangeNote?.trim()) {
         addRow("Notat om endring", p.afterChangeNote.trim());
       }
@@ -1164,7 +1281,7 @@ export function buildRosAnalysisPdfDocument(data: RosPdfInput): jsPDF {
       y += 4.5;
       doc.setFont("helvetica", "normal");
       doc.setTextColor(30, 41, 59);
-      const bodyLines = doc.splitTextToSize(e.body, contentW());
+      const bodyLines = splitPdfText(doc, e.body, contentW());
       const blh = bodyLineHeightMm(8.5);
       ensureSpace(bodyLines.length * blh + 3);
       doc.setFontSize(8.5);
@@ -1181,55 +1298,15 @@ export function buildRosAnalysisPdfDocument(data: RosPdfInput): jsPDF {
   }
 
   const legendExplain =
-    "Forklaring av nivåer: 0 = ikke vurdert; 1–5 = lav → kritisk. " +
+    "Forklaring av nivåer: 0 = ikke vurdert; 1-5 = lav -> kritisk. " +
     legend.map((x) => `${x.level} = ${x.label}`).join("; ") +
     ".";
-  const dFs = 6.8;
-  const dLh = bodyLineHeightMm(dFs);
-  doc.setFontSize(dFs);
-  const legLines = doc.splitTextToSize(legendExplain, contentW() - 10);
-  const discLines = doc.splitTextToSize(
+  L.setY(y);
+  L.addNoteBox("Nivåskala og merknad", [
+    legendExplain,
     ROS_COMPLIANCE_PDF_DISCLAIMER_NB,
-    contentW() - 10,
-  );
-  const footBoxH =
-    8 + legLines.length * dLh + 5 + discLines.length * dLh + 8;
-  ensureSpace(footBoxH + 8);
-  const footTop = y;
-  doc.setFillColor(
-    PDF_THEME.mutedBg[0],
-    PDF_THEME.mutedBg[1],
-    PDF_THEME.mutedBg[2],
-  );
-  doc.setDrawColor(
-    PDF_THEME.mutedBorder[0],
-    PDF_THEME.mutedBorder[1],
-    PDF_THEME.mutedBorder[2],
-  );
-  doc.setLineWidth(0.25);
-  doc.rect(margin, footTop, contentW(), footBoxH, "FD");
-  let fy = footTop + 6;
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(7.5);
-  doc.setTextColor(
-    PDF_THEME.slate700[0],
-    PDF_THEME.slate700[1],
-    PDF_THEME.slate700[2],
-  );
-  doc.text("Nivåskala og merknad", margin + 5, fy);
-  fy += 5;
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(dFs);
-  doc.setTextColor(
-    PDF_THEME.slate700[0],
-    PDF_THEME.slate700[1],
-    PDF_THEME.slate700[2],
-  );
-  doc.text(legLines, margin + 5, fy);
-  fy += legLines.length * dLh + 5;
-  doc.text(discLines, margin + 5, fy);
-  y = footTop + footBoxH + 6;
-  doc.setTextColor(0);
+  ]);
+  y = L.getY();
 
   L.finish({
     shortTitle,
