@@ -5,9 +5,11 @@ import { cn } from "@/lib/utils";
 import type { Id } from "@/convex/_generated/dataModel";
 import {
   Building2,
+  ChartColumn,
   ClipboardList,
   Eye,
   FileText,
+  Kanban,
   LayoutDashboard,
   ListTodo,
   ScrollText,
@@ -77,6 +79,13 @@ function navSections(wid: string): { heading: string | null; items: NavItem[] }[
           kind: "vurderinger",
         },
         {
+          href: `/w/${wid}/portefolje`,
+          label: "Portefølje",
+          icon: Kanban,
+          exact: false,
+          kind: "default",
+        },
+        {
           href: `/w/${wid}/prosessdesign`,
           label: "Prosessdesign",
           icon: ScrollText,
@@ -87,6 +96,13 @@ function navSections(wid: string): { heading: string | null; items: NavItem[] }[
           href: `/w/${wid}/ros`,
           label: "Risiko (ROS)",
           icon: Shield,
+          exact: false,
+          kind: "default",
+        },
+        {
+          href: `/w/${wid}/gevinster`,
+          label: "Gevinster",
+          icon: ChartColumn,
           exact: false,
           kind: "default",
         },

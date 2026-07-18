@@ -10,6 +10,7 @@
 
 import type * as ResendOTPPasswordReset from "../ResendOTPPasswordReset.js";
 import type * as assessmentNotes from "../assessmentNotes.js";
+import type * as assessmentPortfolioBoard from "../assessmentPortfolioBoard.js";
 import type * as assessmentShareLinks from "../assessmentShareLinks.js";
 import type * as assessmentTasks from "../assessmentTasks.js";
 import type * as assessments from "../assessments.js";
@@ -50,6 +51,7 @@ import type * as lib_userSearch from "../lib/userSearch.js";
 import type * as notificationEmailInternal from "../notificationEmailInternal.js";
 import type * as notificationEmails from "../notificationEmails.js";
 import type * as orgUnits from "../orgUnits.js";
+import type * as portfolioBenefits from "../portfolioBenefits.js";
 import type * as processDesignDocs from "../processDesignDocs.js";
 import type * as reminderInternal from "../reminderInternal.js";
 import type * as reminders from "../reminders.js";
@@ -75,6 +77,7 @@ import type {
 declare const fullApi: ApiFromModules<{
   ResendOTPPasswordReset: typeof ResendOTPPasswordReset;
   assessmentNotes: typeof assessmentNotes;
+  assessmentPortfolioBoard: typeof assessmentPortfolioBoard;
   assessmentShareLinks: typeof assessmentShareLinks;
   assessmentTasks: typeof assessmentTasks;
   assessments: typeof assessments;
@@ -115,6 +118,7 @@ declare const fullApi: ApiFromModules<{
   notificationEmailInternal: typeof notificationEmailInternal;
   notificationEmails: typeof notificationEmails;
   orgUnits: typeof orgUnits;
+  portfolioBenefits: typeof portfolioBenefits;
   processDesignDocs: typeof processDesignDocs;
   reminderInternal: typeof reminderInternal;
   reminders: typeof reminders;
