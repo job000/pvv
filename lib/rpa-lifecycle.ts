@@ -245,27 +245,38 @@ export function lifecycleLiveCounts(args: {
   const n = (s: PipelineStatus) => p[s] ?? 0;
   return {
     identify: Math.max(0, args.pendingIntakeCount ?? 0),
+    // Kun det som fortsatt venter på vurdering/prioritering — ikke hele historikken
     assess: n("not_assessed") + n("assessed"),
     design: n("prioritized"),
     develop: n("development"),
     test: n("uat"),
     deploy: n("production"),
-    monitor: n("monitoring") + n("done"),
+    // «Ferdig» teller ikke som arbeid i flyten
+    monitor: n("monitoring"),
   };
 }
 
-/** Steget med flest aktive saker (ekskl. tomme), ellers null. */
+/**
+ * Steget som bør få fokus: første (tidligste) steg med saker > 0.
+ * Det er flaskehalsen i flyten — ikke steget med flest tall (som ofte
+ * er «vurdering» eller «drift» og misleder).
+ *
+ * `hottestLifecycleStage` beholdes som alias for eldre kall.
+ */
+export function focusLifecycleStage(
+  counts: Record<RpaLifecycleStageId, number>,
+): RpaLifecycleStageId | null {
+  for (const stage of RPA_LIFECYCLE_STAGES) {
+    if ((counts[stage.id] ?? 0) > 0) {
+      return stage.id;
+    }
+  }
+  return null;
+}
+
+/** @deprecated Bruk focusLifecycleStage — «hottest» var misvisende. */
 export function hottestLifecycleStage(
   counts: Record<RpaLifecycleStageId, number>,
 ): RpaLifecycleStageId | null {
-  let best: RpaLifecycleStageId | null = null;
-  let bestN = 0;
-  for (const stage of RPA_LIFECYCLE_STAGES) {
-    const n = counts[stage.id] ?? 0;
-    if (n > bestN) {
-      bestN = n;
-      best = stage.id;
-    }
-  }
-  return bestN > 0 ? best : null;
+  return focusLifecycleStage(counts);
 }

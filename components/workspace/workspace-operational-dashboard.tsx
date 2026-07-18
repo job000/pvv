@@ -341,15 +341,19 @@ export function WorkspaceOperationalDashboard({
   return (
     <div className="space-y-6">
       {lifecycleHidden ? (
-        <p className="text-muted-foreground text-sm">
-          <button
-            type="button"
-            onClick={() => setLifecycleHidden(false)}
-            className="font-medium text-foreground underline-offset-2 hover:underline"
-          >
-            Vis RPA-livssyklus
-          </button>
-        </p>
+        <button
+          type="button"
+          onClick={() => setLifecycleHidden(false)}
+          className="text-muted-foreground hover:text-foreground inline-flex min-h-9 items-center gap-2 rounded-full border border-border/50 bg-muted/10 px-3 text-xs font-medium touch-manipulation transition-colors hover:bg-muted/25"
+        >
+          Vis livssyklus
+          {liveLifecycleCounts ? (
+            <span className="text-foreground tabular-nums">
+              {Object.values(liveLifecycleCounts).reduce((a, b) => a + b, 0)} i
+              flyt
+            </span>
+          ) : null}
+        </button>
       ) : (
         <RpaLifecycleGuide
           workspaceId={workspaceId}
