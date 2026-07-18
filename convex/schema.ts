@@ -1060,8 +1060,14 @@ export default defineSchema({
     body: v.string(),
     /** Valgfritt: knytt kommentar til et skjemafelt (nøkkel i assessment payload) */
     fieldKey: v.optional(v.string()),
+    /** Svar i tråd (én nivå under toppkommentar) */
+    parentNoteId: v.optional(v.id("assessmentNotes")),
+    /** Brukere nevnt med @ i kommentaren */
+    mentionedUserIds: v.optional(v.array(v.id("users"))),
     createdAt: v.number(),
-  }).index("by_assessment", ["assessmentId"]),
+  })
+    .index("by_assessment", ["assessmentId"])
+    .index("by_parent", ["parentNoteId"]),
 
   /** Enkle skjema per arbeidsområde for innsendte forslag til vurdering. */
   intakeForms: defineTable({

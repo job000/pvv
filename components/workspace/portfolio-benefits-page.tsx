@@ -16,6 +16,7 @@ import { downloadPortfolioBenefitsPdf } from "@/lib/portfolio-benefits-pdf";
 import { cn } from "@/lib/utils";
 import { useQuery } from "convex/react";
 import {
+  ArrowDownRight,
   ArrowUpRight,
   Clock3,
   Coins,
@@ -23,6 +24,8 @@ import {
   Layers,
   ShieldCheck,
   Sparkles,
+  TrendingDown,
+  TrendingUp,
   Users,
 } from "lucide-react";
 import Link from "next/link";
@@ -125,11 +128,14 @@ export function PortfolioBenefitsPage({
   const [realizationFilter, setRealizationFilter] =
     useState<RealizationFilter>("all");
   const [onlyQuantified, setOnlyQuantified] = useState(false);
+  const [candidateSort, setCandidateSort] = useState<
+    "money_desc" | "money_asc" | "hours_desc" | "updated"
+  >("money_desc");
 
   const filteredItems = useMemo(() => {
     if (!data) return [];
     const q = search.trim().toLowerCase();
-    return data.items.filter((item) => {
+    const filtered = data.items.filter((item) => {
       if (pipelineFilter !== "all" && item.pipelineStatus !== pipelineFilter) {
         return false;
       }
@@ -143,7 +149,57 @@ export function PortfolioBenefitsPage({
       if (q && !item.title.toLowerCase().includes(q)) return false;
       return true;
     });
-  }, [data, search, pipelineFilter, realizationFilter, onlyQuantified]);
+    const sorted = [...filtered];
+    sorted.sort((a, b) => {
+      switch (candidateSort) {
+        case "money_asc":
+          return a.currencySavedPerYear - b.currencySavedPerYear;
+        case "hours_desc":
+          return b.hoursSavedPerYear - a.hoursSavedPerYear;
+        case "updated":
+          return b.updatedAt - a.updatedAt;
+        case "money_desc":
+        default:
+          return b.currencySavedPerYear - a.currencySavedPerYear;
+      }
+    });
+    return sorted;
+  }, [
+    data,
+    search,
+    pipelineFilter,
+    realizationFilter,
+    onlyQuantified,
+    candidateSort,
+  ]);
+
+  const benefitDrivers = useMemo(() => {
+    const empty = {
+      topMoney: [] as NonNullable<typeof data>["items"],
+      lowMoney: [] as NonNullable<typeof data>["items"],
+      noNumbers: [] as NonNullable<typeof data>["items"],
+      totalCurrency: 0,
+    };
+    if (!data) return empty;
+    const totalCurrency = data.totals.currencySavedPerYear;
+    const byMoney = [...data.items].sort(
+      (a, b) => b.currencySavedPerYear - a.currencySavedPerYear,
+    );
+    const withMoney = byMoney.filter((i) => i.currencySavedPerYear > 0);
+    const topMoney = withMoney.slice(0, 5);
+    // Unngå å gjenta toppene når det er få kandidater
+    const lowMoney = [...withMoney]
+      .sort((a, b) => a.currencySavedPerYear - b.currencySavedPerYear)
+      .filter(
+        (i) =>
+          !topMoney.slice(0, 3).some((t) => t.assessmentId === i.assessmentId),
+      )
+      .slice(0, 4);
+    const noNumbers = data.items
+      .filter((i) => !i.hasQuantifiedBenefit)
+      .slice(0, 5);
+    return { topMoney, lowMoney, noNumbers, totalCurrency };
+  }, [data]);
 
   const displayTotals = useMemo(() => {
     if (!data) {
@@ -379,9 +435,171 @@ export function PortfolioBenefitsPage({
             })}
           </section>
 
+          <section className="space-y-3">
+            <div className="flex flex-wrap items-end justify-between gap-2">
+              <div>
+                <h2 className="font-heading text-base font-semibold">
+                  Hva driver tallene?
+                </h2>
+                <p className="text-muted-foreground mt-0.5 text-xs">
+                  Hvilke kandidater står bak besparelsen — og hvor det nesten ikke
+                  er tall.
+                </p>
+              </div>
+              <button
+                type="button"
+                className="text-xs font-medium underline-offset-2 hover:underline"
+                onClick={() => {
+                  setCandidateSort("money_desc");
+                  setOnlyQuantified(true);
+                  setTab("kandidater");
+                }}
+              >
+                Se hele listen
+              </button>
+            </div>
+
+            <div className="grid gap-3 lg:grid-cols-2">
+              <div className="rounded-2xl border border-border/40 bg-card p-4">
+                <p className="flex items-center gap-1.5 text-xs font-semibold text-emerald-800 dark:text-emerald-200">
+                  <TrendingUp className="size-3.5" aria-hidden />
+                  Største besparelse
+                </p>
+                {benefitDrivers.topMoney.length === 0 ? (
+                  <p className="text-muted-foreground mt-3 text-sm">
+                    Ingen kandidater med kroner-besparelse ennå.
+                  </p>
+                ) : (
+                  <ul className="mt-3 space-y-2">
+                    {benefitDrivers.topMoney.map((item, idx) => {
+                      const share =
+                        benefitDrivers.totalCurrency > 0
+                          ? Math.round(
+                              (item.currencySavedPerYear /
+                                benefitDrivers.totalCurrency) *
+                                100,
+                            )
+                          : 0;
+                      return (
+                        <li key={item.assessmentId}>
+                          <button
+                            type="button"
+                            className="hover:bg-muted/30 w-full rounded-xl px-2 py-2 text-left transition-colors"
+                            onClick={() => {
+                              setSearch(item.title);
+                              setCandidateSort("money_desc");
+                              setTab("kandidater");
+                            }}
+                          >
+                            <div className="flex items-start justify-between gap-2">
+                              <p className="min-w-0 text-sm font-medium leading-snug">
+                                <span className="text-muted-foreground mr-1.5 tabular-nums">
+                                  {idx + 1}.
+                                </span>
+                                {item.title}
+                              </p>
+                              <p className="shrink-0 text-sm font-semibold tabular-nums">
+                                {formatMoney(item.currencySavedPerYear)}
+                              </p>
+                            </div>
+                            <div className="mt-1.5 flex items-center gap-2">
+                              <div className="bg-muted h-1.5 min-w-0 flex-1 overflow-hidden rounded-full">
+                                <div
+                                  className="h-full rounded-full bg-emerald-600/70"
+                                  style={{ width: `${Math.min(share, 100)}%` }}
+                                />
+                              </div>
+                              <span className="text-muted-foreground w-10 shrink-0 text-right text-[11px] tabular-nums">
+                                {share}%
+                              </span>
+                            </div>
+                            <p className="text-muted-foreground mt-1 text-[11px]">
+                              {formatHours(item.hoursSavedPerYear)} t/år ·{" "}
+                              {PIPELINE_STATUS_LABELS[
+                                item.pipelineStatus as PipelineStatus
+                              ] ?? item.pipelineStatus}
+                            </p>
+                          </button>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+              </div>
+
+              <div className="rounded-2xl border border-border/40 bg-card p-4">
+                <p className="text-muted-foreground flex items-center gap-1.5 text-xs font-semibold">
+                  <TrendingDown className="size-3.5" aria-hidden />
+                  Lite eller ingen tall
+                </p>
+                {benefitDrivers.lowMoney.length === 0 &&
+                benefitDrivers.noNumbers.length === 0 ? (
+                  <p className="text-muted-foreground mt-3 text-sm">
+                    Alle kandidater har tallfestet gevinst.
+                  </p>
+                ) : (
+                  <ul className="mt-3 space-y-2">
+                    {benefitDrivers.lowMoney.map((item) => (
+                      <li key={item.assessmentId}>
+                        <button
+                          type="button"
+                          className="hover:bg-muted/30 w-full rounded-xl px-2 py-2 text-left transition-colors"
+                          onClick={() => {
+                            setSearch(item.title);
+                            setCandidateSort("money_asc");
+                            setOnlyQuantified(true);
+                            setTab("kandidater");
+                          }}
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <p className="min-w-0 text-sm font-medium leading-snug">
+                              {item.title}
+                            </p>
+                            <p className="text-muted-foreground shrink-0 text-sm tabular-nums">
+                              {formatMoney(item.currencySavedPerYear)}
+                            </p>
+                          </div>
+                          <p className="text-muted-foreground mt-1 text-[11px]">
+                            Lav andel av totalen · {formatHours(item.hoursSavedPerYear)}{" "}
+                            t/år
+                          </p>
+                        </button>
+                      </li>
+                    ))}
+                    {benefitDrivers.noNumbers.map((item) => (
+                      <li key={item.assessmentId}>
+                        <button
+                          type="button"
+                          className="hover:bg-muted/30 w-full rounded-xl px-2 py-2 text-left transition-colors"
+                          onClick={() => {
+                            setSearch(item.title);
+                            setOnlyQuantified(false);
+                            setTab("kandidater");
+                          }}
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <p className="min-w-0 text-sm font-medium leading-snug">
+                              {item.title}
+                            </p>
+                            <span className="text-muted-foreground shrink-0 text-[11px] font-medium">
+                              Uten tall
+                            </span>
+                          </div>
+                          <p className="text-muted-foreground mt-1 text-[11px]">
+                            Mangler kvantifisert besparelse i vurderingen
+                          </p>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </div>
+          </section>
+
           <p className="text-muted-foreground text-center text-xs leading-relaxed">
-            Trykk en fase for å filtrere. Diagrammer, kvalitet og kandidatliste ligger i
-            fanene over — eksporter PDF for hele bildet.
+            Trykk en fase eller en kandidat for å gå dypere. Diagrammer og kvalitet
+            ligger i fanene over.
           </p>
         </div>
       ) : null}
@@ -579,6 +797,25 @@ export function PortfolioBenefitsPage({
               />
               Kun med tall
             </label>
+            <select
+              className="border-input bg-background h-10 rounded-full border px-3 text-sm"
+              value={candidateSort}
+              onChange={(e) =>
+                setCandidateSort(
+                  e.target.value as
+                    | "money_desc"
+                    | "money_asc"
+                    | "hours_desc"
+                    | "updated",
+                )
+              }
+              aria-label="Sorter kandidater"
+            >
+              <option value="money_desc">Mest kroner først</option>
+              <option value="money_asc">Minst kroner først</option>
+              <option value="hours_desc">Flest timer først</option>
+              <option value="updated">Sist oppdatert</option>
+            </select>
             <p className="text-muted-foreground text-xs tabular-nums sm:ml-auto">
               {filteredItems.length} av {data.assessmentCount}
             </p>
@@ -606,12 +843,29 @@ export function PortfolioBenefitsPage({
                         {formatMoney(item.currencySavedPerYear)}
                         {" · "}
                         {formatHours(item.hoursSavedPerYear)} t
+                        {data.totals.currencySavedPerYear > 0 &&
+                        item.currencySavedPerYear > 0
+                          ? ` · ${Math.round(
+                              (item.currencySavedPerYear /
+                                data.totals.currencySavedPerYear) *
+                                100,
+                            )}% av kr`
+                          : !item.hasQuantifiedBenefit
+                            ? " · uten tall"
+                            : ""}
                       </p>
                     </div>
-                    <ArrowUpRight
-                      className="text-muted-foreground size-4 shrink-0"
-                      aria-hidden
-                    />
+                    {item.currencySavedPerYear > 0 ? (
+                      <ArrowUpRight
+                        className="text-muted-foreground size-4 shrink-0"
+                        aria-hidden
+                      />
+                    ) : (
+                      <ArrowDownRight
+                        className="text-muted-foreground size-4 shrink-0"
+                        aria-hidden
+                      />
+                    )}
                   </Link>
                 </li>
               ))}

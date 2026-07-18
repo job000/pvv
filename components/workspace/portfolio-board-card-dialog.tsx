@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { AssessmentCommentThreads } from "@/components/workspace/assessment-comment-threads";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import {
@@ -24,7 +25,6 @@ import {
   ArrowUpRight,
   CheckCircle2,
   ClipboardList,
-  MessageSquare,
   Send,
   UserPlus,
   Zap,
@@ -98,10 +98,8 @@ export function PortfolioBoardCardDialog({
     api.assessmentTasks.listByAssessment,
     open && assessmentId ? { assessmentId } : "skip",
   );
-  const addNote = useMutation(api.assessmentNotes.add);
   const createTask = useMutation(api.assessmentTasks.create);
 
-  const [comment, setComment] = useState("");
   const [taskTitle, setTaskTitle] = useState("");
   const [taskDescription, setTaskDescription] = useState("");
   const [selectedUserIds, setSelectedUserIds] = useState<Id<"users">[]>([]);
@@ -134,7 +132,6 @@ export function PortfolioBoardCardDialog({
   };
 
   const resetLocal = () => {
-    setComment("");
     setTaskTitle("");
     setTaskDescription("");
     setSelectedUserIds([]);
@@ -150,21 +147,6 @@ export function PortfolioBoardCardDialog({
   if (!card) return null;
 
   const phase = card.pipelineStatus as PipelineStatus;
-
-  const submitComment = async () => {
-    const body = comment.trim();
-    if (!body) return;
-    setBusy(true);
-    try {
-      await addNote({ assessmentId: card.assessmentId, body });
-      setComment("");
-      toast.success("Kommentar lagret");
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Kunne ikke lagre kommentar");
-    } finally {
-      setBusy(false);
-    }
-  };
 
   const submitTask = async () => {
     const title = taskTitle.trim();
@@ -534,55 +516,10 @@ export function PortfolioBoardCardDialog({
           ) : null}
 
           {tab === "kommentarer" ? (
-            <div className="space-y-3">
-              <p className="text-muted-foreground flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide">
-                <MessageSquare className="size-3.5" aria-hidden />
-                Kommentarer og notater
-              </p>
-              {(notes?.length ?? 0) === 0 ? (
-                <p className="text-muted-foreground text-sm">
-                  Ingen kommentarer ennå.
-                </p>
-              ) : (
-                <ul className="space-y-2">
-                  {notes!.map((n) => (
-                    <li
-                      key={n._id}
-                      className="rounded-xl border border-border/40 bg-card/80 px-3 py-2.5"
-                    >
-                      <div className="flex flex-wrap items-baseline justify-between gap-2">
-                        <p className="text-sm font-medium">{n.authorName}</p>
-                        <p className="text-muted-foreground text-[11px] tabular-nums">
-                          {new Date(n.createdAt).toLocaleString("nb-NO")}
-                        </p>
-                      </div>
-                      <p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed">
-                        {n.body}
-                      </p>
-                    </li>
-                  ))}
-                </ul>
-              )}
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
-                <Textarea
-                  value={comment}
-                  onChange={(e) => setComment(e.target.value)}
-                  rows={2}
-                  placeholder="Skriv en kommentar til teamet …"
-                  className="min-h-[4rem] flex-1 resize-y text-sm"
-                />
-                <Button
-                  type="button"
-                  size="sm"
-                  className="h-10 shrink-0 rounded-xl sm:self-stretch"
-                  disabled={busy || !comment.trim()}
-                  onClick={() => void submitComment()}
-                >
-                  <Send className="size-3.5" />
-                  Legg til
-                </Button>
-              </div>
-            </div>
+            <AssessmentCommentThreads
+              workspaceId={workspaceId}
+              assessmentId={card.assessmentId}
+            />
           ) : null}
         </DialogBody>
 
