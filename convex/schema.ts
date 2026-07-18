@@ -1172,6 +1172,57 @@ export default defineSchema({
       "submittedAt",
     ]),
 
+  /** Kommentarer / notater på skjemaforslag (før godkjenning). */
+  intakeSubmissionNotes: defineTable({
+    workspaceId: v.id("workspaces"),
+    submissionId: v.id("intakeSubmissions"),
+    authorUserId: v.id("users"),
+    body: v.string(),
+    createdAt: v.number(),
+  }).index("by_submission", ["submissionId"]),
+
+  /**
+   * Oppgaver knyttet til skjemaforslag — delegering, gjennomgang, godkjenning/avslag.
+   * Vises i Oppgaver-innboksen sammen med vurderings- og ROS-oppgaver.
+   */
+  intakeReviewTasks: defineTable({
+    workspaceId: v.id("workspaces"),
+    submissionId: v.id("intakeSubmissions"),
+    title: v.string(),
+    description: v.optional(v.string()),
+    /** Hva mottakeren bes om. */
+    requestKind: v.union(
+      v.literal("review"),
+      v.literal("decide"),
+      v.literal("general"),
+    ),
+    assigneeUserId: v.optional(v.id("users")),
+    assigneeUserIds: v.optional(v.array(v.id("users"))),
+    assigneeStates: v.optional(
+      v.array(
+        v.object({
+          userId: v.id("users"),
+          status: v.union(
+            v.literal("pending"),
+            v.literal("accepted"),
+            v.literal("declined"),
+            v.literal("done"),
+          ),
+          assignedByUserId: v.optional(v.id("users")),
+          note: v.optional(v.string()),
+          updatedAt: v.number(),
+        }),
+      ),
+    ),
+    createdByUserId: v.id("users"),
+    status: v.union(v.literal("open"), v.literal("done")),
+    priority: v.optional(v.number()),
+    dueAt: v.optional(v.number()),
+    createdAt: v.number(),
+  })
+    .index("by_submission", ["submissionId"])
+    .index("by_workspace", ["workspaceId"]),
+
   intakeFormActivations: defineTable({
     sourceFormId: v.id("intakeForms"),
     activatedFormId: v.id("intakeForms"),

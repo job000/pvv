@@ -2,8 +2,10 @@
 
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
+import { rpaLifecycleHomeHref } from "@/lib/rpa-lifecycle";
 import { useQuery } from "convex/react";
 import dynamic from "next/dynamic";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useMemo } from "react";
 
@@ -82,6 +84,18 @@ export function WorkspacePvvHub({
           {activeTab === "prosesser"
             ? "Registeret for alt som skal vurderes, sikres og designes."
             : "Prioriter, følg status og åpne den neste vurderingen."}
+        </p>
+        <p className="text-muted-foreground text-xs">
+          {activeTab === "prosesser"
+            ? "Steg 1–3 · Identifisering til design"
+            : "Steg 2 av 7 · Vurdering og prioritering"}
+          {" · "}
+          <Link
+            href={rpaLifecycleHomeHref(workspaceId)}
+            className="text-foreground font-medium underline-offset-2 hover:underline"
+          >
+            Se hele livssyklusen
+          </Link>
         </p>
       </header>
 

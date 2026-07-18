@@ -18,6 +18,7 @@ import {
   ArrowUpRight,
   Check,
   ClipboardList,
+  FileText,
   RotateCcw,
   Shield,
   X,
@@ -26,7 +27,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 
 export type WorkspaceTaskPreview = {
-  kind: "assessment" | "ros";
+  kind: "assessment" | "ros" | "intake";
   taskId: string;
   title: string;
   myStatus: "pending" | "accepted" | "declined" | "done";
@@ -126,7 +127,12 @@ export function WorkspaceTaskPreviewDialog({
 
   if (!task) return null;
 
-  const KindIcon = task.kind === "ros" ? Shield : ClipboardList;
+  const KindIcon =
+    task.kind === "ros"
+      ? Shield
+      : task.kind === "intake"
+        ? FileText
+        : ClipboardList;
   const canWork = task.myStatus === "pending" || task.myStatus === "accepted";
   const justMissing =
     Boolean(treatment?.justificationRequired) && !justification.trim();

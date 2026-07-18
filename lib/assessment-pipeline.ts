@@ -51,27 +51,27 @@ export function normalizePipelineStatus(
   return "not_assessed";
 }
 
-/** Hva som typisk skjer når status er nådd */
+/** Hva som typisk skjer når status er nådd (RPA-livssyklus-språk). */
 export function nextStepHint(status: PipelineStatus): string {
   switch (status) {
     case "not_assessed":
-      return "Fullfør vurdering for å kunne prioritere.";
+      return "Steg 2 · Fullfør vurdering før prioritering.";
     case "assessed":
-      return "Prioriter i backlog eller flytt til prioritert.";
+      return "Steg 2 · Prioriter i porteføljen (Assessment & Prioritization).";
     case "prioritized":
-      return "Klar for utviklingssprint (robot/bygg).";
+      return "Steg 3 · Design: prosessdesign (PDD) og ROS før utvikling.";
     case "development":
-      return "Klar for UAT når bygg er ferdig.";
+      return "Steg 4–5 · Ferdigstill bygg, deretter UAT / test.";
     case "uat":
-      return "Klar for produksjon etter godkjenning.";
+      return "Steg 5–6 · Godkjenn UAT, deretter produksjon (Deployment).";
     case "production":
-      return "Overvåk og iterer; flytt til overvåkning når stabil.";
+      return "Steg 6–7 · Drift stabil? Flytt til overvåkning og endring.";
     case "monitoring":
-      return "Kontinuerlig forbedring; marker ferdig når avsluttet.";
+      return "Steg 7 · Overvåk, håndter endringer; marker ferdig ved avslutning.";
     case "done":
-      return "Arkivert. Gjenåpne ved behov.";
+      return "Avsluttet i livssyklusen. Gjenåpne ved behov.";
     case "on_hold":
-      return "Avventer avklaring eller kapasitet.";
+      return "På vent — avklar før du fortsetter livssyklusen.";
     default:
       return "";
   }
@@ -85,15 +85,15 @@ export function readinessLabel(status: PipelineStatus): string {
     case "assessed":
       return "Klar for prioritering";
     case "prioritized":
-      return "Klar for utvikling";
+      return "Klar for design (PDD/ROS)";
     case "development":
       return "Under utvikling";
     case "uat":
-      return "Klar for produksjon etter UAT";
+      return "I UAT / test";
     case "production":
       return "I produksjon";
     case "monitoring":
-      return "Kontinuerlig forbedring";
+      return "Overvåkning og endring";
     case "done":
       return "Avsluttet";
     case "on_hold":

@@ -18,6 +18,7 @@ import { useMutation, useQuery } from "convex/react";
 import {
   ArrowUpRight,
   ClipboardList,
+  FileText,
   ListChecks,
   Shield,
 } from "lucide-react";
@@ -77,7 +78,7 @@ export function WorkspaceTasksPanel({
   }, [data, filter]);
 
   const runAction = async (
-    kind: "assessment" | "ros",
+    kind: "assessment" | "ros" | "intake",
     taskId: string,
     action: "accept" | "decline" | "complete" | "reopen",
     opts?: {
@@ -362,15 +363,17 @@ export function WorkspaceTasksPanel({
   );
 }
 
-function KindBadge({ kind }: { kind: "assessment" | "ros" }) {
+function KindBadge({ kind }: { kind: "assessment" | "ros" | "intake" }) {
   return (
     <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-[0.7rem] font-semibold uppercase tracking-wide text-muted-foreground">
       {kind === "ros" ? (
         <Shield className="size-3" aria-hidden />
+      ) : kind === "intake" ? (
+        <FileText className="size-3" aria-hidden />
       ) : (
         <ClipboardList className="size-3" aria-hidden />
       )}
-      {kind === "ros" ? "ROS" : "Vurdering"}
+      {kind === "ros" ? "ROS" : kind === "intake" ? "Forslag" : "Vurdering"}
     </span>
   );
 }

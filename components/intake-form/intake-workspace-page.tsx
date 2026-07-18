@@ -46,19 +46,25 @@ import {
   ChevronRight,
   ChevronUp,
   ClipboardCheck,
+  Eye,
   ExternalLink,
   FileText,
   GitBranch,
   Link2,
+  MoreHorizontal,
   Plus,
   Settings2,
   ShieldAlert,
   Sparkles,
   Trash2,
+  X,
   XCircle,
 } from "lucide-react";
+import { IntakeSubmissionCollabPanel } from "@/components/intake-form/intake-submission-collab-panel";
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useSearchParams } from "next/navigation";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 
 type EditableQuestion = {
   id: string;
@@ -249,7 +255,7 @@ function intakeSubmissionReviewHint(status: IntakeSubmissionStatus): string {
   }
 }
 
-/** Kø-kort: tydelig klikkflate + verktøylinje (gjennomgå/slett) + valgfritt GitHub-felt under. */
+/** Kø-kort: klikk åpner gjennomgang; slett og GitHub er sekundære. */
 function IntakeSubmissionQueueCard({
   submission,
   subtitle,
@@ -288,7 +294,30 @@ function IntakeSubmissionQueueCard({
               <p className="text-[15px] font-medium tracking-tight text-foreground">
                 {title}
               </p>
-              <IntakeSubmissionStatusBadge status={submission.status} />
+              <div className="flex shrink-0 items-center gap-1">
+                <IntakeSubmissionStatusBadge status={submission.status} />
+                {canDelete ? (
+                  <span
+                    role="button"
+                    tabIndex={0}
+                    className="inline-flex size-8 items-center justify-center rounded-full text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                    aria-label="Slett forslag"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onDelete();
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        onDelete();
+                      }
+                    }}
+                  >
+                    <Trash2 className="size-3.5" aria-hidden />
+                  </span>
+                ) : null}
+              </div>
             </div>
             <p className="text-xs text-muted-foreground">{subtitle}</p>
             {extraBadges ? (
@@ -306,29 +335,6 @@ function IntakeSubmissionQueueCard({
           />
         </div>
       </button>
-      <div className="flex flex-wrap items-center justify-end gap-1.5 border-t border-border/40 px-3 py-2">
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          className="rounded-full text-sm font-medium"
-          onClick={() => void onOpenReview()}
-        >
-          Gjennomgå
-        </Button>
-        {canDelete ? (
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            className="size-9 rounded-full text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-            aria-label="Slett forslag"
-            onClick={onDelete}
-          >
-            <Trash2 className="size-4" />
-          </Button>
-        ) : null}
-      </div>
       {githubSlot}
     </div>
   );
@@ -850,62 +856,8 @@ function AdminFormPreview({
   );
 }
 
-function FormWorkspaceDisclosure({
-  instanceId,
-  open,
-  onToggle,
-  title,
-  description,
-  trailing,
-  children,
-}: {
-  instanceId: string;
-  open: boolean;
-  onToggle: () => void;
-  title: string;
-  description: string;
-  trailing?: ReactNode;
-  children: ReactNode;
-}) {
-  const triggerId = `form-workspace-disclosure-${instanceId}-trigger`;
-  const contentId = `form-workspace-disclosure-${instanceId}-panel`;
-  return (
-    <div className="border-border/50 bg-background/70 overflow-hidden rounded-2xl border">
-      <button
-        type="button"
-        id={triggerId}
-        aria-expanded={open}
-        aria-controls={contentId}
-        onClick={onToggle}
-        className="hover:bg-muted/35 flex w-full items-center gap-3 px-3 py-3.5 text-left transition-colors sm:px-4"
-      >
-        <ChevronDown
-          className={cn(
-            "text-muted-foreground size-5 shrink-0 transition-transform duration-200 ease-out",
-            open && "rotate-180",
-          )}
-          aria-hidden
-        />
-        <div className="min-w-0 flex-1">
-          <p className="text-sm font-medium">{title}</p>
-          <p className="text-muted-foreground text-xs leading-snug">{description}</p>
-        </div>
-        {trailing ? <div className="shrink-0">{trailing}</div> : null}
-      </button>
-      <div
-        id={contentId}
-        role="region"
-        aria-labelledby={triggerId}
-        hidden={!open}
-        className="border-border/40 border-t"
-      >
-        {open ? <div className="p-3 pt-3 sm:p-4 sm:pt-4">{children}</div> : null}
-      </div>
-    </div>
-  );
-}
-
 export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspaces"> }) {
+  const searchParams = useSearchParams();
   const formsQuery = useQuery(api.intakeForms.listByWorkspace, { workspaceId });
   const myWorkspacesQuery = useQuery(api.workspaces.listMine, {});
   const submissionsQuery = useQuery(api.intakeSubmissions.listByWorkspace, {
@@ -1182,15 +1134,27 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
       }
     >
   >({});
-  const formsView = "compact" as string;
+  const [pageTab, setPageTab] = useState<"skjemaer" | "forslag">("skjemaer");
   const [formWorkspacePanelExpanded, setFormWorkspacePanelExpanded] =
-    useState(true);
-  const prevActiveFormIdRef = useRef<Id<"intakeForms"> | null>(null);
-  const [showResponses, setShowResponses] = useState(false);
+    useState(false);
+  const [formMoreOpen, setFormMoreOpen] = useState(false);
+  const formMoreBtnRef = useRef<HTMLButtonElement | null>(null);
+  const [formMoreMenuPos, setFormMoreMenuPos] = useState<{
+    top: number;
+    right: number;
+  } | null>(null);
+  const [settingsSection, setSettingsSection] = useState<
+    "org" | "ros" | "mal" | "lenker"
+  >("org");
+  const [settingsFillViewport, setSettingsFillViewport] = useState(false);
   const [formSearch, setFormSearch] = useState("");
   const [formStatusFilter, setFormStatusFilter] = useState<
     "all" | "draft" | "published"
   >("all");
+  const [submissionSearch, setSubmissionSearch] = useState("");
+  const [queueFormFilter, setQueueFormFilter] = useState<Id<"intakeForms"> | null>(
+    null,
+  );
   const [submissionStatusFilter, setSubmissionStatusFilter] = useState<
     "all" | IntakeSubmissionStatus
   >("all");
@@ -1209,13 +1173,64 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
   }, [forms, activeFormId]);
 
   useEffect(() => {
-    if (activeFormId !== prevActiveFormIdRef.current) {
-      prevActiveFormIdRef.current = activeFormId;
-      if (activeFormId !== null) {
-        setFormWorkspacePanelExpanded(true);
-      }
-    }
+    setFormMoreOpen(false);
   }, [activeFormId]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const mq = window.matchMedia("(max-width: 1023px)");
+    const sync = () => setSettingsFillViewport(mq.matches);
+    sync();
+    mq.addEventListener("change", sync);
+    return () => mq.removeEventListener("change", sync);
+  }, []);
+
+  useEffect(() => {
+    if (settingsOpen) {
+      setSettingsSection("org");
+    }
+  }, [settingsOpen]);
+
+  const openedForslagDeepLinkRef = useRef<string | null>(null);
+  /** Deep-link fra Oppgaver / varsel: ?forslag=<submissionId> */
+  useEffect(() => {
+    const raw = searchParams.get("forslag");
+    if (!raw || !submissionsQuery) return;
+    if (openedForslagDeepLinkRef.current === raw) return;
+    const match = submissionsQuery.find((s) => s._id === raw);
+    if (!match) return;
+    openedForslagDeepLinkRef.current = raw;
+    setPageTab("forslag");
+    void openSubmissionForReview({
+      _id: match._id,
+      status: match.status,
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- deep-link once per forslag-id
+  }, [searchParams, submissionsQuery]);
+
+  useLayoutEffect(() => {
+    if (!formMoreOpen) {
+      setFormMoreMenuPos(null);
+      return;
+    }
+    const sync = () => {
+      const el = formMoreBtnRef.current;
+      if (!el) return;
+      const r = el.getBoundingClientRect();
+      // Åpne over knappen så menyen ligger over kortet (ikke klippet av overflow)
+      setFormMoreMenuPos({
+        top: Math.max(8, r.top - 8),
+        right: Math.max(8, window.innerWidth - r.right),
+      });
+    };
+    sync();
+    window.addEventListener("resize", sync);
+    window.addEventListener("scroll", sync, true);
+    return () => {
+      window.removeEventListener("resize", sync);
+      window.removeEventListener("scroll", sync, true);
+    };
+  }, [formMoreOpen]);
 
   const integrationDraft = activeFormId ? integrationDrafts[activeFormId] : undefined;
   const rosIntegrationEnabled =
@@ -1285,7 +1300,8 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
     setConfirmationMode(source.form.confirmationMode);
     const nextQuestions = toEditableQuestions(source.questions);
     setQuestions(nextQuestions);
-    setExpandedQuestionIds(nextQuestions.map((question) => question.id));
+    const firstId = nextQuestions[0]?.id;
+    setExpandedQuestionIds(firstId ? [firstId] : []);
     setMappingSectionOpenIds(questionIdsWithMappingSectionInitiallyOpen(nextQuestions));
   }
 
@@ -1421,6 +1437,7 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
 
   function handleCreateForm() {
     selectedFormIdBeforeCreateRef.current = selectedFormId;
+    setPageTab("skjemaer");
     setIsCreatingNewForm(true);
     setSelectedFormId(null);
     setTitle("Nytt skjema");
@@ -1431,7 +1448,8 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
     setConfirmationMode("none");
     const nextQuestions = defaultIntakeQuestions();
     setQuestions(nextQuestions);
-    setExpandedQuestionIds(nextQuestions.map((question) => question.id));
+    const firstId = nextQuestions[0]?.id;
+    setExpandedQuestionIds(firstId ? [firstId] : []);
     setMappingSectionOpenIds(questionIdsWithMappingSectionInitiallyOpen(nextQuestions));
     setEditorOpen(true);
   }
@@ -1442,7 +1460,8 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
     selectedFormIdBeforeCreateRef.current = null;
     setSelectedFormId(formId);
     setEditorOpen(false);
-    setFormWorkspacePanelExpanded(true);
+    setFormWorkspacePanelExpanded(false);
+    setFormMoreOpen(false);
   }
 
   async function handleSaveForm() {
@@ -1832,6 +1851,7 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
     (submission) => submission.status === "submitted" || submission.status === "under_review",
   ).length;
   const formSearchLower = formSearch.trim().toLowerCase();
+  const submissionSearchLower = submissionSearch.trim().toLowerCase();
   const formsForSidebarDisplay = formsForSidebarList.filter((form) => {
     if (formStatusFilter !== "all" && form.status !== formStatusFilter) {
       return false;
@@ -1843,16 +1863,29 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
       org.toLowerCase().includes(formSearchLower)
     );
   });
+  const queueFormFilterTitle = queueFormFilter
+    ? forms.find((f) => f._id === queueFormFilter)?.title ?? "valgt skjema"
+    : null;
   const submissionsForQueue = submissions.filter((submission) => {
+    if (queueFormFilter && submission.formId !== queueFormFilter) {
+      return false;
+    }
     if (submissionStatusFilter !== "all" && submission.status !== submissionStatusFilter) {
       return false;
     }
-    if (!formSearchLower) return true;
+    if (!submissionSearchLower) return true;
     return (
-      submission.formTitle.toLowerCase().includes(formSearchLower) ||
-      submission.generatedAssessmentDraft.title.toLowerCase().includes(formSearchLower)
+      submission.formTitle.toLowerCase().includes(submissionSearchLower) ||
+      submission.generatedAssessmentDraft.title
+        .toLowerCase()
+        .includes(submissionSearchLower)
     );
   });
+
+  function openForslagForForm(formId: Id<"intakeForms">) {
+    setQueueFormFilter(formId);
+    setPageTab("forslag");
+  }
   useEffect(() => {
     const allowed = new Set(submissionsForQueue.map((s) => s._id));
     setSelectedQueueSubmissionIds((prev) => {
@@ -2006,6 +2039,15 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
           <p className="text-sm text-muted-foreground">
             Samle inn forslag og gjør dem om til prosesser.
           </p>
+          <p className="text-muted-foreground text-xs">
+            Steg 1 av 7 · Identifisering ·{" "}
+            <Link
+              href={`/w/${workspaceId}#rpa-livssyklus`}
+              className="text-foreground font-medium underline-offset-2 hover:underline"
+            >
+              Se hele livssyklusen
+            </Link>
+          </p>
         </div>
         <Button
           type="button"
@@ -2017,28 +2059,65 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
         </Button>
       </header>
 
-      <dl className="flex flex-wrap gap-x-8 gap-y-2 border-y border-border/50 py-3.5 text-sm">
-        <div className="flex items-baseline gap-2">
-          <dt className="text-muted-foreground">Skjemaer</dt>
-          <dd className="font-semibold tabular-nums text-foreground">
+      <nav
+        className="inline-flex max-w-full flex-nowrap items-center gap-1 overflow-x-auto rounded-full border border-border/50 bg-background p-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        role="tablist"
+        aria-label="Skjemaer eller forslag"
+      >
+        <button
+          type="button"
+          role="tab"
+          aria-selected={pageTab === "skjemaer"}
+          onClick={() => setPageTab("skjemaer")}
+          className={cn(
+            "flex h-10 shrink-0 items-center gap-1.5 rounded-full px-3.5 text-sm font-medium transition-colors sm:h-9",
+            pageTab === "skjemaer"
+              ? "bg-foreground text-background"
+              : "text-muted-foreground hover:text-foreground",
+          )}
+        >
+          Skjemaer
+          <span
+            className={cn(
+              "rounded-full px-1.5 py-0.5 text-[10px] font-semibold tabular-nums leading-none",
+              pageTab === "skjemaer"
+                ? "bg-background/20 text-background"
+                : "bg-muted text-muted-foreground",
+            )}
+          >
             {forms.length}
-          </dd>
-        </div>
-        {pendingCount > 0 ? (
-          <div className="flex items-baseline gap-2">
-            <dt className="text-muted-foreground">Ventende svar</dt>
-            <dd className="font-semibold tabular-nums text-foreground">
+          </span>
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={pageTab === "forslag"}
+          onClick={() => setPageTab("forslag")}
+          className={cn(
+            "flex h-10 shrink-0 items-center gap-1.5 rounded-full px-3.5 text-sm font-medium transition-colors sm:h-9",
+            pageTab === "forslag"
+              ? "bg-foreground text-background"
+              : "text-muted-foreground hover:text-foreground",
+          )}
+        >
+          Forslag
+          {pendingCount > 0 ? (
+            <span
+              className={cn(
+                "rounded-full px-1.5 py-0.5 text-[10px] font-semibold tabular-nums leading-none",
+                pageTab === "forslag"
+                  ? "bg-background/20 text-background"
+                  : "bg-muted text-muted-foreground",
+              )}
+            >
               {pendingCount}
-            </dd>
-          </div>
-        ) : null}
-      </dl>
+            </span>
+          ) : null}
+        </button>
+      </nav>
 
-      <section className="grid gap-8 xl:grid-cols-[1.1fr_0.9fr] xl:gap-5">
+      {pageTab === "skjemaer" ? (
         <section className="space-y-3">
-          <h2 className="text-base font-semibold tracking-tight text-foreground">
-            Dine skjemaer
-          </h2>
           <div className="space-y-3">
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <SearchInput
@@ -2072,19 +2151,14 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
                 </p>
               </div>
             ) : formsForSidebarDisplay.length === 0 ? (
-              <p className="text-muted-foreground px-1 text-sm">
-                Ingen treff i filteret. Prøv et annet søk eller status.
-              </p>
+              formSearchLower || formStatusFilter !== "all" ? (
+                <p className="text-muted-foreground px-1 text-sm">
+                  Ingen treff i filteret. Prøv et annet søk eller status.
+                </p>
+              ) : null
             ) : (
-              <div
-                className={
-                  formsView === "cards"
-                    ? "grid gap-3 sm:grid-cols-2"
-                    : "flex flex-col gap-1"
-                }
-              >
+              <div className="flex flex-col gap-1">
                 {formsForSidebarDisplay.map((form) => {
-                  const isSelected = activeFormId === form._id;
                   const statusLabel =
                     form.status === "published"
                       ? "Publisert"
@@ -2096,81 +2170,36 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
                       key={form._id}
                       type="button"
                       onClick={() => selectWorkspaceForm(form._id)}
-                      className={cn(
-                        "rounded-2xl border text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
-                        formsView === "cards" ? "p-4" : "px-3 py-2.5",
-                        isSelected
-                          ? formsView === "cards"
-                            ? "border-primary/70 bg-primary/[0.06] shadow-md ring-2 ring-primary/25"
-                            : "border-primary/60 bg-primary/[0.07] shadow-sm ring-1 ring-primary/20"
-                          : "border-border/50 hover:border-border hover:bg-muted/15",
-                      )}
+                      className="rounded-2xl border border-border/50 px-3 py-2.5 text-left transition hover:border-border hover:bg-muted/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                     >
-                      {formsView === "compact" ? (
-                        <div className="flex min-h-10 items-center gap-3">
-                          <FileText
-                            className={cn(
-                              "size-4 shrink-0",
-                              isSelected ? "text-primary" : "text-muted-foreground",
-                            )}
-                            aria-hidden
-                          />
-                          <div className="min-w-0 flex-1">
-                            <div className="flex min-w-0 items-center gap-2">
-                              <p className="truncate font-medium leading-tight">{form.title}</p>
-                              {form.isTemplate ? (
-                                <Badge variant="outline" className="hidden shrink-0 sm:inline-flex">
-                                  Mal
-                                </Badge>
-                              ) : null}
-                            </div>
-                            <p className="text-muted-foreground mt-0.5 truncate text-xs tabular-nums">
-                              {form.questionCount} spørsmål · {form.responseCount} svar
-                              {form.activeActivationCount > 0
-                                ? ` · ${form.activeActivationCount} aktiveringer`
-                                : ""}
-                              {form.orgUnitId
-                                ? ` · ${orgUnitNameById.get(form.orgUnitId) ?? "Org."}`
-                                : ""}
-                            </p>
+                      <div className="flex min-h-10 items-center gap-3">
+                        <FileText
+                          className="text-muted-foreground size-4 shrink-0"
+                          aria-hidden
+                        />
+                        <div className="min-w-0 flex-1">
+                          <div className="flex min-w-0 items-center gap-2">
+                            <p className="truncate font-medium leading-tight">{form.title}</p>
+                            {form.isTemplate ? (
+                              <Badge variant="outline" className="hidden shrink-0 sm:inline-flex">
+                                Mal
+                              </Badge>
+                            ) : null}
                           </div>
-                          <Badge
-                            variant={form.status === "published" ? "secondary" : "outline"}
-                            className="shrink-0 text-[10px]"
-                          >
-                            {statusLabel}
-                          </Badge>
+                          <p className="text-muted-foreground mt-0.5 truncate text-xs tabular-nums">
+                            {form.questionCount} spørsmål · {form.responseCount} svar
+                            {form.orgUnitId
+                              ? ` · ${orgUnitNameById.get(form.orgUnitId) ?? "Org."}`
+                              : ""}
+                          </p>
                         </div>
-                      ) : (
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="min-w-0 space-y-1.5">
-                            <div className="flex flex-wrap items-center gap-2">
-                              <p className="truncate font-medium">{form.title}</p>
-                              {form.isTemplate ? <Badge variant="outline">Mal</Badge> : null}
-                              {form.sourceTemplateFormId ? (
-                                <Badge variant="outline">Aktivert fra mal</Badge>
-                              ) : null}
-                            </div>
-                            <p className="text-muted-foreground text-sm tabular-nums">
-                              {form.questionCount} spørsmål · {form.responseCount} svar
-                              {form.activeActivationCount > 0
-                                ? ` · ${form.activeActivationCount} aktiveringer`
-                                : ""}
-                              {form.orgUnitId
-                                ? ` · ${orgUnitNameById.get(form.orgUnitId) ?? "Org."}`
-                                : ""}
-                            </p>
-                            <p className="text-muted-foreground text-[11px]">
-                              {form.confirmationMode === "email_copy"
-                                ? "E-post til svarer"
-                                : "Uten e-post"}
-                            </p>
-                          </div>
-                          <Badge variant={form.status === "published" ? "secondary" : "outline"}>
-                            {statusLabel}
-                          </Badge>
-                        </div>
-                      )}
+                        <Badge
+                          variant={form.status === "published" ? "secondary" : "outline"}
+                          className="shrink-0 text-[10px]"
+                        >
+                          {statusLabel}
+                        </Badge>
+                      </div>
                     </button>
                   );
                 })}
@@ -2178,112 +2207,27 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
             )}
 
             {selectedForm ? (
-              !formWorkspacePanelExpanded ? (
-                <div className="overflow-hidden rounded-2xl border border-border/60 bg-card/80 shadow-sm backdrop-blur-sm">
-                  <button
-                    type="button"
-                    className="hover:bg-muted/30 flex w-full items-start gap-3 px-3 py-3.5 text-left transition-colors sm:px-4 sm:py-4"
-                    onClick={() => setFormWorkspacePanelExpanded(true)}
-                  >
-                    <div className="min-w-0 flex-1 space-y-1">
-                      <div className="flex min-w-0 flex-wrap items-center gap-2">
-                        <p className="truncate font-heading text-base font-semibold sm:text-lg">
-                          {selectedForm.title}
-                        </p>
-                        <Badge
-                          variant={selectedForm.status === "published" ? "secondary" : "outline"}
-                          className="shrink-0"
-                        >
-                          {selectedForm.status === "published"
-                            ? "Publisert"
-                            : selectedForm.status === "archived"
-                              ? "Arkivert"
-                              : "Utkast"}
-                        </Badge>
-                      </div>
-                      <p className="text-muted-foreground text-xs tabular-nums sm:text-sm">
-                        {selectedForm.questionCount} spørsmål · {activeFormResponseRows.length} svar
-                      </p>
-                      <p className="text-muted-foreground text-[11px] sm:text-xs">
-                        Trykk her for full oversikt · snarveier under
-                      </p>
-                    </div>
-                    <ChevronDown
-                      className="text-muted-foreground mt-0.5 size-5 shrink-0"
-                      aria-hidden
-                    />
-                  </button>
-                  <div className="border-border/50 flex flex-wrap gap-2 border-t px-3 py-3 sm:px-4">
-                    {selectedForm.status === "published" ? (
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        className="rounded-xl"
-                        onClick={() => handleSetFormStatus("draft")}
-                      >
-                        Avpubliser
-                      </Button>
-                    ) : selectedForm.status === "draft" ? (
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        className="rounded-xl"
-                        disabled={selectedForm.questionCount === 0}
-                        title={
-                          selectedForm.questionCount === 0
-                            ? "Åpne «Rediger skjema», legg til minst ett spørsmål og lagre før du publiserer."
-                            : undefined
-                        }
-                        onClick={() => handleSetFormStatus("published")}
-                      >
-                        Publiser
-                      </Button>
-                    ) : null}
-                    <Button
-                      type="button"
-                      size="sm"
-                      className="rounded-xl"
-                      disabled={!editorData}
-                      onClick={() => {
-                        primeEditorState(editorData);
-                        setEditorOpen(true);
-                      }}
-                    >
-                      Rediger
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="rounded-xl"
-                      aria-label="ROS, mal, lenker"
-                      onClick={() => setSettingsOpen(true)}
-                    >
-                      <Settings2 className="size-4" />
-                      <span className="hidden sm:inline">ROS, mal, lenker</span>
-                    </Button>
-                  </div>
-                </div>
-              ) : (
-              <div className="relative space-y-4 rounded-[28px] border border-border/60 bg-card p-4 shadow-sm sm:p-5">
-                <Button
+              <div className="relative z-10 rounded-2xl border border-border/60 bg-card shadow-sm">
+                <button
                   type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="text-muted-foreground hover:text-foreground absolute right-2 top-2 z-10 size-10 rounded-full sm:right-3 sm:top-3"
-                  aria-label="Skjul oversikt"
-                  title="Skjul oversikt"
-                  onClick={() => setFormWorkspacePanelExpanded(false)}
+                  className="hover:bg-muted/30 flex w-full items-start gap-3 px-3 py-3.5 text-left transition-colors sm:px-4 sm:py-4"
+                  onClick={() => setFormWorkspacePanelExpanded((v) => !v)}
+                  aria-expanded={formWorkspacePanelExpanded}
+                  aria-label={
+                    formWorkspacePanelExpanded
+                      ? "Skjul skjemadetaljer"
+                      : "Vis skjemadetaljer"
+                  }
                 >
-                  <ChevronUp className="size-5" />
-                </Button>
-                <div className="border-border/50 flex flex-col gap-3 border-b pb-4 pr-11 pt-0.5 sm:flex-row sm:items-start sm:justify-between sm:pr-12">
-                  <div className="min-w-0 space-y-2">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <p className="font-heading text-xl font-semibold">{selectedForm.title}</p>
-                      <Badge variant={selectedForm.status === "published" ? "secondary" : "outline"}>
+                  <div className="min-w-0 flex-1 space-y-1">
+                    <div className="flex min-w-0 flex-wrap items-center gap-2">
+                      <p className="truncate font-heading text-base font-semibold sm:text-lg">
+                        {selectedForm.title}
+                      </p>
+                      <Badge
+                        variant={selectedForm.status === "published" ? "secondary" : "outline"}
+                        className="shrink-0"
+                      >
                         {selectedForm.status === "published"
                           ? "Publisert"
                           : selectedForm.status === "archived"
@@ -2291,168 +2235,269 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
                             : "Utkast"}
                       </Badge>
                     </div>
-                    <p className="text-muted-foreground text-sm tabular-nums">
-                      {selectedForm.questionCount} spørsmål · {activeFormResponseRows.length} svar · {links.length} lenker
+                    <p className="text-muted-foreground text-xs tabular-nums sm:text-sm">
+                      {selectedForm.questionCount} spørsmål ·{" "}
+                      <span
+                        role="link"
+                        tabIndex={0}
+                        className="text-foreground underline-offset-2 hover:underline"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openForslagForForm(selectedForm._id);
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            openForslagForForm(selectedForm._id);
+                          }
+                        }}
+                      >
+                        {activeFormResponseRows.length} svar
+                      </span>
+                      {links.length > 0 ? ` · ${links.length} lenker` : ""}
                     </p>
                   </div>
-                  <div className="flex w-full flex-wrap gap-2 sm:w-auto sm:justify-end">
-                    {selectedForm.status === "published" ? (
+                  {formWorkspacePanelExpanded ? (
+                    <ChevronUp className="text-muted-foreground mt-0.5 size-5 shrink-0" aria-hidden />
+                  ) : (
+                    <ChevronDown className="text-muted-foreground mt-0.5 size-5 shrink-0" aria-hidden />
+                  )}
+                </button>
+
+                {formWorkspacePanelExpanded ? (
+                  <div className="border-border/50 space-y-2 border-t px-3 py-3 sm:px-4">
+                    <p className="text-muted-foreground text-xs leading-relaxed">
+                      {selectedForm.orgUnitId
+                        ? `Organisasjon: ${orgUnitNameById.get(selectedForm.orgUnitId) ?? "—"}`
+                        : "Ingen organisasjonsenhet satt."}
+                      {selectedForm.isTemplate
+                        ? " · Delt som mal."
+                        : selectedForm.sourceTemplateFormId
+                          ? " · Aktivert fra mal."
+                          : ""}
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="sm"
+                        className="rounded-xl"
+                        onClick={() => openForslagForForm(selectedForm._id)}
+                      >
+                        Se {activeFormResponseRows.length} forslag
+                      </Button>
                       <Button
                         type="button"
                         variant="outline"
                         size="sm"
                         className="rounded-xl"
-                        onClick={() => handleSetFormStatus("draft")}
+                        onClick={() => setSettingsOpen(true)}
                       >
-                        Avpubliser
+                        Delbare lenker
                       </Button>
-                    ) : selectedForm.status === "draft" ? (
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        className="rounded-xl"
-                        disabled={selectedForm.questionCount === 0}
-                        onClick={() => handleSetFormStatus("published")}
-                      >
-                        Publiser
-                      </Button>
-                    ) : null}
-                    <Button
-                      type="button"
-                      size="sm"
-                      className="rounded-xl"
-                      disabled={!editorData}
-                      onClick={() => {
-                        primeEditorState(editorData);
-                        setEditorOpen(true);
-                      }}
-                    >
-                      Rediger skjema
-                    </Button>
+                    </div>
+                  </div>
+                ) : null}
+
+                <div className="border-border/50 relative flex flex-wrap items-center gap-2 border-t px-3 py-3 sm:px-4">
+                  {selectedForm.status === "published" ? (
                     <Button
                       type="button"
                       variant="outline"
                       size="sm"
                       className="rounded-xl"
-                      onClick={() => setSettingsOpen(true)}
+                      onClick={() => handleSetFormStatus("draft")}
                     >
-                      <Settings2 className="size-4" />
-                      Innstillinger
+                      Avpubliser
                     </Button>
+                  ) : selectedForm.status === "draft" ? (
                     <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="rounded-xl"
+                      disabled={selectedForm.questionCount === 0}
+                      title={
+                        selectedForm.questionCount === 0
+                          ? "Legg til minst ett spørsmål før du publiserer."
+                          : undefined
+                      }
+                      onClick={() => handleSetFormStatus("published")}
+                    >
+                      Publiser
+                    </Button>
+                  ) : null}
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="rounded-xl"
+                    disabled={!editorData}
+                    onClick={() => {
+                      primeEditorState(editorData);
+                      setEditorOpen(true);
+                    }}
+                  >
+                    Rediger
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="rounded-xl"
+                    aria-label="Innstillinger"
+                    onClick={() => {
+                      setFormMoreOpen(false);
+                      setSettingsOpen(true);
+                    }}
+                  >
+                    <Settings2 className="size-4" />
+                    <span className="hidden sm:inline">Innstillinger</span>
+                  </Button>
+                  <div className="relative z-20 ml-auto">
+                    <Button
+                      ref={formMoreBtnRef}
                       type="button"
                       variant="ghost"
                       size="sm"
-                      className="rounded-xl text-destructive hover:bg-destructive/10 hover:text-destructive"
-                      onClick={() => void handleArchiveForm()}
+                      className="rounded-xl"
+                      aria-expanded={formMoreOpen}
+                      aria-haspopup="menu"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setFormMoreOpen((v) => !v);
+                      }}
                     >
-                      <Trash2 className="size-4" />
+                      <MoreHorizontal className="size-4" />
+                      Mer
                     </Button>
+                    {formMoreOpen && formMoreMenuPos
+                      ? createPortal(
+                          <>
+                            <button
+                              type="button"
+                              className="fixed inset-0 z-[220] cursor-default"
+                              aria-label="Lukk meny"
+                              onClick={() => setFormMoreOpen(false)}
+                            />
+                            <div
+                              role="menu"
+                              className="bg-popover fixed z-[230] min-w-[12rem] -translate-y-full rounded-xl border border-border/60 p-1 shadow-2xl"
+                              style={{
+                                top: formMoreMenuPos.top,
+                                right: formMoreMenuPos.right,
+                              }}
+                            >
+                              <button
+                                type="button"
+                                role="menuitem"
+                                className="hover:bg-muted flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-sm"
+                                onClick={() => {
+                                  setFormMoreOpen(false);
+                                  setFormWorkspacePanelExpanded(true);
+                                }}
+                              >
+                                Vis detaljer
+                              </button>
+                              <button
+                                type="button"
+                                role="menuitem"
+                                className="hover:bg-muted flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-sm text-destructive"
+                                onClick={() => {
+                                  setFormMoreOpen(false);
+                                  void handleArchiveForm();
+                                }}
+                              >
+                                <Trash2 className="size-3.5" aria-hidden />
+                                Arkiver
+                              </button>
+                            </div>
+                          </>,
+                          document.body,
+                        )
+                      : null}
                   </div>
                 </div>
-
-                <FormWorkspaceDisclosure
-                  instanceId="responses"
-                  open={showResponses}
-                  onToggle={() => setShowResponses((prev) => !prev)}
-                  title="Svar på dette skjemaet"
-                  description="Trykk på kortet eller «Gjennomgå» for å åpne gjennomgang. Godkjenning skjer i vinduet som åpnes."
-                  trailing={<Badge variant="secondary">{activeFormResponseRows.length} svar</Badge>}
-                >
-                  {activeFormResponseRows.length === 0 ? (
-                    <p className="text-muted-foreground text-sm">
-                      Ingen har sendt inn dette skjemaet ennå.
-                    </p>
-                  ) : (
-                    <div className="space-y-3">
-                      {activeFormResponseRows.map((submission) => (
-                        <IntakeSubmissionQueueCard
-                          key={submission._id}
-                          submission={submission}
-                          subtitle={new Date(submission.submittedAt).toLocaleString("nb-NO")}
-                          onOpenReview={() => void openSubmissionForReview(submission)}
-                          onDelete={() => handleRemoveSubmission(submission)}
-                          canDelete={canDeleteIntakeSubmissions}
-                          extraBadges={
-                            <>
-                              {submission.generatedRosSuggestion.shouldCreateRos ? (
-                                <Badge variant="outline">ROS-forslag</Badge>
-                              ) : null}
-                              {submission.personDataSignal ? (
-                                <Badge variant="outline">Persondata</Badge>
-                              ) : null}
-                            </>
-                          }
-                          githubSlot={renderSubmissionGithubStrip(submission)}
-                        />
-                      ))}
-                    </div>
-                  )}
-                </FormWorkspaceDisclosure>
               </div>
-              )
             ) : isCreatingNewForm ? (
               <div className="border-border/60 bg-muted/15 mt-3 rounded-2xl border border-dashed p-5 text-center sm:text-left">
                 <p className="text-sm font-medium">Du oppretter et nytt skjema</p>
                 <p className="text-muted-foreground mt-1 text-sm leading-snug">
-                  Ingenting lagres i listen før du trykker «Opprett skjema» i vinduet over. Lukk for å
+                  Ingenting lagres i listen før du trykker «Opprett skjema» i vinduet. Lukk for å
                   avbryte.
                 </p>
               </div>
             ) : null}
           </div>
         </section>
-
+      ) : (
         <section className="space-y-3">
-          <h2 className="text-base font-semibold tracking-tight text-foreground">
-            Innsendte forslag
-          </h2>
           <div className="space-y-3">
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-              <div className="flex flex-wrap gap-1.5">
-                <button
-                  type="button"
-                  onClick={() => setSubmissionStatusFilter("all")}
-                  className={cn(
-                    "rounded-full border px-2.5 py-1 text-[11px] transition-colors",
-                    submissionStatusFilter === "all"
-                      ? "border-primary/40 bg-primary/10 text-foreground"
-                      : "border-border/50 bg-card/60 text-muted-foreground hover:text-foreground",
-                  )}
-                >
-                  Alle
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setSubmissionStatusFilter("submitted")}
-                  className={cn(
-                    "rounded-full border px-2.5 py-1 text-[11px] transition-colors",
-                    submissionStatusFilter === "submitted"
-                      ? "border-primary/40 bg-primary/10 text-foreground"
-                      : "border-border/50 bg-card/60 text-muted-foreground hover:text-foreground",
-                  )}
-                >
-                  Nye
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setSubmissionStatusFilter("under_review")}
-                  className={cn(
-                    "rounded-full border px-2.5 py-1 text-[11px] transition-colors",
-                    submissionStatusFilter === "under_review"
-                      ? "border-amber-500/40 bg-amber-500/10 text-foreground"
-                      : "border-border/50 bg-card/60 text-muted-foreground hover:text-foreground",
-                  )}
-                >
-                  Under vurdering
-                </button>
-              </div>
+              <SearchInput
+                value={submissionSearch}
+                onChange={(e) => setSubmissionSearch(e.target.value)}
+                placeholder="Søk i forslag …"
+                className="h-9 w-full rounded-full sm:max-w-xs"
+                aria-label="Søk i forslag"
+              />
               <span className="text-xs tabular-nums text-muted-foreground">
                 {submissionsForQueue.length} i kø
               </span>
             </div>
-            {submissionsForQueue.length > 0 ? (
+            {queueFormFilter ? (
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="bg-muted/40 text-muted-foreground inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs">
+                  Fra «{queueFormFilterTitle}»
+                  <button
+                    type="button"
+                    className="text-foreground font-medium underline-offset-2 hover:underline"
+                    onClick={() => setQueueFormFilter(null)}
+                  >
+                    Fjern
+                  </button>
+                </span>
+              </div>
+            ) : null}
+            <div className="flex flex-wrap gap-1.5">
+              <button
+                type="button"
+                onClick={() => setSubmissionStatusFilter("all")}
+                className={cn(
+                  "rounded-full border px-2.5 py-1 text-[11px] transition-colors",
+                  submissionStatusFilter === "all"
+                    ? "border-primary/40 bg-primary/10 text-foreground"
+                    : "border-border/50 bg-card/60 text-muted-foreground hover:text-foreground",
+                )}
+              >
+                Alle
+              </button>
+              <button
+                type="button"
+                onClick={() => setSubmissionStatusFilter("submitted")}
+                className={cn(
+                  "rounded-full border px-2.5 py-1 text-[11px] transition-colors",
+                  submissionStatusFilter === "submitted"
+                    ? "border-primary/40 bg-primary/10 text-foreground"
+                    : "border-border/50 bg-card/60 text-muted-foreground hover:text-foreground",
+                )}
+              >
+                Nye
+              </button>
+              <button
+                type="button"
+                onClick={() => setSubmissionStatusFilter("under_review")}
+                className={cn(
+                  "rounded-full border px-2.5 py-1 text-[11px] transition-colors",
+                  submissionStatusFilter === "under_review"
+                    ? "border-amber-500/40 bg-amber-500/10 text-foreground"
+                    : "border-border/50 bg-card/60 text-muted-foreground hover:text-foreground",
+                )}
+              >
+                Under vurdering
+              </button>
+            </div>
+            {selectedQueueSubmissionIds.length > 0 ? (
               <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-border/50 bg-muted/[0.08] px-3 py-2">
                 <button
                   type="button"
@@ -2490,7 +2535,6 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
                       size="sm"
                       variant="ghost"
                       className="rounded-xl text-destructive hover:bg-destructive/10 hover:text-destructive"
-                      disabled={selectedQueueSubmissionIds.length === 0}
                       onClick={() => void deleteSelectedQueueRows()}
                     >
                       Slett valgte
@@ -2510,7 +2554,7 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
             ) : submissionsForQueue.length === 0 ? (
               <div className="border-border/60 bg-muted/10 rounded-2xl border border-dashed p-6 text-center">
                 <ClipboardCheck className="text-muted-foreground mx-auto mb-2 size-6" />
-                <p className="font-medium">Ingen treff i køen</p>
+                <p className="font-medium">Ingen treff</p>
                 <p className="text-muted-foreground mt-1 text-sm">
                   Endre filter eller søk for å vise flere forslag.
                 </p>
@@ -2545,9 +2589,12 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
                           {submission.generatedRosSuggestion.shouldCreateRos ? (
                             <Badge variant="outline">ROS-forslag</Badge>
                           ) : null}
-                          <Badge variant="outline">
-                            {submission.generatedRosSuggestion.risks.length} risikoer
-                          </Badge>
+                          {submission.generatedRosSuggestion.shouldCreateRos &&
+                          submission.generatedRosSuggestion.risks.length > 0 ? (
+                            <Badge variant="outline">
+                              {submission.generatedRosSuggestion.risks.length} risikoer
+                            </Badge>
+                          ) : null}
                         </>
                       }
                       githubSlot={renderSubmissionGithubStrip(submission)}
@@ -2558,7 +2605,7 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
             )}
           </div>
         </section>
-      </section>
+      )}
 
       <Dialog
         open={editorOpen}
@@ -2722,20 +2769,9 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
                     Hold dem korte og konkrete. Unngå fagord.
                   </p>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex flex-col items-stretch gap-2 sm:items-end">
                   <Button
                     type="button"
-                    variant="outline"
-                    className="rounded-xl"
-                    onClick={() => setIntakeTemplatePickerOpen(true)}
-                  >
-                    <Sparkles className="size-4" />
-                    Velg eksempelmal
-                    <ChevronDown className="size-4 opacity-70" />
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
                     className="rounded-xl"
                     onClick={() => {
                       const nextQuestion = emptyQuestion();
@@ -2746,12 +2782,36 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
                     <Plus className="size-4" />
                     Nytt spørsmål
                   </Button>
-                  <Button type="button" variant="ghost" className="rounded-xl" onClick={openAllQuestions}>
-                    Vis alle
-                  </Button>
-                  <Button type="button" variant="ghost" className="rounded-xl" onClick={closeAllQuestions}>
-                    Skjul alle
-                  </Button>
+                  <div className="flex flex-wrap justify-end gap-1.5">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="rounded-xl"
+                      onClick={() => setIntakeTemplatePickerOpen(true)}
+                    >
+                      <Sparkles className="size-3.5" />
+                      Eksempelmal
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="rounded-xl"
+                      onClick={openAllQuestions}
+                    >
+                      Vis alle
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="rounded-xl"
+                      onClick={closeAllQuestions}
+                    >
+                      Skjul alle
+                    </Button>
+                  </div>
                 </div>
               </div>
               <div className="space-y-4">
@@ -3261,12 +3321,21 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
             </div>
           </DialogBody>
           <DialogFooter className="flex flex-wrap justify-between gap-3 sm:gap-4">
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                className="h-11 rounded-xl px-5 sm:h-12"
+                onClick={() => setPreviewOpen(true)}
+              >
+                <Eye className="size-4" />
+                Forhåndsvis
+              </Button>
               {isCreatingNewForm ? null : (
                 <Button
                   type="button"
-                  variant="outline"
-                  className="h-11 rounded-xl px-5 sm:h-12"
+                  variant="ghost"
+                  className="h-11 rounded-xl px-5 text-destructive hover:bg-destructive/10 hover:text-destructive sm:h-12"
                   onClick={() => void handleArchiveForm()}
                 >
                   Arkiver
@@ -3344,19 +3413,75 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
       </Dialog>
 
       <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
-        <DialogContent size="xl" titleId="intake-settings-title">
-          <DialogHeader>
-            <p id="intake-settings-title" className="font-heading text-lg font-semibold">
-              Innstillinger for skjema
-            </p>
-            <p className="text-muted-foreground text-sm leading-snug">
-              Organisasjon, ROS, mal og lenker. Publisering og sletting ligger på hovedsiden over.
-            </p>
+        <DialogContent
+          size="2xl"
+          fillViewport={settingsFillViewport}
+          className={settingsFillViewport ? undefined : "max-h-[min(96dvh,56rem)] max-w-2xl"}
+          titleId="intake-settings-title"
+        >
+          <DialogHeader className="sticky top-0 z-10">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0 space-y-1">
+                <p id="intake-settings-title" className="font-heading text-lg font-semibold">
+                  Innstillinger
+                </p>
+                <p className="text-muted-foreground truncate text-sm leading-snug">
+                  {selectedForm?.title ?? "Velg et skjema først"}
+                </p>
+              </div>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="size-11 shrink-0 rounded-full sm:size-10"
+                aria-label="Lukk innstillinger"
+                onClick={() => setSettingsOpen(false)}
+              >
+                <X className="size-4" aria-hidden />
+              </Button>
+            </div>
+            {selectedForm ? (
+              <nav
+                className="mt-3 -mx-1 flex gap-1 overflow-x-auto px-1 pb-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+                role="tablist"
+                aria-label="Innstillingsseksjoner"
+              >
+                {(
+                  [
+                    ["org", "Organisasjon"],
+                    ["ros", "ROS"],
+                    ["mal", "Mal"],
+                    ["lenker", "Lenker"],
+                  ] as const
+                ).map(([id, label]) => (
+                  <button
+                    key={id}
+                    type="button"
+                    role="tab"
+                    aria-selected={settingsSection === id}
+                    onClick={() => setSettingsSection(id)}
+                    className={cn(
+                      "h-10 shrink-0 rounded-full px-4 text-sm font-medium transition-colors sm:h-9 sm:px-3.5",
+                      settingsSection === id
+                        ? "bg-foreground text-background"
+                        : "bg-muted/40 text-muted-foreground hover:text-foreground",
+                    )}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </nav>
+            ) : null}
           </DialogHeader>
-          <DialogBody className="space-y-5">
+          <DialogBody className="space-y-5 overflow-x-hidden">
             {selectedForm ? (
               <>
-                <section className="border-border/60 bg-card rounded-2xl border p-4 shadow-sm sm:p-5">
+                <section
+                  className={cn(
+                    "border-border/60 bg-card rounded-2xl border p-4 shadow-sm sm:p-5",
+                    settingsSection !== "org" && "hidden",
+                  )}
+                >
                   <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
                     <div className="min-w-0 space-y-1">
                       <h3 className="flex items-center gap-2 text-sm font-semibold leading-tight">
@@ -3394,7 +3519,12 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
                   </div>
                 </section>
 
-                <section className="border-border/60 bg-card rounded-2xl border p-4 shadow-sm sm:p-5">
+                <section
+                  className={cn(
+                    "border-border/60 bg-card rounded-2xl border p-4 shadow-sm sm:p-5",
+                    settingsSection !== "ros" && "hidden",
+                  )}
+                >
                   <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
                     <div className="min-w-0 space-y-1">
                       <h3 className="text-sm font-semibold leading-tight">
@@ -3406,7 +3536,7 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
                     </div>
                   </div>
                   <Separator className="my-4" />
-                  <div className="grid gap-3 md:grid-cols-2">
+                  <div className="grid gap-3 sm:grid-cols-2">
                     <div className="border-border/50 bg-muted/20 flex flex-col justify-between gap-2 rounded-xl border p-3">
                       <div className="space-y-0.5">
                         <p className="text-sm font-medium">Vurdering</p>
@@ -3535,7 +3665,12 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
                   )}
                 </section>
 
-                <section className="border-border/60 bg-card rounded-2xl border p-4 shadow-sm sm:p-5">
+                <section
+                  className={cn(
+                    "border-border/60 bg-card rounded-2xl border p-4 shadow-sm sm:p-5",
+                    settingsSection !== "mal" && "hidden",
+                  )}
+                >
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
                     <div className="min-w-0 space-y-1">
                       <h3 className="text-sm font-semibold leading-tight">Mal og aktivering</h3>
@@ -3561,14 +3696,14 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
                     <>
                       <Separator className="my-4" />
                       <div className="space-y-3">
-                        <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
-                          <div className="space-y-2">
+                        <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
+                          <div className="min-w-0 space-y-2">
                             <Label className="text-sm" htmlFor="settings-activate-workspace">
                               Aktiver i arbeidsområde
                             </Label>
                             <select
                               id="settings-activate-workspace"
-                              className="h-10 w-full rounded-xl border border-input bg-background px-3 text-sm"
+                              className="border-input bg-background h-10 w-full min-w-0 max-w-full rounded-xl border px-3 text-sm"
                               value={resolvedTargetWorkspaceId ?? ""}
                               onChange={(event) =>
                                 setSelectedTargetWorkspaceId(
@@ -3591,7 +3726,7 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
                           </div>
                           <Button
                             type="button"
-                            className="rounded-xl sm:min-w-[10rem]"
+                            className="h-11 w-full rounded-xl sm:h-10 sm:w-auto sm:min-w-[10rem]"
                             disabled={!selectedForm.isTemplate || !resolvedTargetWorkspaceId}
                             onClick={handleActivateTemplate}
                           >
@@ -3667,7 +3802,12 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
                   </div>
                 </section>
 
-                <section className="border-border/60 bg-card rounded-2xl border p-4 shadow-sm sm:p-5">
+                <section
+                  className={cn(
+                    "border-border/60 bg-card min-w-0 rounded-2xl border p-4 shadow-sm sm:p-5",
+                    settingsSection !== "lenker" && "hidden",
+                  )}
+                >
                   <div className="space-y-0.5">
                     <h3 className="text-sm font-semibold leading-tight">Delbare lenker</h3>
                     <p className="text-muted-foreground text-xs leading-snug">
@@ -3676,8 +3816,8 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
                   </div>
                   <Separator className="my-4" />
                   <div className="space-y-3">
-                    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                      <div className="space-y-2">
+                    <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2">
+                      <div className="min-w-0 space-y-2 sm:col-span-2">
                         <Label className="text-sm" htmlFor="settings-link-expires">
                           Utløper
                         </Label>
@@ -3686,25 +3826,28 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
                           type="datetime-local"
                           value={expiresAt}
                           onChange={(event) => setExpiresAt(event.target.value)}
+                          className="min-w-0 max-w-full"
                         />
                       </div>
-                      <div className="space-y-2">
+                      <div className="min-w-0 space-y-2">
                         <Label className="text-sm" htmlFor="settings-link-max">
                           Maks svar
                         </Label>
                         <Input
                           id="settings-link-max"
+                          inputMode="numeric"
                           value={maxResponses}
                           onChange={(event) => setMaxResponses(event.target.value)}
+                          className="min-w-0 max-w-full"
                         />
                       </div>
-                      <div className="space-y-2 sm:col-span-2 lg:col-span-1">
+                      <div className="min-w-0 space-y-2">
                         <Label className="text-sm" htmlFor="settings-link-access">
                           Tilgang
                         </Label>
                         <select
                           id="settings-link-access"
-                          className="h-10 w-full rounded-xl border border-input bg-background px-3 text-sm"
+                          className="border-input bg-background h-10 w-full min-w-0 max-w-full rounded-xl border px-3 text-sm"
                           value={accessMode}
                           onChange={(event) =>
                             setAccessMode(
@@ -3717,12 +3860,14 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
                         </select>
                       </div>
                     </div>
-                    <div className="flex flex-wrap gap-2">
-                      <Button type="button" className="rounded-xl" onClick={handleCreateLink}>
-                        <Link2 className="size-4" />
-                        Opprett lenke
-                      </Button>
-                    </div>
+                    <Button
+                      type="button"
+                      className="h-11 w-full rounded-xl sm:h-10 sm:w-auto"
+                      onClick={handleCreateLink}
+                    >
+                      <Link2 className="size-4" />
+                      Opprett lenke
+                    </Button>
                   </div>
                   <Separator className="my-4" />
                   <div className="space-y-2">
@@ -3732,58 +3877,60 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
                       links.map((link) => (
                         <div
                           key={link._id}
-                          className="flex flex-col gap-3 rounded-xl border border-border/50 bg-muted/15 p-4 sm:flex-row sm:items-center sm:justify-between"
+                          className="flex min-w-0 flex-col gap-3 rounded-xl border border-border/50 bg-muted/15 p-3 sm:p-4"
                         >
-                          <div className="min-w-0 space-y-1 text-sm">
+                          <div className="min-w-0 space-y-1.5 text-sm">
                             <div className="flex flex-wrap items-center gap-2">
                               <Badge variant={link.isActive ? "secondary" : "outline"}>
                                 {renderLinkStatusLabel(link.status)}
                               </Badge>
-                              <span className="text-muted-foreground">
+                              <span className="text-muted-foreground text-xs sm:text-sm">
                                 {link.responseCount}
                                 {link.maxResponses ? ` / ${link.maxResponses}` : ""} svar
                               </span>
                             </div>
-                            <p className="break-all text-xs text-muted-foreground">
+                            <p className="text-muted-foreground break-all font-mono text-[11px] leading-relaxed [overflow-wrap:anywhere]">
                               {typeof window !== "undefined"
                                 ? `${window.location.origin}/f/${link.token}`
                                 : `/f/${link.token}`}
                             </p>
                           </div>
-                          <div className="flex shrink-0 flex-wrap gap-2">
+                          <div className="grid grid-cols-3 gap-2 sm:flex sm:flex-wrap">
                             <Button
                               type="button"
                               variant="outline"
-                              className="rounded-xl"
+                              className="min-w-0 rounded-xl px-2 text-xs sm:px-3 sm:text-sm"
                               onClick={() =>
                                 navigator.clipboard.writeText(
                                   `${window.location.origin}/f/${link.token}`,
                                 )
                               }
                             >
-                              <ExternalLink className="size-4" />
-                              Kopier
+                              <ExternalLink className="size-3.5 shrink-0 sm:size-4" />
+                              <span className="truncate">Kopier</span>
                             </Button>
                             <Button
                               type="button"
                               variant="outline"
-                              className="rounded-xl"
+                              className="min-w-0 rounded-xl px-2 text-xs sm:px-3 sm:text-sm"
                               onClick={() =>
                                 link.status === "paused"
                                   ? resumeLink({ linkId: link._id })
                                   : pauseLink({ linkId: link._id })
                               }
                             >
-                              {link.status === "paused" ? "Fortsett" : "Pause"}
+                              <span className="truncate">
+                                {link.status === "paused" ? "Fortsett" : "Pause"}
+                              </span>
                             </Button>
                             <Button
                               type="button"
                               variant="outline"
-                              className="rounded-xl"
+                              className="min-w-0 rounded-xl px-2 text-xs sm:px-3 sm:text-sm"
                               onClick={() => removeLink({ linkId: link._id })}
                             >
-                              <Trash2 className="size-4" />
-                              Slett
+                              <Trash2 className="size-3.5 shrink-0 sm:size-4" />
+                              <span className="truncate">Slett</span>
                             </Button>
                           </div>
                         </div>
@@ -3842,10 +3989,21 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
             <p id="submission-review-title" className="font-heading text-base font-semibold sm:text-lg">
               Gjennomgå forslag
             </p>
+            <p className="text-muted-foreground mt-0.5 text-xs sm:text-sm">
+              Øverst: deleger til kollega. Nederst: godkjenne eller avslå selv.
+            </p>
           </DialogHeader>
           <DialogBody className="space-y-5 px-5 py-3 sm:px-6 sm:py-4">
             {submissionDetail ? (
               <>
+                {selectedSubmissionId ? (
+                  <IntakeSubmissionCollabPanel
+                    workspaceId={workspaceId}
+                    submissionId={selectedSubmissionId}
+                    canAct={canDeleteIntakeSubmissions}
+                  />
+                ) : null}
+
                 {(() => {
                   const ghSub = submissionDetail.submission;
                   const intakeGithubHasIssue =

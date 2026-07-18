@@ -222,12 +222,24 @@ export const workspaceDashboard = query({
     let withoutRosLink = 0;
     let onHold = 0;
     let readyForPrioritizationCount = 0;
+    const pipelineCounts: Record<PipelineStatus, number> = {
+      not_assessed: 0,
+      assessed: 0,
+      prioritized: 0,
+      development: 0,
+      uat: 0,
+      production: 0,
+      monitoring: 0,
+      done: 0,
+      on_hold: 0,
+    };
 
     for (const a of rows) {
       if (!(await canReadAssessment(ctx, a, userId))) {
         continue;
       }
       const status = normalizePipelineStatus(a.pipelineStatus);
+      pipelineCounts[status] += 1;
       const rosLinked = assessmentIdsWithRos.has(a._id);
       if (!rosLinked) {
         withoutRosLink += 1;
@@ -265,6 +277,7 @@ export const workspaceDashboard = query({
       onHoldCount: onHold,
       blockedCount: onHold,
       readyForPrioritizationCount,
+      pipelineCounts,
       assessmentsWithoutRos: withoutRosSorted.slice(0, DASH_CAP_WITHOUT_ROS),
       readyForPrioritization: readySorted.slice(0, DASH_CAP_READY),
       blockedItems: blockedSorted.slice(0, DASH_CAP_BLOCKED),

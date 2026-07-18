@@ -9,7 +9,10 @@ import {
   type PipelineStatus,
 } from "@/lib/assessment-pipeline";
 import { SearchInput } from "@/components/ui/search-input";
+import { RpaLifecycleGuide } from "@/components/workspace/rpa-lifecycle-guide";
 import { formatRelativeUpdatedAt } from "@/lib/assessment-ui-helpers";
+import { lifecycleLiveCounts } from "@/lib/rpa-lifecycle";
+import { useStickyState } from "@/lib/use-sticky-state";
 import { cn } from "@/lib/utils";
 import {
   ArrowRight,
@@ -126,6 +129,9 @@ export function WorkspaceOperationalDashboard({
   sectionVisibility?: WorkspaceDashboardSectionVisibility;
 }) {
   const dash = useQuery(api.assessments.workspaceDashboard, { workspaceId });
+  const intakeQueue = useQuery(api.intakeSubmissions.listByWorkspace, {
+    workspaceId,
+  });
   const viewPrefs = useQuery(api.workspaceViewPrefs.getMyWorkspaceViewPrefs, {
     workspaceId,
   });
@@ -133,6 +139,17 @@ export function WorkspaceOperationalDashboard({
     api.workspaceViewPrefs.setMyHomeListPrefs,
   );
   const wid = String(workspaceId);
+  const [lifecycleHidden, setLifecycleHidden] = useStickyState(
+    `ws:${wid}:rpa-lifecycle-hidden`,
+    false,
+  );
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (window.location.hash === "#rpa-livssyklus" && lifecycleHidden) {
+      setLifecycleHidden(false);
+    }
+  }, [lifecycleHidden, setLifecycleHidden]);
   const [quickListFilter, setQuickListFilter] = useState<
     "all" | "without_ros" | "follow_up"
   >("all");
@@ -145,6 +162,17 @@ export function WorkspaceOperationalDashboard({
   const showMetrics = sectionVisibility?.showMetrics !== false;
   const showPriority = sectionVisibility?.showPrioritySection !== false;
   const showRecent = sectionVisibility?.showRecentSection !== false;
+
+  const liveLifecycleCounts = useMemo(() => {
+    if (!dash) return null;
+    const pendingIntakeCount = (intakeQueue ?? []).filter(
+      (s) => s.status === "submitted" || s.status === "under_review",
+    ).length;
+    return lifecycleLiveCounts({
+      pipelineCounts: dash.pipelineCounts,
+      pendingIntakeCount,
+    });
+  }, [dash, intakeQueue]);
 
   useEffect(() => {
     if (viewPrefs === undefined) return;
@@ -312,10 +340,24 @@ export function WorkspaceOperationalDashboard({
 
   return (
     <div className="space-y-6">
-      {/* Stripped: tidligere et kort-i-kort med eyebrow «Fokus nå» og en
-          forklarende setning. FocusActionCard er allerede tydelig styla, så
-          vi lar den stå som hero direkte og lister snarveier under som
-          rene tekstlenker — uten innpakning. KISS. */}
+      {lifecycleHidden ? (
+        <p className="text-muted-foreground text-sm">
+          <button
+            type="button"
+            onClick={() => setLifecycleHidden(false)}
+            className="font-medium text-foreground underline-offset-2 hover:underline"
+          >
+            Vis RPA-livssyklus
+          </button>
+        </p>
+      ) : (
+        <RpaLifecycleGuide
+          workspaceId={workspaceId}
+          liveCounts={liveLifecycleCounts}
+          onHide={() => setLifecycleHidden(true)}
+        />
+      )}
+
       {showMetrics ? (
         <section className="space-y-3" aria-labelledby="workspace-focus-heading">
           <h2 id="workspace-focus-heading" className="sr-only">

@@ -6,6 +6,7 @@ import {
   internalQuery,
   mutation,
   query,
+  type MutationCtx,
 } from "./_generated/server";
 import {
   intakeAnswerValidator,
@@ -35,6 +36,7 @@ import {
   PUBLIC_INTAKE_SUBMITS_PER_LINK_PER_MINUTE,
 } from "./lib/intakePublicSecurity";
 import { placeIntakeRisksOnRosMatrix } from "./lib/rosIntakePlacement";
+import { upsertAssigneeState, type AssigneeState } from "./lib/taskAssignment";
 import {
   createRosAnalysisWithUser,
   createRosTemplateWithUser,
@@ -65,6 +67,38 @@ function requireNonEmptyAnswers(questionCount: number, answersCount: number) {
   }
   if (answersCount === 0) {
     throw new Error("Svarene kan ikke være tomme.");
+  }
+}
+
+/** Marker åpne delegeringsoppgaver som utført når forslaget avgjøres. */
+async function closeOpenIntakeReviewTasks(
+  ctx: MutationCtx,
+  submissionId: Id<"intakeSubmissions">,
+  actorUserId: Id<"users">,
+  now: number,
+) {
+  const tasks = await ctx.db
+    .query("intakeReviewTasks")
+    .withIndex("by_submission", (q) => q.eq("submissionId", submissionId))
+    .collect();
+  for (const task of tasks) {
+    if (task.status !== "open") continue;
+    const ids =
+      task.assigneeUserIds && task.assigneeUserIds.length > 0
+        ? task.assigneeUserIds
+        : task.assigneeUserId
+          ? [task.assigneeUserId]
+          : [];
+    let states = task.assigneeStates as AssigneeState[] | undefined;
+    for (const uid of ids) {
+      states = upsertAssigneeState(states, uid, "done", now, {
+        assignedByUserId: actorUserId,
+      });
+    }
+    await ctx.db.patch(task._id, {
+      status: "done",
+      assigneeStates: states,
+    });
   }
 }
 
@@ -701,15 +735,17 @@ export const approve = mutation({
       approvedRosAnalysisId = analysisId;
     }
 
+    const now = Date.now();
     await ctx.db.patch(submission._id, {
       status: "approved",
       generatedAssessmentDraft: args.generatedAssessmentDraft,
-      reviewedAt: Date.now(),
+      reviewedAt: now,
       reviewedByUserId: userId,
       rejectionReason: undefined,
       approvedAssessmentId: assessmentId,
       approvedRosAnalysisId,
     });
+    await closeOpenIntakeReviewTasks(ctx, args.submissionId, userId, now);
     return {
       assessmentId,
       rosAnalysisId: approvedRosAnalysisId,
@@ -733,12 +769,14 @@ export const reject = mutation({
     if (!reason) {
       throw new Error("Skriv en kort begrunnelse for hvorfor forslaget avslås.");
     }
+    const now = Date.now();
     await ctx.db.patch(submission._id, {
       status: "rejected",
-      reviewedAt: Date.now(),
+      reviewedAt: now,
       reviewedByUserId: userId,
       rejectionReason: reason,
     });
+    await closeOpenIntakeReviewTasks(ctx, args.submissionId, userId, now);
     return null;
   },
 });

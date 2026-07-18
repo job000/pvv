@@ -29,6 +29,14 @@ function resolveRosAssigneeIds(row: Doc<"rosTasks">): Id<"users">[] {
   return [];
 }
 
+function resolveIntakeAssigneeIds(row: Doc<"intakeReviewTasks">): Id<"users">[] {
+  if (row.assigneeUserIds && row.assigneeUserIds.length > 0) {
+    return row.assigneeUserIds;
+  }
+  if (row.assigneeUserId) return [row.assigneeUserId];
+  return [];
+}
+
 function clampPriority(p: number | undefined): number {
   if (p === undefined) return 3;
   return Math.min(5, Math.max(1, Math.round(p)));
@@ -73,7 +81,11 @@ const workPreviewValidator = v.object({
 });
 
 const workspaceTaskItemValidator = v.object({
-  kind: v.union(v.literal("assessment"), v.literal("ros")),
+  kind: v.union(
+    v.literal("assessment"),
+    v.literal("ros"),
+    v.literal("intake"),
+  ),
   taskId: v.string(),
   title: v.string(),
   description: v.optional(v.string()),
@@ -139,7 +151,11 @@ export const listMyInWorkspace = query({
     mine: v.array(workspaceTaskItemValidator),
     assignedByMe: v.array(
       v.object({
-        kind: v.union(v.literal("assessment"), v.literal("ros")),
+        kind: v.union(
+          v.literal("assessment"),
+          v.literal("ros"),
+          v.literal("intake"),
+        ),
         taskId: v.string(),
         title: v.string(),
         description: v.optional(v.string()),
@@ -172,6 +188,10 @@ export const listMyInWorkspace = query({
       .query("rosTasks")
       .withIndex("by_workspace", (q) => q.eq("workspaceId", args.workspaceId))
       .collect();
+    const intakeTasks = await ctx.db
+      .query("intakeReviewTasks")
+      .withIndex("by_workspace", (q) => q.eq("workspaceId", args.workspaceId))
+      .collect();
 
     type WorkPreview = {
       kindLabel: string;
@@ -191,7 +211,7 @@ export const listMyInWorkspace = query({
     };
 
     type MineItem = {
-      kind: "assessment" | "ros";
+      kind: "assessment" | "ros" | "intake";
       taskId: string;
       title: string;
       description?: string;
@@ -212,7 +232,7 @@ export const listMyInWorkspace = query({
     };
 
     type AssignedByMeItem = {
-      kind: "assessment" | "ros";
+      kind: "assessment" | "ros" | "intake";
       taskId: string;
       title: string;
       description?: string;
@@ -462,6 +482,106 @@ export const listMyInWorkspace = query({
       }
     }
 
+    for (const t of intakeTasks) {
+      const submission = await ctx.db.get(t.submissionId);
+      if (!submission || submission.workspaceId !== args.workspaceId) continue;
+      const ids = resolveIntakeAssigneeIds(t);
+      const states = t.assigneeStates as AssigneeState[] | undefined;
+      const contextTitle =
+        submission.generatedAssessmentDraft.title.trim() || "Skjemaforslag";
+      const href = `/w/${args.workspaceId}/skjemaer?forslag=${t.submissionId}`;
+      const myStatus = resolveMyAssignmentStatus(ids, states, userId, t.status);
+      const requestLabel =
+        t.requestKind === "decide"
+          ? "Godkjenning / avslag"
+          : t.requestKind === "review"
+            ? "Gjennomgang"
+            : "Oppgave";
+      if (myStatus) {
+        const assignerUserId = resolveAssignerUserId(
+          states,
+          userId,
+          t.createdByUserId,
+        );
+        const assignerName = await userDisplayName(ctx, assignerUserId);
+        const creator = await ctx.db.get(t.createdByUserId);
+        const fields = [
+          { label: "Forslag", value: contextTitle },
+          { label: "Type", value: requestLabel },
+          { label: "Tildelt til", value: meName },
+          { label: "Tildelt av", value: assignerName },
+          { label: "Prioritet", value: `P${clampPriority(t.priority)}` },
+        ];
+        if (t.dueAt) {
+          fields.push({
+            label: "Frist",
+            value: new Date(t.dueAt).toLocaleString("nb-NO"),
+          });
+        }
+        if (t.description?.trim()) {
+          fields.push({ label: "Melding", value: t.description.trim() });
+        }
+        mine.push({
+          kind: "intake",
+          taskId: t._id,
+          title: t.title,
+          description: t.description,
+          status: t.status,
+          myStatus,
+          priority: clampPriority(t.priority),
+          dueAt: t.dueAt,
+          createdAt: t.createdAt,
+          href,
+          contextTitle,
+          assigneeName: meName,
+          assigneeUserId: userId,
+          assignerName,
+          assignerUserId,
+          creatorName: creator?.name ?? creator?.email ?? null,
+          createdByUserId: t.createdByUserId,
+          work: {
+            kindLabel: "Forslag",
+            workHref: href,
+            workLabel:
+              t.requestKind === "decide"
+                ? "Åpne og avgjør"
+                : "Åpne forslag",
+            fields,
+          },
+        });
+      }
+      const iAssignedSomeone = ids.some((uid) => {
+        if (uid === userId) return false;
+        const st = states?.find((s) => s.userId === uid);
+        return (st?.assignedByUserId ?? t.createdByUserId) === userId;
+      });
+      if ((t.createdByUserId === userId || iAssignedSomeone) && ids.length > 0) {
+        const assignees = [];
+        for (const uid of ids) {
+          const st =
+            resolveMyAssignmentStatus(ids, states, uid, t.status) ?? "accepted";
+          assignees.push({
+            userId: uid,
+            name: await userDisplayName(ctx, uid),
+            status: st,
+          });
+        }
+        assignedByMe.push({
+          kind: "intake",
+          taskId: t._id,
+          title: t.title,
+          description: t.description,
+          status: t.status,
+          priority: clampPriority(t.priority),
+          dueAt: t.dueAt,
+          createdAt: t.createdAt,
+          href,
+          contextTitle,
+          assignees,
+        });
+      }
+    }
+
     const sortMine = (a: MineItem, b: MineItem) => {
       const order: Record<AssignmentStatus, number> = {
         pending: 0,
@@ -488,7 +608,11 @@ export const listMyInWorkspace = query({
 
 export const respond = mutation({
   args: {
-    kind: v.union(v.literal("assessment"), v.literal("ros")),
+    kind: v.union(
+      v.literal("assessment"),
+      v.literal("ros"),
+      v.literal("intake"),
+    ),
     taskId: v.string(),
     action: v.union(
       v.literal("accept"),
@@ -512,6 +636,92 @@ export const respond = mutation({
     const note = args.note?.trim();
     const completionJustification = args.completionJustification?.trim();
     const myName = await userDisplayName(ctx, userId);
+
+    if (args.kind === "intake") {
+      const taskId = args.taskId as Id<"intakeReviewTasks">;
+      const row = await ctx.db.get(taskId);
+      if (!row) throw new Error("Fant ikke oppgaven.");
+      await requireWorkspaceMember(ctx, row.workspaceId, userId, "viewer");
+      const ids = resolveIntakeAssigneeIds(row);
+      if (!ids.includes(userId)) {
+        throw new Error("Du er ikke tildelt denne oppgaven.");
+      }
+      const states = row.assigneeStates as AssigneeState[] | undefined;
+      const submission = await ctx.db.get(row.submissionId);
+      const contextTitle =
+        submission?.generatedAssessmentDraft.title.trim() || "skjemaforslag";
+      const href = `/w/${row.workspaceId}/oppgaver`;
+      const assignerUserId = resolveAssignerUserId(
+        states,
+        userId,
+        row.createdByUserId,
+      );
+
+      if (args.action === "accept") {
+        await ctx.db.patch(taskId, {
+          assigneeStates: upsertAssigneeState(states, userId, "accepted", now),
+        });
+      } else if (args.action === "decline") {
+        const returned = returnAssigneeToAssigner({
+          assigneeIds: ids,
+          states,
+          returningUserId: userId,
+          assignerUserId,
+          now,
+        });
+        await ctx.db.patch(taskId, {
+          status: "open",
+          assigneeUserIds: returned.assigneeIds,
+          assigneeUserId: returned.assigneeIds[0],
+          assigneeStates: returned.states,
+        });
+        if (assignerUserId !== userId) {
+          await insertUserInAppNotification(ctx, {
+            userId: assignerUserId,
+            title: `${myName} returnerte oppgaven «${row.title}» til deg`,
+            body: note
+              ? `På forslaget «${contextTitle}». Begrunnelse: ${note}`
+              : `På forslaget «${contextTitle}». Oppgaven er tilbake hos deg under Oppgaver.`,
+            href,
+          });
+        }
+      } else if (args.action === "complete") {
+        await ctx.db.patch(taskId, {
+          status: "done",
+          assigneeStates: upsertAssigneeState(states, userId, "done", now),
+        });
+        if (assignerUserId !== userId) {
+          await insertUserInAppNotification(ctx, {
+            userId: assignerUserId,
+            title: `${myName} fullførte «${row.title}»`,
+            body: `På forslaget «${contextTitle}».`,
+            href,
+          });
+        }
+      } else if (args.action === "reopen") {
+        if (
+          row.status !== "done" &&
+          resolveMyAssignmentStatus(ids, states, userId, row.status) !== "done"
+        ) {
+          throw new Error("Oppgaven er ikke markert som utført.");
+        }
+        await ctx.db.patch(taskId, {
+          status: "open",
+          assigneeStates: upsertAssigneeState(states, userId, "accepted", now),
+        });
+        if (assignerUserId !== userId) {
+          await insertUserInAppNotification(ctx, {
+            userId: assignerUserId,
+            title: `${myName} angret utført på «${row.title}»`,
+            body: `På forslaget «${contextTitle}». Oppgaven er åpen igjen.`,
+            href,
+          });
+        }
+      } else {
+        throw new Error("Ugyldig handling.");
+      }
+      return { ok: true as const };
+    }
 
     if (args.kind === "assessment") {
       const taskId = args.taskId as Id<"assessmentTasks">;

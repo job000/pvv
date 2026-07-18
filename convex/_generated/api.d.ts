@@ -24,6 +24,8 @@ import type * as http from "../http.js";
 import type * as intakeEmails from "../intakeEmails.js";
 import type * as intakeForms from "../intakeForms.js";
 import type * as intakeLinks from "../intakeLinks.js";
+import type * as intakeReviewTasks from "../intakeReviewTasks.js";
+import type * as intakeSubmissionNotes from "../intakeSubmissionNotes.js";
 import type * as intakeSubmissions from "../intakeSubmissions.js";
 import type * as lib_access from "../lib/access.js";
 import type * as lib_assessmentCreation from "../lib/assessmentCreation.js";
@@ -87,6 +89,8 @@ declare const fullApi: ApiFromModules<{
   intakeEmails: typeof intakeEmails;
   intakeForms: typeof intakeForms;
   intakeLinks: typeof intakeLinks;
+  intakeReviewTasks: typeof intakeReviewTasks;
+  intakeSubmissionNotes: typeof intakeSubmissionNotes;
   intakeSubmissions: typeof intakeSubmissions;
   "lib/access": typeof lib_access;
   "lib/assessmentCreation": typeof lib_assessmentCreation;

@@ -14,6 +14,7 @@ import {
 import { FilterToolbar } from "@/components/ui/filter-toolbar";
 import { NativeSelectField } from "@/components/ui/native-select-field";
 import { SearchInput } from "@/components/ui/search-input";
+import { RpaLifecycleGuide } from "@/components/workspace/rpa-lifecycle-guide";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import { orgSubtreeIds, orgUnitSearchLabel } from "@/lib/org-unit-filter";
@@ -25,6 +26,7 @@ import {
   normalizePipelineStatus,
   type PipelineStatus,
 } from "@/lib/assessment-pipeline";
+import { lifecycleStageFromProcessCoverage } from "@/lib/rpa-lifecycle";
 import { cn } from "@/lib/utils";
 import { useMutation, useQuery } from "convex/react";
 import {
@@ -194,6 +196,42 @@ function nextStepCopy(c: CoverageRow): string {
     return "Legg til prosessdesign slik at løsning og drift er beskrevet.";
   }
   return "Åpne detaljene for å se eller oppdatere dokumentasjonen.";
+}
+
+function strongestPipelineStatus(c: CoverageRow): PipelineStatus | null {
+  if (c.pvv.assessments.length === 0) return null;
+  /** Høyere indeks = lenger frem i livssyklusen (on_hold teller lavest). */
+  const order: PipelineStatus[] = [
+    "on_hold",
+    "not_assessed",
+    "assessed",
+    "prioritized",
+    "development",
+    "uat",
+    "production",
+    "monitoring",
+    "done",
+  ];
+  let best: PipelineStatus | null = null;
+  let bestRank = -1;
+  for (const a of c.pvv.assessments) {
+    const s = normalizePipelineStatus(a.pipelineStatus);
+    const rank = order.indexOf(s);
+    if (rank > bestRank) {
+      bestRank = rank;
+      best = s;
+    }
+  }
+  return best;
+}
+
+function lifecycleStageForCoverageRow(c: CoverageRow) {
+  return lifecycleStageFromProcessCoverage({
+    hasPvv: c.pvv.count > 0,
+    hasRos: c.ros.count > 0,
+    hasPdd: c.pdd.count > 0,
+    pipelineStatus: strongestPipelineStatus(c),
+  });
 }
 
 function ProcessDocumentSummaryRow({
@@ -413,6 +451,11 @@ function ProcessCoverageDetailDialog({
             </DialogHeader>
 
             <DialogBody className="space-y-6">
+              <RpaLifecycleGuide
+                workspaceId={workspaceId}
+                compact
+                activeStageId={lifecycleStageForCoverageRow(row)}
+              />
               <section
                 className="rounded-xl border border-border/60 bg-muted/20 p-4"
                 aria-labelledby="pvv-detail-heading"
