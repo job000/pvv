@@ -366,6 +366,7 @@ export function buildRosAnalysisPdfDocument(data: RosPdfInput): jsPDF {
     eyebrow: "Risiko- og sårbarhetsanalyse",
     title: data.title.trim() || "ROS-analyse",
     subtitle: "Intern styring, dokumentasjon og etterprøving.",
+    lead: "Risiko før og etter tiltak.",
     generatedLabel: formatPdfTimestamp(data.generatedAt),
     documentRef: docRefLabel,
   });

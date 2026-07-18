@@ -153,6 +153,7 @@ function buildProcessDesignPdfDocument(
     eyebrow: "Process Design Document",
     title: shortTitle,
     subtitle: "As-Is / To-Be, omfang, unntak og feilhåndtering.",
+    lead: "Prosessflyt, HUKI og feilhåndtering.",
     generatedLabel: formatPdfTimestamp(data.generatedAt),
     documentRef: docRef,
   });
@@ -274,19 +275,19 @@ function buildProcessDesignPdfDocument(
 
   /* ---- 4. HUKI ---- */
   L.addSection(toc[5], 12);
-  if (p.hukiRows?.length) {
-    L.addMutedNote(
-      "H = Høres · U = Utfører · K = Kontrollerer · I = Informeres",
-    );
-    for (const row of p.hukiRows) {
-      L.addRow(
-        row.activity?.trim() || "Aktivitet",
-        `H: ${row.h || "—"}  ·  U: ${row.u || "—"}  ·  K: ${row.k || "—"}  ·  I: ${row.i || "—"}`,
-      );
-    }
-  } else {
-    addEmptySectionNote(L, "HUKI-rader");
-  }
+  L.addPara(
+    "HUKI viser hvem som skal høres, utføre, kontrollere og informeres for hver aktivitet.",
+    9,
+  );
+  L.addHukiMatrix(
+    (p.hukiRows ?? []).map((row) => ({
+      activity: row.activity?.trim() || "Aktivitet",
+      h: row.h,
+      u: row.u,
+      k: row.k,
+      i: row.i,
+    })),
+  );
 
   /* ---- 5. Risiko og feilhåndtering ---- */
   L.addSection(toc[6], 12);

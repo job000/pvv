@@ -105,6 +105,7 @@ export function buildAssessmentPdfDocument(data: AssessmentPdfInput): jsPDF {
     eyebrow: "5-stegs vurdering · RPA / prosess",
     title: data.title || "Vurdering",
     subtitle: "Arkiv, porteføljestyring, revisjon og beslutningsmøter.",
+    lead: "Automatiseringspotensial, prioritet og oppfølging.",
     generatedLabel: formatPdfTimestamp(data.generatedAt),
     documentRef: docRef,
   });

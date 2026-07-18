@@ -75,6 +75,7 @@ export function downloadPortfolioBenefitsPdf(input: PortfolioBenefitsPdfInput): 
     eyebrow: "Porteføljeoversikt",
     title: "Gevinster og besparelser",
     subtitle: "Estimert verdi på tvers av vurderinger i arbeidsområdet.",
+    lead: "Timer, kroner og FTE i porteføljen.",
     generatedLabel: formatPdfTimestamp(generatedAt),
     documentRef: docRef,
   });

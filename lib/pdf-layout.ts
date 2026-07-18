@@ -6,6 +6,7 @@ import {
   PDF_CORPORATE_THEME,
   type CorporatePdfFooterOptions,
 } from "@/lib/pdf-corporate";
+import { resolvePdfCoverBackgroundDataUrl } from "@/lib/pdf-cover-background";
 
 const T = PDF_CORPORATE_THEME;
 
@@ -30,12 +31,25 @@ export type PdfFrontPageOptions = {
   generatedLabel: string;
   /** Dokumentreferanse, f.eks. ROS-2026-07-18. */
   documentRef: string;
-  /** @deprecated Flyttet til drawDocumentControlPage */
+  /**
+   * Valgfritt eget forsidebilde (data-URL).
+   * Uten bilde brukes generert standardbakgrunn.
+   */
+  coverImageDataUrl?: string | null;
+  /** Kort én-linjes beskrivelse under tittelblokken (ikke disclaimer). */
   lead?: string;
   /** @deprecated Flyttet til drawDocumentControlPage */
   organizationLine?: string;
   /** @deprecated Flyttet til drawDocumentControlPage */
   metaRows?: PdfMetaRow[];
+};
+
+export type PdfHukiRow = {
+  activity: string;
+  h?: string;
+  u?: string;
+  k?: string;
+  i?: string;
 };
 
 export type PdfDocumentControlOptions = {
@@ -95,6 +109,8 @@ export type PdfLayout = {
     opts?: { showEmpty?: boolean; emptyLabel?: string },
   ) => void;
   addKpiTiles: (tiles: Array<{ label: string; value: string }>) => void;
+  /** HUKI som lesbar matrise (Aktivitet × H/U/K/I). */
+  addHukiMatrix: (rows: PdfHukiRow[]) => void;
   addSoftDivider: () => void;
   finish: (footer: CorporatePdfFooterOptions) => void;
 };
@@ -188,104 +204,146 @@ export function createPdfLayout(doc: jsPDF): PdfLayout {
     return boxH;
   };
 
+  /**
+   * Profesjonell rapportforside — editorial layout:
+   * hvit flate, rolig toppstripe, klar tittel, strukturert metadata.
+   */
   const drawFrontPage = (opts: PdfFrontPageOptions) => {
     const pw = pageW();
     const ph = pageH();
+    const cx = margin;
+    const textMaxW = contentW();
 
-    // Clean white cover
     doc.setFillColor(255, 255, 255);
     doc.rect(0, 0, pw, ph, "F");
 
-    // Slim left rail only
-    doc.setFillColor(T.brand[0], T.brand[1], T.brand[2]);
-    doc.rect(0, 0, 5, ph, "F");
-    doc.setFillColor(T.brandAccent[0], T.brandAccent[1], T.brandAccent[2]);
-    doc.rect(5, 0, 1, ph, "F");
-
-    const cx = margin + 6;
-
-    // Document type only (brand lives in footer / running chrome, not cover chrome)
-    const typeLabel = (opts.docTypeLabel.trim() || "Dokument").toUpperCase();
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(9);
-    doc.setTextColor(T.slate500[0], T.slate500[1], T.slate500[2]);
-    doc.text(typeLabel, cx, 28);
-
-    // Thin rule
-    doc.setDrawColor(T.slate200[0], T.slate200[1], T.slate200[2]);
-    doc.setLineWidth(0.35);
-    doc.line(cx, 36, pw - margin, 36);
-
-    // Vertically centered title block
-    const titleMaxW = contentW() - 8;
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(8.5);
-    const eyebrow = opts.eyebrow?.trim().toUpperCase() ?? "";
-    doc.setFontSize(26);
-    const titleLines = doc.splitTextToSize(
-      opts.title.trim() || "Uten tittel",
-      titleMaxW,
-    );
-    const shownTitle = titleLines.slice(0, 3);
-    doc.setFontSize(12);
-    const subLines = opts.subtitle?.trim()
-      ? doc.splitTextToSize(opts.subtitle.trim(), titleMaxW).slice(0, 2)
-      : [];
-
-    const blockH =
-      (eyebrow ? 8 : 0) +
-      shownTitle.length * 11 +
-      (subLines.length ? 6 + subLines.length * 6 : 0);
-    let ty = Math.max(72, (ph - 40) / 2 - blockH / 2);
-
-    if (eyebrow) {
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(8.5);
-      doc.setTextColor(T.brandAccent[0], T.brandAccent[1], T.brandAccent[2]);
-      doc.text(eyebrow, cx, ty);
-      ty += 10;
-    }
-
-    doc.setFillColor(T.brandAccent[0], T.brandAccent[1], T.brandAccent[2]);
-    doc.rect(cx, ty - 1, 2.8, shownTitle.length * 11 + 2, "F");
-
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(26);
-    doc.setTextColor(T.slate900[0], T.slate900[1], T.slate900[2]);
-    let titleY = ty + 8;
-    for (const line of shownTitle) {
-      doc.text(line, cx + 8, titleY);
-      titleY += 11;
-    }
-    ty = titleY + 4;
-
-    if (subLines.length > 0) {
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(12);
-      doc.setTextColor(T.slate500[0], T.slate500[1], T.slate500[2]);
-      for (const line of subLines) {
-        doc.text(line, cx + 8, ty);
-        ty += 6;
+    // Optional custom image as restrained top banner
+    const customBg = resolvePdfCoverBackgroundDataUrl(opts.coverImageDataUrl);
+    let contentStartY = 28;
+    if (customBg) {
+      try {
+        const format = customBg.includes("image/png") ? "PNG" : "JPEG";
+        const bannerH = 42;
+        doc.addImage(customBg, format, 0, 0, pw, bannerH, undefined, "FAST");
+        doc.setFillColor(255, 255, 255);
+        doc.rect(0, bannerH, pw, ph - bannerH, "F");
+        doc.setFillColor(T.brandAccent[0], T.brandAccent[1], T.brandAccent[2]);
+        doc.rect(0, bannerH, pw, 1, "F");
+        contentStartY = bannerH + 16;
+      } catch {
+        /* fall through to standard header */
       }
     }
 
-    // Minimal bottom: date · ref
-    doc.setDrawColor(T.slate200[0], T.slate200[1], T.slate200[2]);
-    doc.setLineWidth(0.3);
-    doc.line(cx, ph - 22, pw - margin, ph - 22);
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(9);
-    doc.setTextColor(T.slate500[0], T.slate500[1], T.slate500[2]);
-    doc.text(opts.generatedLabel, cx, ph - 14);
+    if (!customBg) {
+      // Slim institutional top rule (single, not stacked bars)
+      doc.setFillColor(T.brand[0], T.brand[1], T.brand[2]);
+      doc.rect(0, 0, pw, 2.4, "F");
+      contentStartY = 22;
+    }
+
+    // Classification row
+    const typeLabel = opts.docTypeLabel.trim() || "Dokument";
     doc.setFont("helvetica", "bold");
-    doc.setTextColor(T.slate700[0], T.slate700[1], T.slate700[2]);
-    doc.text(opts.documentRef || "—", pw - margin, ph - 14, {
-      align: "right",
+    doc.setFontSize(9);
+    doc.setTextColor(T.brand[0], T.brand[1], T.brand[2]);
+    doc.text(typeLabel.toUpperCase(), cx, contentStartY);
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8.5);
+    doc.setTextColor(T.slate500[0], T.slate500[1], T.slate500[2]);
+    doc.text("Intern bruk", pw - margin, contentStartY, { align: "right" });
+
+    // Classification rule stays near top; title block sits lower on the page
+    let ty = contentStartY + 5;
+    doc.setDrawColor(T.slate200[0], T.slate200[1], T.slate200[2]);
+    doc.setLineWidth(0.4);
+    doc.line(cx, ty, pw - margin, ty);
+
+    // Start title content further down (above the meta band)
+    const bandH = 38;
+    const titleBlockStart = Math.max(ty + 28, ph * 0.38);
+    ty = titleBlockStart;
+
+    if (opts.eyebrow?.trim()) {
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(9);
+      doc.setTextColor(T.slate500[0], T.slate500[1], T.slate500[2]);
+      doc.text(opts.eyebrow.trim(), cx, ty);
+      ty += 9;
+    }
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(22);
+    doc.setTextColor(T.slate900[0], T.slate900[1], T.slate900[2]);
+    const titleLines = doc.splitTextToSize(
+      opts.title.trim() || "Uten tittel",
+      textMaxW,
+    );
+    const shownTitle = titleLines.slice(0, 4);
+    const titleLh = 9.2;
+    for (const line of shownTitle) {
+      doc.text(line, cx, ty);
+      ty += titleLh;
+    }
+    ty += 7;
+
+    if (opts.subtitle?.trim()) {
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(11);
+      doc.setTextColor(T.slate700[0], T.slate700[1], T.slate700[2]);
+      const subLines = doc.splitTextToSize(opts.subtitle.trim(), textMaxW);
+      for (const line of subLines.slice(0, 3)) {
+        doc.text(line, cx, ty);
+        ty += 5.6;
+      }
+      ty += 6;
+    }
+
+    doc.setFillColor(T.brandAccent[0], T.brandAccent[1], T.brandAccent[2]);
+    doc.rect(cx, ty, 18, 1.1, "F");
+    ty += 12;
+
+    if (opts.lead?.trim()) {
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(10);
+      doc.setTextColor(T.slate700[0], T.slate700[1], T.slate700[2]);
+      const leadLines = doc.splitTextToSize(opts.lead.trim(), textMaxW);
+      for (const line of leadLines.slice(0, 2)) {
+        doc.text(line, cx, ty);
+        ty += 5.2;
+      }
+    }
+
+    // Footer band — full-bleed, calm, table-like meta
+    const bandY = ph - bandH;
+    doc.setFillColor(T.surface[0], T.surface[1], T.surface[2]);
+    doc.rect(0, bandY, pw, bandH, "F");
+    doc.setFillColor(T.brand[0], T.brand[1], T.brand[2]);
+    doc.rect(0, bandY, pw, 1, "F");
+
+    const cols = [
+      { label: "Dato", value: opts.generatedLabel },
+      { label: "Dokumentreferanse", value: opts.documentRef || "—" },
+      { label: "Dokumenttype", value: typeLabel },
+    ];
+    const colW = contentW() / cols.length;
+    cols.forEach((col, i) => {
+      const x = cx + i * colW;
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(7.5);
+      doc.setTextColor(T.slate500[0], T.slate500[1], T.slate500[2]);
+      doc.text(col.label, x, bandY + 12);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(9);
+      doc.setTextColor(T.slate900[0], T.slate900[1], T.slate900[2]);
+      const lines = doc.splitTextToSize(col.value, colW - 4);
+      doc.text(lines[0] ?? "—", x, bandY + 21);
     });
 
     doc.setTextColor(0);
 
-    // Blank page after cover (intentional empty verso)
+    // Blank side etter cover
     doc.addPage();
     doc.setFillColor(255, 255, 255);
     doc.rect(0, 0, pw, ph, "F");
@@ -354,51 +412,53 @@ export function createPdfLayout(doc: jsPDF): PdfLayout {
 
   const paintTocPage = (entries: TocEntryState[]) => {
     const pw = pageW();
-    // Header band
-    doc.setFillColor(T.surface[0], T.surface[1], T.surface[2]);
-    doc.rect(0, 0, pw, 28, "F");
-    doc.setFillColor(T.brandAccent[0], T.brandAccent[1], T.brandAccent[2]);
-    doc.rect(0, 28, pw, 1.1, "F");
+
+    doc.setFillColor(255, 255, 255);
+    doc.rect(0, 0, pw, pageH(), "F");
+    doc.setFillColor(T.brand[0], T.brand[1], T.brand[2]);
+    doc.rect(0, 0, pw, 2.4, "F");
 
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(8);
-    doc.setTextColor(T.slate500[0], T.slate500[1], T.slate500[2]);
-    doc.text("PVV", margin, 12);
-    doc.setFontSize(16);
+    doc.setFontSize(9);
+    doc.setTextColor(T.brand[0], T.brand[1], T.brand[2]);
+    doc.text("INNHOLD", margin, 18);
+    doc.setFontSize(18);
     doc.setTextColor(T.slate900[0], T.slate900[1], T.slate900[2]);
-    doc.text("Innholdsfortegnelse", margin, 22);
+    doc.text("Innholdsfortegnelse", margin, 28);
+    doc.setDrawColor(T.slate200[0], T.slate200[1], T.slate200[2]);
+    doc.setLineWidth(0.35);
+    doc.line(margin, 33, pw - margin, 33);
 
-    let ty = 42;
-    const rowH = 9;
-    const numW = 10;
+    let ty = 46;
+    const rowH = 10;
+    const numW = 12;
     const pageColW = 12;
     const titleMaxW = contentW() - numW - pageColW - 8;
 
     entries.forEach((entry, i) => {
       if (ty > contentBottom() - 8) return;
-      const n = String(i + 1).padStart(2, "0");
+      const n = `${i + 1}.`;
       doc.setFont("helvetica", "bold");
-      doc.setFontSize(9);
-      doc.setTextColor(T.brandAccent[0], T.brandAccent[1], T.brandAccent[2]);
+      doc.setFontSize(10);
+      doc.setTextColor(T.slate500[0], T.slate500[1], T.slate500[2]);
       doc.text(n, margin, ty);
 
       doc.setFont("helvetica", "normal");
-      doc.setFontSize(10.5);
+      doc.setFontSize(11);
       doc.setTextColor(T.slate800[0], T.slate800[1], T.slate800[2]);
       const titleLines = doc.splitTextToSize(entry.title, titleMaxW);
       const title = titleLines[0] ?? entry.title;
       doc.text(title, margin + numW, ty);
 
       const titleW = doc.getTextWidth(title);
-      const dotsStart = margin + numW + titleW + 2;
+      const dotsStart = margin + numW + titleW + 2.5;
       const dotsEnd = pw - margin - pageColW - 2;
       if (dotsEnd > dotsStart + 4) {
-        doc.setFontSize(8);
-        doc.setTextColor(T.slate200[0], T.slate200[1], T.slate200[2]);
-        let dx = dotsStart;
-        while (dx < dotsEnd) {
-          doc.text("·", dx, ty);
-          dx += 2.2;
+        doc.setDrawColor(T.slate200[0], T.slate200[1], T.slate200[2]);
+        doc.setLineWidth(0.2);
+        // dotted leader via short dashes
+        for (let dx = dotsStart; dx < dotsEnd; dx += 2.4) {
+          doc.line(dx, ty - 0.8, Math.min(dx + 0.7, dotsEnd), ty - 0.8);
         }
       }
 
@@ -409,12 +469,7 @@ export function createPdfLayout(doc: jsPDF): PdfLayout {
         entry.page != null && entry.page > 0 ? String(entry.page) : "—";
       doc.text(pageLabel, pw - margin, ty, { align: "right" });
 
-      // subtle separator
-      doc.setDrawColor(T.slate200[0], T.slate200[1], T.slate200[2]);
-      doc.setLineWidth(0.15);
-      doc.line(margin + numW, ty + 3.2, pw - margin, ty + 3.2);
-
-      ty += rowH + (titleLines.length > 1 ? 2 : 0);
+      ty += rowH;
     });
 
     doc.setTextColor(0);
@@ -646,6 +701,148 @@ export function createPdfLayout(doc: jsPDF): PdfLayout {
     doc.setFont("helvetica", "normal");
   };
 
+  const addHukiMatrix = (rows: PdfHukiRow[]) => {
+    if (rows.length === 0) {
+      addMutedNote("HUKI: ingen oppføringer.");
+      return;
+    }
+
+    // Legend chips
+    const legend: Array<{ code: string; label: string }> = [
+      { code: "H", label: "Høres" },
+      { code: "U", label: "Utfører" },
+      { code: "K", label: "Kontrollerer" },
+      { code: "I", label: "Informeres" },
+    ];
+    ensureSpace(16);
+    let lx = margin;
+    for (const item of legend) {
+      const chipW = 28 + doc.getTextWidth(item.label);
+      doc.setFillColor(T.calloutBg[0], T.calloutBg[1], T.calloutBg[2]);
+      doc.setDrawColor(T.calloutBorder[0], T.calloutBorder[1], T.calloutBorder[2]);
+      doc.setLineWidth(0.25);
+      doc.roundedRect(lx, y - 3.5, chipW, 8, 2, 2, "FD");
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(8);
+      doc.setTextColor(T.brandAccent[0], T.brandAccent[1], T.brandAccent[2]);
+      doc.text(item.code, lx + 3, y + 1.5);
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(T.slate700[0], T.slate700[1], T.slate700[2]);
+      doc.text(item.label, lx + 10, y + 1.5);
+      lx += chipW + 3;
+    }
+    y += 10;
+
+    const roleCols = ["H", "U", "K", "I"] as const;
+    const roleW = 22;
+    const actW = contentW() - roleW * 4;
+    const headerH = 12;
+    const minRowH = 10;
+    const cellPad = 2.5;
+
+    const drawHeader = () => {
+      ensureSpace(headerH + 4);
+      doc.setFillColor(T.brand[0], T.brand[1], T.brand[2]);
+      doc.roundedRect(margin, y, contentW(), headerH, 1.2, 1.2, "F");
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(8);
+      doc.setTextColor(255, 255, 255);
+      doc.text("Aktivitet", margin + cellPad, y + 7.5);
+      roleCols.forEach((code, i) => {
+        const x = margin + actW + i * roleW + roleW / 2;
+        doc.text(code, x, y + 5.2, { align: "center" });
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(6.5);
+        doc.setTextColor(191, 219, 254);
+        const short =
+          code === "H"
+            ? "Høres"
+            : code === "U"
+              ? "Utfører"
+              : code === "K"
+                ? "Kontroll."
+                : "Inform.";
+        doc.text(short, x, y + 9.2, { align: "center" });
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(8);
+        doc.setTextColor(255, 255, 255);
+      });
+      y += headerH;
+    };
+
+    drawHeader();
+
+    rows.forEach((row, idx) => {
+      const activity = row.activity?.trim() || "Aktivitet";
+      doc.setFontSize(9);
+      const actLines = doc.splitTextToSize(activity, actW - cellPad * 2);
+      const values = [row.h, row.u, row.k, row.i].map((v) => {
+        const t = (v ?? "").trim();
+        return t || "—";
+      });
+      let maxValLines = 1;
+      for (const v of values) {
+        doc.setFontSize(8);
+        const vl = doc.splitTextToSize(v, roleW - 3);
+        maxValLines = Math.max(maxValLines, vl.length);
+      }
+      const rowH = Math.max(
+        minRowH,
+        actLines.length * bodyLineHeightMm(9) + 4,
+        maxValLines * bodyLineHeightMm(8) + 4,
+      );
+
+      if (y + rowH > contentBottom()) {
+        doc.addPage();
+        y = PDF_CONTINUATION_TOP_MM;
+        drawHeader();
+      }
+
+      const zebra = idx % 2 === 0;
+      doc.setFillColor(
+        zebra ? T.surface[0] : 255,
+        zebra ? T.surface[1] : 255,
+        zebra ? T.surface[2] : 255,
+      );
+      doc.rect(margin, y, contentW(), rowH, "F");
+      doc.setDrawColor(T.slate200[0], T.slate200[1], T.slate200[2]);
+      doc.setLineWidth(0.2);
+      doc.rect(margin, y, contentW(), rowH, "S");
+
+      // Vertical grid for role columns
+      for (let i = 0; i <= 4; i++) {
+        const gx = margin + actW + i * roleW;
+        doc.line(gx, y, gx, y + rowH);
+      }
+
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(9);
+      doc.setTextColor(T.slate900[0], T.slate900[1], T.slate900[2]);
+      doc.text(actLines, margin + cellPad, y + 5.5);
+
+      values.forEach((val, i) => {
+        const empty = val === "—";
+        const x = margin + actW + i * roleW + roleW / 2;
+        doc.setFont("helvetica", empty ? "italic" : "normal");
+        doc.setFontSize(8);
+        doc.setTextColor(
+          empty ? T.slate500[0] : T.slate800[0],
+          empty ? T.slate500[1] : T.slate800[1],
+          empty ? T.slate500[2] : T.slate800[2],
+        );
+        const vl = doc.splitTextToSize(val, roleW - 3);
+        const textH = vl.length * bodyLineHeightMm(8);
+        doc.text(vl, x, y + (rowH - textH) / 2 + 3.2, { align: "center" });
+      });
+
+      y += rowH;
+    });
+
+    y += 6;
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(0);
+  };
+
   const addSoftDivider = () => {
     ensureSpace(6);
     doc.setDrawColor(T.slate200[0], T.slate200[1], T.slate200[2]);
@@ -698,6 +895,7 @@ export function createPdfLayout(doc: jsPDF): PdfLayout {
     addRow,
     addFieldCard,
     addKpiTiles,
+    addHukiMatrix,
     addSoftDivider,
     finish,
   };
