@@ -12,6 +12,7 @@ import type * as ResendOTPPasswordReset from "../ResendOTPPasswordReset.js";
 import type * as assessmentNotes from "../assessmentNotes.js";
 import type * as assessmentPortfolioBoard from "../assessmentPortfolioBoard.js";
 import type * as assessmentShareLinks from "../assessmentShareLinks.js";
+import type * as assessmentTaskNotes from "../assessmentTaskNotes.js";
 import type * as assessmentTasks from "../assessmentTasks.js";
 import type * as assessments from "../assessments.js";
 import type * as auth from "../auth.js";
@@ -79,6 +80,7 @@ declare const fullApi: ApiFromModules<{
   assessmentNotes: typeof assessmentNotes;
   assessmentPortfolioBoard: typeof assessmentPortfolioBoard;
   assessmentShareLinks: typeof assessmentShareLinks;
+  assessmentTaskNotes: typeof assessmentTaskNotes;
   assessmentTasks: typeof assessmentTasks;
   assessments: typeof assessments;
   auth: typeof auth;

@@ -30,7 +30,7 @@ type NoteRow = {
   mentionedNames: string[];
 };
 
-function renderBodyWithMentions(body: string, mentionNames: string[]) {
+export function renderBodyWithMentions(body: string, mentionNames: string[]) {
   if (mentionNames.length === 0) {
     return <span className="whitespace-pre-wrap">{body}</span>;
   }
@@ -58,7 +58,7 @@ function renderBodyWithMentions(body: string, mentionNames: string[]) {
   );
 }
 
-function CommentComposer({
+export function CommentComposer({
   members,
   placeholder,
   busy,

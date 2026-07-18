@@ -27,6 +27,12 @@ export async function cascadeDeleteAssessmentData(
     .collect();
   for (const c of collabs) await ctx.db.delete(c._id);
 
+  const taskNotes = await ctx.db
+    .query("assessmentTaskNotes")
+    .withIndex("by_assessment", (q) => q.eq("assessmentId", assessmentId))
+    .collect();
+  for (const tn of taskNotes) await ctx.db.delete(tn._id);
+
   const tasks = await ctx.db
     .query("assessmentTasks")
     .withIndex("by_assessment", (q) => q.eq("assessmentId", assessmentId))

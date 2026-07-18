@@ -1,6 +1,5 @@
 "use client";
 
-import { TaskGithubControls } from "@/components/tasks/task-github-controls";
 import { InviteEmailSuggestInput } from "@/components/user/invite-email-suggest-input";
 import { UserAvatar } from "@/components/user-avatar";
 import { AssessmentVersionsBlock } from "@/components/assessment-wizard/assessment-versions-block";
@@ -19,6 +18,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
+import { AssessmentTaskIssueTree } from "@/components/workspace/assessment-task-issue-tree";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import type { AssessmentPayload } from "@/lib/assessment-types";
@@ -30,28 +30,15 @@ import {
   ASSESSMENT_COLLAB_ROLE_DESC_NB,
   ASSESSMENT_COLLAB_ROLE_LABEL_NB,
 } from "@/lib/role-labels-nb";
-import { effectiveGithubDefaultRepos } from "@/lib/github-workspace-helpers";
 import { formatUserFacingError } from "@/lib/user-facing-error";
-import { cn } from "@/lib/utils";
 import { useMutation, useQuery } from "convex/react";
 import {
-  CalendarDays,
-  CheckCircle2,
-  CircleDot,
-  ListChecks,
+  ListTree,
   MessageSquareText,
   Share2,
   Users,
 } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
-
-const PRIORITY_LABEL: Record<number, string> = {
-  1: "Høyest",
-  2: "Høy",
-  3: "Middels",
-  4: "Lav",
-  5: "Lavest",
-};
 
 type Props = {
   assessmentId: Id<"assessments">;
@@ -83,10 +70,6 @@ export function AssessmentCollaborationPanel({
   const workspaceMembers = useQuery(api.workspaces.listMembers, {
     workspaceId,
   });
-  const workspace = useQuery(api.workspaces.get, { workspaceId });
-  const assessmentTasks = useQuery(api.assessmentTasks.listByAssessment, {
-    assessmentId,
-  });
   const notes = useQuery(api.assessmentNotes.listByAssessment, {
     assessmentId,
   });
@@ -100,19 +83,12 @@ export function AssessmentCollaborationPanel({
     api.assessments.cancelAssessmentInvite,
   );
   const setShare = useMutation(api.assessments.setShareWithWorkspace);
-  const createAssessmentTask = useMutation(api.assessmentTasks.create);
-  const setAssessmentTaskStatus = useMutation(api.assessmentTasks.setStatus);
   const addNote = useMutation(api.assessmentNotes.add);
 
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState<
     "editor" | "reviewer" | "viewer"
   >("reviewer");
-  const [taskTitle, setTaskTitle] = useState("");
-  const [taskDescription, setTaskDescription] = useState("");
-  const [taskAssignees, setTaskAssignees] = useState<Id<"users">[]>([]);
-  const [taskPriority, setTaskPriority] = useState(3);
-  const [taskDue, setTaskDue] = useState(""); // yyyy-mm-dd for input
   const [noteBody, setNoteBody] = useState("");
   const [noteFieldKey, setNoteFieldKey] = useState<string>("");
   const [noteError, setNoteError] = useState<string | null>(null);
@@ -144,10 +120,6 @@ export function AssessmentCollaborationPanel({
       setNoteError(formatUserFacingError(e));
     }
   }, [addNote, assessmentId, noteBody, noteFieldKey]);
-
-  const taskDueMs = taskDue
-    ? new Date(`${taskDue}T12:00:00`).getTime()
-    : undefined;
 
   return (
     <div className="space-y-6">
@@ -433,289 +405,26 @@ export function AssessmentCollaborationPanel({
         </CardContent>
       </Card>
 
-      {/* Oppfølging: konkrete steg knyttet til denne vurderingen */}
+      {/* Issues / under-saker knyttet til denne vurderingen */}
       <div className="space-y-3">
         <div className="flex items-center gap-2">
-          <CheckCircle2 className="text-primary size-5 shrink-0" aria-hidden />
-          <h3 className="font-heading text-base font-semibold leading-tight">
-            Oppfølging på denne vurderingen
-          </h3>
-        </div>
-
-        <div className="space-y-3">
-          {(assessmentTasks ?? []).length === 0 ? (
-            <p className="text-muted-foreground rounded-xl border border-dashed px-4 py-8 text-center text-sm">
-              Ingen oppfølgingspunkter ennå.
+          <ListTree className="text-primary size-5 shrink-0" aria-hidden />
+          <div>
+            <h3 className="font-heading text-base font-semibold leading-tight">
+              Saker og under-saker
+            </h3>
+            <p className="text-muted-foreground text-sm">
+              Som GitHub: hvert issue er et eget kort. Under-sak er bare en
+              kobling — opprett, koble til, eller fjern kobling.
             </p>
-          ) : (
-            <ul className="space-y-2.5">
-              {(assessmentTasks ?? []).map((t) => {
-                const prio = Math.min(5, Math.max(1, t.priority ?? 3));
-                return (
-                  <li
-                    key={t._id}
-                    className={cn(
-                      "flex flex-col gap-3 rounded-2xl border bg-card p-4 shadow-xs",
-                      t.status === "done" && "opacity-80",
-                    )}
-                  >
-                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                    <div className="flex min-w-0 flex-1 gap-3">
-                      <div className="flex -space-x-1.5 pt-0.5">
-                        {(t.assignees ?? []).length > 0 ? (
-                          (t.assignees ?? []).slice(0, 3).map((a) => (
-                            <UserAvatar key={a.userId} name={a.name} className="ring-background size-7 ring-2" />
-                          ))
-                        ) : (
-                          <UserAvatar name="Ikke tildelt" className="opacity-60" />
-                        )}
-                        {(t.assignees ?? []).length > 3 ? (
-                          <span className="bg-muted text-muted-foreground flex size-7 items-center justify-center rounded-full text-[10px] font-medium ring-2 ring-background">
-                            +{(t.assignees ?? []).length - 3}
-                          </span>
-                        ) : null}
-                      </div>
-                      <div className="min-w-0 flex-1 space-y-1">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <p
-                            className={cn(
-                              "font-medium",
-                              t.status === "done" &&
-                                "text-muted-foreground line-through",
-                            )}
-                          >
-                            {t.title}
-                          </p>
-                          <Badge
-                            variant="outline"
-                            className={cn(
-                              "text-[10px] font-semibold uppercase tracking-wide",
-                              prio <= 2 && "border-amber-500/50 text-amber-800",
-                              prio >= 4 && "text-muted-foreground",
-                            )}
-                          >
-                            P{prio} · {PRIORITY_LABEL[prio] ?? prio}
-                          </Badge>
-                          {t.status === "done" ? (
-                            <Badge className="gap-0.5 text-[10px]">
-                              <CheckCircle2 className="size-3" /> Fullført
-                            </Badge>
-                          ) : (
-                            <Badge variant="secondary" className="text-[10px]">
-                              Åpen
-                            </Badge>
-                          )}
-                        </div>
-                        {t.description ? (
-                          <p className="text-muted-foreground text-sm leading-relaxed">
-                            {t.description}
-                          </p>
-                        ) : null}
-                        <div className="text-muted-foreground flex flex-wrap gap-x-4 gap-y-1 text-xs">
-                          {t.assigneeName ? (
-                            <span className="flex items-center gap-1">
-                              <CircleDot className="size-3.5 shrink-0" />
-                              <strong className="text-foreground/90 font-medium">
-                                Ansvar:
-                              </strong>{" "}
-                              {t.assigneeName}
-                            </span>
-                          ) : (
-                            <span>Ingen tildeling</span>
-                          )}
-                          {t.creatorName ? (
-                            <span>
-                              <strong className="text-foreground/90 font-medium">
-                                Opprettet av
-                              </strong>{" "}
-                              {t.creatorName}
-                            </span>
-                          ) : null}
-                          {t.dueAt ? (
-                            <span className="flex items-center gap-1">
-                              <CalendarDays className="size-3.5" />
-                              Frist{" "}
-                              {new Date(t.dueAt).toLocaleDateString("nb-NO")}
-                            </span>
-                          ) : null}
-                        </div>
-                      </div>
-                    </div>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant={t.status === "done" ? "outline" : "default"}
-                      className="shrink-0 self-start"
-                      disabled={!canEdit}
-                      onClick={() =>
-                        void setAssessmentTaskStatus({
-                          taskId: t._id,
-                          status: t.status === "open" ? "done" : "open",
-                        })
-                      }
-                    >
-                      {t.status === "done" ? "Gjenåpne" : "Marker fullført"}
-                    </Button>
-                    </div>
-                    <TaskGithubControls
-                      taskId={t._id}
-                      canEdit={canEdit}
-                      githubIssueUrl={t.githubIssueUrl ?? null}
-                      workspaceDefaultRepos={effectiveGithubDefaultRepos(
-                        workspace ?? null,
-                      )}
-                      compact
-                    />
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-
-          <div className="bg-muted/15 space-y-4 rounded-2xl border p-4">
-            <div className="flex items-center gap-2.5 border-b border-border/60 pb-3">
-              <div className="bg-primary/10 flex size-8 shrink-0 items-center justify-center rounded-lg">
-                <ListChecks className="text-primary size-4" aria-hidden />
-              </div>
-              <p className="text-sm font-medium leading-snug">
-                Nytt oppfølgingspunkt
-              </p>
-            </div>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div className="space-y-1.5 sm:col-span-2">
-                <Label htmlFor="new-task-title">Hva skal gjøres?</Label>
-                <Input
-                  id="new-task-title"
-                  value={taskTitle}
-                  onChange={(e) => setTaskTitle(e.target.value)}
-                  placeholder="F.eks. Ferdigstill ROS-analyse"
-                  disabled={!canEdit}
-                />
-              </div>
-              <div className="space-y-1.5 sm:col-span-2">
-                <Label htmlFor="new-task-desc">Mer detaljer (valgfritt)</Label>
-                <Textarea
-                  id="new-task-desc"
-                  value={taskDescription}
-                  onChange={(e) => setTaskDescription(e.target.value)}
-                  placeholder="Kort om forventet leveranse …"
-                  disabled={!canEdit}
-                  className="min-h-[72px]"
-                />
-              </div>
-              <div className="space-y-1.5 sm:col-span-2">
-                <Label htmlFor="new-task-assignees">Ansvarlig(e)</Label>
-                <div className="space-y-2">
-                  {taskAssignees.length > 0 ? (
-                    <div className="flex flex-wrap gap-1.5">
-                      {taskAssignees.map((uid) => {
-                        const m = (workspaceMembers ?? []).find((wm) => wm.userId === uid);
-                        const label = m?.name ?? m?.email ?? String(uid);
-                        return (
-                          <span
-                            key={uid}
-                            className="bg-card inline-flex items-center gap-1 rounded-full border py-0.5 pr-1 pl-2 text-xs shadow-xs"
-                          >
-                            {label}
-                            <button
-                              type="button"
-                              className="text-muted-foreground hover:text-destructive rounded-full p-0.5"
-                              onClick={() =>
-                                setTaskAssignees((ids) =>
-                                  ids.filter((id) => id !== uid),
-                                )
-                              }
-                            >
-                              ×
-                            </button>
-                          </span>
-                        );
-                      })}
-                    </div>
-                  ) : null}
-                  <select
-                    id="new-task-assignees"
-                    className="border-input bg-background flex h-9 w-full rounded-lg border px-2 text-sm"
-                    value=""
-                    onChange={(e) => {
-                      const uid = e.target.value as Id<"users">;
-                      if (uid && !taskAssignees.includes(uid)) {
-                        setTaskAssignees((ids) => [...ids, uid]);
-                      }
-                    }}
-                    disabled={!canEdit}
-                  >
-                    <option value="">Legg til person …</option>
-                    {(workspaceMembers ?? [])
-                      .filter((m) => !taskAssignees.includes(m.userId))
-                      .map((m) => (
-                        <option key={m.userId} value={m.userId}>
-                          {m.name ?? m.email ?? m.userId}
-                        </option>
-                      ))}
-                  </select>
-                </div>
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="new-task-prio">Hvor haster det?</Label>
-                <select
-                  id="new-task-prio"
-                  className="border-input bg-background flex h-9 w-full rounded-lg border px-2 text-sm"
-                  value={taskPriority}
-                  onChange={(e) =>
-                    setTaskPriority(Number.parseInt(e.target.value, 10))
-                  }
-                  disabled={!canEdit}
-                >
-                  {[1, 2, 3, 4, 5].map((n) => (
-                    <option key={n} value={n}>
-                      P{n} — {PRIORITY_LABEL[n]}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="new-task-due">Frist (valgfritt)</Label>
-                <Input
-                  id="new-task-due"
-                  type="date"
-                  value={taskDue}
-                  onChange={(e) => setTaskDue(e.target.value)}
-                  disabled={!canEdit}
-                />
-              </div>
-            </div>
-            <Button
-              type="button"
-              className="w-full sm:w-auto"
-              disabled={
-                !canEdit || !taskTitle.trim() || workspaceMembers === undefined
-              }
-              aria-label="Legg til oppfølgingspunkt på denne vurderingen"
-              onClick={() => {
-                const title = taskTitle.trim();
-                if (!title) return;
-                void createAssessmentTask({
-                  assessmentId,
-                  title,
-                  description: taskDescription.trim() || undefined,
-                  assigneeUserIds:
-                    taskAssignees.length > 0 ? taskAssignees : undefined,
-                  priority: taskPriority,
-                  dueAt: taskDueMs,
-                }).then(() => {
-                  setTaskTitle("");
-                  setTaskDescription("");
-                  setTaskAssignees([]);
-                  setTaskPriority(3);
-                  setTaskDue("");
-                });
-              }}
-            >
-              Legg til
-            </Button>
           </div>
         </div>
+        <AssessmentTaskIssueTree
+          assessmentId={assessmentId}
+          workspaceId={workspaceId}
+          canEdit={canEdit}
+          showGithub
+        />
       </div>
 
       <Separator />

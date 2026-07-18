@@ -17,6 +17,9 @@ export type DashboardTaskRow = Doc<"assessmentTasks"> & {
   assigneeName: string | null;
   assignees: { userId: string; name: string }[];
   githubIssueUrl: string | null;
+  parentTitle: string | null;
+  subIssueCount: number;
+  subIssueDoneCount: number;
 };
 import {
   closestCorners,
@@ -41,9 +44,11 @@ import { useMutation, useQuery } from "convex/react";
 import {
   GripVertical,
   LayoutGrid,
+  Link2,
   List,
   Pencil,
   Trash2,
+  Unlink,
 } from "lucide-react";
 import Link from "next/link";
 import { useMemo, useState } from "react";
@@ -104,6 +109,16 @@ function DraggableTaskCard({
         <GripVertical className="size-4" />
       </button>
       <div className="min-w-0 flex-1">
+        {task.parentTaskId ? (
+          <p className="text-sky-800 dark:text-sky-200 mb-0.5 inline-flex items-center gap-1 text-[11px] font-medium">
+            <Link2 className="size-3 shrink-0" aria-hidden />
+            Under-sak av «{task.parentTitle ?? "…"}»
+          </p>
+        ) : task.subIssueCount > 0 ? (
+          <p className="text-muted-foreground mb-0.5 text-[11px] font-medium">
+            {task.subIssueDoneCount}/{task.subIssueCount} under-saker
+          </p>
+        ) : null}
         <p className="text-[15px] font-medium leading-snug tracking-tight">
           {task.title}
         </p>
@@ -158,7 +173,7 @@ function KanbanCard({
       style={style}
       className={`bg-card mb-2 rounded-lg border p-2 text-sm shadow-sm ${
         isDragging ? "opacity-40" : ""
-      }`}
+      } ${task.parentTaskId ? "border-l-[3px] border-l-sky-500/70" : ""}`}
     >
       <div className="flex gap-1">
         <button
@@ -170,6 +185,15 @@ function KanbanCard({
           <GripVertical className="size-4" />
         </button>
         <div className="min-w-0 flex-1">
+          {task.parentTaskId ? (
+            <p className="text-sky-800 dark:text-sky-200 mb-0.5 truncate text-[0.65rem] font-medium">
+              ↳ {task.parentTitle ?? "Under-sak"}
+            </p>
+          ) : task.subIssueCount > 0 ? (
+            <p className="text-muted-foreground mb-0.5 text-[0.65rem]">
+              {task.subIssueDoneCount}/{task.subIssueCount} under
+            </p>
+          ) : null}
           <p className="font-medium leading-tight">{task.title}</p>
           <p className="text-muted-foreground mt-0.5 text-[0.65rem]">
             {task.workspaceName}
@@ -257,6 +281,7 @@ export function TasksBoard() {
   const reorderDashboard = useMutation(api.assessmentTasks.reorderDashboard);
   const updateTask = useMutation(api.assessmentTasks.update);
   const removeTask = useMutation(api.assessmentTasks.remove);
+  const setParent = useMutation(api.assessmentTasks.setParent);
 
   const [view, setView] = useStickyState<"list" | "kanban">("tasks-board:view", "list");
   const [activeDrag, setActiveDrag] = useState<TaskRow | null>(null);
@@ -265,6 +290,9 @@ export function TasksBoard() {
   const [editDescription, setEditDescription] = useState("");
   const [editPriority, setEditPriority] = useState(3);
   const [editDue, setEditDue] = useState("");
+  const [editParentId, setEditParentId] = useState<Id<"assessmentTasks"> | "">(
+    "",
+  );
 
   const workspaceForEdit = useQuery(
     api.workspaces.get,
@@ -309,7 +337,20 @@ export function TasksBoard() {
         ? new Date(t.dueAt).toISOString().slice(0, 10)
         : "",
     );
+    setEditParentId(t.parentTaskId ?? "");
   }
+
+  /** Issues på samme vurdering som kan være forelder for editTask */
+  const linkParentOptions = useMemo(() => {
+    if (!editTask || !tasks) return [];
+    return tasks.filter(
+      (t) =>
+        t.assessmentId === editTask.assessmentId &&
+        t._id !== editTask._id &&
+        !t.parentTaskId &&
+        (editTask.subIssueCount ?? 0) === 0,
+    );
+  }, [editTask, tasks]);
 
   async function saveEdit() {
     if (!editTask) return;
@@ -321,6 +362,14 @@ export function TasksBoard() {
         priority: editPriority,
         dueAt: editDue ? new Date(editDue).getTime() : null,
       });
+      const nextParent = editParentId || null;
+      const prevParent = editTask.parentTaskId ?? null;
+      if (nextParent !== prevParent) {
+        await setParent({
+          taskId: editTask._id,
+          parentTaskId: nextParent,
+        });
+      }
       setEditTask(null);
       toast.success("Oppgave lagret.");
     } catch (e) {
@@ -617,6 +666,54 @@ export function TasksBoard() {
                   value={editDue}
                   onChange={(e) => setEditDue(e.target.value)}
                 />
+              </div>
+              <div className="space-y-1.5 rounded-xl border border-border/50 bg-muted/10 p-3">
+                <Label htmlFor="et-parent" className="flex items-center gap-1.5">
+                  <Link2 className="size-3.5" aria-hidden />
+                  Kobling til issue
+                </Label>
+                <p className="text-muted-foreground text-xs leading-relaxed">
+                  Som GitHub: hvert kort er et eget issue. Velg et foreldre-issue
+                  for å gjøre dette kortet til under-sak — eller fjern kobling.
+                </p>
+                {(editTask.subIssueCount ?? 0) > 0 ? (
+                  <p className="text-muted-foreground text-xs">
+                    Dette issue har allerede under-saker og kan ikke selv bli
+                    under-sak.
+                  </p>
+                ) : (
+                  <select
+                    id="et-parent"
+                    className="border-input bg-background flex h-9 w-full rounded-lg border px-2 text-sm"
+                    value={editParentId}
+                    onChange={(e) =>
+                      setEditParentId(
+                        e.target.value as Id<"assessmentTasks"> | "",
+                      )
+                    }
+                    disabled={!(assessmentAccessForEdit?.canEdit ?? false)}
+                  >
+                    <option value="">Ingen — selvstendig issue</option>
+                    {linkParentOptions.map((p) => (
+                      <option key={p._id} value={p._id}>
+                        Under-sak av «{p.title}»
+                      </option>
+                    ))}
+                  </select>
+                )}
+                {editTask.parentTaskId ? (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    className="h-8 gap-1 px-2 text-xs"
+                    disabled={!(assessmentAccessForEdit?.canEdit ?? false)}
+                    onClick={() => setEditParentId("")}
+                  >
+                    <Unlink className="size-3.5" />
+                    Fjern kobling
+                  </Button>
+                ) : null}
               </div>
               <TaskGithubControls
                 taskId={editTask._id}

@@ -330,7 +330,7 @@ export function WorkspaceOperationalDashboard({
       value: followUpCount,
       href: nextFollowUp
         ? `/w/${wid}/a/${nextFollowUp.assessmentId}`
-        : `/w/${wid}/portefolje`,
+        : `/w/${wid}/saker`,
       emphasize: followUpCount > 0,
     },
   ] as const;
@@ -412,14 +412,14 @@ export function WorkspaceOperationalDashboard({
                 Ta tak i først
               </h2>
               <p className="text-muted-foreground text-xs">
-                Kø etter hva som stopper flyten — ikke hele porteføljen.
+                Kø etter hva som stopper flyten — ikke hele tavlen.
               </p>
             </div>
             <Link
-              href={`/w/${wid}/portefolje`}
+              href={`/w/${wid}/saker`}
               className="text-muted-foreground hover:text-foreground shrink-0 text-xs font-medium underline-offset-2 hover:underline"
             >
-              Portefølje
+              Saker
             </Link>
           </div>
 
@@ -429,7 +429,7 @@ export function WorkspaceOperationalDashboard({
                 Ingen kritiske køer akkurat nå
               </p>
               <p className="text-muted-foreground mt-1 text-xs">
-                Fortsett i vurderinger eller portefølje når du er klar.
+                Fortsett i vurderinger eller saker når du er klar.
               </p>
               <div className="mt-4 flex flex-wrap justify-center gap-2">
                 <Link
@@ -439,10 +439,10 @@ export function WorkspaceOperationalDashboard({
                   Vurderinger
                 </Link>
                 <Link
-                  href={`/w/${wid}/portefolje`}
+                  href={`/w/${wid}/saker`}
                   className="inline-flex h-10 items-center rounded-full border border-border/50 px-4 text-xs font-medium"
                 >
-                  Portefølje
+                  Saker
                 </Link>
               </div>
             </div>

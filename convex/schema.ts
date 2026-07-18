@@ -1001,12 +1001,17 @@ export default defineSchema({
     .index("by_user", ["userId"])
     .index("by_user_assessment", ["userId", "assessmentId"]),
 
-  /** Oppgaver knyttet til én vurdering (tildeling, varsling, dashboard) */
+  /** Oppgaver knyttet til én vurdering (tildeling, varsling, dashboard) — som GitHub issues */
   assessmentTasks: defineTable({
     workspaceId: v.id("workspaces"),
     assessmentId: v.id("assessments"),
     title: v.string(),
     description: v.optional(v.string()),
+    /**
+     * Under-sak (sub-issue): peker på toppnivå-issue i samme vurdering.
+     * Kun ett nivå — forelder kan ikke selv være sub-issue.
+     */
+    parentTaskId: v.optional(v.id("assessmentTasks")),
     /** @deprecated Bruk assigneeUserIds for flere ansvarlige */
     assigneeUserId: v.optional(v.id("users")),
     /** Alle ansvarlige brukere (erstatter assigneeUserId) */
@@ -1036,7 +1041,9 @@ export default defineSchema({
     status: v.union(v.literal("open"), v.literal("done")),
     /** 1 = høyest … 5 = lavest (dashboard-kolonner) */
     priority: v.optional(v.number()),
-    /** Frist (ms) */
+    /** Startdato (ms, midt på dagen lokalt satt fra klient) */
+    startAt: v.optional(v.number()),
+    /** Sluttdato / frist (ms) */
     dueAt: v.optional(v.number()),
     /** Global rekkefølge på tvers (lavere = høyere i listen) */
     dashboardRank: v.optional(v.number()),
@@ -1050,6 +1057,7 @@ export default defineSchema({
     .index("by_assessment", ["assessmentId"])
     .index("by_workspace", ["workspaceId"])
     .index("by_assignee", ["assigneeUserId"])
+    .index("by_parent", ["parentTaskId"])
     .index("by_github_issue", ["githubRepoFullName", "githubIssueNumber"]),
 
   /** Korte team-notater på vurderingen (samarbeid / hvem sa hva) */
@@ -1066,6 +1074,21 @@ export default defineSchema({
     mentionedUserIds: v.optional(v.array(v.id("users"))),
     createdAt: v.number(),
   })
+    .index("by_assessment", ["assessmentId"])
+    .index("by_parent", ["parentNoteId"]),
+
+  /** Kommentarer på sakskort (issue / under-sak) med @-tagging */
+  assessmentTaskNotes: defineTable({
+    workspaceId: v.id("workspaces"),
+    assessmentId: v.id("assessments"),
+    taskId: v.id("assessmentTasks"),
+    authorUserId: v.id("users"),
+    body: v.string(),
+    parentNoteId: v.optional(v.id("assessmentTaskNotes")),
+    mentionedUserIds: v.optional(v.array(v.id("users"))),
+    createdAt: v.number(),
+  })
+    .index("by_task", ["taskId"])
     .index("by_assessment", ["assessmentId"])
     .index("by_parent", ["parentNoteId"]),
 

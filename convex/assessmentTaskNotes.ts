@@ -1,22 +1,36 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
+import type { Id } from "./_generated/dataModel";
 import { requireAssessmentEdit, requireAssessmentRead } from "./lib/access";
 import { insertUserInAppNotification } from "./userInAppNotifications";
 
 const NOTE_MAX = 8_000;
 
-export const listByAssessment = query({
-  args: { assessmentId: v.id("assessments") },
+function resolveTaskAssigneeIds(task: {
+  assigneeUserIds?: Id<"users">[];
+  assigneeUserId?: Id<"users">;
+}): Id<"users">[] {
+  if (task.assigneeUserIds && task.assigneeUserIds.length > 0) {
+    return task.assigneeUserIds;
+  }
+  if (task.assigneeUserId) {
+    return [task.assigneeUserId];
+  }
+  return [];
+}
+
+export const listByTask = query({
+  args: { taskId: v.id("assessmentTasks") },
   returns: v.array(
     v.object({
-      _id: v.id("assessmentNotes"),
+      _id: v.id("assessmentTaskNotes"),
       _creationTime: v.number(),
       workspaceId: v.id("workspaces"),
       assessmentId: v.id("assessments"),
+      taskId: v.id("assessmentTasks"),
       authorUserId: v.id("users"),
       body: v.string(),
-      fieldKey: v.optional(v.string()),
-      parentNoteId: v.optional(v.id("assessmentNotes")),
+      parentNoteId: v.optional(v.id("assessmentTaskNotes")),
       mentionedUserIds: v.optional(v.array(v.id("users"))),
       createdAt: v.number(),
       authorName: v.string(),
@@ -24,14 +38,16 @@ export const listByAssessment = query({
     }),
   ),
   handler: async (ctx, args) => {
-    await requireAssessmentRead(ctx, args.assessmentId);
+    const task = await ctx.db.get(args.taskId);
+    if (!task) return [];
+    await requireAssessmentRead(ctx, task.assessmentId);
+
     const rows = await ctx.db
-      .query("assessmentNotes")
-      .withIndex("by_assessment", (q) =>
-        q.eq("assessmentId", args.assessmentId),
-      )
+      .query("assessmentTaskNotes")
+      .withIndex("by_task", (q) => q.eq("taskId", args.taskId))
       .collect();
     rows.sort((a, b) => b.createdAt - a.createdAt);
+
     const out = [];
     for (const r of rows) {
       const u = await ctx.db.get(r.authorUserId);
@@ -52,43 +68,37 @@ export const listByAssessment = query({
 
 export const add = mutation({
   args: {
-    assessmentId: v.id("assessments"),
+    taskId: v.id("assessmentTasks"),
     body: v.string(),
-    /** Valgfritt skjemafelt (payload-nøkkel) kommentaren gjelder */
-    fieldKey: v.optional(v.string()),
-    parentNoteId: v.optional(v.id("assessmentNotes")),
+    parentNoteId: v.optional(v.id("assessmentTaskNotes")),
     mentionedUserIds: v.optional(v.array(v.id("users"))),
   },
-  returns: v.id("assessmentNotes"),
+  returns: v.id("assessmentTaskNotes"),
   handler: async (ctx, args) => {
+    const task = await ctx.db.get(args.taskId);
+    if (!task) {
+      throw new Error("Fant ikke saken.");
+    }
     const { assessment, userId } = await requireAssessmentEdit(
       ctx,
-      args.assessmentId,
+      task.assessmentId,
     );
+
     const body = args.body.trim();
     if (!body) {
-      throw new Error("Notatet er tomt.");
+      throw new Error("Kommentaren er tom.");
     }
     if (body.length > NOTE_MAX) {
-      throw new Error(`Notatet kan ikke overstige ${NOTE_MAX} tegn.`);
-    }
-    let fieldKey: string | undefined;
-    if (args.fieldKey !== undefined) {
-      const fk = args.fieldKey.trim();
-      if (fk.length > 120) {
-        throw new Error("Feltreferansen er for lang.");
-      }
-      fieldKey = fk || undefined;
+      throw new Error(`Kommentaren kan ikke overstige ${NOTE_MAX} tegn.`);
     }
 
     let parentNoteId = args.parentNoteId;
-    let notifyParentAuthor: typeof userId | null = null;
+    let notifyParentAuthor: Id<"users"> | null = null;
     if (parentNoteId) {
       const parent = await ctx.db.get(parentNoteId);
-      if (!parent || parent.assessmentId !== args.assessmentId) {
-        throw new Error("Tråden finnes ikke på denne vurderingen.");
+      if (!parent || parent.taskId !== args.taskId) {
+        throw new Error("Tråden finnes ikke på denne saken.");
       }
-      // Kun ett nivå: svar på svar går under samme toppkommentar
       if (parent.parentNoteId) {
         parentNoteId = parent.parentNoteId;
         const root = await ctx.db.get(parentNoteId);
@@ -102,31 +112,40 @@ export const add = mutation({
 
     const mentioned = [...new Set(args.mentionedUserIds ?? [])].slice(0, 20);
     const now = Date.now();
-    const noteId = await ctx.db.insert("assessmentNotes", {
+    const noteId = await ctx.db.insert("assessmentTaskNotes", {
       workspaceId: assessment.workspaceId,
-      assessmentId: args.assessmentId,
+      assessmentId: task.assessmentId,
+      taskId: args.taskId,
       authorUserId: userId,
       body,
-      fieldKey,
       parentNoteId,
       mentionedUserIds: mentioned.length > 0 ? mentioned : undefined,
       createdAt: now,
     });
 
-    const title = assessment.title.trim() || "vurdering";
-    const href = `/w/${assessment.workspaceId}/saker`;
-    const notifyIds = new Set(mentioned);
+    const taskTitle = task.title.trim() || "sak";
+    const href = `/w/${assessment.workspaceId}/saker?task=${args.taskId}`;
+
+    /** Varsle: @-taggede, tildelte på saken, og tråd-eier ved svar */
+    const notifyIds = new Set<Id<"users">>(mentioned);
+    for (const uid of resolveTaskAssigneeIds(task)) {
+      notifyIds.add(uid);
+    }
     if (notifyParentAuthor) notifyIds.add(notifyParentAuthor);
 
     for (const uid of notifyIds) {
       if (uid === userId) continue;
       const isMention = mentioned.includes(uid);
+      const isAssignee =
+        !isMention && resolveTaskAssigneeIds(task).includes(uid);
       await insertUserInAppNotification(ctx, {
         userId: uid,
         title: isMention
-          ? `Du ble nevnt i en kommentar`
-          : `Nytt svar i en kommentartråd`,
-        body: `På «${title}».`,
+          ? `Du ble nevnt i «${taskTitle}»`
+          : isAssignee
+            ? `Ny kommentar på «${taskTitle}»`
+            : `Nytt svar i «${taskTitle}»`,
+        body: body.length > 160 ? `${body.slice(0, 157)}…` : body,
         href,
       });
     }
