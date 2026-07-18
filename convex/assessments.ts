@@ -42,7 +42,7 @@ import { syncWorkloadDerivedFields } from "../lib/assessment-workload-sync";
 import { sanitizeAssessmentProcessTextFields } from "../lib/assessment-process-profile";
 import { payloadToSnapshot } from "./lib/payloadSnapshot";
 import { computeAllResults } from "./lib/rpaScoring";
-import { queryUsersByEmailPrefix } from "./lib/userSearch";
+import { queryUsersForInviteSuggest } from "./lib/userSearch";
 
 async function refreshCachedPriority(
   ctx: MutationCtx,
@@ -1072,7 +1072,15 @@ export const suggestUsersForCollaboratorInvite = query({
     if (raw.length < 2) {
       return [];
     }
-    const rows = await queryUsersByEmailPrefix(ctx, raw, 24);
+    const assessment = await ctx.db.get(args.assessmentId);
+    if (!assessment) {
+      return [];
+    }
+    const rows = await queryUsersForInviteSuggest(ctx, {
+      query: raw,
+      workspaceId: assessment.workspaceId,
+      take: 24,
+    });
     const collabRows = await ctx.db
       .query("assessmentCollaborators")
       .withIndex("by_assessment", (q) =>

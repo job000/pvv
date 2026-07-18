@@ -266,9 +266,9 @@ export function AuthForm({
       <div className="absolute right-3 top-3 z-20 sm:right-5 sm:top-5">
         <ThemeModeToggle
           className={cn(
-            "size-10 border border-slate-300/90 bg-white text-slate-800 shadow-md",
-            "hover:bg-slate-50 hover:text-slate-950",
-            "dark:border-white/15 dark:bg-card/80 dark:text-foreground dark:shadow-none",
+            "size-10 border border-border/80 bg-card text-foreground shadow-md",
+            "hover:bg-muted hover:text-foreground",
+            "dark:border-white/15 dark:bg-card/80 dark:shadow-none",
             "dark:hover:bg-card dark:hover:text-foreground",
           )}
         />
@@ -301,7 +301,7 @@ export function AuthForm({
 
         <div
           className={cn(
-            "mt-8 w-full rounded-[1.75rem] border border-white/40 bg-white/85 p-6 shadow-[0_20px_60px_-24px_rgba(15,23,42,0.35)] backdrop-blur-2xl",
+            "mt-8 w-full rounded-[1.75rem] border border-border/60 bg-card/90 p-6 shadow-[0_20px_60px_-24px_rgba(15,23,42,0.22)] backdrop-blur-2xl",
             "sm:p-8",
             "dark:border-white/[0.08] dark:bg-card/75 dark:shadow-[0_24px_80px_-28px_rgba(0,0,0,0.65)]",
           )}

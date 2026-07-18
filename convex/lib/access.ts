@@ -184,3 +184,70 @@ export async function requireAssessmentEdit(
   }
   return { assessment, userId };
 }
+
+const PULS_BOARD_RANK: Record<"viewer" | "editor" | "owner", number> = {
+  viewer: 0,
+  editor: 1,
+  owner: 2,
+};
+
+export type PulsBoardRole = keyof typeof PULS_BOARD_RANK;
+
+export async function getPulsBoardMembership(
+  ctx: QueryCtx | MutationCtx,
+  boardId: Id<"pulsBoards">,
+  userId: Id<"users">,
+): Promise<Doc<"pulsBoardMembers"> | null> {
+  return await ctx.db
+    .query("pulsBoardMembers")
+    .withIndex("by_user_board", (q) =>
+      q.eq("userId", userId).eq("boardId", boardId),
+    )
+    .unique();
+}
+
+/** Effektiv rolle på Puls-tavle (workspace admin/owner teller som owner). */
+export async function getEffectivePulsBoardRole(
+  ctx: QueryCtx | MutationCtx,
+  board: Doc<"pulsBoards">,
+  userId: Id<"users">,
+): Promise<PulsBoardRole | null> {
+  const wm = await getWorkspaceMembership(ctx, board.workspaceId, userId);
+  if (wm && WORKSPACE_RANK[wm.role] >= WORKSPACE_RANK.admin) {
+    return "owner";
+  }
+  const m = await getPulsBoardMembership(ctx, board._id, userId);
+  return m?.role ?? null;
+}
+
+export async function canAccessPulsBoard(
+  ctx: QueryCtx | MutationCtx,
+  board: Doc<"pulsBoards">,
+  userId: Id<"users">,
+  minRole: PulsBoardRole = "viewer",
+): Promise<boolean> {
+  const role = await getEffectivePulsBoardRole(ctx, board, userId);
+  if (!role) return false;
+  return PULS_BOARD_RANK[role] >= PULS_BOARD_RANK[minRole];
+}
+
+export async function requirePulsBoardAccess(
+  ctx: QueryCtx | MutationCtx,
+  boardId: Id<"pulsBoards">,
+  minRole: PulsBoardRole = "viewer",
+): Promise<{
+  board: Doc<"pulsBoards">;
+  userId: Id<"users">;
+  role: PulsBoardRole;
+}> {
+  const userId = await requireUserId(ctx);
+  const board = await ctx.db.get(boardId);
+  if (!board) {
+    throw new Error("Tavlen finnes ikke.");
+  }
+  const role = await getEffectivePulsBoardRole(ctx, board, userId);
+  if (!role || PULS_BOARD_RANK[role] < PULS_BOARD_RANK[minRole]) {
+    throw new Error("Ingen tilgang til denne tavlen.");
+  }
+  return { board, userId, role };
+}

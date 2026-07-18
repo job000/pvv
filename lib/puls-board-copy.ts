@@ -50,7 +50,24 @@ export const pulsBoardCopy = {
   notifyAssigned: (title: string) => `Du er tildelt «${title}»`,
 } as const;
 
-export const pulsBoardPath = (workspaceId: string, taskId?: string) =>
-  taskId
-    ? `/w/${workspaceId}/puls?task=${taskId}`
-    : `/w/${workspaceId}/puls`;
+/**
+ * Hub: `/puls`. Tavle: `/puls/[boardId]`.
+ * Kort i dialog: `?task=`. Egen side: `/puls/[boardId]/task/[taskId]`.
+ */
+export function pulsBoardPath(
+  workspaceId: string,
+  boardId?: string,
+  taskId?: string,
+  opts?: { page?: boolean },
+) {
+  if (boardId && taskId && opts?.page) {
+    return `/w/${workspaceId}/puls/${boardId}/task/${encodeURIComponent(taskId)}`;
+  }
+  if (boardId && taskId) {
+    return `/w/${workspaceId}/puls/${boardId}?task=${encodeURIComponent(taskId)}`;
+  }
+  if (boardId) {
+    return `/w/${workspaceId}/puls/${boardId}`;
+  }
+  return `/w/${workspaceId}/puls`;
+}

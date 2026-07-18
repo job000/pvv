@@ -4,15 +4,16 @@ import {
   ProductLoadingBlock,
   ProductStack,
 } from "@/components/product";
-import { PulsHubPage } from "@/components/workspace/puls-hub-page";
+import { PulsBoardPage } from "@/components/workspace/puls-board-page";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import { useQuery } from "convex/react";
 import { useParams } from "next/navigation";
 
-export default function WorkspacePulsPage() {
+export default function WorkspacePulsBoardPage() {
   const params = useParams();
   const workspaceId = params.workspaceId as Id<"workspaces">;
+  const boardId = params.boardId as Id<"pulsBoards">;
   const workspace = useQuery(api.workspaces.get, { workspaceId });
 
   if (workspace === undefined) {
@@ -29,7 +30,7 @@ export default function WorkspacePulsPage() {
 
   return (
     <ProductStack className="max-w-none space-y-0 pb-[max(1rem,env(safe-area-inset-bottom))] sm:space-y-0">
-      <PulsHubPage workspaceId={workspaceId} />
+      <PulsBoardPage workspaceId={workspaceId} boardId={boardId} />
     </ProductStack>
   );
 }

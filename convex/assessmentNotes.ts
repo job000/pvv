@@ -1,9 +1,10 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { requireAssessmentEdit, requireAssessmentRead } from "./lib/access";
+import { isEmptyRichText } from "../lib/rich-text";
 import { insertUserInAppNotification } from "./userInAppNotifications";
 
-const NOTE_MAX = 8_000;
+const NOTE_MAX = 12_000;
 
 export const listByAssessment = query({
   args: { assessmentId: v.id("assessments") },
@@ -66,7 +67,7 @@ export const add = mutation({
       args.assessmentId,
     );
     const body = args.body.trim();
-    if (!body) {
+    if (isEmptyRichText(body)) {
       throw new Error("Notatet er tomt.");
     }
     if (body.length > NOTE_MAX) {

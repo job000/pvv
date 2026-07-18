@@ -11,13 +11,17 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { CardDescriptionEditor } from "@/components/ui/card-description-editor";
+import { MarkdownView } from "@/components/ui/markdown-view";
 import { Textarea } from "@/components/ui/textarea";
 import { AssessmentTaskCommentThreads } from "@/components/workspace/assessment-task-comment-threads";
+import { TaskFileAttachments } from "@/components/workspace/task-file-attachments";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import { toast } from "@/lib/app-toast";
 import { effectiveGithubDefaultRepos } from "@/lib/github-workspace-helpers";
-import { pulsBoardCopy } from "@/lib/puls-board-copy";
+import { pulsBoardCopy, pulsBoardPath } from "@/lib/puls-board-copy";
+import { isEmptyRichText } from "@/lib/rich-text";
 import { cn } from "@/lib/utils";
 import {
   DndContext,
@@ -33,19 +37,42 @@ import {
   useSensors,
 } from "@dnd-kit/core";
 import { useMutation, useQuery } from "convex/react";
+import { FilterToolbar } from "@/components/ui/filter-toolbar";
 import {
+  AlertTriangle,
+  ArrowLeft,
+  CalendarClock,
   CalendarRange,
+  ChevronLeft,
+  ChevronRight,
+  Circle,
+  Columns3,
+  ExternalLink,
+  Filter,
+  LayoutList,
   Link2,
   ListTree,
+  Maximize2,
+  Minimize2,
   Plus,
   Search,
   Shield,
+  Table2,
   Unlink,
+  User,
+  UserRoundX,
   Workflow,
+  X,
 } from "lucide-react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 
 type LinkedProcess = {
   id: Id<"candidates">;
@@ -63,6 +90,8 @@ type BoardCard = {
   _id: Id<"assessmentTasks">;
   workspaceId: Id<"workspaces">;
   assessmentId: Id<"assessments">;
+  boardId?: Id<"pulsBoards"> | null;
+  columnId?: Id<"pulsBoardColumns"> | null;
   title: string;
   description?: string;
   parentTaskId?: Id<"assessmentTasks">;
@@ -85,11 +114,19 @@ type BoardCard = {
   canEdit: boolean;
 };
 
+type BoardColumnDoc = {
+  _id: Id<"pulsBoardColumns">;
+  name: string;
+  order: number;
+  isDone: boolean;
+};
+
 /** Normaliser kort fra API (eldre payloads uten arrays). */
 function normalizeBoardCard(raw: BoardCard): BoardCard {
   return {
     ...raw,
     depth: raw.depth ?? 0,
+    columnId: raw.columnId ?? null,
     linkedProcesses: Array.isArray(raw.linkedProcesses)
       ? raw.linkedProcesses
       : [],
@@ -223,12 +260,14 @@ function AssigneeStack({ names }: { names: string[] }) {
 
 function IssueCardView({
   card,
+  columnLabel,
   isDragging,
   dragListeners,
   dragAttributes,
   onOpen,
 }: {
   card: BoardCard;
+  columnLabel?: string;
   isDragging?: boolean;
   dragListeners?: object;
   dragAttributes?: object;
@@ -279,7 +318,9 @@ function IssueCardView({
       </p>
 
       <div className="mt-2 flex flex-wrap gap-1">
-        <FieldChip>P{clampP(card.priority)}</FieldChip>
+        <FieldChip>
+          {columnLabel ?? `P${clampP(card.priority)}`}
+        </FieldChip>
         {isSub ? (
           <FieldChip tone="sky">{pulsBoardCopy.subcardChip}</FieldChip>
         ) : null}
@@ -322,9 +363,11 @@ function IssueCardView({
 
 function DraggableIssueCard({
   card,
+  columnLabel,
   onOpen,
 }: {
   card: BoardCard;
+  columnLabel?: string;
   onOpen: () => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } =
@@ -338,6 +381,7 @@ function DraggableIssueCard({
     <div ref={setNodeRef} style={style} className="mb-2">
       <IssueCardView
         card={card}
+        columnLabel={columnLabel}
         isDragging={isDragging}
         dragListeners={card.canEdit ? listeners : undefined}
         dragAttributes={card.canEdit ? attributes : undefined}
@@ -347,63 +391,251 @@ function DraggableIssueCard({
   );
 }
 
-function PriorityColumn({
-  priority,
-  count,
-  children,
+type BoardViewMode = "columns" | "table" | "list";
+
+type AssigneeFilter = "all" | "me" | "unassigned" | Id<"users">;
+type CardTypeFilter = "all" | "top" | "sub";
+type StatusFilter = "all" | "open" | "done";
+type DueFilter = "all" | "overdue" | "week" | "none";
+
+type BoardFilters = {
+  query: string;
+  assignee: AssigneeFilter;
+  columnId: Id<"pulsBoardColumns"> | "";
+  cardType: CardTypeFilter;
+  status: StatusFilter;
+  processId: Id<"candidates"> | "";
+  assessmentId: Id<"assessments"> | "";
+  due: DueFilter;
+};
+
+const DEFAULT_FILTERS: BoardFilters = {
+  query: "",
+  assignee: "all",
+  columnId: "",
+  cardType: "all",
+  status: "all",
+  processId: "",
+  assessmentId: "",
+  due: "all",
+};
+
+const COLUMN_PAGE_SIZE = 24;
+
+function viewStorageKey(boardId: string) {
+  return `puls-board-view:${boardId}`;
+}
+
+function filterStorageKey(boardId: string, userId?: string) {
+  return userId
+    ? `puls-board-filters:${userId}:${boardId}`
+    : `puls-board-filters:${boardId}`;
+}
+
+function isBoardFilters(value: unknown): value is BoardFilters {
+  if (!value || typeof value !== "object") return false;
+  const o = value as Record<string, unknown>;
+  return (
+    typeof o.query === "string" &&
+    typeof o.assignee === "string" &&
+    typeof o.columnId === "string" &&
+    (o.cardType === "all" || o.cardType === "top" || o.cardType === "sub") &&
+    (o.status === "all" || o.status === "open" || o.status === "done") &&
+    (o.due === "all" ||
+      o.due === "overdue" ||
+      o.due === "week" ||
+      o.due === "none") &&
+    typeof o.processId === "string" &&
+    typeof o.assessmentId === "string"
+  );
+}
+
+function filtersToPersist(filters: BoardFilters) {
+  return {
+    query: filters.query,
+    assignee: filters.assignee,
+    columnId: filters.columnId,
+    cardType: filters.cardType,
+    status: filters.status,
+    due: filters.due,
+    processId: filters.processId,
+    assessmentId: filters.assessmentId,
+  };
+}
+
+function startOfTodayMs() {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  return d.getTime();
+}
+
+function endOfWeekMs() {
+  const d = new Date();
+  d.setHours(23, 59, 59, 999);
+  d.setDate(d.getDate() + 7);
+  return d.getTime();
+}
+
+function BoardColumn({
+  column,
+  cards,
+  onOpenCard,
+  onRename,
+  onRemove,
+  canManage,
 }: {
-  priority: number;
-  count: number;
-  children: ReactNode;
+  column: BoardColumnDoc;
+  cards: BoardCard[];
+  onOpenCard: (card: BoardCard) => void;
+  onRename?: (nextName: string) => void | Promise<void>;
+  onRemove?: () => void;
+  canManage?: boolean;
 }) {
-  const { setNodeRef, isOver } = useDroppable({ id: `pri-${priority}` });
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(column.name);
+  const [visible, setVisible] = useState(COLUMN_PAGE_SIZE);
+  const { setNodeRef, isOver } = useDroppable({
+    id: `col-${column._id}`,
+  });
+
+  useEffect(() => {
+    setVisible(COLUMN_PAGE_SIZE);
+  }, [column._id, cards.length]);
+
+  const startEdit = () => {
+    if (!canManage || !onRename) return;
+    setDraft(column.name);
+    setEditing(true);
+  };
+
+  const commitEdit = () => {
+    const next = draft.trim();
+    setEditing(false);
+    if (!next || next === column.name) {
+      setDraft(column.name);
+      return;
+    }
+    void onRename?.(next);
+  };
+
+  const shown = cards.slice(0, visible);
+  const remaining = cards.length - shown.length;
+
   return (
     <div
       ref={setNodeRef}
       className={cn(
-        "flex w-[min(100%,280px)] shrink-0 flex-col rounded-xl border border-border/50 bg-muted/20",
+        "flex w-[280px] shrink-0 flex-col rounded-xl border border-border/50 bg-muted/20 sm:w-[300px]",
+        column.isDone && "bg-muted/30",
         isOver && "border-sky-500/50 bg-sky-500/8 ring-1 ring-sky-500/20",
       )}
     >
-      <div className="sticky top-0 z-[1] flex items-center justify-between gap-2 rounded-t-xl border-b border-border/40 bg-muted/40 px-3 py-2.5 backdrop-blur-sm">
-        <div>
-          <p className="text-xs font-semibold tracking-wide text-foreground">
-            Prioritet {priority}
-          </p>
-          <p className="text-muted-foreground text-[10px]">P{priority}</p>
+      <div className="sticky top-0 z-[1] flex items-start justify-between gap-2 rounded-t-xl border-b border-border/40 bg-muted/40 px-3 py-2.5 backdrop-blur-sm">
+        <div className="min-w-0 flex-1">
+          {editing ? (
+            <input
+              autoFocus
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              onBlur={() => commitEdit()}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  commitEdit();
+                }
+                if (e.key === "Escape") {
+                  setDraft(column.name);
+                  setEditing(false);
+                }
+              }}
+              className="border-input bg-background h-7 w-full min-w-0 rounded-md border px-1.5 text-xs font-semibold tracking-wide outline-none focus:ring-1 focus:ring-sky-500/40"
+              aria-label="Kolonnenavn"
+            />
+          ) : (
+            <button
+              type="button"
+              disabled={!canManage}
+              onClick={startEdit}
+              className={cn(
+                "block w-full min-w-0 text-left",
+                canManage &&
+                  "hover:text-sky-800 dark:hover:text-sky-200 -mx-1 cursor-pointer rounded-md px-1 py-0.5 hover:bg-background/50",
+                !canManage && "cursor-default",
+              )}
+              title={canManage ? "Klikk for å endre navn" : undefined}
+            >
+              <p className="truncate text-xs font-semibold tracking-wide text-foreground">
+                {column.name}
+              </p>
+              <p className="text-muted-foreground text-[10px]">
+                {column.isDone ? "Fullført" : "Åpen"}
+              </p>
+            </button>
+          )}
         </div>
-        <span className="bg-background/80 text-muted-foreground rounded-full px-2 py-0.5 text-[11px] font-medium tabular-nums shadow-xs">
-          {count}
-        </span>
+        <div className="flex shrink-0 items-center gap-1">
+          {canManage ? (
+            <button
+              type="button"
+              className="text-muted-foreground hover:text-destructive rounded-md px-1.5 py-1 text-[10px] font-medium"
+              onClick={onRemove}
+            >
+              Slett
+            </button>
+          ) : null}
+          <span className="bg-background/80 text-muted-foreground rounded-full px-2 py-0.5 text-[11px] font-medium tabular-nums shadow-xs">
+            {cards.length}
+          </span>
+        </div>
       </div>
-      <div className="min-h-[160px] flex-1 p-2.5">{children}</div>
+      <div
+        data-column-cards
+        className="max-h-[min(70vh,36rem)] min-h-[160px] flex-1 touch-pan-y space-y-2 overflow-y-auto overscroll-contain p-2.5"
+      >
+        {shown.map((card) => (
+          <DraggableIssueCard
+            key={card._id}
+            card={card}
+            columnLabel={column.name}
+            onOpen={() => onOpenCard(card)}
+          />
+        ))}
+        {remaining > 0 ? (
+          <button
+            type="button"
+            className="text-muted-foreground hover:text-foreground hover:bg-background/60 w-full rounded-lg border border-dashed border-border/60 py-2 text-xs font-medium"
+            onClick={() => setVisible((v) => v + COLUMN_PAGE_SIZE)}
+          >
+            Vis {Math.min(COLUMN_PAGE_SIZE, remaining)} til · {remaining} skjult
+          </button>
+        ) : null}
+        {cards.length === 0 ? (
+          <p className="text-muted-foreground px-1 py-6 text-center text-[11px]">
+            Ingen kort her
+          </p>
+        ) : null}
+      </div>
     </div>
   );
 }
 
-function DoneColumn({ count, children }: { count: number; children: ReactNode }) {
-  const { setNodeRef, isOver } = useDroppable({ id: "done-drop" });
+function LinkSection({
+  icon,
+  title,
+  children,
+}: {
+  icon: ReactNode;
+  title: string;
+  children: ReactNode;
+}) {
   return (
-    <div
-      ref={setNodeRef}
-      className={cn(
-        "flex w-[min(100%,280px)] shrink-0 flex-col rounded-xl border border-border/50 bg-muted/30",
-        isOver && "border-sky-500/50 bg-sky-500/8 ring-1 ring-sky-500/20",
-      )}
-    >
-      <div className="sticky top-0 z-[1] flex items-center justify-between gap-2 rounded-t-xl border-b border-border/40 bg-muted/50 px-3 py-2.5 backdrop-blur-sm">
-        <div>
-          <p className="text-xs font-semibold tracking-wide text-foreground">
-            Ferdig
-          </p>
-          <p className="text-muted-foreground text-[10px]">Fullført</p>
-        </div>
-        <span className="bg-background/80 text-muted-foreground rounded-full px-2 py-0.5 text-[11px] font-medium tabular-nums shadow-xs">
-          {count}
-        </span>
+    <section className="min-w-0 overflow-hidden rounded-xl border border-border/50 bg-muted/10">
+      <div className="flex items-center gap-1.5 border-b border-border/40 px-3 py-2">
+        <span className="text-muted-foreground shrink-0">{icon}</span>
+        <h3 className="text-sm font-medium">{title}</h3>
       </div>
-      <div className="min-h-[160px] flex-1 p-2.5">{children}</div>
-    </div>
+      <div className="min-w-0 space-y-2.5 p-3">{children}</div>
+    </section>
   );
 }
 
@@ -414,52 +646,319 @@ const DETAIL_TABS: { id: DetailTab; label: string }[] = [
   { id: "mer", label: "Mer" },
 ];
 
+type DetailSize = "normal" | "large" | "full";
+type CommentsPlacement = "tab" | "overview";
+
 export function IssuesProjectBoard({
   workspaceId,
+  boardId,
+  focusTaskId,
+  detailPresentation = "dialog",
 }: {
   workspaceId: Id<"workspaces">;
+  boardId: Id<"pulsBoards">;
+  /** Åpne dette kortet (egen side eller deep-link). */
+  focusTaskId?: Id<"assessmentTasks">;
+  /** dialog = modal på tavle; page = full kortside. */
+  detailPresentation?: "dialog" | "page";
 }) {
+  const router = useRouter();
   const searchParams = useSearchParams();
-  const deepLinkTaskId = searchParams.get("task");
+  const deepLinkTaskId = focusTaskId ?? searchParams.get("task");
   const deepLinkHandled = useRef<string | null>(null);
+  const isPageDetail = detailPresentation === "page";
 
-  const cardsRaw = useQuery(api.assessmentTasks.listBoardByWorkspace, {
-    workspaceId,
+  const cardsRaw = useQuery(api.assessmentTasks.listBoardByPulsBoard, {
+    boardId,
   });
   const cards = useMemo(
     () => (cardsRaw ?? []).map((c) => normalizeBoardCard(c as BoardCard)),
     [cardsRaw],
   );
   const cardsLoaded = cardsRaw !== undefined;
+  const columnsRaw = useQuery(api.pulsBoardColumns.listByBoard, { boardId });
+  const boardMeta = useQuery(api.pulsBoards.get, { boardId });
+  const otherBoards = useQuery(api.pulsBoards.listMineInWorkspace, {
+    workspaceId,
+  });
   const assessments = useQuery(api.assessments.listByWorkspace, {
     workspaceId,
   });
   const workspace = useQuery(api.workspaces.get, { workspaceId });
   const members = useQuery(api.workspaces.listMembers, { workspaceId });
+  const myProfile = useQuery(api.users.getMyProfile);
   const processes = useQuery(api.candidates.listByWorkspace, { workspaceId });
   const rosAnalyses = useQuery(api.ros.listAnalyses, { workspaceId });
 
+  const ensureColumns = useMutation(api.pulsBoardColumns.ensureForBoard);
+  const createColumn = useMutation(api.pulsBoardColumns.create);
+  const renameColumn = useMutation(api.pulsBoardColumns.rename);
+  const removeColumn = useMutation(api.pulsBoardColumns.remove);
+  const applyTemplate = useMutation(api.pulsBoardColumns.applyTemplate);
+  const templates = useQuery(api.pulsBoardColumns.listTemplates, {});
   const createTask = useMutation(api.assessmentTasks.create);
   const moveTask = useMutation(api.assessmentTasks.moveTask);
+  const moveToBoard = useMutation(api.assessmentTasks.moveToBoard);
   const updateTask = useMutation(api.assessmentTasks.update);
   const setParent = useMutation(api.assessmentTasks.setParent);
   const setStatus = useMutation(api.assessmentTasks.setStatus);
+  const completeTask = useMutation(api.assessmentTasks.completeTask);
   const removeTask = useMutation(api.assessmentTasks.remove);
   const linkProcess = useMutation(api.candidates.linkAssessment);
   const linkRos = useMutation(api.ros.linkAssessment);
+  const savedPrefs = useQuery(api.pulsBoardUserPrefs.getMine, { boardId });
+  const setPrefs = useMutation(api.pulsBoardUserPrefs.setMine);
+  useEffect(() => {
+    void ensureColumns({ boardId }).catch(() => {
+      /* ignore */
+    });
+  }, [boardId, ensureColumns]);
 
-  const [query, setQuery] = useState("");
-  const [processFilter, setProcessFilter] = useState<Id<"candidates"> | "">(
-    "",
-  );
+  const [filters, setFilters] = useState<BoardFilters>(DEFAULT_FILTERS);
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [listVisible, setListVisible] = useState(80);
   const [activeDrag, setActiveDrag] = useState<BoardCard | null>(null);
   const [selected, setSelected] = useState<BoardCard | null>(null);
   const [detailTab, setDetailTab] = useState<DetailTab>("oversikt");
   const [completePrompt, setCompletePrompt] = useState<BoardCard | null>(null);
+  const [completeComment, setCompleteComment] = useState("");
+  const [moveBoardId, setMoveBoardId] = useState<Id<"pulsBoards"> | "">("");
+  const [columnsOpen, setColumnsOpen] = useState(false);
+  const [newColumnName, setNewColumnName] = useState("");
+  const [viewMode, setViewMode] = useState<BoardViewMode>("columns");
+  const [commentsPlacement, setCommentsPlacement] =
+    useState<CommentsPlacement>("tab");
+  const [detailSize, setDetailSize] = useState<DetailSize>("large");
+  const [descInsertToken, setDescInsertToken] = useState<string | null>(null);
+  const [prefsHydrated, setPrefsHydrated] = useState(false);
+  const boardScrollRef = useRef<HTMLDivElement>(null);
+  const [boardCanScroll, setBoardCanScroll] = useState(false);
+  const [boardScrollAtStart, setBoardScrollAtStart] = useState(true);
+  const [boardScrollAtEnd, setBoardScrollAtEnd] = useState(false);
+  const persistTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const uiPrefsRef = useRef({ commentsPlacement, detailSize });
+  uiPrefsRef.current = { commentsPlacement, detailSize };
+  const myUserId = myProfile?.user?._id as Id<"users"> | undefined;
+
+  const persistLocal = (
+    next: BoardFilters,
+    mode: BoardViewMode,
+    extras?: {
+      commentsPlacement?: CommentsPlacement;
+      detailSize?: DetailSize;
+    },
+  ) => {
+    try {
+      localStorage.setItem(viewStorageKey(boardId), mode);
+      localStorage.setItem(
+        filterStorageKey(boardId, myUserId),
+        JSON.stringify(next),
+      );
+      localStorage.setItem(
+        `puls-board-ui:${boardId}`,
+        JSON.stringify({
+          commentsPlacement:
+            extras?.commentsPlacement ?? uiPrefsRef.current.commentsPlacement,
+          detailSize: extras?.detailSize ?? uiPrefsRef.current.detailSize,
+        }),
+      );
+    } catch {
+      /* ignore */
+    }
+  };
+
+  const persistRemote = (
+    next: BoardFilters,
+    mode: BoardViewMode,
+    extras?: {
+      commentsPlacement?: CommentsPlacement;
+      detailSize?: DetailSize;
+    },
+  ) => {
+    if (persistTimer.current) clearTimeout(persistTimer.current);
+    persistTimer.current = setTimeout(() => {
+      void setPrefs({
+        boardId,
+        filters: filtersToPersist(next),
+        viewMode: mode,
+        commentsPlacement:
+          extras?.commentsPlacement ?? uiPrefsRef.current.commentsPlacement,
+        detailSize: extras?.detailSize ?? uiPrefsRef.current.detailSize,
+      }).catch(() => {
+        /* ignore */
+      });
+    }, 350);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (persistTimer.current) clearTimeout(persistTimer.current);
+    };
+  }, []);
+
+  useEffect(() => {
+    setPrefsHydrated(false);
+  }, [boardId]);
+
+  useEffect(() => {
+    if (prefsHydrated || savedPrefs === undefined) return;
+
+    if (savedPrefs) {
+      const next = { ...DEFAULT_FILTERS, ...savedPrefs.filters };
+      const mode =
+        savedPrefs.viewMode === "columns" ||
+        savedPrefs.viewMode === "table" ||
+        savedPrefs.viewMode === "list"
+          ? savedPrefs.viewMode
+          : "columns";
+      setFilters(next);
+      setViewMode(mode);
+      if (
+        savedPrefs.commentsPlacement === "tab" ||
+        savedPrefs.commentsPlacement === "overview"
+      ) {
+        setCommentsPlacement(savedPrefs.commentsPlacement);
+      }
+      if (
+        savedPrefs.detailSize === "normal" ||
+        savedPrefs.detailSize === "large" ||
+        savedPrefs.detailSize === "full"
+      ) {
+        setDetailSize(savedPrefs.detailSize);
+      }
+      try {
+        localStorage.setItem(viewStorageKey(boardId), mode);
+        localStorage.setItem(
+          filterStorageKey(boardId, myUserId),
+          JSON.stringify(next),
+        );
+      } catch {
+        /* ignore */
+      }
+      setPrefsHydrated(true);
+      return;
+    }
+
+    try {
+      const savedView = localStorage.getItem(viewStorageKey(boardId));
+      let mode: BoardViewMode = "columns";
+      if (
+        savedView === "columns" ||
+        savedView === "table" ||
+        savedView === "list"
+      ) {
+        mode = savedView;
+        setViewMode(savedView);
+      }
+      const uiRaw = localStorage.getItem(`puls-board-ui:${boardId}`);
+      if (uiRaw) {
+        const ui = JSON.parse(uiRaw) as {
+          commentsPlacement?: CommentsPlacement;
+          detailSize?: DetailSize;
+        };
+        if (ui.commentsPlacement === "tab" || ui.commentsPlacement === "overview") {
+          setCommentsPlacement(ui.commentsPlacement);
+        }
+        if (
+          ui.detailSize === "normal" ||
+          ui.detailSize === "large" ||
+          ui.detailSize === "full"
+        ) {
+          setDetailSize(ui.detailSize);
+        }
+      }
+      const raw =
+        localStorage.getItem(filterStorageKey(boardId, myUserId)) ??
+        localStorage.getItem(filterStorageKey(boardId));
+      if (raw) {
+        const parsed: unknown = JSON.parse(raw);
+        const next = isBoardFilters(parsed)
+          ? parsed
+          : {
+              ...DEFAULT_FILTERS,
+              ...(parsed as Partial<BoardFilters>),
+            };
+        setFilters(next);
+        void setPrefs({
+          boardId,
+          filters: filtersToPersist(next),
+          viewMode: mode,
+        }).catch(() => {
+          /* ignore */
+        });
+      }
+    } catch {
+      /* ignore */
+    }
+    setPrefsHydrated(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- hydrate once per board/prefs load
+  }, [savedPrefs, prefsHydrated, boardId, myUserId, setPrefs]);
+
+  // Hold UI-valg i sync når de endres under Innstillinger (samme Convex-prefs)
+  useEffect(() => {
+    if (!prefsHydrated || !savedPrefs) return;
+    if (
+      savedPrefs.commentsPlacement === "tab" ||
+      savedPrefs.commentsPlacement === "overview"
+    ) {
+      setCommentsPlacement(savedPrefs.commentsPlacement);
+    }
+    if (
+      savedPrefs.detailSize === "normal" ||
+      savedPrefs.detailSize === "large" ||
+      savedPrefs.detailSize === "full"
+    ) {
+      setDetailSize(savedPrefs.detailSize);
+    }
+    if (
+      savedPrefs.viewMode === "columns" ||
+      savedPrefs.viewMode === "table" ||
+      savedPrefs.viewMode === "list"
+    ) {
+      setViewMode(savedPrefs.viewMode);
+    }
+  }, [
+    prefsHydrated,
+    savedPrefs?.updatedAt,
+    savedPrefs?.commentsPlacement,
+    savedPrefs?.detailSize,
+    savedPrefs?.viewMode,
+  ]);
+
+  const setViewModePersist = (mode: BoardViewMode) => {
+    setViewMode(mode);
+    persistLocal(filters, mode);
+    persistRemote(filters, mode);
+  };
+
+  const patchFilters = (patch: Partial<BoardFilters>) => {
+    setFilters((prev) => {
+      const next = { ...prev, ...patch };
+      persistLocal(next, viewMode);
+      persistRemote(next, viewMode);
+      return next;
+    });
+  };
+
+  const clearFilters = () => {
+    setFilters(DEFAULT_FILTERS);
+    persistLocal(DEFAULT_FILTERS, viewMode);
+    if (persistTimer.current) clearTimeout(persistTimer.current);
+    void setPrefs({
+      boardId,
+      filters: filtersToPersist(DEFAULT_FILTERS),
+      viewMode,
+    }).catch(() => {
+      /* ignore */
+    });
+  };
 
   const [editTitle, setEditTitle] = useState("");
   const [editDescription, setEditDescription] = useState("");
   const [editPriority, setEditPriority] = useState(3);
+  const [editColumnId, setEditColumnId] = useState<
+    Id<"pulsBoardColumns"> | ""
+  >("");
   const [editStart, setEditStart] = useState("");
   const [editDue, setEditDue] = useState("");
   const [editAssigneeIds, setEditAssigneeIds] = useState<Id<"users">[]>([]);
@@ -510,42 +1009,251 @@ export function IssuesProjectBoard({
     );
   }, [cards]);
 
+  const assessmentFilterOptions = useMemo(() => {
+    const map = new Map<Id<"assessments">, string>();
+    for (const c of cards) map.set(c.assessmentId, c.assessmentTitle);
+    return [...map.entries()]
+      .map(([id, title]) => ({ id, title }))
+      .sort((a, b) => a.title.localeCompare(b.title, "nb"));
+  }, [cards]);
+
+  const assigneeFilterOptions = useMemo(() => {
+    return (members ?? [])
+      .map((m) => ({
+        userId: m.userId as Id<"users">,
+        label: m.name?.trim() || m.email || "Medlem",
+      }))
+      .sort((a, b) => a.label.localeCompare(b.label, "nb"));
+  }, [members]);
+
   const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
+    const q = filters.query.trim().toLowerCase();
+    const today = startOfTodayMs();
+    const weekEnd = endOfWeekMs();
     let list = cards;
-    if (processFilter) {
+
+    if (filters.status === "open") {
+      list = list.filter((c) => c.status === "open");
+    } else if (filters.status === "done") {
+      list = list.filter((c) => c.status === "done");
+    }
+
+    if (filters.cardType === "top") {
+      list = list.filter((c) => !c.parentTaskId);
+    } else if (filters.cardType === "sub") {
+      list = list.filter((c) => Boolean(c.parentTaskId));
+    }
+
+    if (filters.columnId) {
+      list = list.filter((c) => c.columnId === filters.columnId);
+    }
+
+    if (filters.processId) {
       list = list.filter((c) =>
-        c.linkedProcesses.some((p) => p.id === processFilter),
+        c.linkedProcesses.some((p) => p.id === filters.processId),
       );
     }
-    if (!q) return list;
-    return list.filter(
-      (c) =>
-        c.title.toLowerCase().includes(q) ||
-        c.assessmentTitle.toLowerCase().includes(q) ||
-        (c.parentTitle?.toLowerCase().includes(q) ?? false) ||
-        c.linkedProcesses.some(
-          (p) =>
-            p.name.toLowerCase().includes(q) ||
-            p.code.toLowerCase().includes(q),
-        ),
-    );
-  }, [cards, query, processFilter]);
 
-  const byPriority = useMemo(() => {
-    const open = filtered.filter((c) => c.status === "open");
-    const map = new Map<number, BoardCard[]>();
-    for (let p = 1; p <= 5; p++) map.set(p, []);
-    for (const c of open) {
-      map.get(clampP(c.priority))!.push(c);
+    if (filters.assessmentId) {
+      list = list.filter((c) => c.assessmentId === filters.assessmentId);
+    }
+
+    if (filters.assignee === "me" && myUserId) {
+      list = list.filter((c) => c.assignees.some((a) => a.userId === myUserId));
+    } else if (filters.assignee === "unassigned") {
+      list = list.filter((c) => c.assignees.length === 0);
+    } else if (filters.assignee !== "all") {
+      const uid = filters.assignee;
+      list = list.filter((c) => c.assignees.some((a) => a.userId === uid));
+    }
+
+    if (filters.due === "overdue") {
+      list = list.filter(
+        (c) => c.status === "open" && c.dueAt != null && c.dueAt < today,
+      );
+    } else if (filters.due === "week") {
+      list = list.filter(
+        (c) =>
+          c.status === "open" &&
+          c.dueAt != null &&
+          c.dueAt >= today &&
+          c.dueAt <= weekEnd,
+      );
+    } else if (filters.due === "none") {
+      list = list.filter((c) => c.dueAt == null);
+    }
+
+    if (q) {
+      list = list.filter(
+        (c) =>
+          c.title.toLowerCase().includes(q) ||
+          c.assessmentTitle.toLowerCase().includes(q) ||
+          (c.parentTitle?.toLowerCase().includes(q) ?? false) ||
+          (c.assigneeName?.toLowerCase().includes(q) ?? false) ||
+          c.linkedProcesses.some(
+            (p) =>
+              p.name.toLowerCase().includes(q) ||
+              p.code.toLowerCase().includes(q),
+          ),
+      );
+    }
+
+    return list;
+  }, [cards, filters, myUserId]);
+
+  const updateBoardScrollState = () => {
+    const el = boardScrollRef.current;
+    if (!el) return;
+    const max = el.scrollWidth - el.clientWidth;
+    setBoardCanScroll(max > 2);
+    setBoardScrollAtStart(el.scrollLeft <= 2);
+    setBoardScrollAtEnd(el.scrollLeft >= max - 2);
+  };
+
+  const scrollBoardBy = (delta: number) => {
+    const el = boardScrollRef.current;
+    if (!el) return;
+    el.scrollBy({ left: delta, behavior: "smooth" });
+  };
+
+  useEffect(() => {
+    const el = boardScrollRef.current;
+    if (!el || viewMode !== "columns") return;
+
+    updateBoardScrollState();
+    const onScroll = () => updateBoardScrollState();
+    el.addEventListener("scroll", onScroll, { passive: true });
+
+    let raf = 0;
+    let pending = 0;
+    const flush = () => {
+      raf = 0;
+      if (pending === 0) return;
+      el.scrollLeft += pending;
+      pending = 0;
+      updateBoardScrollState();
+    };
+
+    const onWheel = (e: WheelEvent) => {
+      if (el.scrollWidth <= el.clientWidth + 2) return;
+
+      // Trackpad horizontal / shift+scroll → horizontal, no snap fighting
+      const horizontalIntent =
+        e.shiftKey || Math.abs(e.deltaX) > Math.abs(e.deltaY);
+      if (horizontalIntent) {
+        const dx = e.shiftKey && e.deltaY !== 0 ? e.deltaY : e.deltaX || e.deltaY;
+        if (dx === 0) return;
+        e.preventDefault();
+        pending += dx;
+        if (!raf) raf = requestAnimationFrame(flush);
+        return;
+      }
+
+      if (e.deltaY === 0) return;
+
+      const target = e.target as HTMLElement | null;
+      const cardsEl = target?.closest(
+        "[data-column-cards]",
+      ) as HTMLElement | null;
+      if (cardsEl) {
+        const canScrollY = cardsEl.scrollHeight > cardsEl.clientHeight + 2;
+        if (canScrollY) {
+          const atTop = cardsEl.scrollTop <= 0;
+          const atBottom =
+            cardsEl.scrollTop + cardsEl.clientHeight >=
+            cardsEl.scrollHeight - 1;
+          if ((e.deltaY < 0 && !atTop) || (e.deltaY > 0 && !atBottom)) {
+            return;
+          }
+        }
+      }
+
+      e.preventDefault();
+      pending += e.deltaY;
+      if (!raf) raf = requestAnimationFrame(flush);
+    };
+    el.addEventListener("wheel", onWheel, { passive: false });
+
+    const ro = new ResizeObserver(() => updateBoardScrollState());
+    ro.observe(el);
+    window.addEventListener("resize", updateBoardScrollState);
+
+    return () => {
+      el.removeEventListener("scroll", onScroll);
+      el.removeEventListener("wheel", onWheel);
+      if (raf) cancelAnimationFrame(raf);
+      ro.disconnect();
+      window.removeEventListener("resize", updateBoardScrollState);
+    };
+  }, [viewMode, columnsRaw?.length, filtered.length]);
+
+  const activeFilterCount = useMemo(() => {
+    let n = 0;
+    if (filters.query.trim()) n++;
+    if (filters.assignee !== "all") n++;
+    if (filters.columnId) n++;
+    if (filters.cardType !== "all") n++;
+    if (filters.status !== "all") n++;
+    if (filters.processId) n++;
+    if (filters.assessmentId) n++;
+    if (filters.due !== "all") n++;
+    return n;
+  }, [filters]);
+
+  useEffect(() => {
+    setListVisible(80);
+  }, [filters, viewMode, boardId]);
+
+  const visibleRows = useMemo(
+    () => filtered.slice(0, listVisible),
+    [filtered, listVisible],
+  );
+
+  const columns = useMemo((): BoardColumnDoc[] => {
+    return (columnsRaw ?? [])
+      .map((c) => ({
+        _id: c._id,
+        name: c.name,
+        order: c.order,
+        isDone: c.isDone,
+      }))
+      .sort((a, b) => a.order - b.order);
+  }, [columnsRaw]);
+
+  const byColumn = useMemo(() => {
+    const map = new Map<string, BoardCard[]>();
+    for (const col of columns) map.set(col._id, []);
+    const fallbackOpen = columns.find((c) => !c.isDone);
+    const fallbackDone = columns.find((c) => c.isDone);
+    for (const c of filtered) {
+      let key = c.columnId ?? "";
+      if (!key || !map.has(key)) {
+        key =
+          (c.status === "done"
+            ? fallbackDone?._id
+            : fallbackOpen?._id) ?? "";
+      }
+      if (key && map.has(key)) {
+        map.get(key)!.push(c);
+      }
     }
     return map;
-  }, [filtered]);
+  }, [filtered, columns]);
 
-  const doneCards = useMemo(
-    () => filtered.filter((c) => c.status === "done"),
-    [filtered],
-  );
+  const canManageColumns = boardMeta?.canManage === true;
+
+  const columnLabelById = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const c of columns) map.set(c._id, c.name);
+    return map;
+  }, [columns]);
+
+  const labelForCard = (card: BoardCard) => {
+    if (card.columnId && columnLabelById.has(card.columnId)) {
+      return columnLabelById.get(card.columnId)!;
+    }
+    return `P${clampP(card.priority)}`;
+  };
 
   const createParentOptions = useMemo(() => {
     if (!createAssessmentId) return [];
@@ -621,12 +1329,14 @@ export function IssuesProjectBoard({
     setEditTitle(card.title);
     setEditDescription(card.description ?? "");
     setEditPriority(clampP(card.priority));
+    setEditColumnId(card.columnId ?? "");
     setEditStart(toDateInput(card.startAt));
     setEditDue(toDateInput(card.dueAt));
     setEditAssigneeIds(card.assignees.map((a) => a.userId));
     setEditParentId(card.parentTaskId ?? "");
     setLinkCandidateId("");
     setLinkRosId("");
+    setMoveBoardId("");
   };
 
   useEffect(() => {
@@ -646,11 +1356,8 @@ export function IssuesProjectBoard({
   }, [deepLinkTaskId, cards, cardsLoaded]);
 
   const requestComplete = (card: BoardCard) => {
-    if (hasOpenDescendants(card, cards)) {
-      setCompletePrompt(card);
-      return;
-    }
-    void finishComplete(card, false);
+    setCompleteComment("");
+    setCompletePrompt(card);
   };
 
   const finishComplete = async (
@@ -659,10 +1366,10 @@ export function IssuesProjectBoard({
   ) => {
     setBusy(true);
     try {
-      await setStatus({
+      await completeTask({
         taskId: card._id,
-        status: "done",
         completeSubIssues,
+        comment: completeComment.trim() || undefined,
       });
       toast.success(
         completeSubIssues
@@ -670,6 +1377,7 @@ export function IssuesProjectBoard({
           : pulsBoardCopy.completed,
       );
       setCompletePrompt(null);
+      setCompleteComment("");
       if (selected?._id === card._id) setSelected(null);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Kunne ikke fullføre");
@@ -683,8 +1391,9 @@ export function IssuesProjectBoard({
     setCreateTitle("");
     setCreateAssessmentId(parent.assessmentId);
     setCreateParentId(parent._id);
-    setCreateStart(toDateInput(parent.startAt));
-    setCreateDue(toDateInput(parent.dueAt));
+    // Datoer er valgfrie for delkort — ikke arv fra forelder
+    setCreateStart("");
+    setCreateDue("");
     setCreateAssigneeIds([]);
   };
 
@@ -701,27 +1410,26 @@ export function IssuesProjectBoard({
     if (!card || !card.canEdit) return;
 
     const overId = String(over.id);
+    if (!overId.startsWith("col-")) return;
+    const columnId = overId.slice(4) as Id<"pulsBoardColumns">;
+    const col = columns.find((c) => c._id === columnId);
+    if (!col) return;
+    if (card.columnId === columnId) return;
+
     try {
-      if (overId === "done-drop") {
-        if (card.status !== "done") {
-          if (hasOpenDescendants(card, cards)) {
-            setCompletePrompt(card);
-            return;
-          }
-          await moveTask({ taskId: card._id, status: "done" });
+      if (col.isDone && card.status !== "done") {
+        if (hasOpenDescendants(card, cards)) {
+          setCompleteComment("");
+          setCompletePrompt(card);
+          return;
         }
+        await completeTask({ taskId: card._id });
         return;
       }
-      if (overId.startsWith("pri-")) {
-        const p = Number(overId.slice(4));
-        if (p >= 1 && p <= 5) {
-          await moveTask({
-            taskId: card._id,
-            priority: p,
-            status: "open",
-          });
-        }
-      }
+      await moveTask({
+        taskId: card._id,
+        columnId,
+      });
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Kunne ikke flytte");
     }
@@ -731,11 +1439,7 @@ export function IssuesProjectBoard({
     if (!selected) return;
     const startAt = fromDateInput(editStart);
     const dueAt = fromDateInput(editDue);
-    if (!startAt || !dueAt) {
-      toast.error("Start- og sluttdato er påkrevd");
-      return;
-    }
-    if (startAt > dueAt) {
+    if (startAt && dueAt && startAt > dueAt) {
       toast.error("Startdato kan ikke være etter sluttdato");
       return;
     }
@@ -744,12 +1448,28 @@ export function IssuesProjectBoard({
       await updateTask({
         taskId: selected._id,
         title: editTitle.trim(),
-        description: editDescription.trim() || null,
+        description: isEmptyRichText(editDescription)
+          ? null
+          : editDescription,
         priority: editPriority,
-        startAt,
-        dueAt,
+        startAt: startAt ?? null,
+        dueAt: dueAt ?? null,
         assigneeUserIds: editAssigneeIds,
       });
+      if (editColumnId && editColumnId !== (selected.columnId ?? "")) {
+        const col = columns.find((c) => c._id === editColumnId);
+        if (col?.isDone && selected.status !== "done") {
+          await completeTask({
+            taskId: selected._id,
+            completeSubIssues: false,
+          });
+        } else {
+          await moveTask({
+            taskId: selected._id,
+            columnId: editColumnId,
+          });
+        }
+      }
       const nextParent = editParentId || null;
       const prevParent = selected.parentTaskId ?? null;
       if (nextParent !== prevParent) {
@@ -757,6 +1477,9 @@ export function IssuesProjectBoard({
       }
       toast.success(pulsBoardCopy.saved);
       setSelected(null);
+      if (isPageDetail) {
+        router.push(pulsBoardPath(workspaceId, boardId));
+      }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Kunne ikke lagre");
     } finally {
@@ -776,11 +1499,7 @@ export function IssuesProjectBoard({
     }
     const startAt = fromDateInput(createStart);
     const dueAt = fromDateInput(createDue);
-    if (!startAt || !dueAt) {
-      toast.error("Start- og sluttdato er påkrevd");
-      return;
-    }
-    if (startAt > dueAt) {
+    if (startAt && dueAt && startAt > dueAt) {
       toast.error("Startdato kan ikke være etter sluttdato");
       return;
     }
@@ -788,10 +1507,11 @@ export function IssuesProjectBoard({
     try {
       await createTask({
         assessmentId: createAssessmentId,
+        boardId,
         title,
         parentTaskId: createParentId || undefined,
-        startAt,
-        dueAt,
+        startAt: startAt ?? undefined,
+        dueAt: dueAt ?? undefined,
         assigneeUserIds:
           createAssigneeIds.length > 0 ? createAssigneeIds : undefined,
       });
@@ -827,10 +1547,172 @@ export function IssuesProjectBoard({
     );
   }
 
+  const selectClass =
+    "border-input bg-background h-9 w-full min-w-0 rounded-lg border px-2 text-sm sm:w-auto sm:min-w-[9.5rem]";
+
+  const activeFilterChips: { key: string; label: string; clear: () => void }[] =
+    [];
+  if (filters.assignee === "me") {
+    activeFilterChips.push({
+      key: "assignee",
+      label: "Mine",
+      clear: () => patchFilters({ assignee: "all" }),
+    });
+  } else if (filters.assignee === "unassigned") {
+    activeFilterChips.push({
+      key: "assignee",
+      label: "Utildelt",
+      clear: () => patchFilters({ assignee: "all" }),
+    });
+  } else if (filters.assignee !== "all") {
+    const name =
+      assigneeFilterOptions.find((m) => m.userId === filters.assignee)
+        ?.label ?? "Ansvarlig";
+    activeFilterChips.push({
+      key: "assignee",
+      label: name,
+      clear: () => patchFilters({ assignee: "all" }),
+    });
+  }
+  if (filters.due === "overdue") {
+    activeFilterChips.push({
+      key: "due",
+      label: "Forfalt",
+      clear: () => patchFilters({ due: "all" }),
+    });
+  } else if (filters.due === "week") {
+    activeFilterChips.push({
+      key: "due",
+      label: "Denne uken",
+      clear: () => patchFilters({ due: "all" }),
+    });
+  } else if (filters.due === "none") {
+    activeFilterChips.push({
+      key: "due",
+      label: "Uten frist",
+      clear: () => patchFilters({ due: "all" }),
+    });
+  }
+  if (filters.columnId) {
+    activeFilterChips.push({
+      key: "column",
+      label:
+        columns.find((c) => c._id === filters.columnId)?.name ?? "Kolonne",
+      clear: () => patchFilters({ columnId: "" }),
+    });
+  }
+  if (filters.cardType !== "all") {
+    activeFilterChips.push({
+      key: "type",
+      label: filters.cardType === "top" ? "Toppnivå" : "Delkort",
+      clear: () => patchFilters({ cardType: "all" }),
+    });
+  }
+  if (filters.status !== "all") {
+    activeFilterChips.push({
+      key: "status",
+      label: filters.status === "open" ? "Åpne" : "Ferdige",
+      clear: () => patchFilters({ status: "all" }),
+    });
+  }
+  if (filters.processId) {
+    const p = processFilterOptions.find((x) => x.id === filters.processId);
+    activeFilterChips.push({
+      key: "process",
+      label: p ? (p.code ? `${p.code}` : p.name) : "Prosess",
+      clear: () => patchFilters({ processId: "" }),
+    });
+  }
+  if (filters.assessmentId) {
+    activeFilterChips.push({
+      key: "assessment",
+      label:
+        assessmentFilterOptions.find((a) => a.id === filters.assessmentId)
+          ?.title ?? "Vurdering",
+      clear: () => patchFilters({ assessmentId: "" }),
+    });
+  }
+  if (filters.query.trim()) {
+    activeFilterChips.push({
+      key: "query",
+      label: `«${filters.query.trim()}»`,
+      clear: () => patchFilters({ query: "" }),
+    });
+  }
+
+  const quickFilters = [
+    {
+      id: "me",
+      label: "Mine",
+      icon: User,
+      active: filters.assignee === "me",
+      onClick: () =>
+        patchFilters({
+          assignee: filters.assignee === "me" ? "all" : "me",
+        }),
+    },
+    {
+      id: "unassigned",
+      label: "Utildelt",
+      icon: UserRoundX,
+      active: filters.assignee === "unassigned",
+      onClick: () =>
+        patchFilters({
+          assignee: filters.assignee === "unassigned" ? "all" : "unassigned",
+        }),
+    },
+    {
+      id: "overdue",
+      label: "Forfalt",
+      icon: AlertTriangle,
+      active: filters.due === "overdue",
+      onClick: () =>
+        patchFilters({
+          due: filters.due === "overdue" ? "all" : "overdue",
+        }),
+    },
+    {
+      id: "week",
+      label: "Denne uken",
+      icon: CalendarClock,
+      active: filters.due === "week",
+      onClick: () =>
+        patchFilters({
+          due: filters.due === "week" ? "all" : "week",
+        }),
+    },
+    {
+      id: "open",
+      label: "Åpne",
+      icon: Circle,
+      active: filters.status === "open",
+      onClick: () =>
+        patchFilters({
+          status: filters.status === "open" ? "all" : "open",
+        }),
+    },
+  ] as const;
+
   return (
-    <div className="flex min-h-0 min-w-0 flex-col gap-3">
-      <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
-        <div className="flex min-w-0 flex-1 flex-col gap-2 sm:flex-row sm:items-center">
+    <div className="flex w-full min-h-0 min-w-0 max-w-full flex-col gap-3 overflow-x-clip">
+      {isPageDetail ? (
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <Link
+            href={pulsBoardPath(workspaceId, boardId)}
+            className="text-muted-foreground hover:text-foreground inline-flex min-h-9 items-center gap-1.5 text-sm font-medium"
+          >
+            <ArrowLeft className="size-3.5" aria-hidden />
+            Tilbake til tavle
+          </Link>
+          {cardsLoaded && !selected ? (
+            <p className="text-muted-foreground text-sm">Fant ikke kortet.</p>
+          ) : null}
+        </div>
+      ) : null}
+      <div className={isPageDetail ? "hidden" : "contents"}>
+      {/* Én ren verktøylinje */}
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex min-w-0 flex-1 items-center gap-2">
           <div className="relative min-w-0 flex-1 sm:max-w-xs">
             <Search
               className="text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2"
@@ -838,33 +1720,78 @@ export function IssuesProjectBoard({
             />
             <input
               type="search"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
+              value={filters.query}
+              onChange={(e) => patchFilters({ query: e.target.value })}
               placeholder={pulsBoardCopy.filterPlaceholder}
               aria-label={pulsBoardCopy.filterAria}
               className="border-input bg-background focus:border-sky-500 focus:ring-sky-500 h-9 w-full rounded-lg border py-1 pr-3 pl-8 text-sm outline-none focus:ring-1"
             />
           </div>
-          <select
-            aria-label={pulsBoardCopy.processFilterAria}
-            className="border-input bg-background h-9 w-full rounded-lg border px-2 text-sm sm:w-auto sm:min-w-[12rem]"
-            value={processFilter}
-            onChange={(e) =>
-              setProcessFilter(e.target.value as Id<"candidates"> | "")
-            }
+          <Button
+            type="button"
+            size="sm"
+            variant={filtersOpen || activeFilterCount > 0 ? "secondary" : "outline"}
+            className="h-9 shrink-0 gap-1.5 rounded-lg"
+            onClick={() => setFiltersOpen((o) => !o)}
+            aria-expanded={filtersOpen}
           >
-            <option value="">{pulsBoardCopy.allProcesses}</option>
-            {processFilterOptions.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.code ? `${p.code} — ${p.name}` : p.name}
-              </option>
-            ))}
-          </select>
+            <Filter className="size-3.5" aria-hidden />
+            Flere
+            {activeFilterCount > 0 ? (
+              <span className="bg-foreground text-background rounded-full px-1.5 text-[10px] tabular-nums">
+                {activeFilterCount}
+              </span>
+            ) : null}
+          </Button>
         </div>
+
         <div className="flex flex-wrap items-center gap-2">
-          <p className="text-muted-foreground text-xs tabular-nums">
-            {pulsBoardCopy.cardCount(filtered.length)}
+          <p className="text-muted-foreground order-last w-full text-xs tabular-nums sm:order-none sm:w-auto">
+            {activeFilterCount > 0
+              ? `${filtered.length} av ${cards.length} kort`
+              : pulsBoardCopy.cardCount(filtered.length)}
           </p>
+          <div
+            role="group"
+            aria-label="Visning"
+            className="bg-muted/40 inline-flex rounded-lg border border-border/50 p-0.5"
+          >
+            {(
+              [
+                ["columns", "Kolonner", Columns3],
+                ["table", "Tabell", Table2],
+                ["list", "Liste", LayoutList],
+              ] as const
+            ).map(([id, label, Icon]) => (
+              <button
+                key={id}
+                type="button"
+                title={label}
+                aria-pressed={viewMode === id}
+                onClick={() => setViewModePersist(id)}
+                className={cn(
+                  "inline-flex h-8 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium",
+                  viewMode === id
+                    ? "bg-card text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground",
+                )}
+              >
+                <Icon className="size-3.5" aria-hidden />
+                <span className="hidden sm:inline">{label}</span>
+              </button>
+            ))}
+          </div>
+          {canManageColumns ? (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="h-9 rounded-lg"
+              onClick={() => setColumnsOpen(true)}
+            >
+              Struktur
+            </Button>
+          ) : null}
           <Button
             type="button"
             size="sm"
@@ -885,55 +1812,492 @@ export function IssuesProjectBoard({
         </div>
       </div>
 
-      <DndContext
-        sensors={sensors}
-        collisionDetection={closestCorners}
-        onDragStart={onDragStart}
-        onDragEnd={(e) => void onDragEnd(e)}
+      {/* Hurtigfiltre — alltid synlige, lagres per bruker */}
+      <div
+        role="group"
+        aria-label="Hurtigfiltre"
+        className="bg-muted/30 flex flex-wrap items-center gap-1 rounded-xl border border-border/40 p-1"
       >
-        <div className="flex gap-3 overflow-x-auto pb-2">
-          {[1, 2, 3, 4, 5].map((p) => {
-            const col = byPriority.get(p) ?? [];
-            return (
-              <PriorityColumn key={p} priority={p} count={col.length}>
-                {col.map((card) => (
-                  <DraggableIssueCard
-                    key={card._id}
-                    card={card}
-                    onOpen={() => openDetail(card)}
-                  />
-                ))}
-              </PriorityColumn>
-            );
-          })}
-          <DoneColumn count={doneCards.length}>
-            {doneCards.map((card) => (
-              <DraggableIssueCard
-                key={card._id}
-                card={card}
-                onOpen={() => openDetail(card)}
-              />
+        {quickFilters.map((item) => {
+          const Icon = item.icon;
+          return (
+            <button
+              key={item.id}
+              type="button"
+              onClick={item.onClick}
+              aria-pressed={item.active}
+              className={cn(
+                "inline-flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-xs font-medium transition-colors",
+                item.active
+                  ? "bg-background text-foreground shadow-sm ring-1 ring-border/60"
+                  : "text-muted-foreground hover:bg-background/60 hover:text-foreground",
+              )}
+            >
+              <Icon className="size-3.5 shrink-0 opacity-70" aria-hidden />
+              {item.label}
+            </button>
+          );
+        })}
+        {activeFilterCount > 0 ? (
+          <button
+            type="button"
+            className="text-muted-foreground hover:text-foreground ml-auto inline-flex h-8 items-center gap-1 px-2 text-xs"
+            onClick={clearFilters}
+          >
+            <X className="size-3.5" aria-hidden />
+            Nullstill
+          </button>
+        ) : null}
+      </div>
+
+      {(() => {
+        const detailChips = activeFilterChips.filter((chip) => {
+          if (chip.key === "query") return true;
+          if (chip.key === "column" || chip.key === "type" || chip.key === "process" || chip.key === "assessment")
+            return true;
+          if (chip.key === "assignee")
+            return filters.assignee !== "me" && filters.assignee !== "unassigned";
+          if (chip.key === "due") return filters.due === "none";
+          if (chip.key === "status") return filters.status === "done";
+          return false;
+        });
+        if (detailChips.length === 0 || filtersOpen) return null;
+        return (
+          <div className="flex flex-wrap items-center gap-1.5">
+            {detailChips.map((chip) => (
+              <button
+                key={chip.key}
+                type="button"
+                onClick={chip.clear}
+                className="bg-muted/40 text-foreground hover:bg-muted inline-flex h-7 max-w-[14rem] items-center gap-1 rounded-md border border-border/40 px-2 text-xs"
+                title="Fjern filter"
+              >
+                <span className="truncate">{chip.label}</span>
+                <X className="size-3 shrink-0 opacity-60" aria-hidden />
+              </button>
             ))}
-          </DoneColumn>
+          </div>
+        );
+      })()}
+
+      {filtersOpen ? (
+        <div className="bg-muted/15 space-y-3 rounded-xl border border-border/50 p-3 sm:p-4">
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-sm font-medium">Flere filtre</p>
+            <p className="text-muted-foreground text-xs">
+              Lagres for deg på denne tavlen
+            </p>
+          </div>
+          <div className="space-y-2">
+            <FilterToolbar>
+              <div className="min-w-0 space-y-1">
+                <Label className="text-xs">Ansvarlig</Label>
+                <select
+                  className={selectClass}
+                  value={filters.assignee}
+                  onChange={(e) =>
+                    patchFilters({
+                      assignee: e.target.value as AssigneeFilter,
+                    })
+                  }
+                >
+                  <option value="all">Alle</option>
+                  <option value="me">Meg</option>
+                  <option value="unassigned">Utildelt</option>
+                  {assigneeFilterOptions.map((m) => (
+                    <option key={m.userId} value={m.userId}>
+                      {m.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="min-w-0 space-y-1">
+                <Label className="text-xs">Kolonne</Label>
+                <select
+                  className={selectClass}
+                  value={filters.columnId}
+                  onChange={(e) =>
+                    patchFilters({
+                      columnId: e.target.value as Id<"pulsBoardColumns"> | "",
+                    })
+                  }
+                >
+                  <option value="">Alle kolonner</option>
+                  {columns.map((c) => (
+                    <option key={c._id} value={c._id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="min-w-0 space-y-1">
+                <Label className="text-xs">Type</Label>
+                <select
+                  className={selectClass}
+                  value={filters.cardType}
+                  onChange={(e) =>
+                    patchFilters({
+                      cardType: e.target.value as CardTypeFilter,
+                    })
+                  }
+                >
+                  <option value="all">Alle kort</option>
+                  <option value="top">Toppnivå</option>
+                  <option value="sub">Delkort</option>
+                </select>
+              </div>
+              <div className="min-w-0 space-y-1">
+                <Label className="text-xs">Status</Label>
+                <select
+                  className={selectClass}
+                  value={filters.status}
+                  onChange={(e) =>
+                    patchFilters({ status: e.target.value as StatusFilter })
+                  }
+                >
+                  <option value="all">Åpne og ferdige</option>
+                  <option value="open">Kun åpne</option>
+                  <option value="done">Kun ferdige</option>
+                </select>
+              </div>
+              <div className="min-w-0 space-y-1">
+                <Label className="text-xs">Frist</Label>
+                <select
+                  className={selectClass}
+                  value={filters.due}
+                  onChange={(e) =>
+                    patchFilters({ due: e.target.value as DueFilter })
+                  }
+                >
+                  <option value="all">Alle frister</option>
+                  <option value="overdue">Forfalt</option>
+                  <option value="week">Neste 7 dager</option>
+                  <option value="none">Uten frist</option>
+                </select>
+              </div>
+              <div className="min-w-0 space-y-1">
+                <Label className="text-xs">Prosess</Label>
+                <select
+                  className={selectClass}
+                  value={filters.processId}
+                  onChange={(e) =>
+                    patchFilters({
+                      processId: e.target.value as Id<"candidates"> | "",
+                    })
+                  }
+                >
+                  <option value="">{pulsBoardCopy.allProcesses}</option>
+                  {processFilterOptions.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.code ? `${p.code} — ${p.name}` : p.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="min-w-0 space-y-1">
+                <Label className="text-xs">Vurdering</Label>
+                <select
+                  className={selectClass}
+                  value={filters.assessmentId}
+                  onChange={(e) =>
+                    patchFilters({
+                      assessmentId: e.target.value as Id<"assessments"> | "",
+                    })
+                  }
+                >
+                  <option value="">Alle vurderinger</option>
+                  {assessmentFilterOptions.map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {a.title}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </FilterToolbar>
+          </div>
+
+          <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border/40 pt-3">
+            <p className="text-muted-foreground text-xs tabular-nums">
+              Viser {filtered.length} av {cards.length} kort
+            </p>
+            <div className="flex gap-2">
+              {activeFilterCount > 0 ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  className="h-8 gap-1 text-xs"
+                  onClick={clearFilters}
+                >
+                  <X className="size-3.5" aria-hidden />
+                  Nullstill
+                </Button>
+              ) : null}
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="h-8 text-xs"
+                onClick={() => setFiltersOpen(false)}
+              >
+                Lukk
+              </Button>
+            </div>
+          </div>
         </div>
-        <DragOverlay>
-          {activeDrag ? (
-            <div className="w-[260px]">
-              <IssueCardView
-                card={activeDrag}
-                isDragging
-                onOpen={() => undefined}
-              />
+      ) : null}
+
+      {viewMode === "columns" ? (
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCorners}
+          onDragStart={onDragStart}
+          onDragEnd={(e) => void onDragEnd(e)}
+        >
+          <div className="relative w-full min-w-0 max-w-full">
+            {boardCanScroll ? (
+              <>
+                <button
+                  type="button"
+                  aria-label="Bla til venstre"
+                  disabled={boardScrollAtStart}
+                  onClick={() => scrollBoardBy(-300)}
+                  className={cn(
+                    "bg-background/95 absolute top-1/2 left-1 z-10 inline-flex size-9 -translate-y-1/2 items-center justify-center rounded-full border border-border/60 shadow-sm",
+                    boardScrollAtStart && "pointer-events-none opacity-30",
+                  )}
+                >
+                  <ChevronLeft className="size-4" aria-hidden />
+                </button>
+                <button
+                  type="button"
+                  aria-label="Bla til høyre"
+                  disabled={boardScrollAtEnd}
+                  onClick={() => scrollBoardBy(300)}
+                  className={cn(
+                    "bg-background/95 absolute top-1/2 right-1 z-10 inline-flex size-9 -translate-y-1/2 items-center justify-center rounded-full border border-border/60 shadow-sm",
+                    boardScrollAtEnd && "pointer-events-none opacity-30",
+                  )}
+                >
+                  <ChevronRight className="size-4" aria-hidden />
+                </button>
+              </>
+            ) : null}
+            <div
+              ref={boardScrollRef}
+              className={cn(
+                "flex w-full min-w-0 max-w-full gap-3 overflow-x-auto overscroll-x-contain pb-3 pt-1",
+                "[scrollbar-gutter:stable] [scrollbar-width:auto]",
+                boardCanScroll && "px-10",
+              )}
+            >
+              {columns.map((col) => {
+                const list = byColumn.get(col._id) ?? [];
+                return (
+                  <BoardColumn
+                    key={col._id}
+                    column={col}
+                    cards={list}
+                    onOpenCard={openDetail}
+                    canManage={canManageColumns}
+                    onRename={async (nextName) => {
+                      try {
+                        await renameColumn({
+                          columnId: col._id,
+                          name: nextName,
+                        });
+                        toast.success("Kolonne oppdatert");
+                      } catch (err: unknown) {
+                        toast.error(
+                          err instanceof Error
+                            ? err.message
+                            : "Kunne ikke endre",
+                        );
+                      }
+                    }}
+                    onRemove={() => {
+                      if (
+                        !window.confirm(
+                          `Er du sikker på at du vil slette kolonnen «${col.name}»?\n\nKortene flyttes til en annen kolonne.`,
+                        )
+                      ) {
+                        return;
+                      }
+                      void removeColumn({ columnId: col._id })
+                        .then(() => toast.success("Kolonne slettet"))
+                        .catch((err: unknown) =>
+                          toast.error(
+                            err instanceof Error
+                              ? err.message
+                              : "Kunne ikke slette",
+                          ),
+                        );
+                    }}
+                  />
+                );
+              })}
+              <div className="w-1 shrink-0 sm:hidden" aria-hidden />
+            </div>
+          </div>
+          <DragOverlay>
+            {activeDrag ? (
+              <div className="w-[280px] sm:w-[300px]">
+                <IssueCardView
+                  card={activeDrag}
+                  columnLabel={labelForCard(activeDrag)}
+                  isDragging
+                  onOpen={() => undefined}
+                />
+              </div>
+            ) : null}
+          </DragOverlay>
+        </DndContext>
+      ) : null}
+
+      {viewMode === "table" ? (
+        <div className="min-w-0 overflow-x-auto rounded-xl border border-border/50">
+          <table className="w-full min-w-[640px] text-left text-sm">
+            <thead className="bg-muted/40 border-b border-border/50 text-xs">
+              <tr>
+                <th className="px-3 py-2.5 font-medium">Tittel</th>
+                <th className="px-3 py-2.5 font-medium">Kolonne</th>
+                <th className="px-3 py-2.5 font-medium">Vurdering</th>
+                <th className="px-3 py-2.5 font-medium">Ansvarlig</th>
+                <th className="px-3 py-2.5 font-medium">Frist</th>
+              </tr>
+            </thead>
+            <tbody>
+              {visibleRows.map((card) => (
+                <tr
+                  key={card._id}
+                  className="hover:bg-muted/30 border-b border-border/40 last:border-0"
+                >
+                  <td className="px-3 py-2.5">
+                    <button
+                      type="button"
+                      className="text-left font-medium hover:underline"
+                      onClick={() => openDetail(card)}
+                    >
+                      {card.title}
+                    </button>
+                    {card.parentTitle ? (
+                      <p className="text-muted-foreground text-[11px]">
+                        Under: {card.parentTitle}
+                      </p>
+                    ) : null}
+                  </td>
+                  <td className="text-muted-foreground px-3 py-2.5">
+                    <select
+                      className="border-input bg-background h-8 max-w-[10rem] rounded-md border px-1.5 text-xs"
+                      value={card.columnId ?? ""}
+                      disabled={!card.canEdit}
+                      onChange={(e) => {
+                        const columnId = e.target
+                          .value as Id<"pulsBoardColumns">;
+                        const col = columns.find((c) => c._id === columnId);
+                        if (!col) return;
+                        if (col.isDone && card.status !== "done") {
+                          requestComplete(card);
+                          return;
+                        }
+                        void moveTask({ taskId: card._id, columnId }).catch(
+                          (err: unknown) =>
+                            toast.error(
+                              err instanceof Error
+                                ? err.message
+                                : "Kunne ikke flytte",
+                            ),
+                        );
+                      }}
+                    >
+                      {columns.map((c) => (
+                        <option key={c._id} value={c._id}>
+                          {c.name}
+                        </option>
+                      ))}
+                    </select>
+                  </td>
+                  <td className="text-muted-foreground max-w-[12rem] truncate px-3 py-2.5">
+                    {card.assessmentTitle}
+                  </td>
+                  <td className="text-muted-foreground px-3 py-2.5">
+                    {card.assigneeName ?? "—"}
+                  </td>
+                  <td className="text-muted-foreground whitespace-nowrap px-3 py-2.5">
+                    {formatDateNb(card.dueAt) ?? "—"}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {filtered.length > listVisible ? (
+            <div className="border-t border-border/50 p-2 text-center">
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                className="h-9"
+                onClick={() => setListVisible((v) => v + 80)}
+              >
+                Vis flere ({filtered.length - listVisible} igjen)
+              </Button>
             </div>
           ) : null}
-        </DragOverlay>
-      </DndContext>
+        </div>
+      ) : null}
+
+      {viewMode === "list" ? (
+        <div className="min-w-0 space-y-2">
+          <ul className="divide-border/50 divide-y rounded-xl border border-border/50 bg-card/40">
+            {visibleRows.map((card) => (
+              <li key={card._id}>
+                <button
+                  type="button"
+                  className="hover:bg-muted/30 flex w-full min-w-0 items-start gap-3 px-3 py-3 text-left touch-manipulation"
+                  onClick={() => openDetail(card)}
+                >
+                  <span className="bg-muted text-muted-foreground mt-0.5 shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-medium">
+                    {labelForCard(card)}
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm font-medium">
+                      {card.title}
+                    </span>
+                    <span className="text-muted-foreground block truncate text-xs">
+                      {card.assessmentTitle}
+                      {card.assigneeName ? ` · ${card.assigneeName}` : ""}
+                      {card.dueAt
+                        ? ` · ${formatDateNb(card.dueAt)}`
+                        : ""}
+                    </span>
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+          {filtered.length > listVisible ? (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="h-9 w-full"
+              onClick={() => setListVisible((v) => v + 80)}
+            >
+              Vis flere ({filtered.length - listVisible} igjen)
+            </Button>
+          ) : null}
+        </div>
+      ) : null}
 
       {filtered.length === 0 ? (
         <p className="text-muted-foreground rounded-xl border border-dashed px-4 py-10 text-center text-sm">
-          {pulsBoardCopy.emptyBoard}
+          {activeFilterCount > 0
+            ? "Ingen kort matcher filtrene. Prøv å nullstille eller endre filtre."
+            : pulsBoardCopy.emptyBoard}
         </p>
       ) : null}
+
+      </div>
 
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
         <DialogContent size="md" titleId="create-issue-title">
@@ -1010,28 +2374,31 @@ export function IssuesProjectBoard({
             </div>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div className="space-y-1">
-                <Label htmlFor="create-start">Startdato</Label>
+                <Label htmlFor="create-start">Startdato (valgfritt)</Label>
                 <Input
                   id="create-start"
                   type="date"
                   value={createStart}
                   onChange={(e) => setCreateStart(e.target.value)}
-                  required
                   className="min-h-11 sm:min-h-9"
                 />
               </div>
               <div className="space-y-1">
-                <Label htmlFor="create-due">Sluttdato</Label>
+                <Label htmlFor="create-due">Sluttdato (valgfritt)</Label>
                 <Input
                   id="create-due"
                   type="date"
                   value={createDue}
                   onChange={(e) => setCreateDue(e.target.value)}
-                  required
                   className="min-h-11 sm:min-h-9"
                 />
               </div>
             </div>
+            <p className="text-muted-foreground -mt-2 text-[11px]">
+              {createParentId
+                ? "Datoer er valgfrie for delkort — du kan la dem stå tomme."
+                : "Datoer er valgfrie — du kan la dem stå tomme."}
+            </p>
             <div className="space-y-1">
               <Label>Tildel (valgfritt)</Label>
               <div className="flex max-h-36 flex-col gap-1 overflow-y-auto rounded-lg border border-border/50 p-1.5">
@@ -1072,13 +2439,7 @@ export function IssuesProjectBoard({
             <Button
               type="button"
               className="min-h-11 touch-manipulation sm:min-h-9"
-              disabled={
-                busy ||
-                !createTitle.trim() ||
-                !createAssessmentId ||
-                !createStart ||
-                !createDue
-              }
+              disabled={busy || !createTitle.trim() || !createAssessmentId}
               onClick={() => void submitCreate()}
             >
               Opprett
@@ -1090,24 +2451,90 @@ export function IssuesProjectBoard({
       <Dialog
         open={!!selected}
         onOpenChange={(o) => {
-          if (!o) setSelected(null);
+          if (!o) {
+            setSelected(null);
+            if (isPageDetail) {
+              router.push(pulsBoardPath(workspaceId, boardId));
+            }
+          }
         }}
       >
-        <DialogContent size="lg" titleId="issue-detail-title">
+        <DialogContent
+          size={
+            detailSize === "normal"
+              ? "3xl"
+              : detailSize === "large"
+                ? "5xl"
+                : "7xl"
+          }
+          fillViewport={isPageDetail || detailSize === "full"}
+          titleId="issue-detail-title"
+        >
           <DialogHeader>
-            <h2
-              id="issue-detail-title"
-              className="font-heading text-lg font-semibold"
-            >
-              {pulsBoardCopy.detailTitle}
-            </h2>
-            {selected ? (
-              <p className="text-muted-foreground mt-1 line-clamp-2 text-sm">
-                {selected.title}
-              </p>
-            ) : null}
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <div className="min-w-0">
+                <h2
+                  id="issue-detail-title"
+                  className="font-heading text-lg font-semibold"
+                >
+                  {pulsBoardCopy.detailTitle}
+                </h2>
+                {selected ? (
+                  <p className="text-muted-foreground mt-1 line-clamp-2 text-sm">
+                    {selected.title}
+                  </p>
+                ) : null}
+              </div>
+              {selected ? (
+                <div className="flex shrink-0 flex-wrap items-center gap-1">
+                  <button
+                    type="button"
+                    title={
+                      detailSize === "full"
+                        ? "Mindre kort"
+                        : "Større kort (fullskjerm)"
+                    }
+                    aria-label={
+                      detailSize === "full"
+                        ? "Mindre kort"
+                        : "Større kort (fullskjerm)"
+                    }
+                    className="text-muted-foreground hover:text-foreground inline-flex size-9 items-center justify-center rounded-lg border border-border/50"
+                    onClick={() => {
+                      const next: DetailSize =
+                        detailSize === "full" ? "large" : "full";
+                      setDetailSize(next);
+                      persistLocal(filters, viewMode);
+                      persistRemote(filters, viewMode, { detailSize: next });
+                    }}
+                  >
+                    {detailSize === "full" ? (
+                      <Minimize2 className="size-3.5" aria-hidden />
+                    ) : (
+                      <Maximize2 className="size-3.5" aria-hidden />
+                    )}
+                  </button>
+                  <a
+                    href={pulsBoardPath(workspaceId, boardId, selected._id, {
+                      page: true,
+                    })}
+                    target="_blank"
+                    rel="noreferrer"
+                    title="Åpne i egen fane"
+                    className="text-muted-foreground hover:text-foreground inline-flex size-9 items-center justify-center rounded-lg border border-border/50"
+                  >
+                    <ExternalLink className="size-3.5" aria-hidden />
+                  </a>
+                </div>
+              ) : null}
+            </div>
             <div className="mt-3 flex gap-1 overflow-x-auto">
-              {DETAIL_TABS.map((tab) => (
+              {DETAIL_TABS.filter(
+                (tab) =>
+                  !(
+                    commentsPlacement === "overview" && tab.id === "kommentarer"
+                  ),
+              ).map((tab) => (
                 <button
                   key={tab.id}
                   type="button"
@@ -1126,7 +2553,7 @@ export function IssuesProjectBoard({
           </DialogHeader>
           {selected ? (
             <>
-              <DialogBody className="space-y-4">
+              <DialogBody className="min-w-0 space-y-4 overflow-x-hidden">
                 {detailTab === "oversikt" ? (
                   <>
                     <div className="space-y-1">
@@ -1139,57 +2566,82 @@ export function IssuesProjectBoard({
                         className="min-h-11 sm:min-h-9"
                       />
                     </div>
-                    <div className="space-y-1">
+                    <div className="space-y-2">
                       <Label htmlFor="detail-desc">Beskrivelse</Label>
-                      <Textarea
-                        id="detail-desc"
-                        value={editDescription}
-                        onChange={(e) => setEditDescription(e.target.value)}
-                        rows={4}
-                        disabled={!selected.canEdit}
+                      {selected.canEdit ? (
+                        <CardDescriptionEditor
+                          aria-label="Beskrivelse"
+                          value={editDescription}
+                          onChange={setEditDescription}
+                          rows={6}
+                          insertToken={descInsertToken}
+                          onInsertConsumed={() => setDescInsertToken(null)}
+                        />
+                      ) : (
+                        <div className="rounded-xl border border-border/40 bg-muted/10 px-3.5 py-3">
+                          <MarkdownView
+                            value={editDescription}
+                            emptyLabel="Ingen beskrivelse."
+                          />
+                        </div>
+                      )}
+                      <TaskFileAttachments
+                        taskId={selected._id}
+                        canEdit={selected.canEdit}
+                        onInsertRef={
+                          selected.canEdit
+                            ? (md) => setDescInsertToken(md)
+                            : undefined
+                        }
                       />
                     </div>
-                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                      <div className="space-y-1">
-                        <Label htmlFor="detail-prio">Prioritet</Label>
-                        <Input
-                          id="detail-prio"
-                          type="number"
-                          min={1}
-                          max={5}
-                          value={editPriority}
+                    <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-3">
+                      <div className="min-w-0 space-y-1">
+                        <Label htmlFor="detail-col">Kolonne</Label>
+                        <select
+                          id="detail-col"
+                          className="border-input bg-background h-11 w-full min-w-0 max-w-full rounded-lg border px-2 text-sm sm:h-9"
+                          value={editColumnId}
                           onChange={(e) =>
-                            setEditPriority(Number(e.target.value) || 3)
+                            setEditColumnId(
+                              e.target.value as Id<"pulsBoardColumns"> | "",
+                            )
                           }
                           disabled={!selected.canEdit}
-                          className="min-h-11 sm:min-h-9"
-                        />
+                        >
+                          {columns.map((c) => (
+                            <option key={c._id} value={c._id}>
+                              {c.name}
+                            </option>
+                          ))}
+                        </select>
                       </div>
-                      <div className="space-y-1">
-                        <Label htmlFor="detail-start">Startdato</Label>
+                      <div className="min-w-0 space-y-1">
+                        <Label htmlFor="detail-start">Startdato (valgfritt)</Label>
                         <Input
                           id="detail-start"
                           type="date"
                           value={editStart}
                           onChange={(e) => setEditStart(e.target.value)}
                           disabled={!selected.canEdit}
-                          required
-                          className="min-h-11 sm:min-h-9"
+                          className="min-h-11 min-w-0 sm:min-h-9"
                         />
                       </div>
                       <div className="space-y-1">
-                        <Label htmlFor="detail-due">Sluttdato</Label>
+                        <Label htmlFor="detail-due">Sluttdato (valgfritt)</Label>
                         <Input
                           id="detail-due"
                           type="date"
                           value={editDue}
                           onChange={(e) => setEditDue(e.target.value)}
                           disabled={!selected.canEdit}
-                          required
                           className="min-h-11 sm:min-h-9"
                         />
                       </div>
                     </div>
+                    <p className="text-muted-foreground -mt-2 text-[11px]">
+                      Start- og sluttdato er valgfrie.
+                    </p>
                     <div className="space-y-1.5">
                       <Label>Tildelt</Label>
                       <p className="text-muted-foreground text-[11px]">
@@ -1222,36 +2674,43 @@ export function IssuesProjectBoard({
                         })}
                       </div>
                     </div>
+                    {commentsPlacement === "overview" ? (
+                      <div className="border-border/40 mt-2 space-y-3 border-t pt-5">
+                        <AssessmentTaskCommentThreads
+                          workspaceId={workspaceId}
+                          taskId={selected._id}
+                          canEdit={selected.canEdit}
+                        />
+                      </div>
+                    ) : null}
                   </>
                 ) : null}
 
                 {detailTab === "koblinger" ? (
-                  <>
-                    <div className="space-y-2 rounded-xl border border-border/50 bg-muted/10 p-3">
-                      <Label className="flex items-center gap-1.5">
-                        <ListTree className="size-3.5" aria-hidden />
-                        Vurdering
-                      </Label>
+                  <div className="min-w-0 space-y-3">
+                    <LinkSection
+                      icon={<ListTree className="size-3.5" aria-hidden />}
+                      title="Vurdering"
+                    >
                       <Link
                         href={`/w/${workspaceId}/a/${selected.assessmentId}`}
-                        className="text-foreground hover:text-foreground/80 inline-flex min-h-10 items-center text-sm font-medium underline-offset-2 touch-manipulation hover:underline"
+                        className="text-foreground hover:text-foreground/80 block min-w-0 truncate text-sm font-medium underline-offset-2 touch-manipulation hover:underline"
                       >
                         {selected.assessmentTitle} →
                       </Link>
-                    </div>
+                    </LinkSection>
 
-                    <div className="space-y-2 rounded-xl border border-border/50 bg-muted/10 p-3">
-                      <Label className="flex items-center gap-1.5">
-                        <Workflow className="size-3.5" aria-hidden />
-                        Prosesser
-                      </Label>
+                    <LinkSection
+                      icon={<Workflow className="size-3.5" aria-hidden />}
+                      title="Prosesser"
+                    >
                       {selected.linkedProcesses.length > 0 ? (
-                        <ul className="flex flex-wrap gap-1.5">
+                        <ul className="flex min-w-0 flex-wrap gap-1.5">
                           {selected.linkedProcesses.map((p) => (
-                            <li key={p.id}>
+                            <li key={p.id} className="min-w-0 max-w-full">
                               <Link
                                 href={`/w/${workspaceId}/vurderinger?fane=prosesser&rediger=${p.id}`}
-                                className="bg-violet-500/15 text-violet-900 dark:text-violet-100 inline-flex min-h-8 items-center rounded-full px-2.5 text-xs font-medium"
+                                className="bg-violet-500/15 text-violet-900 dark:text-violet-100 inline-flex max-w-full min-h-8 items-center truncate rounded-full px-2.5 text-xs font-medium"
                               >
                                 {p.code ? `${p.code} — ` : ""}
                                 {p.name}
@@ -1264,10 +2723,11 @@ export function IssuesProjectBoard({
                           Ingen prosess koblet til vurderingen ennå.
                         </p>
                       )}
-                      {selected.canEdit && availableProcessesToLink.length > 0 ? (
-                        <div className="flex flex-col gap-2 sm:flex-row">
+                      {selected.canEdit &&
+                      availableProcessesToLink.length > 0 ? (
+                        <div className="grid min-w-0 gap-2">
                           <select
-                            className="border-input bg-background min-h-11 flex-1 rounded-lg border px-2 text-sm sm:min-h-9"
+                            className="border-input bg-background h-10 w-full min-w-0 max-w-full rounded-lg border px-2 text-sm"
                             value={linkCandidateId}
                             onChange={(e) =>
                               setLinkCandidateId(
@@ -1286,7 +2746,7 @@ export function IssuesProjectBoard({
                           <Button
                             type="button"
                             size="sm"
-                            className="min-h-11 touch-manipulation sm:min-h-9"
+                            className="h-10 w-full touch-manipulation"
                             disabled={busy || !linkCandidateId}
                             onClick={() => {
                               if (!linkCandidateId) return;
@@ -1295,7 +2755,9 @@ export function IssuesProjectBoard({
                                 assessmentId: selected.assessmentId,
                               })
                                 .then(() => {
-                                  toast.success("Prosess koblet til vurderingen");
+                                  toast.success(
+                                    "Prosess koblet til vurderingen",
+                                  );
                                   setLinkCandidateId("");
                                 })
                                 .catch((err: unknown) =>
@@ -1307,26 +2769,25 @@ export function IssuesProjectBoard({
                                 );
                             }}
                           >
-                            Koble
+                            Koble prosess
                           </Button>
                         </div>
                       ) : null}
-                    </div>
+                    </LinkSection>
 
-                    <div className="space-y-2 rounded-xl border border-border/50 bg-muted/10 p-3">
-                      <Label className="flex items-center gap-1.5">
-                        <Shield className="size-3.5" aria-hidden />
-                        ROS
-                      </Label>
+                    <LinkSection
+                      icon={<Shield className="size-3.5" aria-hidden />}
+                      title="ROS"
+                    >
                       {selected.linkedRos.length > 0 ? (
-                        <ul className="space-y-1.5">
+                        <ul className="min-w-0 space-y-1.5">
                           {selected.linkedRos.map((r) => (
-                            <li key={r.id}>
+                            <li key={r.id} className="min-w-0">
                               <Link
                                 href={`/w/${workspaceId}/ros/a/${r.id}`}
-                                className="hover:bg-muted/60 flex min-h-10 items-center justify-between gap-2 rounded-lg border border-border/40 bg-card px-2.5 py-2 text-sm"
+                                className="hover:bg-muted/60 flex min-h-10 min-w-0 items-center justify-between gap-2 rounded-lg border border-border/40 bg-card px-2.5 py-2 text-sm"
                               >
-                                <span className="truncate font-medium">
+                                <span className="min-w-0 truncate font-medium">
                                   {r.title}
                                 </span>
                                 <span className="text-muted-foreground shrink-0 text-[11px]">
@@ -1342,9 +2803,9 @@ export function IssuesProjectBoard({
                         </p>
                       )}
                       {selected.canEdit && availableRosToLink.length > 0 ? (
-                        <div className="flex flex-col gap-2 sm:flex-row">
+                        <div className="grid min-w-0 gap-2">
                           <select
-                            className="border-input bg-background min-h-11 flex-1 rounded-lg border px-2 text-sm sm:min-h-9"
+                            className="border-input bg-background h-10 w-full min-w-0 max-w-full rounded-lg border px-2 text-sm"
                             value={linkRosId}
                             onChange={(e) =>
                               setLinkRosId(
@@ -1362,7 +2823,7 @@ export function IssuesProjectBoard({
                           <Button
                             type="button"
                             size="sm"
-                            className="min-h-11 touch-manipulation sm:min-h-9"
+                            className="h-10 w-full touch-manipulation"
                             disabled={busy || !linkRosId}
                             onClick={() => {
                               if (!linkRosId) return;
@@ -1383,22 +2844,21 @@ export function IssuesProjectBoard({
                                 );
                             }}
                           >
-                            Koble
+                            Koble ROS
                           </Button>
                         </div>
                       ) : null}
-                    </div>
+                    </LinkSection>
 
-                    <div className="space-y-1.5 rounded-xl border border-border/50 bg-muted/10 p-3">
-                      <Label className="flex items-center gap-1.5">
-                        <Link2 className="size-3.5" aria-hidden />
-                        {pulsBoardCopy.parentLabel}
-                      </Label>
+                    <LinkSection
+                      icon={<Link2 className="size-3.5" aria-hidden />}
+                      title={pulsBoardCopy.parentLabel}
+                    >
                       <p className="text-muted-foreground text-xs leading-relaxed">
                         {pulsBoardCopy.parentHint}
                       </p>
                       <select
-                        className="border-input bg-background flex min-h-11 w-full rounded-lg border px-2 text-sm sm:min-h-9"
+                        className="border-input bg-background h-10 w-full min-w-0 max-w-full rounded-lg border px-2 text-sm"
                         value={editParentId}
                         onChange={(e) =>
                           setEditParentId(
@@ -1419,7 +2879,7 @@ export function IssuesProjectBoard({
                           type="button"
                           size="sm"
                           variant="ghost"
-                          className="min-h-11 gap-1 px-2 text-xs touch-manipulation sm:min-h-8"
+                          className="h-9 w-full justify-start gap-1 px-2 text-xs touch-manipulation"
                           disabled={!selected.canEdit}
                           onClick={() => setEditParentId("")}
                         >
@@ -1427,39 +2887,36 @@ export function IssuesProjectBoard({
                           Fjern kobling
                         </Button>
                       ) : null}
-                    </div>
+                    </LinkSection>
 
                     {childSubIssues.length > 0 ? (
-                      <div className="space-y-2 rounded-xl border border-border/50 bg-muted/10 p-3">
-                        <div className="flex items-center justify-between gap-2">
-                          <p className="flex items-center gap-1.5 text-sm font-medium">
-                            <ListTree className="size-3.5" aria-hidden />
-                            {pulsBoardCopy.directSubcards}
-                          </p>
-                          <span className="text-muted-foreground text-xs tabular-nums">
-                            {selected.subIssueDoneCount}/
-                            {selected.subIssueCount} ferdig
-                          </span>
+                      <LinkSection
+                        icon={<ListTree className="size-3.5" aria-hidden />}
+                        title={pulsBoardCopy.directSubcards}
+                      >
+                        <div className="text-muted-foreground mb-1 text-xs tabular-nums">
+                          {selected.subIssueDoneCount}/{selected.subIssueCount}{" "}
+                          ferdig
                         </div>
-                        <ul className="space-y-1.5">
+                        <ul className="min-w-0 space-y-1.5">
                           {childSubIssues.map((child) => (
-                            <li key={child._id}>
+                            <li key={child._id} className="min-w-0">
                               <button
                                 type="button"
-                                className="hover:bg-muted/60 flex min-h-11 w-full items-start justify-between gap-2 rounded-lg border border-border/40 bg-card px-2.5 py-2 text-left text-sm touch-manipulation"
+                                className="hover:bg-muted/60 flex min-h-11 w-full min-w-0 items-start justify-between gap-2 rounded-lg border border-border/40 bg-card px-2.5 py-2 text-left text-sm touch-manipulation"
                                 onClick={() => openDetail(child)}
                               >
-                                <span className="min-w-0">
+                                <span className="min-w-0 flex-1">
                                   <span
                                     className={cn(
-                                      "block font-medium leading-snug",
+                                      "block truncate font-medium leading-snug",
                                       child.status === "done" &&
                                         "text-muted-foreground line-through",
                                     )}
                                   >
                                     {child.title}
                                   </span>
-                                  <span className="text-muted-foreground text-[11px]">
+                                  <span className="text-muted-foreground block truncate text-[11px]">
                                     {formatDateRange(
                                       child.startAt,
                                       child.dueAt,
@@ -1483,7 +2940,7 @@ export function IssuesProjectBoard({
                             </li>
                           ))}
                         </ul>
-                      </div>
+                      </LinkSection>
                     ) : null}
 
                     {selected.canEdit ? (
@@ -1491,7 +2948,7 @@ export function IssuesProjectBoard({
                         type="button"
                         size="sm"
                         variant="outline"
-                        className="min-h-11 w-full touch-manipulation sm:min-h-9"
+                        className="h-10 w-full touch-manipulation"
                         onClick={() => {
                           const parent = selected;
                           setSelected(null);
@@ -1502,18 +2959,41 @@ export function IssuesProjectBoard({
                         {pulsBoardCopy.createSubcardCta}
                       </Button>
                     ) : null}
-                  </>
+                  </div>
                 ) : null}
 
                 {detailTab === "kommentarer" ? (
                   <AssessmentTaskCommentThreads
                     workspaceId={workspaceId}
                     taskId={selected._id}
+                    canEdit={selected.canEdit}
                   />
                 ) : null}
 
                 {detailTab === "mer" ? (
-                  <>
+                  <div className="min-w-0 space-y-4">
+                    <div className="space-y-2 rounded-xl border border-border/50 p-3">
+                      <p className="text-sm font-medium">Visning</p>
+                      <p className="text-muted-foreground text-xs leading-relaxed">
+                        Kommentarer under oversikt, standard kortstørrelse og
+                        mer styres under{" "}
+                        <span className="text-foreground font-medium">
+                          Innstillinger
+                        </span>{" "}
+                        på tavlen (personlige valg).
+                      </p>
+                      <a
+                        href={pulsBoardPath(workspaceId, boardId, selected._id, {
+                          page: true,
+                        })}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-sky-800 dark:text-sky-200 inline-flex items-center gap-1.5 text-xs font-medium underline-offset-2 hover:underline"
+                      >
+                        <ExternalLink className="size-3.5" aria-hidden />
+                        Åpne kort i egen fane
+                      </a>
+                    </div>
                     <TaskGithubControls
                       taskId={selected._id}
                       canEdit={selected.canEdit}
@@ -1523,14 +3003,75 @@ export function IssuesProjectBoard({
                       )}
                     />
                     {selected.canEdit ? (
+                      <LinkSection
+                        icon={<ListTree className="size-3.5" aria-hidden />}
+                        title="Flytt til annen tavle"
+                      >
+                        <p className="text-muted-foreground text-xs leading-relaxed">
+                          Kortet og delkort flyttes til valgt tavle. Kobling til
+                          vurdering beholdes.
+                        </p>
+                        <select
+                          className="border-input bg-background h-10 w-full min-w-0 max-w-full rounded-lg border px-2 text-sm"
+                          value={moveBoardId}
+                          onChange={(e) =>
+                            setMoveBoardId(
+                              e.target.value as Id<"pulsBoards"> | "",
+                            )
+                          }
+                        >
+                          <option value="">Velg tavle …</option>
+                          {(otherBoards?.boards ?? [])
+                            .filter((b) => b._id !== boardId)
+                            .map((b) => (
+                              <option key={b._id} value={b._id}>
+                                {b.name}
+                              </option>
+                            ))}
+                        </select>
+                        <Button
+                          type="button"
+                          size="sm"
+                          className="h-10 w-full touch-manipulation"
+                          disabled={busy || !moveBoardId}
+                          onClick={() => {
+                            if (!moveBoardId) return;
+                            setBusy(true);
+                            void moveToBoard({
+                              taskId: selected._id,
+                              targetBoardId: moveBoardId,
+                              moveSubtree: true,
+                            })
+                              .then(() => {
+                                toast.success("Kort flyttet");
+                                setSelected(null);
+                                setMoveBoardId("");
+                              })
+                              .catch((err: unknown) =>
+                                toast.error(
+                                  err instanceof Error
+                                    ? err.message
+                                    : "Kunne ikke flytte",
+                                ),
+                              )
+                              .finally(() => setBusy(false));
+                          }}
+                        >
+                          Flytt kort og delkort
+                        </Button>
+                      </LinkSection>
+                    ) : null}
+                    {selected.canEdit ? (
                       <Button
                         type="button"
                         variant="destructive"
-                        className="min-h-11 w-full touch-manipulation sm:min-h-9"
+                        className="h-10 w-full touch-manipulation"
                         disabled={busy}
                         onClick={() => {
                           if (
-                            window.confirm("Slette dette kortet permanent?")
+                            window.confirm(
+                              "Er du sikker på at du vil slette dette kortet permanent?\n\nDette kan ikke angres.",
+                            )
                           ) {
                             void removeTask({ taskId: selected._id }).then(
                               () => {
@@ -1544,7 +3085,7 @@ export function IssuesProjectBoard({
                         Slett kort
                       </Button>
                     ) : null}
-                  </>
+                  </div>
                 ) : null}
               </DialogBody>
               <DialogFooter>
@@ -1607,7 +3148,10 @@ export function IssuesProjectBoard({
       <Dialog
         open={!!completePrompt}
         onOpenChange={(o) => {
-          if (!o) setCompletePrompt(null);
+          if (!o) {
+            setCompletePrompt(null);
+            setCompleteComment("");
+          }
         }}
       >
         <DialogContent
@@ -1620,45 +3164,277 @@ export function IssuesProjectBoard({
               id="complete-parent-title"
               className="font-heading text-lg font-semibold"
             >
-              Marker ferdig?
+              Marker ferdig
             </h2>
           </DialogHeader>
-          <DialogBody className="space-y-2 text-sm">
-            <p>
+          <DialogBody className="min-w-0 space-y-3 text-sm">
+            <p className="text-muted-foreground">
               {completePrompt
-                ? pulsBoardCopy.completePromptBody(completePrompt.title)
+                ? hasOpenDescendants(completePrompt, cards)
+                  ? pulsBoardCopy.completePromptBody(completePrompt.title)
+                  : `Marker «${completePrompt.title}» som ferdig. Tildelte varsles.`
                 : null}
             </p>
+            <div className="min-w-0 space-y-1.5">
+              <Label htmlFor="complete-comment">
+                Kommentar (valgfritt)
+              </Label>
+              <Textarea
+                id="complete-comment"
+                value={completeComment}
+                onChange={(e) => setCompleteComment(e.target.value)}
+                placeholder="F.eks. hva som ble gjort …"
+                rows={3}
+                className="min-w-0 resize-none"
+              />
+            </div>
           </DialogBody>
           <DialogFooter className="flex flex-col gap-2 sm:flex-col">
-            <Button
-              type="button"
-              className="min-h-11 w-full touch-manipulation"
-              disabled={busy || !completePrompt}
-              onClick={() =>
-                completePrompt && void finishComplete(completePrompt, true)
-              }
-            >
-              {pulsBoardCopy.completeAll}
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              className="min-h-11 w-full touch-manipulation"
-              disabled={busy || !completePrompt}
-              onClick={() =>
-                completePrompt && void finishComplete(completePrompt, false)
-              }
-            >
-              {pulsBoardCopy.completeOnly}
-            </Button>
+            {completePrompt && hasOpenDescendants(completePrompt, cards) ? (
+              <>
+                <Button
+                  type="button"
+                  className="h-10 w-full touch-manipulation"
+                  disabled={busy || !completePrompt}
+                  onClick={() =>
+                    completePrompt && void finishComplete(completePrompt, true)
+                  }
+                >
+                  {pulsBoardCopy.completeAll}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-10 w-full touch-manipulation"
+                  disabled={busy || !completePrompt}
+                  onClick={() =>
+                    completePrompt &&
+                    void finishComplete(completePrompt, false)
+                  }
+                >
+                  {pulsBoardCopy.completeOnly}
+                </Button>
+              </>
+            ) : (
+              <Button
+                type="button"
+                className="h-10 w-full touch-manipulation"
+                disabled={busy || !completePrompt}
+                onClick={() =>
+                  completePrompt && void finishComplete(completePrompt, false)
+                }
+              >
+                Fullfør kort
+              </Button>
+            )}
             <Button
               type="button"
               variant="ghost"
-              className="min-h-11 w-full touch-manipulation"
-              onClick={() => setCompletePrompt(null)}
+              className="h-10 w-full touch-manipulation"
+              onClick={() => {
+                setCompletePrompt(null);
+                setCompleteComment("");
+              }}
             >
               Avbryt
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={columnsOpen} onOpenChange={setColumnsOpen}>
+        <DialogContent size="md" titleId="columns-title">
+          <DialogHeader>
+            <h2
+              id="columns-title"
+              className="font-heading text-lg font-semibold"
+            >
+              Kolonnestruktur
+            </h2>
+            <p className="text-muted-foreground mt-1 text-sm">
+              Velg mal, eller tilpass kolonner manuelt.
+              {boardMeta?.columnTemplate
+                ? ` Aktiv: ${
+                    boardMeta.columnTemplate === "priority"
+                      ? "Prioritet"
+                      : boardMeta.columnTemplate === "phases"
+                        ? "Utviklingsfaser"
+                        : boardMeta.columnTemplate === "empty"
+                          ? "Tom tavle"
+                          : "Tilpasset"
+                  }.`
+                : ""}
+            </p>
+          </DialogHeader>
+          <DialogBody className="min-w-0 space-y-4">
+            <div className="space-y-2">
+              <p className="text-xs font-semibold tracking-wide uppercase">
+                Maler
+              </p>
+              <div className="grid min-w-0 gap-2">
+                {(templates ?? []).map((t) => (
+                  <button
+                    key={t.id}
+                    type="button"
+                    disabled={busy}
+                    onClick={() => {
+                      if (
+                        !window.confirm(
+                          `Erstatt kolonnestrukturen med malen «${t.label}»?\n\nEksisterende kort flyttes best mulig til nye kolonner.`,
+                        )
+                      ) {
+                        return;
+                      }
+                      setBusy(true);
+                      void applyTemplate({
+                        boardId,
+                        templateId: t.id,
+                      })
+                        .then(() => {
+                          toast.success(`Mal «${t.label}» aktivert`);
+                        })
+                        .catch((err: unknown) =>
+                          toast.error(
+                            err instanceof Error
+                              ? err.message
+                              : "Kunne ikke bytte mal",
+                          ),
+                        )
+                        .finally(() => setBusy(false));
+                    }}
+                    className={cn(
+                      "hover:bg-muted/40 min-w-0 rounded-xl border border-border/50 p-3 text-left transition-colors",
+                      boardMeta?.columnTemplate === t.id &&
+                        "border-sky-500/40 bg-sky-500/5 ring-1 ring-sky-500/20",
+                    )}
+                  >
+                    <p className="text-sm font-medium">{t.label}</p>
+                    <p className="text-muted-foreground mt-0.5 text-xs leading-relaxed">
+                      {t.description}
+                    </p>
+                    <p className="text-muted-foreground mt-1.5 truncate text-[11px]">
+                      {t.columnNames.join(" → ")}
+                    </p>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <p className="text-xs font-semibold tracking-wide uppercase">
+                Kolonner
+              </p>
+              <ul className="min-w-0 space-y-2">
+                {columns.map((col) => (
+                  <li
+                    key={col._id}
+                    className="flex min-w-0 items-center justify-between gap-2 rounded-lg border border-border/50 px-3 py-2"
+                  >
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium">{col.name}</p>
+                      <p className="text-muted-foreground text-[11px]">
+                        {col.isDone ? "Ferdig-kolonne" : "Åpen kolonne"}
+                      </p>
+                    </div>
+                    <div className="flex shrink-0 gap-1">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        className="h-8"
+                        onClick={() => {
+                          const name = window.prompt(
+                            "Nytt kolonnenavn",
+                            col.name,
+                          );
+                          if (!name?.trim() || name.trim() === col.name)
+                            return;
+                          void renameColumn({
+                            columnId: col._id,
+                            name: name.trim(),
+                          }).then(() => toast.success("Oppdatert"));
+                        }}
+                      >
+                        Endre
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        className="text-destructive h-8"
+                        onClick={() => {
+                          if (
+                            !window.confirm(
+                              `Er du sikker på at du vil slette kolonnen «${col.name}»?\n\nKortene flyttes til en annen kolonne.`,
+                            )
+                          ) {
+                            return;
+                          }
+                          void removeColumn({ columnId: col._id })
+                            .then(() => toast.success("Slettet"))
+                            .catch((err: unknown) =>
+                              toast.error(
+                                err instanceof Error
+                                  ? err.message
+                                  : "Kunne ikke slette",
+                              ),
+                            );
+                        }}
+                      >
+                        Slett
+                      </Button>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            <div className="grid min-w-0 gap-2 rounded-xl border border-dashed border-border/60 p-3">
+              <Label htmlFor="new-col">Ny kolonne</Label>
+              <Input
+                id="new-col"
+                value={newColumnName}
+                onChange={(e) => setNewColumnName(e.target.value)}
+                placeholder="F.eks. Pågår"
+                className="min-w-0"
+              />
+              <Button
+                type="button"
+                className="h-10 w-full"
+                disabled={busy || !newColumnName.trim()}
+                onClick={() => {
+                  setBusy(true);
+                  void createColumn({
+                    boardId,
+                    name: newColumnName.trim(),
+                  })
+                    .then(() => {
+                      toast.success("Kolonne lagt til");
+                      setNewColumnName("");
+                    })
+                    .catch((err: unknown) =>
+                      toast.error(
+                        err instanceof Error
+                          ? err.message
+                          : "Kunne ikke legge til",
+                      ),
+                    )
+                    .finally(() => setBusy(false));
+                }}
+              >
+                <Plus className="size-3.5" />
+                Legg til kolonne
+              </Button>
+            </div>
+          </DialogBody>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              className="h-10"
+              onClick={() => setColumnsOpen(false)}
+            >
+              Lukk
             </Button>
           </DialogFooter>
         </DialogContent>

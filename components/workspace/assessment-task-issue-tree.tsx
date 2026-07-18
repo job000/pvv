@@ -3,7 +3,8 @@
 import { TaskGithubControls } from "@/components/tasks/task-github-controls";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
+import { CardDescriptionEditor } from "@/components/ui/card-description-editor";
+import { htmlToPlainText, isEmptyRichText } from "@/lib/rich-text";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import { toast } from "@/lib/app-toast";
@@ -175,7 +176,9 @@ export function AssessmentTaskIssueTree({
       await createTask({
         assessmentId,
         title: t,
-        description: description.trim() || undefined,
+        description: isEmptyRichText(description)
+          ? undefined
+          : description,
         assigneeUserIds:
           selectedUserIds.length > 0 ? selectedUserIds : undefined,
         parentTaskId: createLinkedTo || undefined,
@@ -244,12 +247,11 @@ export function AssessmentTaskIssueTree({
             placeholder="Tittel"
             className="border-input bg-background h-10 w-full rounded-xl border px-3 text-sm"
           />
-          <Textarea
+          <CardDescriptionEditor
             value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            rows={2}
-            placeholder="Beskrivelse (valgfritt)"
-            className="resize-y text-sm"
+            onChange={setDescription}
+            rows={4}
+            aria-label="Beskrivelse"
           />
           <div className="space-y-1.5">
             <Label className="text-sm">Kobling (valgfritt)</Label>
@@ -427,9 +429,10 @@ export function AssessmentTaskIssueTree({
                       >
                         {card.title}
                       </p>
-                      {card.description ? (
+                      {card.description &&
+                      !isEmptyRichText(card.description) ? (
                         <p className="text-muted-foreground line-clamp-2 text-xs leading-relaxed">
-                          {card.description}
+                          {htmlToPlainText(card.description)}
                         </p>
                       ) : null}
                       <p className="text-muted-foreground text-xs">

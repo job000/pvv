@@ -8,15 +8,39 @@ import {
 import { getAuthUserId } from "@convex-dev/auth/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import {
+  canAccessPulsBoard,
   canEditAssessment,
   canReadAssessment,
   requireAssessmentEdit,
   requireAssessmentRead,
+  requirePulsBoardAccess,
   requireUserId,
   requireWorkspaceMember,
 } from "./lib/access";
 import { buildAssigneeStates } from "./lib/taskAssignment";
+import {
+  ensureDefaultColumns,
+  listColumnsForBoard,
+  resolveColumnForLegacy,
+} from "./pulsBoardColumns";
+import { ensureDefaultPulsBoard } from "./pulsBoards";
 import { insertUserInAppNotification } from "./userInAppNotifications";
+
+async function requireTaskWriteAccess(
+  ctx: MutationCtx,
+  task: Doc<"assessmentTasks">,
+): Promise<Id<"users">> {
+  if (task.boardId) {
+    const { userId } = await requirePulsBoardAccess(
+      ctx,
+      task.boardId,
+      "editor",
+    );
+    return userId;
+  }
+  const { userId } = await requireAssessmentEdit(ctx, task.assessmentId);
+  return userId;
+}
 
 function clampPriority(p: number | undefined): number {
   if (p === undefined) return 3;
@@ -250,6 +274,8 @@ const boardCardValidator = v.object({
   _id: v.id("assessmentTasks"),
   workspaceId: v.id("workspaces"),
   assessmentId: v.id("assessments"),
+  boardId: v.union(v.id("pulsBoards"), v.null()),
+  columnId: v.union(v.id("pulsBoardColumns"), v.null()),
   title: v.string(),
   description: v.optional(v.string()),
   parentTaskId: v.optional(v.id("assessmentTasks")),
@@ -272,19 +298,13 @@ const boardCardValidator = v.object({
   canEdit: v.boolean(),
 });
 
-export const listBoardByWorkspace = query({
-  args: { workspaceId: v.id("workspaces") },
-  returns: v.array(boardCardValidator),
-  handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) return [];
-    await requireWorkspaceMember(ctx, args.workspaceId, userId, "viewer");
-
-    const tasks = await ctx.db
-      .query("assessmentTasks")
-      .withIndex("by_workspace", (q) => q.eq("workspaceId", args.workspaceId))
-      .take(500);
-
+async function buildBoardCards(
+  ctx: QueryCtx,
+  userId: Id<"users">,
+  workspaceId: Id<"workspaces">,
+  tasks: Doc<"assessmentTasks">[],
+  canEditBoard: boolean,
+) {
     const titleById = new Map(tasks.map((t) => [t._id, t.title]));
     const parentById = new Map<
       Id<"assessmentTasks">,
@@ -293,7 +313,7 @@ export const listBoardByWorkspace = query({
 
     const processLinks = await ctx.db
       .query("candidateAssessmentLinks")
-      .withIndex("by_workspace", (q) => q.eq("workspaceId", args.workspaceId))
+      .withIndex("by_workspace", (q) => q.eq("workspaceId", workspaceId))
       .collect();
     const processesByAssessment = new Map<
       Id<"assessments">,
@@ -315,7 +335,7 @@ export const listBoardByWorkspace = query({
 
     const rosLinks = await ctx.db
       .query("rosAnalysisAssessments")
-      .withIndex("by_workspace", (q) => q.eq("workspaceId", args.workspaceId))
+      .withIndex("by_workspace", (q) => q.eq("workspaceId", workspaceId))
       .collect();
     const rosByAssessment = new Map<
       Id<"assessments">,
@@ -337,10 +357,27 @@ export const listBoardByWorkspace = query({
       rosByAssessment.set(link.assessmentId, list);
     }
 
+    const boardIds = [
+      ...new Set(
+        tasks
+          .map((t) => t.boardId)
+          .filter((id): id is Id<"pulsBoards"> => id != null),
+      ),
+    ];
+    const columnsByBoard = new Map<
+      Id<"pulsBoards">,
+      Doc<"pulsBoardColumns">[]
+    >();
+    for (const bid of boardIds) {
+      columnsByBoard.set(bid, await listColumnsForBoard(ctx, bid));
+    }
+
     const out: Array<{
       _id: Id<"assessmentTasks">;
       workspaceId: Id<"workspaces">;
       assessmentId: Id<"assessments">;
+      boardId: Id<"pulsBoards"> | null;
+      columnId: Id<"pulsBoardColumns"> | null;
       title: string;
       description?: string;
       parentTaskId?: Id<"assessmentTasks">;
@@ -391,11 +428,17 @@ export const listBoardByWorkspace = query({
           ? `https://github.com/${t.githubRepoFullName}/issues/${t.githubIssueNumber}`
           : null;
       const children = tasks.filter((c) => c.parentTaskId === t._id);
+      const cols = t.boardId
+        ? (columnsByBoard.get(t.boardId) ?? [])
+        : [];
+      const columnId = resolveColumnForLegacy(cols, t);
 
       out.push({
         _id: t._id,
         workspaceId: t.workspaceId,
         assessmentId: t.assessmentId,
+        boardId: t.boardId ?? null,
+        columnId,
         title: t.title,
         description: t.description,
         parentTaskId: t.parentTaskId,
@@ -420,7 +463,8 @@ export const listBoardByWorkspace = query({
         subIssueDoneCount: children.filter((c) => c.status === "done").length,
         linkedProcesses: processesByAssessment.get(t.assessmentId) ?? [],
         linkedRos: rosByAssessment.get(t.assessmentId) ?? [],
-        canEdit: await canEditAssessment(ctx, assessment, userId),
+        canEdit:
+          canEditBoard || (await canEditAssessment(ctx, assessment, userId)),
       });
     }
 
@@ -431,6 +475,49 @@ export const listBoardByWorkspace = query({
     });
 
     return out;
+}
+
+export const listBoardByPulsBoard = query({
+  args: { boardId: v.id("pulsBoards") },
+  returns: v.array(boardCardValidator),
+  handler: async (ctx, args) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) return [];
+    const board = await ctx.db.get(args.boardId);
+    if (!board) return [];
+    const canView = await canAccessPulsBoard(ctx, board, userId, "viewer");
+    if (!canView) return [];
+    const canEditBoard = await canAccessPulsBoard(ctx, board, userId, "editor");
+
+    const tasks = await ctx.db
+      .query("assessmentTasks")
+      .withIndex("by_board", (q) => q.eq("boardId", args.boardId))
+      .take(500);
+
+    return await buildBoardCards(
+      ctx,
+      userId,
+      board.workspaceId,
+      tasks,
+      canEditBoard,
+    );
+  },
+});
+
+export const listBoardByWorkspace = query({
+  args: { workspaceId: v.id("workspaces") },
+  returns: v.array(boardCardValidator),
+  handler: async (ctx, args) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) return [];
+    await requireWorkspaceMember(ctx, args.workspaceId, userId, "viewer");
+
+    const tasks = await ctx.db
+      .query("assessmentTasks")
+      .withIndex("by_workspace", (q) => q.eq("workspaceId", args.workspaceId))
+      .take(500);
+
+    return await buildBoardCards(ctx, userId, args.workspaceId, tasks, false);
   },
 });
 
@@ -519,6 +606,8 @@ export const listMineAcrossWorkspaces = query({
 export const create = mutation({
   args: {
     assessmentId: v.id("assessments"),
+    boardId: v.optional(v.id("pulsBoards")),
+    columnId: v.optional(v.id("pulsBoardColumns")),
     title: v.string(),
     description: v.optional(v.string()),
     assigneeUserId: v.optional(v.id("users")),
@@ -526,7 +615,7 @@ export const create = mutation({
     priority: v.optional(v.number()),
     startAt: v.optional(v.number()),
     dueAt: v.optional(v.number()),
-    /** Opprett som under-sak under denne saken (flernivå tillatt) */
+    /** Opprett som delkort under denne saken (flernivå tillatt) */
     parentTaskId: v.optional(v.id("assessmentTasks")),
   },
   returns: v.id("assessmentTasks"),
@@ -535,6 +624,36 @@ export const create = mutation({
       ctx,
       args.assessmentId,
     );
+    let boardId = args.boardId;
+    let boardDoc: Doc<"pulsBoards"> | null = null;
+    if (boardId) {
+      const access = await requirePulsBoardAccess(ctx, boardId, "editor");
+      boardDoc = access.board;
+      if (boardDoc.workspaceId !== assessment.workspaceId) {
+        throw new Error("Tavlen tilhører ikke samme arbeidsområde.");
+      }
+    } else {
+      boardId = await ensureDefaultPulsBoard(
+        ctx,
+        assessment.workspaceId,
+        userId,
+      );
+      const access = await requirePulsBoardAccess(ctx, boardId, "editor");
+      boardDoc = access.board;
+    }
+
+    const cols = await ensureDefaultColumns(ctx, boardDoc);
+    let columnId = args.columnId;
+    if (columnId) {
+      const col = cols.find((c) => c._id === columnId);
+      if (!col) throw new Error("Kolonnen finnes ikke på denne tavlen.");
+      if (col.isDone) throw new Error("Nye kort kan ikke legges direkte i Ferdig.");
+    } else {
+      const openCols = cols.filter((c) => !c.isDone);
+      const p = clampPriority(args.priority);
+      columnId = openCols[p - 1]?._id ?? openCols[0]?._id;
+    }
+
     const title = args.title.trim();
     if (!title) {
       throw new Error("Oppgavetekst mangler.");
@@ -562,7 +681,10 @@ export const create = mutation({
     if (args.parentTaskId) {
       const parent = await ctx.db.get(args.parentTaskId);
       if (!parent || parent.assessmentId !== args.assessmentId) {
-        throw new Error("Foreldresaken finnes ikke på denne vurderingen.");
+        throw new Error("Foreldrekortet finnes ikke på denne vurderingen.");
+      }
+      if (parent.boardId && parent.boardId !== boardId) {
+        throw new Error("Foreldrekortet ligger på en annen tavle.");
       }
       const { parentById } = await loadAssessmentParentMaps(
         ctx,
@@ -571,7 +693,7 @@ export const create = mutation({
       const parentDepth = taskDepth(args.parentTaskId, parentById);
       if (parentDepth + 1 > MAX_NESTING_DEPTH) {
         throw new Error(
-          `Under-saker kan maksimalt være ${MAX_NESTING_DEPTH} nivåer dype.`,
+          `Delkort kan maksimalt være ${MAX_NESTING_DEPTH} nivåer dype.`,
         );
       }
       parentTaskId = args.parentTaskId;
@@ -580,6 +702,8 @@ export const create = mutation({
     const taskId = await ctx.db.insert("assessmentTasks", {
       workspaceId: assessment.workspaceId,
       assessmentId: args.assessmentId,
+      boardId,
+      columnId,
       title,
       description: args.description?.trim() || undefined,
       parentTaskId,
@@ -595,7 +719,7 @@ export const create = mutation({
       createdAt: now,
     });
     const atitle = assessment.title.trim() || "vurdering";
-    const pulsHref = `/w/${assessment.workspaceId}/puls?task=${taskId}`;
+    const pulsHref = `/w/${assessment.workspaceId}/puls/${boardId}?task=${taskId}`;
     for (const uid of uniqueIds) {
       if (uid !== userId) {
         await insertUserInAppNotification(ctx, {
@@ -626,7 +750,7 @@ export const setParent = mutation({
     if (!row) {
       throw new Error("Fant ikke saken.");
     }
-    await requireAssessmentEdit(ctx, row.assessmentId);
+    await requireTaskWriteAccess(ctx, row);
 
     if (args.parentTaskId === null) {
       if (!row.parentTaskId) {
@@ -661,7 +785,9 @@ export const update = mutation({
     if (!row) {
       throw new Error("Fant ikke oppgaven.");
     }
-    const { assessment, userId } = await requireAssessmentEdit(ctx, row.assessmentId);
+    const userId = await requireTaskWriteAccess(ctx, row);
+    const assessment = await ctx.db.get(row.assessmentId);
+    if (!assessment) throw new Error("Vurdering finnes ikke.");
     const patch: Record<string, unknown> = {};
     if (args.title !== undefined) {
       const t = args.title.trim();
@@ -689,7 +815,9 @@ export const update = mutation({
       const oldIds = new Set(resolveAssigneeIds(row));
       const added = newIds.filter((id) => !oldIds.has(id));
       const atitle = assessment.title.trim() || "vurdering";
-      const pulsHref = `/w/${assessment.workspaceId}/puls?task=${args.taskId}`;
+      const pulsHref = row.boardId
+        ? `/w/${assessment.workspaceId}/puls/${row.boardId}?task=${args.taskId}`
+        : `/w/${assessment.workspaceId}/puls?task=${args.taskId}`;
       for (const uid of added) {
         if (uid !== userId) {
           await insertUserInAppNotification(ctx, {
@@ -721,7 +849,9 @@ export const update = mutation({
             userId: args.assigneeUserId,
             title: `Du er tildelt «${row.title}»`,
             body: `På vurderingen «${atitle}». Åpne kortet under Puls.`,
-            href: `/w/${assessment.workspaceId}/puls?task=${args.taskId}`,
+            href: row.boardId
+              ? `/w/${assessment.workspaceId}/puls/${row.boardId}?task=${args.taskId}`
+              : `/w/${assessment.workspaceId}/puls?task=${args.taskId}`,
           });
         }
       } else {
@@ -769,7 +899,7 @@ export const remove = mutation({
     if (!row) {
       throw new Error("Fant ikke oppgaven.");
     }
-    await requireAssessmentEdit(ctx, row.assessmentId);
+    await requireTaskWriteAccess(ctx, row);
     // Under-saker blir selvstendige issues (som når man sletter parent på GitHub)
     const children = await ctx.db
       .query("assessmentTasks")
@@ -806,7 +936,7 @@ export const setStatus = mutation({
     if (!row) {
       throw new Error("Fant ikke oppgaven.");
     }
-    await requireAssessmentEdit(ctx, row.assessmentId);
+    await requireTaskWriteAccess(ctx, row);
     await ctx.db.patch(args.taskId, { status: args.status });
     if (args.status === "done" && args.completeSubIssues === true) {
       await markSubtreeDone(ctx, args.taskId);
@@ -832,10 +962,11 @@ export const reorderDashboard = mutation({
   },
 });
 
-/** Flytt mellom prioriteringskolonner (1–5) eller til/fra ferdig. */
+/** Flytt mellom kolonner (eller legacy prioritet 1–5 / ferdig). */
 export const moveTask = mutation({
   args: {
     taskId: v.id("assessmentTasks"),
+    columnId: v.optional(v.id("pulsBoardColumns")),
     priority: v.optional(v.number()),
     status: v.optional(v.union(v.literal("open"), v.literal("done"))),
     /** Ved flytting til ferdig: også fullfør hele subtreet */
@@ -847,23 +978,246 @@ export const moveTask = mutation({
     if (!row) {
       throw new Error("Fant ikke oppgaven.");
     }
-    await requireAssessmentEdit(ctx, row.assessmentId);
+    await requireTaskWriteAccess(ctx, row);
     const patch: {
+      columnId?: Id<"pulsBoardColumns">;
       priority?: number;
       status?: "open" | "done";
       dashboardRank?: number;
-    } = {};
-    if (args.priority !== undefined) {
-      patch.priority = clampPriority(args.priority);
+    } = { dashboardRank: Date.now() };
+
+    if (args.columnId !== undefined) {
+      const col = await ctx.db.get(args.columnId);
+      if (!col || (row.boardId && col.boardId !== row.boardId)) {
+        throw new Error("Kolonnen finnes ikke på denne tavlen.");
+      }
+      patch.columnId = args.columnId;
+      patch.status = col.isDone ? "done" : "open";
+      if (!col.isDone) {
+        const cols = await listColumnsForBoard(ctx, col.boardId);
+        const openIdx = cols
+          .filter((c) => !c.isDone)
+          .findIndex((c) => c._id === col._id);
+        if (openIdx >= 0) patch.priority = openIdx + 1;
+      }
+    } else {
+      if (args.priority !== undefined) {
+        patch.priority = clampPriority(args.priority);
+      }
+      if (args.status !== undefined) {
+        patch.status = args.status;
+      }
+      if (row.boardId) {
+        const board = await ctx.db.get(row.boardId);
+        if (board) {
+          const cols = await ensureDefaultColumns(ctx, board);
+          const nextStatus = patch.status ?? row.status;
+          const nextPriority = patch.priority ?? clampPriority(row.priority);
+          patch.columnId =
+            resolveColumnForLegacy(cols, {
+              status: nextStatus,
+              priority: nextPriority,
+              columnId: undefined,
+            }) ?? undefined;
+        }
+      }
     }
-    if (args.status !== undefined) {
-      patch.status = args.status;
-    }
-    patch.dashboardRank = Date.now();
+
     await ctx.db.patch(args.taskId, patch);
-    if (args.status === "done" && args.completeSubIssues === true) {
+    const becameDone =
+      (patch.status === "done" || args.status === "done") &&
+      args.completeSubIssues === true;
+    if (becameDone) {
       await markSubtreeDone(ctx, args.taskId);
     }
+    return { ok: true as const };
+  },
+});
+
+/**
+ * Fullfør kort → Ferdig-kolonne, valgfri kommentar, varsel til tildelte.
+ */
+export const completeTask = mutation({
+  args: {
+    taskId: v.id("assessmentTasks"),
+    comment: v.optional(v.string()),
+    completeSubIssues: v.optional(v.boolean()),
+  },
+  returns: v.object({ ok: v.literal(true) }),
+  handler: async (ctx, args) => {
+    const row = await ctx.db.get(args.taskId);
+    if (!row) throw new Error("Fant ikke oppgaven.");
+    const userId = await requireTaskWriteAccess(ctx, row);
+
+    let doneColumnId: Id<"pulsBoardColumns"> | undefined;
+    if (row.boardId) {
+      const board = await ctx.db.get(row.boardId);
+      if (board) {
+        const cols = await ensureDefaultColumns(ctx, board);
+        const doneCol = cols.find((c) => c.isDone);
+        doneColumnId = doneCol?._id;
+      }
+    }
+
+    await ctx.db.patch(args.taskId, {
+      status: "done",
+      columnId: doneColumnId,
+      dashboardRank: Date.now(),
+    });
+    if (args.completeSubIssues === true) {
+      await markSubtreeDone(ctx, args.taskId);
+      if (doneColumnId) {
+        const allOnBoard = await ctx.db
+          .query("assessmentTasks")
+          .withIndex("by_board", (q) => q.eq("boardId", row.boardId!))
+          .take(500);
+        const descendants = new Set<Id<"assessmentTasks">>();
+        const walk = (id: Id<"assessmentTasks">) => {
+          for (const c of allOnBoard) {
+            if (c.parentTaskId === id && !descendants.has(c._id)) {
+              descendants.add(c._id);
+              walk(c._id);
+            }
+          }
+        };
+        walk(args.taskId);
+        for (const id of descendants) {
+          await ctx.db.patch(id, { columnId: doneColumnId, status: "done" });
+        }
+      }
+    }
+
+    const comment = args.comment?.trim();
+    if (comment) {
+      await ctx.db.insert("assessmentTaskNotes", {
+        workspaceId: row.workspaceId,
+        assessmentId: row.assessmentId,
+        taskId: args.taskId,
+        authorUserId: userId,
+        body: comment,
+        createdAt: Date.now(),
+      });
+    }
+
+    const actor = await ctx.db.get(userId);
+    const actorName = actor?.name?.trim() || actor?.email || "Noen";
+    const boardPath = row.boardId
+      ? `/w/${row.workspaceId}/puls/${row.boardId}?task=${args.taskId}`
+      : `/w/${row.workspaceId}/puls?task=${args.taskId}`;
+    const bodyBase = comment
+      ? `${actorName} fullførte «${row.title}»: ${comment}`
+      : `${actorName} markerte «${row.title}» som ferdig.`;
+
+    for (const uid of resolveAssigneeIds(row)) {
+      if (uid === userId) continue;
+      await insertUserInAppNotification(ctx, {
+        userId: uid,
+        title: `Kort fullført: «${row.title}»`,
+        body: bodyBase,
+        href: boardPath,
+      });
+    }
+
+    return { ok: true as const };
+  },
+});
+
+/** Flytt kort (og delkort) til en annen Puls-tavle i samme workspace. */
+export const moveToBoard = mutation({
+  args: {
+    taskId: v.id("assessmentTasks"),
+    targetBoardId: v.id("pulsBoards"),
+    targetColumnId: v.optional(v.id("pulsBoardColumns")),
+    /** true = flytt også hele delkort-treet */
+    moveSubtree: v.optional(v.boolean()),
+  },
+  returns: v.object({ ok: v.literal(true) }),
+  handler: async (ctx, args) => {
+    const row = await ctx.db.get(args.taskId);
+    if (!row) throw new Error("Fant ikke oppgaven.");
+    await requireTaskWriteAccess(ctx, row);
+
+    const { board: targetBoard } = await requirePulsBoardAccess(
+      ctx,
+      args.targetBoardId,
+      "editor",
+    );
+    if (targetBoard.workspaceId !== row.workspaceId) {
+      throw new Error("Tavlen tilhører ikke samme arbeidsområde.");
+    }
+
+    const cols = await ensureDefaultColumns(ctx, targetBoard);
+    let columnId = args.targetColumnId;
+    if (columnId) {
+      const col = cols.find((c) => c._id === columnId);
+      if (!col) throw new Error("Kolonnen finnes ikke på mål-tavlen.");
+    } else {
+      columnId =
+        resolveColumnForLegacy(cols, {
+          status: row.status,
+          priority: row.priority,
+          columnId: undefined,
+        }) ?? undefined;
+    }
+    const targetCol = columnId ? await ctx.db.get(columnId) : null;
+    const nextStatus = targetCol?.isDone ? "done" : row.status === "done" && !targetCol?.isDone ? "open" : row.status;
+
+    const moveIds = new Set<Id<"assessmentTasks">>([args.taskId]);
+    if (args.moveSubtree !== false) {
+      const siblings = await ctx.db
+        .query("assessmentTasks")
+        .withIndex("by_workspace", (q) => q.eq("workspaceId", row.workspaceId))
+        .take(500);
+      const walk = (id: Id<"assessmentTasks">) => {
+        for (const c of siblings) {
+          if (c.parentTaskId === id && !moveIds.has(c._id)) {
+            moveIds.add(c._id);
+            walk(c._id);
+          }
+        }
+      };
+      walk(args.taskId);
+    }
+
+    const now = Date.now();
+    for (const id of moveIds) {
+      const t = await ctx.db.get(id);
+      if (!t) continue;
+      const isRoot = id === args.taskId;
+      let parentTaskId = t.parentTaskId;
+      if (isRoot) {
+        // Rot: fjern forelder hvis den ikke flyttes med
+        if (parentTaskId && !moveIds.has(parentTaskId)) {
+          parentTaskId = undefined;
+        }
+      } else if (parentTaskId && !moveIds.has(parentTaskId)) {
+        parentTaskId = undefined;
+      }
+
+      const colForTask =
+        isRoot || t.status === row.status
+          ? columnId
+          : resolveColumnForLegacy(cols, {
+              status: t.status,
+              priority: t.priority,
+              columnId: undefined,
+            }) ?? columnId;
+
+      const colDoc = colForTask ? await ctx.db.get(colForTask) : null;
+      await ctx.db.patch(id, {
+        boardId: args.targetBoardId,
+        columnId: colForTask,
+        parentTaskId,
+        status: colDoc?.isDone
+          ? "done"
+          : isRoot
+            ? nextStatus
+            : t.status,
+        dashboardRank: now,
+      });
+    }
+
+    await ctx.db.patch(args.targetBoardId, { updatedAt: now });
     return { ok: true as const };
   },
 });

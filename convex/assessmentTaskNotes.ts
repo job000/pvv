@@ -2,9 +2,10 @@ import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 import { requireAssessmentEdit, requireAssessmentRead } from "./lib/access";
+import { htmlToPlainText, isEmptyRichText } from "../lib/rich-text";
 import { insertUserInAppNotification } from "./userInAppNotifications";
 
-const NOTE_MAX = 8_000;
+const NOTE_MAX = 12_000;
 
 function resolveTaskAssigneeIds(task: {
   assigneeUserIds?: Id<"users">[];
@@ -46,7 +47,7 @@ export const listByTask = query({
       .query("assessmentTaskNotes")
       .withIndex("by_task", (q) => q.eq("taskId", args.taskId))
       .collect();
-    rows.sort((a, b) => b.createdAt - a.createdAt);
+    rows.sort((a, b) => a.createdAt - b.createdAt);
 
     const out = [];
     for (const r of rows) {
@@ -85,12 +86,13 @@ export const add = mutation({
     );
 
     const body = args.body.trim();
-    if (!body) {
+    if (isEmptyRichText(body)) {
       throw new Error("Kommentaren er tom.");
     }
     if (body.length > NOTE_MAX) {
       throw new Error(`Kommentaren kan ikke overstige ${NOTE_MAX} tegn.`);
     }
+    const plainBody = htmlToPlainText(body);
 
     let parentNoteId = args.parentNoteId;
     let notifyParentAuthor: Id<"users"> | null = null;
@@ -124,7 +126,9 @@ export const add = mutation({
     });
 
     const taskTitle = task.title.trim() || "sak";
-    const href = `/w/${assessment.workspaceId}/puls?task=${args.taskId}`;
+    const href = task.boardId
+      ? `/w/${assessment.workspaceId}/puls/${task.boardId}?task=${args.taskId}`
+      : `/w/${assessment.workspaceId}/puls?task=${args.taskId}`;
 
     /** Varsle: @-taggede, tildelte på saken, og tråd-eier ved svar */
     const notifyIds = new Set<Id<"users">>(mentioned);
@@ -145,7 +149,10 @@ export const add = mutation({
           : isAssignee
             ? `Ny kommentar på «${taskTitle}»`
             : `Nytt svar i «${taskTitle}»`,
-        body: body.length > 160 ? `${body.slice(0, 157)}…` : body,
+        body:
+          plainBody.length > 160
+            ? `${plainBody.slice(0, 157)}…`
+            : plainBody,
         href,
       });
     }

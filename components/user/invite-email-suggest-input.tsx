@@ -27,7 +27,15 @@ type AssessmentSuggest = {
   assessmentId: Id<"assessments">;
 };
 
-export type InviteEmailSuggestSource = WorkspaceSuggest | AssessmentSuggest;
+type PulsBoardSuggest = {
+  kind: "pulsBoard";
+  boardId: Id<"pulsBoards">;
+};
+
+export type InviteEmailSuggestSource =
+  | WorkspaceSuggest
+  | AssessmentSuggest
+  | PulsBoardSuggest;
 
 export function InviteEmailSuggestInput({
   id: idProp,
@@ -71,8 +79,19 @@ export function InviteEmailSuggestInput({
       : "skip",
   );
 
+  const boardHits = useQuery(
+    api.pulsBoards.suggestUsersForBoardInvite,
+    source.kind === "pulsBoard" && canSearch
+      ? { boardId: source.boardId, prefix: debounced }
+      : "skip",
+  );
+
   const hits =
-    source.kind === "workspace" ? workspaceHits : assessmentHits;
+    source.kind === "workspace"
+      ? workspaceHits
+      : source.kind === "assessment"
+        ? assessmentHits
+        : boardHits;
 
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -133,7 +152,8 @@ export function InviteEmailSuggestInput({
       </Label>
       <Input
         id={inputId}
-        type="email"
+        type="text"
+        inputMode="email"
         autoComplete="off"
         aria-autocomplete="list"
         aria-expanded={Boolean(showList)}
@@ -166,9 +186,13 @@ export function InviteEmailSuggestInput({
                 : row.alreadyCollaborator;
             const hint = blocked
               ? "alreadyMember" in row
-                ? "Allerede medlem"
+                ? source.kind === "pulsBoard"
+                  ? "Allerede på tavlen"
+                  : "Allerede medlem"
                 : "Allerede på vurderingen"
               : null;
+            const primary = row.name?.trim() || row.email;
+            const secondary = row.name?.trim() ? row.email : null;
             return (
               <li key={row.email} role="presentation">
                 <button
@@ -182,10 +206,10 @@ export function InviteEmailSuggestInput({
                   )}
                   onMouseDown={() => pick(row.email, blocked)}
                 >
-                  <span className="truncate font-medium">{row.email}</span>
-                  {row.name ? (
+                  <span className="truncate font-medium">{primary}</span>
+                  {secondary ? (
                     <span className="text-muted-foreground truncate text-xs">
-                      {row.name}
+                      {secondary}
                     </span>
                   ) : null}
                   {hint ? (
@@ -201,8 +225,8 @@ export function InviteEmailSuggestInput({
       ) : null}
       {open && canSearch && hits !== undefined && hits.length === 0 ? (
         <p className="border-border/60 bg-popover text-muted-foreground pointer-events-none absolute left-0 top-full z-50 mt-1 w-full rounded-xl border px-3 py-2 text-xs shadow-md">
-          Ingen registrerte brukere matcher «{debounced}». Du kan fortsatt skrive en
-          e-post og invitere noen som ikke har konto ennå.
+          Ingen treff på navn eller e-post. Du kan fortsatt skrive en e-post og
+          invitere noen som ikke har konto ennå.
         </p>
       ) : null}
       {canSearch && hits === undefined ? (

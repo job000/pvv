@@ -1001,15 +1001,118 @@ export default defineSchema({
     .index("by_user", ["userId"])
     .index("by_user_assessment", ["userId", "assessmentId"]),
 
-  /** Oppgaver knyttet til én vurdering (tildeling, varsling, dashboard) — som GitHub issues */
+  /** Puls-tavle innenfor et arbeidsområde (flere tavler per workspace) */
+  pulsBoards: defineTable({
+    workspaceId: v.id("workspaces"),
+    name: v.string(),
+    description: v.optional(v.string()),
+    createdByUserId: v.id("users"),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    /** Aktiv kolonnestruktur-mal (custom = manuelt tilpasset) */
+    columnTemplate: v.optional(
+      v.union(
+        v.literal("priority"),
+        v.literal("phases"),
+        v.literal("empty"),
+        v.literal("custom"),
+      ),
+    ),
+  }).index("by_workspace", ["workspaceId"]),
+
+  /** Tilpassbare kolonner på en Puls-tavle (f.eks. P1–P5 + Ferdig) */
+  pulsBoardColumns: defineTable({
+    boardId: v.id("pulsBoards"),
+    workspaceId: v.id("workspaces"),
+    name: v.string(),
+    order: v.number(),
+    /** Når true: kort i kolonnen får status=done */
+    isDone: v.boolean(),
+    createdAt: v.number(),
+  }).index("by_board", ["boardId"]),
+
+  /** Per-bruker filter- og visningsvalg for en Puls-tavle */
+  pulsBoardUserPrefs: defineTable({
+    userId: v.id("users"),
+    boardId: v.id("pulsBoards"),
+    viewMode: v.optional(
+      v.union(v.literal("columns"), v.literal("table"), v.literal("list")),
+    ),
+    /** Kommentarer i egen fane, eller under oversikt (GitHub-stil). */
+    commentsPlacement: v.optional(
+      v.union(v.literal("tab"), v.literal("overview")),
+    ),
+    /** Størrelse på kortdialog. */
+    detailSize: v.optional(
+      v.union(v.literal("normal"), v.literal("large"), v.literal("full")),
+    ),
+    filters: v.object({
+      query: v.string(),
+      assignee: v.string(),
+      columnId: v.string(),
+      cardType: v.union(
+        v.literal("all"),
+        v.literal("top"),
+        v.literal("sub"),
+      ),
+      status: v.union(
+        v.literal("all"),
+        v.literal("open"),
+        v.literal("done"),
+      ),
+      due: v.union(
+        v.literal("all"),
+        v.literal("overdue"),
+        v.literal("week"),
+        v.literal("none"),
+      ),
+      processId: v.string(),
+      assessmentId: v.string(),
+    }),
+    updatedAt: v.number(),
+  }).index("by_user_board", ["userId", "boardId"]),
+
+  pulsBoardMembers: defineTable({
+    boardId: v.id("pulsBoards"),
+    workspaceId: v.id("workspaces"),
+    userId: v.id("users"),
+    role: v.union(
+      v.literal("owner"),
+      v.literal("editor"),
+      v.literal("viewer"),
+    ),
+    addedAt: v.number(),
+  })
+    .index("by_board", ["boardId"])
+    .index("by_user", ["userId"])
+    .index("by_user_board", ["userId", "boardId"])
+    .index("by_workspace", ["workspaceId"]),
+
+  pulsBoardInvites: defineTable({
+    boardId: v.id("pulsBoards"),
+    workspaceId: v.id("workspaces"),
+    email: v.string(),
+    role: v.union(v.literal("editor"), v.literal("viewer")),
+    token: v.string(),
+    invitedByUserId: v.id("users"),
+    createdAt: v.number(),
+  })
+    .index("by_token", ["token"])
+    .index("by_board", ["boardId"])
+    .index("by_email", ["email"]),
+
+  /** Oppgaver knyttet til én vurdering (tildeling, varsling, dashboard) — Puls-kort */
   assessmentTasks: defineTable({
     workspaceId: v.id("workspaces"),
     assessmentId: v.id("assessments"),
+    /** Puls-tavle kortet ligger på */
+    boardId: v.optional(v.id("pulsBoards")),
+    /** Kolonne på Puls-tavlen */
+    columnId: v.optional(v.id("pulsBoardColumns")),
     title: v.string(),
     description: v.optional(v.string()),
     /**
-     * Under-sak (sub-issue): peker på toppnivå-issue i samme vurdering.
-     * Kun ett nivå — forelder kan ikke selv være sub-issue.
+     * Delkort: peker på foreldrekort i samme vurdering (flernivå tillatt i app-logikk).
      */
     parentTaskId: v.optional(v.id("assessmentTasks")),
     /** @deprecated Bruk assigneeUserIds for flere ansvarlige */
@@ -1039,7 +1142,7 @@ export default defineSchema({
     ),
     createdByUserId: v.id("users"),
     status: v.union(v.literal("open"), v.literal("done")),
-    /** 1 = høyest … 5 = lavest (dashboard-kolonner) */
+    /** 1 = høyest … 5 = lavest (legacy; preferer columnId) */
     priority: v.optional(v.number()),
     /** Startdato (ms, midt på dagen lokalt satt fra klient) */
     startAt: v.optional(v.number()),
@@ -1056,6 +1159,8 @@ export default defineSchema({
   })
     .index("by_assessment", ["assessmentId"])
     .index("by_workspace", ["workspaceId"])
+    .index("by_board", ["boardId"])
+    .index("by_column", ["columnId"])
     .index("by_assignee", ["assigneeUserId"])
     .index("by_parent", ["parentTaskId"])
     .index("by_github_issue", ["githubRepoFullName", "githubIssueNumber"]),
@@ -1091,6 +1196,24 @@ export default defineSchema({
     .index("by_task", ["taskId"])
     .index("by_assessment", ["assessmentId"])
     .index("by_parent", ["parentNoteId"]),
+
+  /**
+   * Filer på Puls-kort: oppgavebeskrivelse (noteId mangler) eller kommentar (noteId satt).
+   */
+  assessmentTaskFiles: defineTable({
+    workspaceId: v.id("workspaces"),
+    taskId: v.id("assessmentTasks"),
+    noteId: v.optional(v.id("assessmentTaskNotes")),
+    storageId: v.id("_storage"),
+    fileName: v.string(),
+    contentType: v.string(),
+    sizeBytes: v.number(),
+    uploadedByUserId: v.id("users"),
+    createdAt: v.number(),
+  })
+    .index("by_task", ["taskId"])
+    .index("by_note", ["noteId"])
+    .index("by_storage", ["storageId"]),
 
   /** Enkle skjema per arbeidsområde for innsendte forslag til vurdering. */
   intakeForms: defineTable({

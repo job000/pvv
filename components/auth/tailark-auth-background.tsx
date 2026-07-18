@@ -165,12 +165,12 @@ export function TailarkAuthBackground({
         }}
       />
 
-      {/* Soft spotlight — lighter wash so motion stays visible */}
-      <div className="absolute left-1/2 top-[38%] h-[48%] w-[64%] -translate-x-1/2 rounded-full bg-white/40 blur-[80px] dark:bg-background/25" />
+      {/* Soft spotlight — muted wash, not harsh white */}
+      <div className="absolute left-1/2 top-[38%] h-[48%] w-[64%] -translate-x-1/2 rounded-full bg-sky-100/35 blur-[80px] dark:bg-background/25" />
 
       {/* Light-mode edge vignette (slate, not black) */}
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_40%,rgba(100,116,139,0.28)_100%)] dark:bg-[radial-gradient(ellipse_at_center,transparent_30%,oklch(0.08_0.02_245_/_0.7)_100%)]" />
-      <div className="absolute inset-0 bg-gradient-to-t from-slate-300/40 via-transparent to-sky-100/30 dark:from-background dark:via-transparent dark:to-transparent" />
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_40%,rgba(100,116,139,0.32)_100%)] dark:bg-[radial-gradient(ellipse_at_center,transparent_30%,oklch(0.08_0.02_245_/_0.7)_100%)]" />
+      <div className="absolute inset-0 bg-gradient-to-t from-slate-400/25 via-transparent to-sky-200/25 dark:from-background dark:via-transparent dark:to-transparent" />
     </div>
   );
 }

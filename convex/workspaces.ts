@@ -10,7 +10,7 @@ import {
 } from "./lib/access";
 import { insertUserInAppNotification } from "./userInAppNotifications";
 import { normalizeGithubRepoFullName } from "./lib/github";
-import { queryUsersByEmailPrefix } from "./lib/userSearch";
+import { queryUsersForInviteSuggest } from "./lib/userSearch";
 import { isValidRosSectorPackId } from "../lib/ros-sector-packs";
 
 const WORKSPACE_INVITE_ROLE_NB: Record<"admin" | "member" | "viewer", string> = {
@@ -263,7 +263,11 @@ export const suggestUsersForWorkspaceInvite = query({
     if (raw.length < 2) {
       return [];
     }
-    const rows = await queryUsersByEmailPrefix(ctx, raw, 24);
+    const rows = await queryUsersForInviteSuggest(ctx, {
+      query: raw,
+      workspaceId: args.workspaceId,
+      take: 24,
+    });
     const memberRows = await ctx.db
       .query("workspaceMembers")
       .withIndex("by_workspace", (q) =>

@@ -1,10 +1,15 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
+import {
+  RichTextEditor,
+  type RichTextEditorHandle,
+} from "@/components/ui/rich-text-editor";
+import { RichTextView } from "@/components/ui/rich-text-view";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import { toast } from "@/lib/app-toast";
+import { isEmptyRichText } from "@/lib/rich-text";
 import { cn } from "@/lib/utils";
 import { useMutation, useQuery } from "convex/react";
 import { CornerDownRight, MessageSquare, Send } from "lucide-react";
@@ -31,31 +36,12 @@ type NoteRow = {
 };
 
 export function renderBodyWithMentions(body: string, mentionNames: string[]) {
-  if (mentionNames.length === 0) {
-    return <span className="whitespace-pre-wrap">{body}</span>;
-  }
-  const escaped = mentionNames
-    .map((n) => n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
-    .sort((a, b) => b.length - a.length);
-  const re = new RegExp(`(@(?:${escaped.join("|")}))`, "gi");
-  const parts = body.split(re);
-  return (
-    <span className="whitespace-pre-wrap">
-      {parts.map((part, i) =>
-        part.startsWith("@") &&
-        mentionNames.some((n) => part.slice(1).toLowerCase() === n.toLowerCase()) ? (
-          <span
-            key={i}
-            className="rounded bg-sky-500/15 px-0.5 font-medium text-sky-900 dark:text-sky-100"
-          >
-            {part}
-          </span>
-        ) : (
-          <span key={i}>{part}</span>
-        ),
-      )}
-    </span>
-  );
+  return <RichTextView value={body} mentionNames={mentionNames} />;
+}
+
+function detectTrailingMentionQuery(plain: string): string | null {
+  const match = /(?:^|\s)@([^\s@]*)$/.exec(plain);
+  return match ? (match[1] ?? "") : null;
 }
 
 export function CommentComposer({
@@ -73,14 +59,14 @@ export function CommentComposer({
   autoFocus?: boolean;
   onCancel?: () => void;
 }) {
-  const [text, setText] = useState("");
+  const [html, setHtml] = useState("");
   const [mentioned, setMentioned] = useState<Id<"users">[]>([]);
   const [mentionQuery, setMentionQuery] = useState<string | null>(null);
   const [mentionIndex, setMentionIndex] = useState(0);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const editorRef = useRef<RichTextEditorHandle>(null);
 
   useEffect(() => {
-    if (autoFocus) textareaRef.current?.focus();
+    if (autoFocus) editorRef.current?.focus();
   }, [autoFocus]);
 
   const mentionMatches = useMemo(() => {
@@ -91,49 +77,29 @@ export function CommentComposer({
       .slice(0, 6);
   }, [members, mentionQuery]);
 
-  const updateMentionState = (value: string, cursor: number) => {
-    const before = value.slice(0, cursor);
-    const at = before.lastIndexOf("@");
-    if (at < 0) {
-      setMentionQuery(null);
-      return;
-    }
-    const charBefore = at === 0 ? " " : before[at - 1];
-    if (charBefore && !/\s/.test(charBefore)) {
-      setMentionQuery(null);
-      return;
-    }
-    const fragment = before.slice(at + 1);
-    if (/\s/.test(fragment)) {
-      setMentionQuery(null);
-      return;
-    }
-    setMentionQuery(fragment);
-    setMentionIndex(0);
+  const syncMentionState = (nextHtml: string) => {
+    const plain = editorRef.current?.getPlainText() ?? "";
+    // Prefer live editor text; fall back to stripping HTML if editor not ready
+    const source =
+      plain ||
+      nextHtml
+        .replace(/<[^>]+>/g, " ")
+        .replace(/&nbsp;/g, " ")
+        .trimEnd();
+    const q = detectTrailingMentionQuery(source);
+    setMentionQuery(q);
+    if (q !== null) setMentionIndex(0);
   };
 
   const insertMention = (member: MemberOption) => {
-    const el = textareaRef.current;
-    if (!el) return;
-    const cursor = el.selectionStart ?? text.length;
-    const before = text.slice(0, cursor);
-    const after = text.slice(cursor);
-    const at = before.lastIndexOf("@");
-    if (at < 0) return;
-    const next = `${before.slice(0, at)}@${member.label} ${after}`;
-    setText(next);
+    editorRef.current?.replaceTrailingMention(mentionQuery ?? "", member.label);
     setMentioned((prev) =>
       prev.includes(member.userId) ? prev : [...prev, member.userId],
     );
     setMentionQuery(null);
-    requestAnimationFrame(() => {
-      const pos = at + member.label.length + 2;
-      el.focus();
-      el.setSelectionRange(pos, pos);
-    });
   };
 
-  const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
+  const handleKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
     if (mentionQuery === null || mentionMatches.length === 0) return;
     if (e.key === "ArrowDown") {
       e.preventDefault();
@@ -153,17 +119,15 @@ export function CommentComposer({
   };
 
   const submit = async () => {
-    const body = text.trim();
-    if (!body) return;
-    await onSubmit(body, mentioned);
-    setText("");
+    if (isEmptyRichText(html)) return;
+    await onSubmit(html, mentioned);
+    setHtml("");
     setMentioned([]);
     setMentionQuery(null);
   };
 
   return (
-    <div className="space-y-2">
-      {/* I dokumentflyt (ikke absolute) — unngår klipping i dialog-scroll på mobil */}
+    <div className="space-y-2" onKeyDown={handleKeyDown}>
       {mentionQuery !== null && mentionMatches.length > 0 ? (
         <ul
           className="max-h-36 w-full overflow-y-auto rounded-xl border border-border/60 bg-muted/20 py-1"
@@ -190,21 +154,25 @@ export function CommentComposer({
           ))}
         </ul>
       ) : null}
-      <Textarea
-        ref={textareaRef}
-        value={text}
-        onChange={(e) => {
-          const value = e.target.value;
-          setText(value);
-          updateMentionState(value, e.target.selectionStart ?? value.length);
+      <RichTextEditor
+        ref={editorRef}
+        value={html}
+        onChange={(next) => {
+          setHtml(next);
+          // Defer so editor text is updated
+          requestAnimationFrame(() => syncMentionState(next));
         }}
-        onKeyDown={handleKeyDown}
-        rows={2}
+        disabled={busy}
         placeholder={placeholder}
-        className="min-h-[4.5rem] resize-y text-base sm:min-h-[4rem] sm:text-sm"
+        rows={3}
+        compact
+        allowImages={false}
+        autoFocus={autoFocus}
+        aria-label={placeholder}
       />
       <p className="text-muted-foreground text-[11px]">
-        Skriv <span className="font-medium">@</span> for å tagge kolleger
+        Fet, kursiv, emoji — og <span className="font-medium">@</span> for å
+        tagge kolleger
       </p>
       <div className="flex flex-wrap justify-end gap-2">
         {onCancel ? (
@@ -222,7 +190,7 @@ export function CommentComposer({
           type="button"
           size="sm"
           className="min-h-11 rounded-xl touch-manipulation sm:min-h-9"
-          disabled={busy || !text.trim()}
+          disabled={busy || isEmptyRichText(html)}
           onClick={() => void submit()}
         >
           <Send className="size-3.5" />
@@ -317,9 +285,9 @@ export function AssessmentCommentThreads({
                   {new Date(root.createdAt).toLocaleString("nb-NO")}
                 </p>
               </div>
-              <p className="mt-1 text-sm leading-relaxed">
+              <div className="mt-1">
                 {renderBodyWithMentions(root.body, root.mentionedNames)}
-              </p>
+              </div>
               <button
                 type="button"
                 className="text-muted-foreground hover:text-foreground mt-2 inline-flex items-center gap-1 text-xs font-medium"
@@ -342,9 +310,9 @@ export function AssessmentCommentThreads({
                           {new Date(r.createdAt).toLocaleString("nb-NO")}
                         </p>
                       </div>
-                      <p className="mt-0.5 text-sm leading-relaxed">
+                      <div className="mt-0.5">
                         {renderBodyWithMentions(r.body, r.mentionedNames)}
-                      </p>
+                      </div>
                     </li>
                   ))}
                 </ul>
