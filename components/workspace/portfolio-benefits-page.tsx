@@ -95,14 +95,14 @@ function HeroMetric({
   unit?: string;
 }) {
   return (
-    <div className="min-w-0">
-      <p className="text-muted-foreground text-[11px] font-medium tracking-[0.12em] uppercase">
+    <div className="min-w-0 overflow-hidden">
+      <p className="text-muted-foreground text-[10px] font-medium tracking-[0.12em] uppercase sm:text-[11px]">
         {label}
       </p>
-      <p className="font-heading mt-1 text-3xl font-semibold tracking-tight tabular-nums text-foreground sm:text-4xl">
+      <p className="font-heading mt-1 text-2xl font-semibold tracking-tight break-words tabular-nums text-foreground sm:text-3xl md:text-4xl">
         {value}
         {unit ? (
-          <span className="text-muted-foreground ml-1.5 text-base font-medium sm:text-lg">
+          <span className="text-muted-foreground ml-1 text-sm font-medium sm:ml-1.5 sm:text-base md:text-lg">
             {unit}
           </span>
         ) : null}
@@ -312,8 +312,8 @@ export function PortfolioBenefitsPage({
   }
 
   return (
-    <div className="mx-auto max-w-3xl space-y-6 pb-10 lg:max-w-4xl">
-      <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+    <div className="mx-auto min-w-0 max-w-3xl space-y-5 overflow-x-clip pb-[max(2.5rem,env(safe-area-inset-bottom))] sm:space-y-6 lg:max-w-4xl">
+      <header className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between sm:gap-4">
         <div className="min-w-0 space-y-1">
           <h1 className="font-heading text-2xl font-semibold tracking-tight sm:text-3xl">
             Gevinster
@@ -327,7 +327,7 @@ export function PortfolioBenefitsPage({
           onClick={exportPdf}
           className={cn(
             buttonVariants({ variant: "outline", size: "sm" }),
-            "h-10 shrink-0 gap-2 rounded-full",
+            "min-h-11 w-full shrink-0 gap-2 rounded-full touch-manipulation sm:min-h-10 sm:w-auto",
           )}
         >
           <Download className="size-3.5" aria-hidden />
@@ -336,36 +336,38 @@ export function PortfolioBenefitsPage({
       </header>
 
       <nav
-        className="flex gap-1 overflow-x-auto rounded-full border border-border/50 bg-background p-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        className="-mx-3 flex gap-1 overflow-x-auto overscroll-x-contain px-3 [scrollbar-width:none] sm:mx-0 sm:rounded-full sm:border sm:border-border/50 sm:bg-background sm:p-1 sm:px-1 [&::-webkit-scrollbar]:hidden"
         role="tablist"
         aria-label="Gevinstvisning"
       >
-        {TABS.map((t) => (
-          <button
-            key={t.id}
-            type="button"
-            role="tab"
-            aria-selected={tab === t.id}
-            onClick={() => setTab(t.id)}
-            className={cn(
-              "h-10 shrink-0 rounded-full px-4 text-sm font-medium transition-colors",
-              tab === t.id
-                ? "bg-foreground text-background"
-                : "text-muted-foreground hover:text-foreground",
-            )}
-          >
-            {t.label}
-          </button>
-        ))}
+        <div className="flex min-w-full gap-1 rounded-full border border-border/50 bg-background p-1 sm:min-w-0 sm:flex-1 sm:border-0 sm:bg-transparent sm:p-0">
+          {TABS.map((t) => (
+            <button
+              key={t.id}
+              type="button"
+              role="tab"
+              aria-selected={tab === t.id}
+              onClick={() => setTab(t.id)}
+              className={cn(
+                "min-h-11 min-w-0 flex-1 rounded-full px-2.5 text-xs font-medium touch-manipulation transition-colors sm:min-h-10 sm:px-4 sm:text-sm",
+                tab === t.id
+                  ? "bg-foreground text-background"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
       </nav>
 
       {tab === "oversikt" ? (
         <div className="space-y-6">
-          <section className="rounded-3xl border border-border/40 bg-card px-5 py-6 sm:px-8 sm:py-8">
+          <section className="rounded-3xl border border-border/40 bg-card px-4 py-5 sm:px-8 sm:py-8">
             <p className="text-muted-foreground text-xs font-medium tracking-[0.14em] uppercase">
               Årlig potensial
             </p>
-            <div className="mt-5 grid gap-8 sm:grid-cols-2">
+            <div className="mt-4 grid grid-cols-2 gap-4 sm:mt-5 sm:gap-8">
               <HeroMetric
                 label="Besparelse"
                 value={formatMoney(displayTotals.currency)}
@@ -387,7 +389,7 @@ export function PortfolioBenefitsPage({
             </div>
           </section>
 
-          <section className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+          <section className="-mx-3 flex gap-2 overflow-x-auto overscroll-x-contain px-3 pb-0.5 [scrollbar-width:none] sm:mx-0 sm:grid sm:grid-cols-3 sm:overflow-visible sm:px-0 [&::-webkit-scrollbar]:hidden">
             {(
               [
                 ["potential", data.potentialTotals, Clock3],
@@ -404,7 +406,7 @@ export function PortfolioBenefitsPage({
                     setRealizationFilter((prev) => (prev === key ? "all" : key))
                   }
                   className={cn(
-                    "rounded-2xl border px-4 py-4 text-left transition-colors",
+                    "min-w-[11.5rem] shrink-0 rounded-2xl border px-4 py-4 text-left touch-manipulation transition-colors sm:min-w-0",
                     active
                       ? "border-foreground/25 bg-foreground text-background"
                       : "border-border/40 bg-muted/10 hover:bg-muted/25",
@@ -436,8 +438,8 @@ export function PortfolioBenefitsPage({
           </section>
 
           <section className="space-y-3">
-            <div className="flex flex-wrap items-end justify-between gap-2">
-              <div>
+            <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between">
+              <div className="min-w-0">
                 <h2 className="font-heading text-base font-semibold">
                   Hva driver tallene?
                 </h2>
@@ -448,7 +450,7 @@ export function PortfolioBenefitsPage({
               </div>
               <button
                 type="button"
-                className="text-xs font-medium underline-offset-2 hover:underline"
+                className="min-h-10 self-start text-xs font-medium underline-offset-2 touch-manipulation hover:underline"
                 onClick={() => {
                   setCandidateSort("money_desc");
                   setOnlyQuantified(true);
@@ -606,22 +608,32 @@ export function PortfolioBenefitsPage({
 
       {tab === "diagrammer" ? (
         <div className="space-y-4">
-          <section className="rounded-2xl border border-border/40 bg-card p-4 sm:p-5">
+          <section className="overflow-hidden rounded-2xl border border-border/40 bg-card p-3 sm:p-5">
             <h2 className="font-heading text-base font-semibold">Per fase</h2>
             <p className="text-muted-foreground mt-0.5 text-xs">
               Timer og kroner fordelt på pipeline
             </p>
-            <div className="mt-4 h-64 w-full min-w-0 sm:h-72">
+            <div className="mt-4 h-60 w-full min-w-0 sm:h-72">
               {pipelineChartData.length === 0 ? (
                 <p className="text-muted-foreground flex h-full items-center justify-center text-sm">
                   Ingen data ennå
                 </p>
               ) : (
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={pipelineChartData} margin={{ left: 0, right: 8 }}>
+                  <BarChart
+                    data={pipelineChartData}
+                    margin={{ left: 0, right: 4, top: 4, bottom: 0 }}
+                  >
                     <CartesianGrid strokeDasharray="3 3" className="stroke-border/50" />
-                    <XAxis dataKey="name" tick={{ fontSize: 10 }} interval={0} angle={-20} textAnchor="end" height={52} />
-                    <YAxis tick={{ fontSize: 10 }} width={40} />
+                    <XAxis
+                      dataKey="name"
+                      tick={{ fontSize: 9 }}
+                      interval={0}
+                      angle={-28}
+                      textAnchor="end"
+                      height={56}
+                    />
+                    <YAxis tick={{ fontSize: 10 }} width={36} />
                     <Tooltip
                       formatter={(value, name) => {
                         const n = typeof value === "number" ? value : Number(value);
@@ -630,7 +642,7 @@ export function PortfolioBenefitsPage({
                           : [`${formatHours(n)} t`, "Timer"];
                       }}
                     />
-                    <Legend />
+                    <Legend wrapperStyle={{ fontSize: 11 }} />
                     <Bar dataKey="timer" name="Timer" fill={CHART_COLORS[0]} radius={[4, 4, 0, 0]} />
                     <Bar dataKey="kr" name="Kroner" fill={CHART_COLORS[1]} radius={[4, 4, 0, 0]} />
                   </BarChart>
@@ -639,15 +651,15 @@ export function PortfolioBenefitsPage({
             </div>
           </section>
 
-          <div className="grid gap-4 sm:grid-cols-2">
-            <section className="rounded-2xl border border-border/40 bg-card p-4 sm:p-5">
+          <div className="grid gap-4 md:grid-cols-2">
+            <section className="overflow-hidden rounded-2xl border border-border/40 bg-card p-3 sm:p-5">
               <h2 className="font-heading text-base font-semibold">Realisering</h2>
-              <div className="mt-4 h-56 w-full">
+              <div className="mt-4 h-52 w-full min-w-0 sm:h-56">
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={realizationChartData}>
+                  <BarChart data={realizationChartData} margin={{ left: 0, right: 4 }}>
                     <CartesianGrid strokeDasharray="3 3" className="stroke-border/50" />
-                    <XAxis dataKey="name" tick={{ fontSize: 11 }} />
-                    <YAxis tick={{ fontSize: 10 }} width={40} />
+                    <XAxis dataKey="name" tick={{ fontSize: 10 }} />
+                    <YAxis tick={{ fontSize: 10 }} width={36} />
                     <Tooltip
                       formatter={(value, name) => {
                         const n = typeof value === "number" ? value : Number(value);
@@ -662,9 +674,9 @@ export function PortfolioBenefitsPage({
               </div>
             </section>
 
-            <section className="rounded-2xl border border-border/40 bg-card p-4 sm:p-5">
+            <section className="overflow-hidden rounded-2xl border border-border/40 bg-card p-3 sm:p-5">
               <h2 className="font-heading text-base font-semibold">Antall</h2>
-              <div className="mt-4 h-56 w-full">
+              <div className="mt-4 h-52 w-full min-w-0 sm:h-56">
                 {phasePieData.length === 0 ? (
                   <p className="text-muted-foreground flex h-full items-center justify-center text-sm">
                     Ingen kandidater
@@ -676,8 +688,8 @@ export function PortfolioBenefitsPage({
                         data={phasePieData}
                         dataKey="value"
                         nameKey="name"
-                        innerRadius={48}
-                        outerRadius={78}
+                        innerRadius={40}
+                        outerRadius={68}
                         paddingAngle={2}
                       >
                         {phasePieData.map((_, i) => (
@@ -685,7 +697,7 @@ export function PortfolioBenefitsPage({
                         ))}
                       </Pie>
                       <Tooltip />
-                      <Legend wrapperStyle={{ fontSize: 11 }} />
+                      <Legend wrapperStyle={{ fontSize: 10 }} />
                     </PieChart>
                   </ResponsiveContainer>
                 )}
@@ -713,13 +725,22 @@ export function PortfolioBenefitsPage({
           </section>
 
           {softChartData.length > 0 ? (
-            <section className="rounded-2xl border border-border/40 bg-card p-4 sm:p-5">
-              <div className="h-56 w-full sm:h-64">
+            <section className="overflow-hidden rounded-2xl border border-border/40 bg-card p-3 sm:p-5">
+              <div className="h-56 w-full min-w-0 sm:h-64">
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={softChartData} layout="vertical" margin={{ left: 4, right: 12 }}>
+                  <BarChart
+                    data={softChartData}
+                    layout="vertical"
+                    margin={{ left: 0, right: 8, top: 4, bottom: 4 }}
+                  >
                     <CartesianGrid strokeDasharray="3 3" className="stroke-border/50" />
                     <XAxis type="number" allowDecimals={false} tick={{ fontSize: 10 }} />
-                    <YAxis type="category" dataKey="name" width={110} tick={{ fontSize: 10 }} />
+                    <YAxis
+                      type="category"
+                      dataKey="name"
+                      width={88}
+                      tick={{ fontSize: 9 }}
+                    />
                     <Tooltip />
                     <Bar dataKey="count" name="Vurderinger" fill={CHART_COLORS[0]} radius={[0, 4, 4, 0]} />
                   </BarChart>
@@ -763,16 +784,16 @@ export function PortfolioBenefitsPage({
 
       {tab === "kandidater" ? (
         <div className="space-y-4">
-          <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+          <div className="grid grid-cols-1 gap-2 sm:flex sm:flex-wrap sm:items-center">
             <SearchInput
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Søk …"
-              className="h-10 w-full rounded-full sm:max-w-xs"
+              className="h-11 w-full rounded-full sm:h-10 sm:max-w-xs"
               aria-label="Søk kandidat"
             />
             <select
-              className="border-input bg-background h-10 rounded-full border px-3 text-sm"
+              className="border-input bg-background h-11 w-full rounded-full border px-3 text-sm sm:h-10 sm:w-auto"
               value={pipelineFilter}
               onChange={(e) =>
                 setPipelineFilter(e.target.value as "all" | PipelineStatus)
@@ -788,17 +809,8 @@ export function PortfolioBenefitsPage({
                 ),
               )}
             </select>
-            <label className="flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                checked={onlyQuantified}
-                onChange={(e) => setOnlyQuantified(e.target.checked)}
-                className="size-4 rounded"
-              />
-              Kun med tall
-            </label>
             <select
-              className="border-input bg-background h-10 rounded-full border px-3 text-sm"
+              className="border-input bg-background h-11 w-full rounded-full border px-3 text-sm sm:h-10 sm:w-auto"
               value={candidateSort}
               onChange={(e) =>
                 setCandidateSort(
@@ -816,6 +828,15 @@ export function PortfolioBenefitsPage({
               <option value="hours_desc">Flest timer først</option>
               <option value="updated">Sist oppdatert</option>
             </select>
+            <label className="flex min-h-11 items-center gap-2 text-sm touch-manipulation sm:min-h-0">
+              <input
+                type="checkbox"
+                checked={onlyQuantified}
+                onChange={(e) => setOnlyQuantified(e.target.checked)}
+                className="size-4 rounded"
+              />
+              Kun med tall
+            </label>
             <p className="text-muted-foreground text-xs tabular-nums sm:ml-auto">
               {filteredItems.length} av {data.assessmentCount}
             </p>
@@ -831,7 +852,7 @@ export function PortfolioBenefitsPage({
                 <li key={item.assessmentId}>
                   <Link
                     href={`/w/${workspaceId}/a/${item.assessmentId}`}
-                    className="hover:bg-muted/20 flex items-center gap-3 px-4 py-3.5 transition-colors"
+                    className="hover:bg-muted/20 flex min-h-14 items-center gap-3 px-3 py-3.5 touch-manipulation transition-colors sm:px-4"
                   >
                     <div className="min-w-0 flex-1">
                       <p className="truncate font-medium">{item.title}</p>

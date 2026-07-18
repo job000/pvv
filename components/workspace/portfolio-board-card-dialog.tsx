@@ -194,23 +194,27 @@ export function PortfolioBoardCardDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent size="2xl" titleId="portfolio-card-title">
+      <DialogContent
+        size="2xl"
+        titleId="portfolio-card-title"
+        className="max-sm:max-h-[min(92dvh,100%)]"
+      >
         <DialogHeader className="space-y-2">
-          <div className="flex flex-wrap items-start justify-between gap-2">
+          <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
             <div className="min-w-0 space-y-1">
               <p className="text-muted-foreground text-xs font-medium uppercase tracking-wide">
                 Kandidat
               </p>
               <h2
                 id="portfolio-card-title"
-                className="font-heading text-lg font-semibold leading-snug tracking-tight sm:text-xl"
+                className="font-heading text-lg font-semibold leading-snug tracking-tight break-words sm:text-xl"
               >
                 {card.title}
               </h2>
             </div>
             <Link
               href={`/w/${workspaceId}/a/${card.assessmentId}`}
-              className="text-muted-foreground hover:text-foreground inline-flex shrink-0 items-center gap-1 text-xs font-medium underline-offset-2 hover:underline"
+              className="text-muted-foreground hover:text-foreground inline-flex min-h-10 shrink-0 items-center gap-1 text-xs font-medium underline-offset-2 touch-manipulation hover:underline"
             >
               Åpne full vurdering
               <ArrowUpRight className="size-3.5" aria-hidden />
@@ -238,15 +242,19 @@ export function PortfolioBoardCardDialog({
           </div>
           <div
             role="tablist"
-            className="flex gap-1 rounded-xl border border-border/50 bg-muted/20 p-1"
+            className="grid grid-cols-3 gap-1 rounded-xl border border-border/50 bg-muted/20 p-1"
           >
             {(
               [
-                ["oversikt", "Oversikt"],
-                ["oppgaver", `Oppgaver (${openTasks.length})`],
-                ["kommentarer", `Kommentarer (${notes?.length ?? card.noteCount})`],
+                ["oversikt", "Oversikt", "Info"],
+                ["oppgaver", `Oppgaver (${openTasks.length})`, `Oppg. (${openTasks.length})`],
+                [
+                  "kommentarer",
+                  `Kommentarer (${notes?.length ?? card.noteCount})`,
+                  `Chat (${notes?.length ?? card.noteCount})`,
+                ],
               ] as const
-            ).map(([id, label]) => (
+            ).map(([id, label, shortLabel]) => (
               <button
                 key={id}
                 type="button"
@@ -254,13 +262,14 @@ export function PortfolioBoardCardDialog({
                 aria-selected={tab === id}
                 onClick={() => setTab(id)}
                 className={cn(
-                  "flex-1 rounded-lg px-2 py-1.5 text-xs font-medium transition-colors sm:text-sm",
+                  "min-h-11 rounded-lg px-1.5 py-2 text-center text-[11px] font-medium leading-tight touch-manipulation transition-colors sm:min-h-9 sm:px-2 sm:text-sm",
                   tab === id
                     ? "bg-background text-foreground shadow-sm"
                     : "text-muted-foreground hover:text-foreground",
                 )}
               >
-                {label}
+                <span className="sm:hidden">{shortLabel}</span>
+                <span className="hidden sm:inline">{label}</span>
               </button>
             ))}
           </div>

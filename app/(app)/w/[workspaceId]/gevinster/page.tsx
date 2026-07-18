@@ -28,7 +28,7 @@ export default function WorkspaceGevinsterPage() {
   }
 
   return (
-    <ProductStack className="pb-4">
+    <ProductStack className="min-w-0 space-y-0 overflow-x-clip pb-[max(1rem,env(safe-area-inset-bottom))] sm:space-y-0">
       <PortfolioBenefitsPage workspaceId={workspaceId} />
     </ProductStack>
   );

@@ -28,7 +28,7 @@ export default function WorkspacePortefoljePage() {
   }
 
   return (
-    <ProductStack className="max-w-none pb-4">
+    <ProductStack className="max-w-none space-y-0 pb-[max(1rem,env(safe-area-inset-bottom))] sm:space-y-0">
       <PortfolioPriorityBoard workspaceId={workspaceId} />
     </ProductStack>
   );

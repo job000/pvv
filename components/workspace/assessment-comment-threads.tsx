@@ -162,10 +162,11 @@ function CommentComposer({
   };
 
   return (
-    <div className="relative space-y-2">
+    <div className="space-y-2">
+      {/* I dokumentflyt (ikke absolute) — unngår klipping i dialog-scroll på mobil */}
       {mentionQuery !== null && mentionMatches.length > 0 ? (
         <ul
-          className="absolute bottom-full z-10 mb-1 max-h-40 w-full overflow-y-auto rounded-xl border border-border/60 bg-background py-1 shadow-lg"
+          className="max-h-36 w-full overflow-y-auto rounded-xl border border-border/60 bg-muted/20 py-1"
           role="listbox"
         >
           {mentionMatches.map((m, i) => (
@@ -175,7 +176,7 @@ function CommentComposer({
                 role="option"
                 aria-selected={i === mentionIndex}
                 className={cn(
-                  "flex w-full px-3 py-2 text-left text-sm",
+                  "flex min-h-11 w-full px-3 py-2.5 text-left text-sm touch-manipulation",
                   i === mentionIndex ? "bg-muted" : "hover:bg-muted/50",
                 )}
                 onMouseDown={(e) => {
@@ -200,21 +201,27 @@ function CommentComposer({
         onKeyDown={handleKeyDown}
         rows={2}
         placeholder={placeholder}
-        className="min-h-[4rem] resize-y text-sm"
+        className="min-h-[4.5rem] resize-y text-base sm:min-h-[4rem] sm:text-sm"
       />
       <p className="text-muted-foreground text-[11px]">
         Skriv <span className="font-medium">@</span> for å tagge kolleger
       </p>
       <div className="flex flex-wrap justify-end gap-2">
         {onCancel ? (
-          <Button type="button" size="sm" variant="ghost" onClick={onCancel}>
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            className="min-h-11 touch-manipulation sm:min-h-9"
+            onClick={onCancel}
+          >
             Avbryt
           </Button>
         ) : null}
         <Button
           type="button"
           size="sm"
-          className="rounded-xl"
+          className="min-h-11 rounded-xl touch-manipulation sm:min-h-9"
           disabled={busy || !text.trim()}
           onClick={() => void submit()}
         >

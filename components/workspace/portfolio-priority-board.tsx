@@ -89,15 +89,15 @@ function BoardCardView({
       <div className="flex items-start gap-2">
         <button
           type="button"
-          className="text-muted-foreground hover:text-foreground mt-0.5 cursor-grab touch-none active:cursor-grabbing"
+          className="text-muted-foreground hover:text-foreground -ml-1 mt-0.5 flex size-11 shrink-0 cursor-grab touch-manipulation items-center justify-center rounded-lg active:cursor-grabbing"
           aria-label="Flytt kandidat"
           {...dragHandleProps}
         >
-          <GripVertical className="size-4" />
+          <GripVertical className="size-5" />
         </button>
         <button
           type="button"
-          className="min-w-0 flex-1 space-y-1.5 text-left"
+          className="min-w-0 flex-1 touch-manipulation space-y-1.5 py-0.5 text-left"
           onClick={onOpen}
         >
           <p className="text-sm font-semibold leading-snug tracking-tight">
@@ -213,12 +213,14 @@ function Column({
   return (
     <div
       ref={setNodeRef}
+      id={`portfolio-col-${status}`}
       className={cn(
-        "flex w-[17.5rem] shrink-0 flex-col rounded-2xl border border-border/50 bg-muted/15 transition-colors",
+        // Mobil/nettbrett: nesten full bredde + snap. Desktop: fast kolonnebredde.
+        "flex w-[min(85vw,20rem)] shrink-0 snap-center flex-col rounded-2xl border border-border/50 bg-muted/15 transition-colors sm:w-[17.5rem] sm:snap-start",
         isOver && "border-foreground/30 bg-muted/35 ring-1 ring-foreground/10",
       )}
     >
-      <div className="sticky top-0 z-[1] flex items-center justify-between gap-2 border-b border-border/40 bg-muted/40 px-3 py-2.5 backdrop-blur-sm">
+      <div className="flex items-center justify-between gap-2 border-b border-border/40 bg-muted/40 px-3 py-2.5">
         <div className="min-w-0">
           <p className="truncate text-sm font-semibold">
             {PIPELINE_STATUS_LABELS[status]}
@@ -232,7 +234,8 @@ function Column({
         items={cards.map((c) => c.assessmentId)}
         strategy={verticalListSortingStrategy}
       >
-        <div className="flex max-h-[min(70vh,40rem)] min-h-[6rem] flex-col gap-2 overflow-y-auto p-2">
+        {/* Unngå dobbel scroll på mobil — siden scroller; kolonne-scroll fra md */}
+        <div className="flex min-h-[6rem] flex-col gap-2 p-2 md:max-h-[min(65vh,36rem)] md:overflow-y-auto">
           {cards.length === 0 ? (
             <p
               className={cn(
@@ -290,9 +293,18 @@ export function PortfolioPriorityBoard({
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
     useSensor(TouchSensor, {
-      activationConstraint: { delay: 180, tolerance: 8 },
+      activationConstraint: { delay: 220, tolerance: 10 },
     }),
   );
+
+  const scrollToPhase = (status: PipelineStatus) => {
+    const el = document.getElementById(`portfolio-col-${status}`);
+    el?.scrollIntoView({
+      behavior: "smooth",
+      inline: "center",
+      block: "nearest",
+    });
+  };
 
   const serverColumns = useMemo((): ColumnState[] => {
     if (!data) return [];
@@ -517,11 +529,11 @@ export function PortfolioPriorityBoard({
 
   if (data === undefined) {
     return (
-      <div className="flex gap-3 overflow-hidden">
-        {Array.from({ length: 4 }).map((_, i) => (
+      <div className="-mx-3 flex gap-3 overflow-hidden px-3 sm:mx-0 sm:px-0">
+        {Array.from({ length: 3 }).map((_, i) => (
           <div
             key={i}
-            className="bg-muted/40 h-80 w-72 shrink-0 animate-pulse rounded-2xl"
+            className="bg-muted/40 h-64 w-[min(85vw,20rem)] shrink-0 animate-pulse rounded-2xl sm:h-80 sm:w-72"
           />
         ))}
       </div>
@@ -537,75 +549,116 @@ export function PortfolioPriorityBoard({
   }
 
   return (
-    <div className="space-y-5">
+    <div className="min-w-0 space-y-4 overflow-x-clip pb-[max(0.5rem,env(safe-area-inset-bottom))] sm:space-y-5">
       <header className="space-y-2">
         <h1 className="font-heading text-2xl font-semibold tracking-tight sm:text-3xl">
           Portefølje og prioritering
         </h1>
         <p className="text-muted-foreground max-w-2xl text-sm leading-relaxed">
-          Dra kort mellom faser, eller trykk for detaljer, tildeling og
-          kommentarer. Rekkefølgen i kolonnen er det koordinatorene følger —
-          modell-score er et forslag.
+          <span className="sm:hidden">
+            Sveip mellom faser, hold i håndtaket for å flytte, eller trykk kortet
+            for detaljer.
+          </span>
+          <span className="hidden sm:inline">
+            Dra kort mellom faser, eller trykk for detaljer, tildeling og
+            kommentarer. Rekkefølgen i kolonnen er det koordinatorene følger —
+            modell-score er et forslag.
+          </span>
         </p>
       </header>
 
-      <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-border/50 bg-muted/10 px-3 py-2.5 text-sm">
-        <Sparkles className="text-muted-foreground size-4 shrink-0" aria-hidden />
-        <p className="text-muted-foreground min-w-0 flex-1 text-xs sm:text-sm">
-          <span className="text-foreground font-medium">{data.totalCount}</span>{" "}
-          kandidater
-          {data.lowHangingFruitCount > 0 ? (
-            <>
-              {" "}
-              ·{" "}
-              <span className="text-foreground font-medium">
-                {data.lowHangingFruitCount}
-              </span>{" "}
-              rask gevinst
-            </>
-          ) : null}
-          {isDragging ? (
-            <span className="text-foreground ml-1 font-medium">
-              · Vis alle faser for å slippe
+      <div className="space-y-3 rounded-2xl border border-border/50 bg-muted/10 px-3 py-3">
+        <div className="flex items-start gap-2">
+          <Sparkles
+            className="text-muted-foreground mt-0.5 size-4 shrink-0"
+            aria-hidden
+          />
+          <p className="text-muted-foreground min-w-0 flex-1 text-xs leading-snug sm:text-sm">
+            <span className="text-foreground font-medium">{data.totalCount}</span>{" "}
+            kandidater
+            {data.lowHangingFruitCount > 0 ? (
+              <>
+                {" "}
+                ·{" "}
+                <span className="text-foreground font-medium">
+                  {data.lowHangingFruitCount}
+                </span>{" "}
+                rask gevinst
+              </>
+            ) : null}
+            {isDragging ? (
+              <span className="text-foreground mt-1 block font-medium sm:mt-0 sm:ml-1 sm:inline">
+                Alle faser vises — slipp i ønsket kolonne
+              </span>
+            ) : null}
+          </p>
+        </div>
+        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+          <label className="flex min-h-11 items-center gap-2 text-sm touch-manipulation sm:min-h-0 sm:text-xs md:text-sm">
+            <input
+              type="checkbox"
+              checked={hideEmpty}
+              onChange={(e) => setHideEmpty(e.target.checked)}
+              className="size-4 rounded sm:size-3.5"
+            />
+            Skjul tomme faser
+          </label>
+          <label className="flex min-h-11 items-center gap-2 text-sm touch-manipulation sm:min-h-0 sm:text-xs md:text-sm">
+            <input
+              type="checkbox"
+              checked={onlyQuickWin}
+              onChange={(e) => setOnlyQuickWin(e.target.checked)}
+              className="size-4 rounded sm:size-3.5"
+            />
+            Kun rask gevinst
+          </label>
+          <div className="flex flex-wrap gap-2 sm:ml-auto">
+            <Link
+              href={`/w/${workspaceId}/gevinster`}
+              className={cn(
+                buttonVariants({ variant: "outline", size: "sm" }),
+                "min-h-11 flex-1 rounded-full touch-manipulation sm:min-h-9 sm:flex-none",
+              )}
+            >
+              Se gevinster
+            </Link>
+            <Link
+              href={`/w/${workspaceId}/oppgaver`}
+              className={cn(
+                buttonVariants({ variant: "outline", size: "sm" }),
+                "min-h-11 flex-1 rounded-full touch-manipulation sm:min-h-9 sm:flex-none",
+              )}
+            >
+              Oppgaver
+            </Link>
+          </div>
+        </div>
+      </div>
+
+      {/* Hurtigvalg av fase — viktig på mobil/nettbrett */}
+      <div
+        className="-mx-3 flex gap-1.5 overflow-x-auto px-3 pb-0.5 [scrollbar-width:none] sm:mx-0 sm:px-0 [&::-webkit-scrollbar]:hidden"
+        role="navigation"
+        aria-label="Hopp til fase"
+      >
+        {visibleColumns.map((col) => (
+          <button
+            key={col.status}
+            type="button"
+            onClick={() => scrollToPhase(col.status)}
+            className={cn(
+              "inline-flex min-h-10 shrink-0 items-center gap-1.5 rounded-full border px-3 text-xs font-medium touch-manipulation transition-colors",
+              "border-border/50 bg-background hover:bg-muted/40",
+            )}
+          >
+            <span className="max-w-[9rem] truncate">
+              {PIPELINE_STATUS_LABELS[col.status]}
             </span>
-          ) : null}
-        </p>
-        <label className="flex items-center gap-1.5 text-xs sm:text-sm">
-          <input
-            type="checkbox"
-            checked={hideEmpty}
-            onChange={(e) => setHideEmpty(e.target.checked)}
-            className="size-3.5 rounded"
-          />
-          Skjul tomme faser
-        </label>
-        <label className="flex items-center gap-1.5 text-xs sm:text-sm">
-          <input
-            type="checkbox"
-            checked={onlyQuickWin}
-            onChange={(e) => setOnlyQuickWin(e.target.checked)}
-            className="size-3.5 rounded"
-          />
-          Kun rask gevinst
-        </label>
-        <Link
-          href={`/w/${workspaceId}/gevinster`}
-          className={cn(
-            buttonVariants({ variant: "outline", size: "sm" }),
-            "rounded-full",
-          )}
-        >
-          Se gevinster
-        </Link>
-        <Link
-          href={`/w/${workspaceId}/oppgaver`}
-          className={cn(
-            buttonVariants({ variant: "outline", size: "sm" }),
-            "rounded-full",
-          )}
-        >
-          Oppgaver
-        </Link>
+            <span className="text-muted-foreground tabular-nums">
+              {col.cards.length}
+            </span>
+          </button>
+        ))}
       </div>
 
       <DndContext
@@ -619,7 +672,14 @@ export function PortfolioPriorityBoard({
           setLocalColumns(serverColumns);
         }}
       >
-        <div className="flex gap-3 overflow-x-auto pb-3 [scrollbar-width:thin]">
+        <div
+          className={cn(
+            "-mx-3 flex gap-3 overflow-x-auto overscroll-x-contain px-3 pb-4",
+            "snap-x snap-mandatory touch-pan-x [scrollbar-width:thin]",
+            "sm:mx-0 sm:snap-proximity sm:px-0",
+            isDragging && "select-none",
+          )}
+        >
           {visibleColumns.map((col) => (
             <Column
               key={col.status}
@@ -628,10 +688,12 @@ export function PortfolioPriorityBoard({
               onOpenCard={setDialogCard}
             />
           ))}
+          {/* Luft til høyre så siste kolonne kan snappes midt på mobil */}
+          <div className="w-2 shrink-0 sm:hidden" aria-hidden />
         </div>
         <DragOverlay dropAnimation={null}>
           {activeCard ? (
-            <div className="w-[16.5rem] scale-[1.02] rotate-1 shadow-lg">
+            <div className="w-[min(85vw,20rem)] max-w-[16.5rem] scale-[1.02] rotate-1 shadow-lg sm:w-[16.5rem]">
               <BoardCardView
                 card={activeCard}
                 isDragging
@@ -645,16 +707,15 @@ export function PortfolioPriorityBoard({
       <aside className="rounded-2xl border border-border/40 bg-muted/10 px-4 py-3 text-xs leading-relaxed text-muted-foreground">
         <p className="font-medium text-foreground">Tips</p>
         <ul className="mt-1.5 list-inside list-disc space-y-1">
+          <li className="sm:hidden">
+            Sveip sidelengs mellom faser, eller bruk chipene over tavlen.
+          </li>
           <li>
             Bruk <strong className="text-foreground font-medium">håndtaket</strong>{" "}
             for å dra; trykk på kortet for detaljer, tildeling og kommentarer.
           </li>
           <li>
             Tomme faser vises automatisk mens du drar, så du kan slippe dit.
-          </li>
-          <li>
-            Oppgaver går til <strong className="text-foreground font-medium">Oppgaver</strong>{" "}
-            med varsel — samme mønster som backlog.
           </li>
         </ul>
       </aside>
