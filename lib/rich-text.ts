@@ -6,6 +6,38 @@ export function isLikelyHtml(value: string): boolean {
   return /<\/?[a-z][\s\S]*>/i.test(value);
 }
 
+/**
+ * Gjenkjenn Markdown (spesielt GitHub-issue body: sjekklister, lister, lenker).
+ * Brukes for å åpne Markdown-fane og rendere med remark-gfm i stedet for rik tekst.
+ */
+export function isLikelyMarkdown(value: string): boolean {
+  const t = value.trim();
+  if (!t) return false;
+
+  // GFM task lists: - [ ] / - [x] (vinner også ved blandet innhold)
+  if (/^[\t ]*[-*+]\s+\[[ xX]\]\s+\S/m.test(t)) return true;
+
+  if (isLikelyHtml(t)) return false;
+
+  // ATX-overskrifter
+  if (/^#{1,6}\s+\S/m.test(t)) return true;
+  // Fenced code
+  if (/^```/m.test(t)) return true;
+  // Lenker / bilder
+  if (/\[[^\]]*\]\([^)\s]+\)/.test(t)) return true;
+  // Horisontal linje (ofte før metadata ved import)
+  if (/^ {0,3}(-{3,}|\*{3,}|_{3,})\s*$/m.test(t)) return true;
+  // Flere punkt-/nummerlister
+  const bullets = t.match(/^[\t ]*[-*+]\s+\S/gm);
+  if (bullets && bullets.length >= 2) return true;
+  const ordered = t.match(/^[\t ]*\d+\.\s+\S/gm);
+  if (ordered && ordered.length >= 2) return true;
+  // Fet/kursiv
+  if (/\*\*[^*\n]+\*\*/.test(t) || /__[^_\n]+__/.test(t)) return true;
+  if (/(^|[^*])\*[^*\n]+\*([^*]|$)/.test(t)) return true;
+  return false;
+}
+
 /** Convert stored HTML (or plain text) to plain text for PDF/search. */
 export function htmlToPlainText(value: string | undefined | null): string {
   if (!value?.trim()) return "";

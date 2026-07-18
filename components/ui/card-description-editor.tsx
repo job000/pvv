@@ -3,11 +3,17 @@
 import { MarkdownView } from "@/components/ui/markdown-view";
 import { RichTextEditor } from "@/components/ui/rich-text-editor";
 import { Textarea } from "@/components/ui/textarea";
-import { isLikelyHtml } from "@/lib/rich-text";
+import { isLikelyHtml, isLikelyMarkdown } from "@/lib/rich-text";
 import { cn } from "@/lib/utils";
 import { useEffect, useState } from "react";
 
 type Mode = "write" | "markdown" | "preview";
+
+function initialModeForValue(value: string): Mode {
+  if (isLikelyMarkdown(value)) return "preview";
+  if (isLikelyHtml(value)) return "write";
+  return "write";
+}
 
 /**
  * Beskrivelse: brukervennlig skriver (rik tekst) + egen Markdown-fane + forhåndsvisning.
@@ -33,15 +39,17 @@ export function CardDescriptionEditor({
   insertToken?: string | null;
   onInsertConsumed?: () => void;
 }) {
-  const [mode, setMode] = useState<Mode>("write");
+  const [mode, setMode] = useState<Mode>(() => initialModeForValue(value));
 
   useEffect(() => {
     if (!insertToken) return;
     const token = insertToken.trim();
-    if (mode === "preview") setMode("write");
+    const preferMd = isLikelyMarkdown(value) || mode === "markdown";
+    if (mode === "preview") setMode(preferMd ? "markdown" : "write");
 
     const useHtml =
-      mode === "write" || isLikelyHtml(value) || !value.trim();
+      !preferMd &&
+      (mode === "write" || isLikelyHtml(value) || !value.trim());
     let chunk = token;
     if (useHtml && mode !== "markdown") {
       const img = /^!\[([^\]]*)\]\(([^)]+)\)$/.exec(token);
@@ -107,23 +115,42 @@ export function CardDescriptionEditor({
           {mode === "write"
             ? "Tekst, bilder og formatering"
             : mode === "markdown"
-              ? "**fet** · *kursiv* · `kode` · ![bilde](…)"
-              : "Slik det vises for andre"}
+              ? "- [ ] sjekkliste · **fet** · *kursiv* · [lenke](…)"
+              : isLikelyMarkdown(value)
+                ? "Markdown (f.eks. fra GitHub)"
+                : "Slik det vises for andre"}
         </p>
       </div>
 
       {mode === "write" ? (
         <div className="p-1">
-          <RichTextEditor
-            aria-label={ariaLabel}
-            value={isLikelyHtml(value) || !value.trim() ? value : value}
-            onChange={onChange}
-            disabled={disabled}
-            rows={rows}
-            allowImages
-            placeholder="Skriv beskrivelsen — tekst, bilder, lister …"
-            className="border-0 bg-transparent shadow-none"
-          />
+          {isLikelyMarkdown(value) ? (
+            <div className="space-y-2 px-2 py-2">
+              <p className="text-muted-foreground text-xs leading-relaxed">
+                Dette ser ut som Markdown (f.eks. GitHub-sjekklister). Bruk
+                Markdown- eller Forhåndsvis-fanen — rik tekst kan ødelegge
+                formateringen.
+              </p>
+              <button
+                type="button"
+                className="text-sky-800 dark:text-sky-200 text-xs font-medium underline-offset-2 hover:underline"
+                onClick={() => setMode("preview")}
+              >
+                Vis som Markdown
+              </button>
+            </div>
+          ) : (
+            <RichTextEditor
+              aria-label={ariaLabel}
+              value={value}
+              onChange={onChange}
+              disabled={disabled}
+              rows={rows}
+              allowImages
+              placeholder="Skriv beskrivelsen — tekst, bilder, lister …"
+              className="border-0 bg-transparent shadow-none"
+            />
+          )}
         </div>
       ) : null}
 

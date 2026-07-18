@@ -2580,6 +2580,7 @@ export function IssuesProjectBoard({
                       <Label htmlFor="detail-desc">Beskrivelse</Label>
                       {selected.canEdit ? (
                         <CardDescriptionEditor
+                          key={selected._id}
                           aria-label="Beskrivelse"
                           value={editDescription}
                           onChange={setEditDescription}
