@@ -36,6 +36,23 @@ export default function WorkspaceOverviewPage() {
     };
   }, [viewPrefs]);
 
+  const homeListPrefs = useMemo(() => {
+    if (!viewPrefs) {
+      return undefined;
+    }
+    return {
+      viewMode:
+        viewPrefs.homeListViewMode === "list" ||
+        viewPrefs.homeListViewMode === "table"
+          ? viewPrefs.homeListViewMode
+          : ("cards" as const),
+      pageSize:
+        viewPrefs.homeListPageSize === 10 || viewPrefs.homeListPageSize === 20
+          ? viewPrefs.homeListPageSize
+          : (6 as const),
+    };
+  }, [viewPrefs]);
+
   if (workspace === undefined || membership === undefined) {
     return (
       <ProductLoadingBlock
@@ -80,6 +97,7 @@ export default function WorkspaceOverviewPage() {
       <WorkspaceOperationalDashboard
         workspaceId={workspaceId}
         sectionVisibility={sectionVisibility}
+        homeListPrefs={homeListPrefs}
       />
     </ProductStack>
   );
