@@ -61,17 +61,17 @@ export default function WorkspaceOverviewPage() {
         description={
           workspace.notes?.trim()
             ? workspace.notes
-            : "Fortsett der du slapp — vurderinger, ROS og prosesser."
+            : "Hva som er viktigst å ta tak i nå."
         }
         actions={
           <div className="flex flex-wrap items-center gap-2">
             <WorkspaceOverviewViewSettings workspaceId={workspaceId} />
             <Link
               href={`/w/${workspaceId}/vurderinger`}
-              className="inline-flex h-11 items-center justify-center gap-2 rounded-full bg-foreground px-5 text-sm font-semibold text-background transition-opacity hover:opacity-90"
+              className="text-muted-foreground hover:text-foreground inline-flex h-11 items-center justify-center gap-1.5 rounded-full border border-border/50 px-4 text-sm font-medium transition-colors"
             >
-              Til vurderinger
-              <ArrowUpRight className="size-4" aria-hidden />
+              Alle vurderinger
+              <ArrowUpRight className="size-3.5" aria-hidden />
             </Link>
           </div>
         }

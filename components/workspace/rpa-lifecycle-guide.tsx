@@ -114,17 +114,13 @@ export function RpaLifecycleGuide({
             >
               RPA-livssyklus
             </h2>
-            {bottleneck && !pickedId && !activeStageId ? (
-              <span className="text-muted-foreground text-xs">
-                Fremhevet = første steg med saker
-              </span>
-            ) : totalInFlow > 0 ? (
+            {totalInFlow > 0 ? (
               <span className="text-muted-foreground text-xs tabular-nums">
                 {totalInFlow} i flyt
               </span>
             ) : (
               <span className="text-muted-foreground text-xs">
-                7 steg · trykk for å gå dit
+                Trykk et steg for å gå dit
               </span>
             )}
           </div>
