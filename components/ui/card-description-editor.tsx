@@ -51,7 +51,7 @@ export function CardDescriptionEditor({
       !preferMd &&
       (mode === "write" || isLikelyHtml(value) || !value.trim());
     let chunk = token;
-    if (useHtml && mode !== "markdown") {
+    if (useHtml) {
       const img = /^!\[([^\]]*)\]\(([^)]+)\)$/.exec(token);
       const link = /^\[([^\]]+)\]\(([^)]+)\)$/.exec(token);
       if (img) {

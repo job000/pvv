@@ -463,6 +463,38 @@ function filtersToPersist(filters: BoardFilters) {
   };
 }
 
+/** Convex lagrer Id-felt som string — map tilbake til BoardFilters. */
+function filtersFromPersist(
+  raw: Partial<{
+    query: string;
+    assignee: string;
+    columnId: string;
+    cardType: CardTypeFilter;
+    status: StatusFilter;
+    due: DueFilter;
+    processId: string;
+    assessmentId: string;
+  }> | null | undefined,
+): BoardFilters {
+  const merged = { ...DEFAULT_FILTERS, ...raw };
+  const assignee: AssigneeFilter =
+    merged.assignee === "all" ||
+    merged.assignee === "me" ||
+    merged.assignee === "unassigned"
+      ? merged.assignee
+      : (merged.assignee as Id<"users">);
+  return {
+    query: merged.query,
+    assignee,
+    columnId: (merged.columnId || "") as Id<"pulsBoardColumns"> | "",
+    cardType: merged.cardType,
+    status: merged.status,
+    due: merged.due,
+    processId: (merged.processId || "") as Id<"candidates"> | "",
+    assessmentId: (merged.assessmentId || "") as Id<"assessments"> | "",
+  };
+}
+
 function startOfTodayMs() {
   const d = new Date();
   d.setHours(0, 0, 0, 0);
@@ -804,7 +836,7 @@ export function IssuesProjectBoard({
     if (prefsHydrated || savedPrefs === undefined) return;
 
     if (savedPrefs) {
-      const next = { ...DEFAULT_FILTERS, ...savedPrefs.filters };
+      const next = filtersFromPersist(savedPrefs.filters);
       const mode =
         savedPrefs.viewMode === "columns" ||
         savedPrefs.viewMode === "table" ||
