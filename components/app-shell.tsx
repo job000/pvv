@@ -70,6 +70,8 @@ export function AppShell({
   }
 
   const inWorkspace = Boolean(workspaceChrome?.hasWorkspace);
+  const inDashboardNav = Boolean(workspaceChrome?.hasDashboardNav);
+  const showMenuButton = inWorkspace || inDashboardNav;
   const menuOpen = isDesktop
     ? !workspaceChrome?.sidebarCollapsed
     : Boolean(workspaceChrome?.mobileOpen);
@@ -91,13 +93,13 @@ export function AppShell({
           >
             {/* Left cluster */}
             <div className="flex min-w-0 flex-1 items-center gap-0.5 sm:gap-1.5">
-              {inWorkspace ? (
+              {showMenuButton ? (
                 <Button
                   type="button"
                   variant="ghost"
                   size="icon"
                   className={cn(
-                    "text-muted-foreground hover:text-foreground size-10 shrink-0 rounded-xl",
+                    "text-muted-foreground hover:text-foreground size-10 shrink-0 rounded-xl touch-manipulation",
                     menuOpen && "bg-muted text-foreground",
                   )}
                   aria-label={
@@ -139,7 +141,7 @@ export function AppShell({
                 />
               ) : (
                 <span className="text-muted-foreground truncate text-sm font-medium">
-                  Oversikt
+                  {workspaceChrome?.dashboardTitle ?? "Oversikt"}
                 </span>
               )}
             </div>

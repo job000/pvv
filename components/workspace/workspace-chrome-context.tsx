@@ -13,9 +13,13 @@ type WorkspaceChromeValue = {
   mobileOpen: boolean;
   workspaceName: string;
   hasWorkspace: boolean;
+  /** Dashboard / innstillinger / superadmin — menyknapp i toppbar */
+  hasDashboardNav: boolean;
+  dashboardTitle: string;
   toggleMenu: () => void;
   setMobileOpen: (open: boolean) => void;
   syncWorkspace: (name: string, active: boolean) => void;
+  syncDashboardNav: (active: boolean, title?: string) => void;
 };
 
 const WorkspaceChromeContext = createContext<WorkspaceChromeValue | null>(
@@ -31,6 +35,8 @@ export function WorkspaceChromeProvider({
   const [mobileOpen, setMobileOpen] = useState(false);
   const [workspaceName, setWorkspaceName] = useState("");
   const [hasWorkspace, setHasWorkspace] = useState(false);
+  const [hasDashboardNav, setHasDashboardNav] = useState(false);
+  const [dashboardTitle, setDashboardTitle] = useState("Oversikt");
 
   const toggleMenu = useCallback(() => {
     if (typeof window === "undefined") return;
@@ -50,23 +56,39 @@ export function WorkspaceChromeProvider({
     }
   }, []);
 
+  const syncDashboardNav = useCallback((active: boolean, title?: string) => {
+    setHasDashboardNav(active);
+    if (title) setDashboardTitle(title);
+    if (!active) {
+      setMobileOpen(false);
+      setSidebarCollapsed(false);
+      setDashboardTitle("Oversikt");
+    }
+  }, []);
+
   const value = useMemo(
     () => ({
       sidebarCollapsed,
       mobileOpen,
       workspaceName,
       hasWorkspace,
+      hasDashboardNav,
+      dashboardTitle,
       toggleMenu,
       setMobileOpen,
       syncWorkspace,
+      syncDashboardNav,
     }),
     [
       sidebarCollapsed,
       mobileOpen,
       workspaceName,
       hasWorkspace,
+      hasDashboardNav,
+      dashboardTitle,
       toggleMenu,
       syncWorkspace,
+      syncDashboardNav,
     ],
   );
 
@@ -80,7 +102,9 @@ export function WorkspaceChromeProvider({
 export function useWorkspaceChrome(): WorkspaceChromeValue {
   const ctx = useContext(WorkspaceChromeContext);
   if (!ctx) {
-    throw new Error("useWorkspaceChrome must be used within WorkspaceChromeProvider");
+    throw new Error(
+      "useWorkspaceChrome must be used within WorkspaceChromeProvider",
+    );
   }
   return ctx;
 }

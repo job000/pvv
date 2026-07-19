@@ -527,7 +527,7 @@ export function TasksBoard() {
     return (
       <section
         id="oppgaver"
-        className="scroll-mt-24"
+        className="scroll-mt-20 sm:scroll-mt-24"
         aria-labelledby="tasks-board-heading"
       >
         <div className="text-muted-foreground flex items-center gap-2 rounded-2xl border border-border/40 bg-muted/20 px-4 py-6 text-sm">
@@ -550,13 +550,13 @@ export function TasksBoard() {
   return (
     <section
       id="oppgaver"
-      className="scroll-mt-24 space-y-3"
+      className="scroll-mt-20 space-y-3 sm:scroll-mt-24"
       aria-labelledby="tasks-board-heading"
     >
       <div className="overflow-hidden rounded-2xl border border-border/50 bg-card">
         <button
           type="button"
-          className="flex w-full items-start gap-3 px-4 py-3.5 text-left transition-colors hover:bg-muted/30 sm:items-center sm:px-5"
+          className="flex w-full items-start gap-3 px-3.5 py-3.5 text-left transition-colors hover:bg-muted/30 touch-manipulation active:bg-muted/40 sm:items-center sm:px-5"
           aria-expanded={expanded}
           aria-controls="tasks-board-panel"
           onClick={() => setExpanded(!expanded)}

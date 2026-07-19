@@ -273,20 +273,20 @@ export function WorkspaceDashboardGrid({
 
   return (
     <>
-      <section className="space-y-5">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+      <section className="space-y-4 sm:space-y-5">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between sm:gap-4">
           <div className="min-w-0 space-y-1">
-            <h2 className="text-lg font-semibold tracking-tight text-foreground">
+            <h2 className="text-base font-semibold tracking-tight text-foreground sm:text-lg">
               Arbeidsområder
             </h2>
-            <p className="text-muted-foreground text-[15px]">
+            <p className="text-muted-foreground text-sm sm:text-[15px]">
               Åpne et område for å jobbe videre.
             </p>
           </div>
           <button
             type="button"
             onClick={() => setCreateOpen((v) => !v)}
-            className="bg-foreground text-background inline-flex h-11 shrink-0 items-center justify-center gap-2 rounded-xl px-5 text-sm font-semibold transition-opacity hover:opacity-90"
+            className="bg-foreground text-background inline-flex h-11 w-full shrink-0 items-center justify-center gap-2 rounded-xl px-5 text-sm font-semibold transition-opacity hover:opacity-90 touch-manipulation sm:w-auto"
           >
             <Plus className="size-4" aria-hidden />
             Nytt område
@@ -357,7 +357,7 @@ export function WorkspaceDashboardGrid({
                   type="button"
                   onClick={() => setFiltersOpen((v) => !v)}
                   className={cn(
-                    "inline-flex h-11 items-center gap-2 rounded-xl border px-3.5 text-sm font-medium transition-colors",
+                    "inline-flex h-11 flex-1 items-center justify-center gap-2 rounded-xl border px-3.5 text-sm font-medium transition-colors touch-manipulation sm:flex-none",
                     filtersOpen || filtersActive
                       ? "border-foreground/20 bg-muted text-foreground"
                       : "border-border/50 bg-background text-muted-foreground hover:text-foreground",
@@ -715,10 +715,10 @@ export function WorkspaceDashboardGrid({
               Viser {rangeStart}–{rangeEnd} av {visibleWorkspaces.length}
             </p>
             {totalPages > 1 ? (
-              <div className="flex items-center gap-2">
+              <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 sm:flex">
                 <button
                   type="button"
-                  className="border-border/50 bg-background hover:bg-muted/50 inline-flex h-10 items-center gap-1.5 rounded-xl border px-3.5 text-sm font-medium text-foreground transition-colors disabled:pointer-events-none disabled:opacity-40"
+                  className="border-border/50 bg-background hover:bg-muted/50 inline-flex h-11 items-center justify-center gap-1.5 rounded-xl border px-3.5 text-sm font-medium text-foreground transition-colors touch-manipulation disabled:pointer-events-none disabled:opacity-40 sm:h-10"
                   disabled={safePage <= 1}
                   onClick={() => setPage((p) => Math.max(1, p - 1))}
                 >
@@ -730,7 +730,7 @@ export function WorkspaceDashboardGrid({
                 </span>
                 <button
                   type="button"
-                  className="border-border/50 bg-background hover:bg-muted/50 inline-flex h-10 items-center gap-1.5 rounded-xl border px-3.5 text-sm font-medium text-foreground transition-colors disabled:pointer-events-none disabled:opacity-40"
+                  className="border-border/50 bg-background hover:bg-muted/50 inline-flex h-11 items-center justify-center gap-1.5 rounded-xl border px-3.5 text-sm font-medium text-foreground transition-colors touch-manipulation disabled:pointer-events-none disabled:opacity-40 sm:h-10"
                   disabled={safePage >= totalPages}
                   onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
                 >

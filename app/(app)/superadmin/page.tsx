@@ -102,7 +102,7 @@ function SuperAdminDashboard() {
   }, [allUsers, allWorkspaces]);
 
   return (
-    <div className="mx-auto max-w-5xl space-y-8 px-5 pb-16 pt-6 sm:px-8 lg:px-10">
+    <div className="mx-auto max-w-5xl space-y-6 px-3 pb-[max(4rem,env(safe-area-inset-bottom))] pt-4 sm:space-y-8 sm:px-8 sm:pt-6 lg:px-10">
       <header className="space-y-1">
         <p className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
           <ShieldCheck className="size-3.5" aria-hidden />
