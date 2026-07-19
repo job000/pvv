@@ -26,6 +26,7 @@ import {
   ASSESSMENT_PAYLOAD_FIELD_LABELS_NB,
   labelAssessmentPayloadField,
 } from "@/lib/assessment-payload-field-labels";
+import type { PulsIssueType } from "@/lib/puls-issue-types";
 import {
   ASSESSMENT_COLLAB_ROLE_DESC_NB,
   ASSESSMENT_COLLAB_ROLE_LABEL_NB,
@@ -52,6 +53,10 @@ type Props = {
     payload: AssessmentPayload,
     meta?: { revision: number },
   ) => void;
+  /** Forhåndsvalgt Puls-korttype (f.eks. fra ?puls=endring) */
+  defaultPulsIssueType?: PulsIssueType | null;
+  /** Når true: ekstra hint om endring i prod/overvåkning */
+  showOpsChangeHint?: boolean;
 };
 
 export function AssessmentCollaborationPanel({
@@ -61,6 +66,8 @@ export function AssessmentCollaborationPanel({
   versionPreviewRequest,
   onVersionPreviewRequestConsumed,
   onDraftRestored,
+  defaultPulsIssueType = null,
+  showOpsChangeHint = false,
 }: Props) {
   const access = useQuery(api.assessments.getMyAccess, { assessmentId });
   const versions = useQuery(api.assessments.listVersions, { assessmentId });
@@ -417,6 +424,12 @@ export function AssessmentCollaborationPanel({
               Hvert kort står for seg selv. Delkort er bare en kobling — opprett,
               koble til, eller fjern.
             </p>
+            {showOpsChangeHint ? (
+              <p className="text-muted-foreground mt-1.5 text-sm">
+                Prosessen kan stå i produksjon eller overvåkning. Endringsønsker,
+                feil og nye funksjoner håndteres som Puls-kort her.
+              </p>
+            ) : null}
           </div>
         </div>
         <AssessmentTaskIssueTree
@@ -424,6 +437,14 @@ export function AssessmentCollaborationPanel({
           workspaceId={workspaceId}
           canEdit={canEdit}
           showGithub
+          defaultIssueType={defaultPulsIssueType}
+          presetTitleHint={
+            defaultPulsIssueType === "Endring"
+              ? "F.eks. Endring: …"
+              : defaultPulsIssueType === "Feil"
+                ? "F.eks. Feil: …"
+                : null
+          }
         />
       </div>
 

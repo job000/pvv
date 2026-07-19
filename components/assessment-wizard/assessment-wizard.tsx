@@ -47,6 +47,10 @@ import {
   nextStepHint,
   type PipelineStatus,
 } from "@/lib/assessment-pipeline";
+import {
+  isProdOrMonitoring,
+  pulsIssueTypeFromQuery,
+} from "@/lib/puls-issue-types";
 import { cn } from "@/lib/utils";
 import { payloadToSnapshot } from "@/convex/lib/payloadSnapshot";
 import { ASSESSMENT_WIZARD_STEP_LABELS } from "@/lib/assessment-wizard-steps";
@@ -898,14 +902,27 @@ export function AssessmentWizard({ assessmentId }: Props) {
     return () => root.removeEventListener("wheel", onWheel);
   }, [emblaApi]);
 
+  const pulsIssuePreset = pulsIssueTypeFromQuery(searchParams.get("puls"));
+
   useEffect(() => {
     if (!emblaApi) return;
     const go = () => {
       if (typeof window === "undefined") return;
-      if (window.location.hash === "#versjoner") {
+      const hash = window.location.hash;
+      if (hash === "#versjoner") {
         emblaApi.scrollTo(detailsSlideIndex);
         requestAnimationFrame(() => {
           document.getElementById("versjoner")?.scrollIntoView({
+            behavior: "smooth",
+            block: "start",
+          });
+        });
+        return;
+      }
+      if (hash === "#puls-kort" || searchParams.get("puls")) {
+        emblaApi.scrollTo(detailsSlideIndex);
+        requestAnimationFrame(() => {
+          document.getElementById("puls-kort")?.scrollIntoView({
             behavior: "smooth",
             block: "start",
           });
@@ -915,7 +932,7 @@ export function AssessmentWizard({ assessmentId }: Props) {
     go();
     window.addEventListener("hashchange", go);
     return () => window.removeEventListener("hashchange", go);
-  }, [emblaApi, detailsSlideIndex]);
+  }, [emblaApi, detailsSlideIndex, searchParams]);
 
   const [candidatePickerKey, setCandidatePickerKey] = useState(0);
 
@@ -1887,6 +1904,8 @@ export function AssessmentWizard({ assessmentId }: Props) {
                     onVersionPreviewRequestConsumed={
                       onVersionPreviewRequestConsumed
                     }
+                    defaultPulsIssueType={pulsIssuePreset}
+                    showOpsChangeHint={isProdOrMonitoring(pipelineStatusNorm)}
                     onDraftRestored={(p, meta) => {
                       setPayload(normalizeDraftPayload(p));
                       if (meta?.revision !== undefined) {

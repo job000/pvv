@@ -9,6 +9,11 @@ import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import { toast } from "@/lib/app-toast";
 import { effectiveGithubDefaultRepos } from "@/lib/github-workspace-helpers";
+import {
+  normalizePulsIssueType,
+  PULS_ISSUE_TYPE_OPTIONS,
+  type PulsIssueType,
+} from "@/lib/puls-issue-types";
 import { cn } from "@/lib/utils";
 import { useMutation, useQuery } from "convex/react";
 import {
@@ -18,7 +23,7 @@ import {
   Send,
   Unlink,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 type EnrichedTask = {
   _id: Id<"assessmentTasks">;
@@ -32,6 +37,7 @@ type EnrichedTask = {
   assignees: { userId: Id<"users">; name: string }[];
   assigneeName: string | null;
   githubIssueUrl?: string | null;
+  issueType?: string;
 };
 
 /**
@@ -42,11 +48,17 @@ export function AssessmentTaskIssueTree({
   workspaceId,
   canEdit = true,
   showGithub = false,
+  defaultIssueType = null,
+  presetTitleHint = null,
 }: {
   assessmentId: Id<"assessments">;
   workspaceId: Id<"workspaces">;
   canEdit?: boolean;
   showGithub?: boolean;
+  /** Forhåndsvalgt type (f.eks. fra ?puls=endring) */
+  defaultIssueType?: PulsIssueType | null;
+  /** Valgfri tittel-hint i placeholder */
+  presetTitleHint?: string | null;
 }) {
   const tasks = useQuery(api.assessmentTasks.listByAssessment, {
     assessmentId,
@@ -67,6 +79,9 @@ export function AssessmentTaskIssueTree({
   const [busy, setBusy] = useState(false);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
+  const [issueType, setIssueType] = useState<string>(
+    defaultIssueType ?? "Oppgave",
+  );
   const [selectedUserIds, setSelectedUserIds] = useState<Id<"users">[]>([]);
   /** Når satt: opprett neste sak allerede koblet som under-sak */
   const [createLinkedTo, setCreateLinkedTo] = useState<
@@ -79,6 +94,10 @@ export function AssessmentTaskIssueTree({
   const [linkParentId, setLinkParentId] = useState<Id<"assessmentTasks"> | "">(
     "",
   );
+
+  useEffect(() => {
+    if (defaultIssueType) setIssueType(defaultIssueType);
+  }, [defaultIssueType]);
 
   const memberOptions = useMemo(() => {
     return (members ?? [])
@@ -179,6 +198,7 @@ export function AssessmentTaskIssueTree({
         description: isEmptyRichText(description)
           ? undefined
           : description,
+        issueType: issueType.trim() || undefined,
         assigneeUserIds:
           selectedUserIds.length > 0 ? selectedUserIds : undefined,
         parentTaskId: createLinkedTo || undefined,
@@ -187,6 +207,7 @@ export function AssessmentTaskIssueTree({
       setDescription("");
       setSelectedUserIds([]);
       setCreateLinkedTo("");
+      setIssueType(defaultIssueType ?? "Oppgave");
       toast.success(
         createLinkedTo
           ? "Nytt delkort opprettet"
@@ -234,17 +255,43 @@ export function AssessmentTaskIssueTree({
   }
 
   return (
-    <div className="space-y-4">
+    <div id="puls-kort" className="scroll-mt-24 space-y-4">
       {canEdit ? (
         <div className="space-y-3 rounded-xl border border-border/50 bg-muted/10 p-3.5">
           <p className="flex items-center gap-2 text-sm font-semibold">
             <ListTree className="size-4 shrink-0" aria-hidden />
             Nytt kort
           </p>
+          <div className="space-y-1.5">
+            <Label className="text-sm" htmlFor="puls-issue-type">
+              Type
+            </Label>
+            <select
+              id="puls-issue-type"
+              className="border-input bg-background h-10 w-full rounded-xl border px-3 text-sm"
+              value={issueType}
+              onChange={(e) => setIssueType(e.target.value)}
+              aria-label="Korttype"
+            >
+              {PULS_ISSUE_TYPE_OPTIONS.map((opt) => (
+                <option key={opt} value={opt}>
+                  {opt}
+                </option>
+              ))}
+            </select>
+          </div>
           <input
             value={title}
             onChange={(e) => setTitle(e.target.value)}
-            placeholder="Tittel"
+            placeholder={
+              presetTitleHint?.trim()
+                ? presetTitleHint
+                : issueType === "Endring"
+                  ? "F.eks. Endring: ny validering i steg 2"
+                  : issueType === "Feil"
+                    ? "F.eks. Feil: timeout mot System X"
+                    : "Tittel"
+            }
             className="border-input bg-background h-10 w-full rounded-xl border px-3 text-sm"
           />
           <CardDescriptionEditor
@@ -401,26 +448,34 @@ export function AssessmentTaskIssueTree({
                 <div className="flex flex-col gap-2">
                   <div className="flex flex-wrap items-start justify-between gap-2">
                     <div className="min-w-0 flex-1 space-y-1">
-                      {isSub ? (
-                        <p className="text-sky-800 dark:text-sky-200 inline-flex items-center gap-1 text-[11px] font-medium">
-                          <Link2 className="size-3 shrink-0" aria-hidden />
-                          Under: {card.parentTitle ?? "…"}
-                          {depth > 1 ? (
-                            <span className="text-muted-foreground font-normal">
-                              · nivå {depth}
-                            </span>
-                          ) : null}
-                        </p>
-                      ) : card.subIssueCount > 0 ? (
-                        <p className="text-muted-foreground text-[11px] font-medium">
-                          Kort · {card.subIssueDoneCount}/{card.subIssueCount}{" "}
-                          delkort ferdig
-                        </p>
-                      ) : (
-                        <p className="text-muted-foreground text-[11px] font-medium">
-                          Kort
-                        </p>
-                      )}
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        {card.issueType ? (
+                          <span className="bg-muted text-foreground inline-flex rounded-md px-1.5 py-0.5 text-[11px] font-medium">
+                            {normalizePulsIssueType(card.issueType) ||
+                              card.issueType}
+                          </span>
+                        ) : null}
+                        {isSub ? (
+                          <p className="text-sky-800 dark:text-sky-200 inline-flex items-center gap-1 text-[11px] font-medium">
+                            <Link2 className="size-3 shrink-0" aria-hidden />
+                            Under: {card.parentTitle ?? "…"}
+                            {depth > 1 ? (
+                              <span className="text-muted-foreground font-normal">
+                                · nivå {depth}
+                              </span>
+                            ) : null}
+                          </p>
+                        ) : card.subIssueCount > 0 ? (
+                          <p className="text-muted-foreground text-[11px] font-medium">
+                            {card.subIssueDoneCount}/{card.subIssueCount}{" "}
+                            delkort ferdig
+                          </p>
+                        ) : !card.issueType ? (
+                          <p className="text-muted-foreground text-[11px] font-medium">
+                            Kort
+                          </p>
+                        ) : null}
+                      </div>
                       <p
                         className={cn(
                           "text-sm font-semibold leading-snug",

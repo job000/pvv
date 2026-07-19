@@ -65,9 +65,9 @@ export function nextStepHint(status: PipelineStatus): string {
     case "uat":
       return "Steg 5–6 · Godkjenn UAT, deretter produksjon (Deployment).";
     case "production":
-      return "Steg 6–7 · Drift stabil? Flytt til overvåkning og endring.";
+      return "I drift — opprett endrings- eller feilkort i Puls. Status kan stå.";
     case "monitoring":
-      return "Steg 7 · Overvåk, håndter endringer; marker ferdig ved avslutning.";
+      return "Overvåkning — endringer og feil som Puls-kort. Status kan stå.";
     case "done":
       return "Avsluttet i livssyklusen. Gjenåpne ved behov.";
     case "on_hold":
@@ -91,9 +91,9 @@ export function readinessLabel(status: PipelineStatus): string {
     case "uat":
       return "I UAT / test";
     case "production":
-      return "I produksjon";
+      return "I produksjon — endring via Puls";
     case "monitoring":
-      return "Overvåkning og endring";
+      return "Overvåkning — endring via Puls";
     case "done":
       return "Avsluttet";
     case "on_hold":

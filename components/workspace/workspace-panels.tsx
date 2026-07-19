@@ -57,6 +57,7 @@ import {
   formatRelativeUpdatedAt,
   priorityFillClass,
 } from "@/lib/assessment-ui-helpers";
+import { isProdOrMonitoring } from "@/lib/puls-issue-types";
 import { formatUserFacingError } from "@/lib/user-facing-error";
 import { cn } from "@/lib/utils";
 import {
@@ -4811,6 +4812,15 @@ export function WorkspaceAssessmentsPanel({
                             Koble ROS
                           </Link>
                         ) : null}
+                        {isProdOrMonitoring(pipeline) ? (
+                          <Link
+                            href={`/w/${workspaceId}/a/${a._id}?puls=endring#puls-kort`}
+                            className="text-muted-foreground hover:text-foreground inline-flex h-9 items-center rounded-full border border-border/50 bg-background px-3 text-xs font-semibold touch-manipulation hover:bg-muted"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            Endring
+                          </Link>
+                        ) : null}
                         <button
                           type="button"
                           className="flex size-9 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
@@ -4917,6 +4927,14 @@ export function WorkspaceAssessmentsPanel({
                                 Koble ROS
                               </Link>
                             ) : null}
+                            {isProdOrMonitoring(pipeline) ? (
+                              <Link
+                                href={`/w/${workspaceId}/a/${a._id}?puls=endring#puls-kort`}
+                                className="text-muted-foreground hover:text-foreground inline-flex h-8 items-center rounded-full border border-border/50 bg-background px-3 text-xs font-semibold hover:bg-muted"
+                              >
+                                Endring
+                              </Link>
+                            ) : null}
                             <button
                               type="button"
                               className="inline-flex size-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
@@ -5017,6 +5035,15 @@ export function WorkspaceAssessmentsPanel({
                           onClick={(e) => e.stopPropagation()}
                         >
                           Koble ROS
+                        </Link>
+                      ) : null}
+                      {isProdOrMonitoring(pipeline) ? (
+                        <Link
+                          href={`/w/${workspaceId}/a/${a._id}?puls=endring#puls-kort`}
+                          className="text-muted-foreground hover:text-foreground inline-flex h-9 items-center rounded-full border border-border/50 bg-background px-3 text-xs font-semibold touch-manipulation hover:bg-muted"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          Endring
                         </Link>
                       ) : null}
                       <button

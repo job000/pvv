@@ -21,6 +21,10 @@ import type { Id } from "@/convex/_generated/dataModel";
 import { toast } from "@/lib/app-toast";
 import { effectiveGithubDefaultRepos } from "@/lib/github-workspace-helpers";
 import { pulsBoardCopy, pulsBoardPath } from "@/lib/puls-board-copy";
+import {
+  PULS_ISSUE_TYPE_ALIASES,
+  PULS_ISSUE_TYPE_OPTIONS,
+} from "@/lib/puls-issue-types";
 import { isEmptyRichText } from "@/lib/rich-text";
 import { cn } from "@/lib/utils";
 import {
@@ -137,19 +141,12 @@ function cardPropertyBadges(card: BoardCard): string[] {
 }
 
 /** Norske valg for egenskap-dropdowns (map også vanlige GitHub-engelske verdier). */
-const ISSUE_TYPE_OPTIONS = ["Funksjon", "Feil", "Oppgave"] as const;
+const ISSUE_TYPE_OPTIONS = PULS_ISSUE_TYPE_OPTIONS;
 const PRIORITY_LABEL_OPTIONS = ["Kritisk", "Høy", "Middels", "Lav"] as const;
 const SIZE_OPTIONS = ["XS", "S", "M", "L", "XL"] as const;
 const ESTIMATE_OPTIONS = ["1", "2", "3", "5", "8", "13", "21"] as const;
 
-const ISSUE_TYPE_ALIASES: Record<string, string> = {
-  feature: "Funksjon",
-  funksjon: "Funksjon",
-  bug: "Feil",
-  feil: "Feil",
-  task: "Oppgave",
-  oppgave: "Oppgave",
-};
+const ISSUE_TYPE_ALIASES: Record<string, string> = PULS_ISSUE_TYPE_ALIASES;
 
 const PRIORITY_LABEL_ALIASES: Record<string, string> = {
   urgent: "Kritisk",

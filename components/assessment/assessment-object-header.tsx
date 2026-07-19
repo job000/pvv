@@ -3,14 +3,19 @@
 import { PipelineStatusSelect } from "@/components/assessment/pipeline-status-select";
 import type { Id } from "@/convex/_generated/dataModel";
 import {
+  nextStepHint,
   PIPELINE_STATUS_LABELS,
   type PipelineStatus,
 } from "@/lib/assessment-pipeline";
+import { isProdOrMonitoring } from "@/lib/puls-issue-types";
 import { cn } from "@/lib/utils";
 import {
   AlertCircle,
+  Bug,
   ExternalLink,
   GitBranch,
+  Kanban,
+  RefreshCw,
   Shield,
 } from "lucide-react";
 import Link from "next/link";
@@ -45,7 +50,7 @@ export function AssessmentObjectHeader({
   /** Beholdt for bakoverkompatibilitet — vises ikke lenger i den slanke headeren. */
   ownerName?: string | null;
   hasRosAnalysisLink: boolean;
-  /** Beholdt for bakoverkompatibilitet — vises ikke lenger som egen tekst. */
+  /** Beholdt for bakoverkompatibilitet — hint hentes fra pipelineStatus. */
   nextStepLabel?: string;
   firstRosAnalysisId: Id<"rosAnalyses"> | null;
   /** Når true og assessmentId er satt: nedtrekk for pipeline-status */
@@ -62,6 +67,18 @@ export function AssessmentObjectHeader({
     : `/w/${wid}/ros`;
   const processDesignHref =
     assessmentId != null ? `/w/${wid}/a/${assessmentId}/prosessdesign` : null;
+  const pulsHref = `/w/${wid}/puls`;
+  const inOps = isProdOrMonitoring(pipelineStatus);
+  const hint = nextStepHint(pipelineStatus);
+
+  const changeHref =
+    assessmentId != null
+      ? `/w/${wid}/a/${assessmentId}?puls=endring#puls-kort`
+      : null;
+  const bugHref =
+    assessmentId != null
+      ? `/w/${wid}/a/${assessmentId}?puls=feil#puls-kort`
+      : null;
 
   const githubIssueHref =
     evaluationContext?.kind === "candidate" &&
@@ -114,6 +131,13 @@ export function AssessmentObjectHeader({
         ) : null}
 
         <div className="ml-auto flex flex-wrap items-center gap-x-3 gap-y-2">
+          <Link
+            href={pulsHref}
+            className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 font-medium underline-offset-4 transition-colors hover:underline"
+          >
+            <Kanban className="size-3.5" aria-hidden />
+            Åpne Puls
+          </Link>
           {processDesignHref ? (
             <Link
               href={processDesignHref}
@@ -168,6 +192,34 @@ export function AssessmentObjectHeader({
         <p className="text-muted-foreground text-xs">
           Ingen prosess valgt — velg under steget «Prosess».
         </p>
+      ) : null}
+
+      {inOps && assessmentId ? (
+        <div className="bg-muted/25 flex flex-col gap-2.5 rounded-xl border border-border/40 px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-muted-foreground min-w-0 text-xs leading-snug sm:text-[13px]">
+            {hint}
+          </p>
+          <div className="flex flex-wrap items-center gap-2">
+            {changeHref ? (
+              <Link
+                href={changeHref}
+                className="bg-background hover:bg-muted inline-flex h-9 items-center gap-1.5 rounded-full border border-border/50 px-3 text-xs font-semibold text-foreground touch-manipulation"
+              >
+                <RefreshCw className="size-3.5" aria-hidden />
+                Endringsønske
+              </Link>
+            ) : null}
+            {bugHref ? (
+              <Link
+                href={bugHref}
+                className="bg-background hover:bg-muted inline-flex h-9 items-center gap-1.5 rounded-full border border-border/50 px-3 text-xs font-semibold text-foreground touch-manipulation"
+              >
+                <Bug className="size-3.5" aria-hidden />
+                Feil
+              </Link>
+            ) : null}
+          </div>
+        </div>
       ) : null}
     </section>
   );
