@@ -9,27 +9,30 @@ import {
   DialogFooter,
   DialogHeader,
 } from "@/components/ui/dialog";
+import { FilterToolbar } from "@/components/ui/filter-toolbar";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { ListViewModeToggle } from "@/components/ui/list-view-mode-toggle";
+import { SearchInput } from "@/components/ui/search-input";
 import { Textarea } from "@/components/ui/textarea";
-import { PortfolioPriorityBoard } from "@/components/workspace/portfolio-priority-board";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import { toast } from "@/lib/app-toast";
+import { isListViewMode, type ListViewMode } from "@/lib/list-view-mode";
 import { pulsBoardCopy, pulsBoardPath } from "@/lib/puls-board-copy";
+import { useStickyState } from "@/lib/use-sticky-state";
 import { cn } from "@/lib/utils";
 import { useAction, useMutation, useQuery } from "convex/react";
 import {
   Activity,
   ArrowRight,
-  Kanban,
   Loader2,
   Plus,
   Users,
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 function roleLabel(role: "owner" | "editor" | "viewer") {
   if (role === "owner") return "Eier";
@@ -47,8 +50,12 @@ export function PulsHubPage({
   workspaceId: Id<"workspaces">;
 }) {
   const router = useRouter();
-  const [showPipeline, setShowPipeline] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
+  const [boardSearch, setBoardSearch] = useState("");
+  const [viewMode, setViewMode] = useStickyState<ListViewMode>(
+    `ws:${workspaceId}:puls-hub:viewMode`,
+    "cards",
+  );
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [createTemplate, setCreateTemplate] = useState<
@@ -185,6 +192,26 @@ export function PulsHubPage({
   const boards = data?.boards ?? [];
   const pending = data?.pendingInvites ?? [];
 
+  const filteredBoards = useMemo(() => {
+    const q = boardSearch.trim().toLowerCase();
+    if (!q) return boards;
+    return boards.filter((b) => {
+      const hay = [
+        b.name,
+        b.description ?? "",
+        b.ownerName ?? "",
+        roleLabel(b.myRole),
+      ]
+        .join(" ")
+        .toLowerCase();
+      return hay.includes(q);
+    });
+  }, [boards, boardSearch]);
+
+  const resolvedViewMode: ListViewMode = isListViewMode(viewMode)
+    ? viewMode
+    : "cards";
+
   const submitCreate = async () => {
     const n = name.trim();
     if (!n) {
@@ -265,25 +292,6 @@ export function PulsHubPage({
     }
   };
 
-  if (showPipeline) {
-    return (
-      <div className="space-y-3">
-        <button
-          type="button"
-          onClick={() => setShowPipeline(false)}
-          className="text-muted-foreground hover:text-foreground inline-flex min-h-9 items-center gap-1 text-sm font-medium"
-        >
-          ← Tilbake til Puls
-        </button>
-        <PortfolioPriorityBoard
-          workspaceId={workspaceId}
-          embedded
-          title={pulsBoardCopy.tabPipeline}
-        />
-      </div>
-    );
-  }
-
   return (
     <div className="space-y-6">
       <div className="relative overflow-hidden rounded-2xl border border-border/40 bg-gradient-to-br from-sky-500/[0.07] via-background to-violet-500/[0.06] px-4 py-5 sm:px-6">
@@ -305,20 +313,10 @@ export function PulsHubPage({
               {pulsBoardCopy.pageTitle}
             </h1>
             <p className="text-muted-foreground mt-1 max-w-xl text-sm leading-relaxed">
-              Velg en tavle du eier eller er invitert til — eller åpne pipeline
-              for vurderinger.
+              {pulsBoardCopy.pageSubtitle}
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              className="min-h-10 rounded-xl"
-              onClick={() => setShowPipeline(true)}
-            >
-              <Kanban className="size-3.5" />
-              Pipeline
-            </Button>
             <Button
               type="button"
               className="min-h-10 rounded-xl"
@@ -382,9 +380,29 @@ export function PulsHubPage({
         <div className="flex items-baseline justify-between gap-2">
           <h2 className="text-sm font-semibold">Dine tavler</h2>
           <p className="text-muted-foreground text-xs tabular-nums">
-            {data === undefined ? "…" : `${boards.length} tavler`}
+            {data === undefined
+              ? "…"
+              : boardSearch.trim()
+                ? `${filteredBoards.length} av ${boards.length}`
+                : `${boards.length} tavler`}
           </p>
         </div>
+
+        {boards.length > 0 ? (
+          <FilterToolbar className="w-full">
+            <SearchInput
+              value={boardSearch}
+              onChange={(e) => setBoardSearch(e.target.value)}
+              placeholder="Søk tavler…"
+              aria-label="Søk i Puls-tavler"
+              className="h-11 w-full min-w-0 rounded-full border-border/50 sm:max-w-sm"
+            />
+            <ListViewModeToggle
+              value={resolvedViewMode}
+              onChange={setViewMode}
+            />
+          </FilterToolbar>
+        ) : null}
 
         {data === undefined ? (
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -410,9 +428,91 @@ export function PulsHubPage({
               Ny tavle
             </Button>
           </div>
+        ) : filteredBoards.length === 0 ? (
+          <div className="rounded-2xl border border-dashed border-border/60 px-4 py-10 text-center">
+            <p className="text-sm font-medium">Ingen treff</p>
+            <p className="text-muted-foreground mt-1 text-xs">
+              Prøv et annet søkeord.
+            </p>
+          </div>
+        ) : resolvedViewMode === "list" ? (
+          <ul className="divide-border/50 divide-y rounded-2xl border border-border/50 bg-card">
+            {filteredBoards.map((board) => (
+              <li key={board._id}>
+                <Link
+                  href={pulsBoardPath(workspaceId, board._id)}
+                  className="hover:bg-muted/30 flex min-h-14 items-center gap-3 px-4 py-3 transition-colors"
+                >
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-semibold">
+                      {board.name}
+                    </p>
+                    {board.description ? (
+                      <p className="text-muted-foreground truncate text-xs">
+                        {board.description}
+                      </p>
+                    ) : null}
+                  </div>
+                  <span className="bg-muted text-muted-foreground shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium">
+                    {roleLabel(board.myRole)}
+                  </span>
+                  <span className="text-muted-foreground hidden shrink-0 text-xs tabular-nums sm:inline">
+                    {board.openCardCount} åpne
+                  </span>
+                  <ArrowRight
+                    className="text-muted-foreground size-3.5 shrink-0"
+                    aria-hidden
+                  />
+                </Link>
+              </li>
+            ))}
+          </ul>
+        ) : resolvedViewMode === "table" ? (
+          <div className="overflow-x-auto rounded-2xl border border-border/50">
+            <table className="w-full min-w-[28rem] text-left text-sm">
+              <thead className="bg-muted/30 text-muted-foreground text-xs">
+                <tr>
+                  <th className="px-4 py-2.5 font-medium">Tavle</th>
+                  <th className="px-3 py-2.5 font-medium">Rolle</th>
+                  <th className="hidden px-3 py-2.5 font-medium sm:table-cell">
+                    Eier
+                  </th>
+                  <th className="px-3 py-2.5 font-medium tabular-nums">Åpne</th>
+                </tr>
+              </thead>
+              <tbody className="divide-border/40 divide-y">
+                {filteredBoards.map((board) => (
+                  <tr key={board._id} className="hover:bg-muted/20">
+                    <td className="px-4 py-3">
+                      <Link
+                        href={pulsBoardPath(workspaceId, board._id)}
+                        className="font-medium underline-offset-2 hover:underline"
+                      >
+                        {board.name}
+                      </Link>
+                      {board.description ? (
+                        <p className="text-muted-foreground mt-0.5 line-clamp-1 text-xs">
+                          {board.description}
+                        </p>
+                      ) : null}
+                    </td>
+                    <td className="text-muted-foreground px-3 py-3 text-xs">
+                      {roleLabel(board.myRole)}
+                    </td>
+                    <td className="text-muted-foreground hidden px-3 py-3 text-xs sm:table-cell">
+                      {board.ownerName ?? "—"}
+                    </td>
+                    <td className="px-3 py-3 text-xs tabular-nums">
+                      {board.openCardCount}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         ) : (
           <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {boards.map((board) => (
+            {filteredBoards.map((board) => (
               <li key={board._id}>
                 <Link
                   href={pulsBoardPath(workspaceId, board._id)}

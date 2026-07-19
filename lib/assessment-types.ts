@@ -38,6 +38,10 @@ export type AssessmentPayload = {
   workingDays: number;
   workingHoursPerDay: number;
   employees: number;
+  /** Egne ansatte vs. eksterne — hvilken timepris som brukes i kroner */
+  laborCostBasis?: "own_staff" | "external";
+  /** Timepris kr/t for valgt basis (synker avgCostPerYear) */
+  hourlyLaborRate?: number;
   criticalityBusinessImpact: number;
   criticalityRegulatoryRisk: number;
 

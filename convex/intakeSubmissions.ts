@@ -496,7 +496,12 @@ export const submitPublic = mutation({
       }
     }
 
-    const suggestion = generateIntakeSuggestion(visibleQuestions, visibleAnswers);
+    const workspace = await ctx.db.get(form.workspaceId);
+    const suggestion = generateIntakeSuggestion(
+      visibleQuestions,
+      visibleAnswers,
+      workspace,
+    );
     const screening = buildPublicIntakeScreeningSummary(
       suggestion.generatedAssessment.payload as Record<string, unknown>,
     );

@@ -1,13 +1,17 @@
 import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
 import type { AssessmentPayload } from "../schema";
+import { assessmentCalcFieldsFromWorkspace } from "../../lib/assessment-calc-config";
 import { syncWorkloadDerivedFields } from "../../lib/assessment-workload-sync";
 import { sanitizeAssessmentProcessTextFields } from "../../lib/assessment-process-profile";
 import { normalizePipelineStatus, type PipelineStatus } from "../../lib/assessment-pipeline";
 import { payloadToSnapshot } from "./payloadSnapshot";
 import { computeAllResults } from "./rpaScoring";
 
-export function defaultAssessmentPayload(): AssessmentPayload {
+export function defaultAssessmentPayload(
+  workspace?: Doc<"workspaces"> | null,
+): AssessmentPayload {
+  const calc = assessmentCalcFieldsFromWorkspace(workspace ?? undefined);
   return {
     processName: "",
     candidateId: "",
@@ -32,10 +36,12 @@ export function defaultAssessmentPayload(): AssessmentPayload {
     baselineHours: 800,
     reworkHours: 50,
     auditHours: 40,
-    avgCostPerYear: 850000,
-    workingDays: 230,
-    workingHoursPerDay: 7.5,
+    avgCostPerYear: calc.avgCostPerYear,
+    workingDays: calc.workingDays,
+    workingHoursPerDay: calc.workingHoursPerDay,
     employees: 3,
+    laborCostBasis: calc.laborCostBasis,
+    hourlyLaborRate: calc.hourlyLaborRate,
     criticalityBusinessImpact: 3,
     criticalityRegulatoryRisk: 3,
     hfOperationsSupportLevel: "unsure",
@@ -44,8 +50,8 @@ export function defaultAssessmentPayload(): AssessmentPayload {
     hfEconomicRationaleNotes: "",
     hfCriticalManualGapNotes: "",
     hfOperationsSupportNotes: "",
-    implementationBuildCost: 350000,
-    annualRunCost: 75000,
+    implementationBuildCost: calc.implementationBuildCost,
+    annualRunCost: calc.annualRunCost,
     valuePainPointIds: [],
     valueGainIds: [],
   };

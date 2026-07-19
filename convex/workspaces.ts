@@ -11,6 +11,7 @@ import {
 import { insertUserInAppNotification } from "./userInAppNotifications";
 import { normalizeGithubRepoFullName } from "./lib/github";
 import { queryUsersForInviteSuggest } from "./lib/userSearch";
+import { isCalcSectorPresetId } from "../lib/assessment-calc-config";
 import { isValidRosSectorPackId } from "../lib/ros-sector-packs";
 
 const WORKSPACE_INVITE_ROLE_NB: Record<"admin" | "member" | "viewer", string> = {
@@ -372,6 +373,16 @@ export const update = mutation({
       v.union(v.string(), v.null()),
     ),
     defaultRosSectorPackId: v.optional(v.union(v.string(), v.null())),
+    calcWorkingDays: v.optional(v.union(v.number(), v.null())),
+    calcWorkingHoursPerDay: v.optional(v.union(v.number(), v.null())),
+    calcHourlyRateOwnStaff: v.optional(v.union(v.number(), v.null())),
+    calcHourlyRateExternal: v.optional(v.union(v.number(), v.null())),
+    calcDefaultLaborCostBasis: v.optional(
+      v.union(v.literal("own_staff"), v.literal("external"), v.null()),
+    ),
+    calcDefaultBuildCost: v.optional(v.union(v.number(), v.null())),
+    calcDefaultAnnualRunCost: v.optional(v.union(v.number(), v.null())),
+    calcSectorPresetId: v.optional(v.union(v.string(), v.null())),
   },
   handler: async (ctx, args) => {
     const userId = await requireUserId(ctx);
@@ -394,6 +405,14 @@ export const update = mutation({
       githubProjectStatusFieldCacheAt?: undefined;
       githubProjectStatusFieldCache?: undefined;
       defaultRosSectorPackId?: string;
+      calcWorkingDays?: number | undefined;
+      calcWorkingHoursPerDay?: number | undefined;
+      calcHourlyRateOwnStaff?: number | undefined;
+      calcHourlyRateExternal?: number | undefined;
+      calcDefaultLaborCostBasis?: "own_staff" | "external" | undefined;
+      calcDefaultBuildCost?: number | undefined;
+      calcDefaultAnnualRunCost?: number | undefined;
+      calcSectorPresetId?: string | undefined;
     } = {};
     if (args.name !== undefined) {
       patch.name = args.name.trim() || "Uten navn";
@@ -485,6 +504,68 @@ export const update = mutation({
           throw new Error("Ugyldig ROS-sektor.");
         }
         patch.defaultRosSectorPackId = id;
+      }
+    }
+    const setOptPositive = (
+      key:
+        | "calcWorkingDays"
+        | "calcWorkingHoursPerDay"
+        | "calcHourlyRateOwnStaff"
+        | "calcHourlyRateExternal"
+        | "calcDefaultBuildCost"
+        | "calcDefaultAnnualRunCost",
+      value: number | null | undefined,
+      opts?: { allowZero?: boolean; max?: number },
+    ) => {
+      if (value === undefined) return;
+      if (value === null) {
+        patch[key] = undefined;
+        return;
+      }
+      if (!Number.isFinite(value)) {
+        throw new Error("Ugyldig kalkulasjonstall.");
+      }
+      const min = opts?.allowZero ? 0 : 0.01;
+      if (value < min) {
+        throw new Error("Kalkulasjonstall må være positivt.");
+      }
+      if (opts?.max != null && value > opts.max) {
+        throw new Error("Kalkulasjonstall er for høyt.");
+      }
+      patch[key] = value;
+    };
+    setOptPositive("calcWorkingDays", args.calcWorkingDays, { max: 366 });
+    setOptPositive("calcWorkingHoursPerDay", args.calcWorkingHoursPerDay, {
+      max: 24,
+    });
+    setOptPositive("calcHourlyRateOwnStaff", args.calcHourlyRateOwnStaff, {
+      max: 50_000,
+    });
+    setOptPositive("calcHourlyRateExternal", args.calcHourlyRateExternal, {
+      max: 50_000,
+    });
+    setOptPositive("calcDefaultBuildCost", args.calcDefaultBuildCost, {
+      allowZero: true,
+      max: 500_000_000,
+    });
+    setOptPositive("calcDefaultAnnualRunCost", args.calcDefaultAnnualRunCost, {
+      allowZero: true,
+      max: 100_000_000,
+    });
+    if (args.calcDefaultLaborCostBasis !== undefined) {
+      if (args.calcDefaultLaborCostBasis === null) {
+        patch.calcDefaultLaborCostBasis = undefined;
+      } else {
+        patch.calcDefaultLaborCostBasis = args.calcDefaultLaborCostBasis;
+      }
+    }
+    if (args.calcSectorPresetId !== undefined) {
+      if (args.calcSectorPresetId === null || args.calcSectorPresetId === "") {
+        patch.calcSectorPresetId = undefined;
+      } else if (!isCalcSectorPresetId(args.calcSectorPresetId)) {
+        throw new Error("Ugyldig sektor-forslag for kalkulasjon.");
+      } else {
+        patch.calcSectorPresetId = args.calcSectorPresetId;
       }
     }
     await ctx.db.patch(args.workspaceId, patch);

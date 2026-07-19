@@ -5,6 +5,7 @@ import type {
   IntakeRosSuggestion,
 } from "../schema";
 import type { AssessmentPayload } from "../schema";
+import type { Doc } from "../_generated/dataModel";
 import {
   RPA_BARRIER_SELF_ASSESSMENT_VALUES,
   RPA_SIMILAR_AUTOMATION_VALUES,
@@ -330,13 +331,14 @@ function applyAssessmentChoice(
 export function generateIntakeSuggestion(
   questions: IntakeQuestionDoc[],
   answers: IntakeAnswer[],
+  workspace?: Doc<"workspaces"> | null,
 ): MappingResult {
   const questionMap = new Map<string, IntakeQuestionDoc>();
   for (const question of questions) {
     questionMap.set(question._id, question);
   }
 
-  let payload = defaultAssessmentPayload();
+  let payload = defaultAssessmentPayload(workspace);
   const autoFilledFields = new Set<string>();
   const riskSignals = new Set<string>();
   const generatedPvvFlags = new Set<string>();

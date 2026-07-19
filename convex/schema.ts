@@ -89,6 +89,15 @@ export const assessmentPayloadFields = {
   workingDays: v.number(),
   workingHoursPerDay: v.number(),
   employees: v.number(),
+  /**
+   * Hvem utfører arbeidet i dag — styrer hvilken timepris som brukes i kronerberegning.
+   * own_staff = egne ansatte; external = innleid/konsulent (typisk høyere timepris).
+   */
+  laborCostBasis: v.optional(
+    v.union(v.literal("own_staff"), v.literal("external")),
+  ),
+  /** Timepris (kr/t) for valgt laborCostBasis; avgCostPerYear synkes fra denne × kalender */
+  hourlyLaborRate: v.optional(v.number()),
   /** Kritikalitet: forretningspåvirkning, regulatorisk risiko (Likert 1–5) */
   criticalityBusinessImpact: v.number(),
   criticalityRegulatoryRisk: v.number(),
@@ -621,6 +630,27 @@ export default defineSchema({
     ),
     /** Standard sektor-pakke ved nye ROS-analyser (general, va_water, …) */
     defaultRosSectorPackId: v.optional(v.string()),
+    /**
+     * Valgt sektor-forslag for kalkulasjon (municipal | hospital | private | general).
+     * Tallene under kan fortsatt overstyres manuelt.
+     */
+    calcSectorPresetId: v.optional(v.string()),
+    /** Kalkulasjonsstandard: arbeidsdager / år (nye vurderinger) */
+    calcWorkingDays: v.optional(v.number()),
+    /** Kalkulasjonsstandard: timer per arbeidsdag */
+    calcWorkingHoursPerDay: v.optional(v.number()),
+    /** Timepris egne ansatte (kr/t) */
+    calcHourlyRateOwnStaff: v.optional(v.number()),
+    /** Timepris eksterne / innleid (kr/t) */
+    calcHourlyRateExternal: v.optional(v.number()),
+    /** Standard arbeidsbasis for nye vurderinger */
+    calcDefaultLaborCostBasis: v.optional(
+      v.union(v.literal("own_staff"), v.literal("external")),
+    ),
+    /** Standard engangskostnad bygg (nye vurderinger) */
+    calcDefaultBuildCost: v.optional(v.number()),
+    /** Standard årlig driftskostnad (nye vurderinger) */
+    calcDefaultAnnualRunCost: v.optional(v.number()),
   }).index("by_owner", ["ownerUserId"]),
 
   /**

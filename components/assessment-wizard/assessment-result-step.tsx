@@ -1,8 +1,14 @@
 "use client";
 
+import { AssessmentCalcAssumptions } from "@/components/assessment-wizard/assessment-calc-assumptions";
 import { buttonVariants } from "@/components/ui/button";
 import type { Id } from "@/convex/_generated/dataModel";
 import type { ComputedSnapshot } from "@/convex/lib/rpaScoring";
+import {
+  getCalcSectorPreset,
+  type CalcSectorPresetId,
+  type WorkspaceCalcDefaults,
+} from "@/lib/assessment-calc-config";
 import {
   buildGovernanceReadinessSummary,
   readinessLabelFromScore,
@@ -91,6 +97,11 @@ export function AssessmentResultStep({
   title,
   assessment,
   hasProcessDesignDocument,
+  canEdit,
+  workspaceCalcDefaults,
+  calcSectorPresetId,
+  update,
+  updateMany,
 }: {
   computed: ComputedSnapshot;
   payload: AssessmentPayload;
@@ -101,7 +112,16 @@ export function AssessmentResultStep({
     pddStatus?: string | null;
   };
   hasProcessDesignDocument: boolean;
+  canEdit: boolean;
+  workspaceCalcDefaults: WorkspaceCalcDefaults;
+  calcSectorPresetId?: CalcSectorPresetId | string | null;
+  update: <K extends keyof AssessmentPayload>(
+    key: K,
+    value: AssessmentPayload[K],
+  ) => void;
+  updateMany: (patch: Partial<AssessmentPayload>) => void;
 }) {
+  const sectorPreset = getCalcSectorPreset(calcSectorPresetId);
   const suitability = buildRpaSuitabilityReport(payload, computed);
   const hoursEntered = workloadIsUserEntered(payload);
   const costsDefault = costsLookLikeDefaults(payload);
@@ -205,6 +225,14 @@ export function AssessmentResultStep({
         ) : null}
       </section>
 
+      <AssessmentCalcAssumptions
+        payload={payload}
+        canEdit={canEdit}
+        workspaceDefaults={workspaceCalcDefaults}
+        update={update}
+        updateMany={updateMany}
+      />
+
       {/* Tallfestede gevinster */}
       <section className="space-y-3">
         <div className="flex items-center gap-2">
@@ -215,8 +243,8 @@ export function AssessmentResultStep({
         </div>
         <p className="text-muted-foreground -mt-1 text-xs leading-relaxed">
           Formler: potensial = f(struktur, likhet, digitalisering, volum);
-          timer spart ≈ automasjonspotensial × manuelle timer; prioritet =
-          √(potensial × kritikalitet).
+          timer spart ≈ automasjonspotensial × manuelle timer; kr ≈ samme % ×
+          (timer × timepris); prioritet = √(potensial × kritikalitet).
         </p>
         <div className="grid gap-3 sm:grid-cols-2">
           <MetricTile
@@ -283,8 +311,37 @@ export function AssessmentResultStep({
         </div>
         <p className="text-muted-foreground mt-1 text-xs leading-relaxed">
           Kvalitet, sikkerhet og at arbeidet faktisk blir gjort — ofte like
-          viktige for beslutning som kroner.
+          viktige for beslutning som kroner. Disse påvirker prioritet via
+          kritikalitet, men telles ikke om til kunstige kronebeløp.
         </p>
+        {sectorPreset ? (
+          <div className="bg-muted/25 mt-3 space-y-2 rounded-xl px-3 py-3">
+            <p className="text-foreground text-xs font-medium">
+              Typiske gevinster ({sectorPreset.label})
+            </p>
+            <ul className="space-y-1">
+              {sectorPreset.savingsFocus.map((line) => (
+                <li
+                  key={line}
+                  className="text-muted-foreground flex gap-2 text-xs leading-relaxed"
+                >
+                  <span className="text-foreground/40 mt-1.5 size-1 shrink-0 rounded-full bg-current" />
+                  {line}
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
+        {computed.paybackMonths != null &&
+        computed.paybackMonths > 24 &&
+        suitability.softBenefits.length > 0 ? (
+          <p className="bg-amber-500/10 text-amber-950 dark:text-amber-100 mt-3 rounded-xl px-3 py-2.5 text-xs leading-relaxed">
+            Tilbakebetaling over 24 mnd betyr ikke automatisk «nei». Ved sterke
+            myke gevinster kan det fortsatt være fornuftig å utvikle — vurder
+            sikkerhet, etterlevelse og pålitelig gjennomføring sammen med
+            kroner.
+          </p>
+        ) : null}
         <ul className="mt-4 grid gap-2 sm:grid-cols-2">
           {suitability.softBenefits.map((b) => (
             <SoftBenefitChip key={b.id} benefit={b} />
@@ -397,8 +454,9 @@ export function AssessmentResultStep({
         </ul>
         <p className="text-muted-foreground mt-4 flex items-start gap-1.5 text-[11px] leading-relaxed">
           <Clock className="mt-0.5 size-3 shrink-0" aria-hidden />
-          Tallene er beslutningsstøtte, ikke fasit. Juster volum og kostnader
-          under «Valgfritt mer» for mer presise anslag.
+          Tallene er beslutningsstøtte, ikke fasit. Juster timepris og
+          arbeidsbasis over, og volum under kandidatsteget, for mer treffsikre
+          anslag.
         </p>
       </section>
     </div>

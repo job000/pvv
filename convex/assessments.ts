@@ -322,7 +322,8 @@ export const create = mutation({
   handler: async (ctx, args) => {
     const userId = await requireUserId(ctx);
     await requireWorkspaceMember(ctx, args.workspaceId, userId, "member");
-    let payload = defaultAssessmentPayload();
+    const workspace = await ctx.db.get(args.workspaceId);
+    let payload = defaultAssessmentPayload(workspace);
     let linkedCandidateId: Id<"candidates"> | undefined;
     if (args.fromCandidateId) {
       const cand = await ctx.db.get(args.fromCandidateId);

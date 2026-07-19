@@ -38,6 +38,15 @@ import { useStickyState } from "@/lib/use-sticky-state";
 
 import { InviteEmailSuggestInput } from "@/components/user/invite-email-suggest-input";
 import { PipelineStatusSelect } from "@/components/assessment/pipeline-status-select";
+import {
+  annualCostFromHourlyRate,
+  CALC_DEFAULTS,
+  CALC_SECTOR_PRESETS,
+  getCalcSectorPreset,
+  resolveWorkspaceCalcDefaults,
+  type CalcSectorPresetId,
+  type LaborCostBasis,
+} from "@/lib/assessment-calc-config";
 import { Badge } from "@/components/ui/badge";
 import {
   Dialog,
@@ -275,6 +284,24 @@ export function WorkspaceSettingsPanel({
   const [wsNotes, setWsNotes] = useState("");
   const [wsOrgNr, setWsOrgNr] = useState("");
   const [wsHer, setWsHer] = useState("");
+  const [calcDays, setCalcDays] = useState<number>(CALC_DEFAULTS.workingDays);
+  const [calcHours, setCalcHours] = useState<number>(
+    CALC_DEFAULTS.workingHoursPerDay,
+  );
+  const [calcOwnHourly, setCalcOwnHourly] = useState<number>(
+    CALC_DEFAULTS.hourlyRateOwnStaff,
+  );
+  const [calcExtHourly, setCalcExtHourly] = useState<number>(
+    CALC_DEFAULTS.hourlyRateExternal,
+  );
+  const [calcBasis, setCalcBasis] = useState<LaborCostBasis>(
+    CALC_DEFAULTS.laborCostBasis,
+  );
+  const [calcBuild, setCalcBuild] = useState<number>(CALC_DEFAULTS.buildCost);
+  const [calcRun, setCalcRun] = useState<number>(CALC_DEFAULTS.annualRunCost);
+  const [calcPresetId, setCalcPresetId] = useState<CalcSectorPresetId | null>(
+    null,
+  );
 
   const isAdmin =
     membership?.role === "owner" || membership?.role === "admin";
@@ -288,6 +315,16 @@ export function WorkspaceSettingsPanel({
       setWsNotes(workspace.notes ?? "");
       setWsOrgNr(workspace.organizationNumber ?? "");
       setWsHer(workspace.institutionIdentifier ?? "");
+      const calc = resolveWorkspaceCalcDefaults(workspace);
+      setCalcDays(calc.workingDays);
+      setCalcHours(calc.workingHoursPerDay);
+      setCalcOwnHourly(calc.hourlyRateOwnStaff);
+      setCalcExtHourly(calc.hourlyRateExternal);
+      setCalcBasis(calc.laborCostBasis);
+      setCalcBuild(calc.buildCost);
+      setCalcRun(calc.annualRunCost);
+      const preset = getCalcSectorPreset(workspace.calcSectorPresetId);
+      setCalcPresetId(preset?.id ?? null);
     }
   }, [workspace]);
   /* eslint-enable react-hooks/set-state-in-effect */
@@ -385,6 +422,216 @@ export function WorkspaceSettingsPanel({
           onClick={() => void saveWorkspaceSettings()}
         >
           Lagre
+        </Button>
+      </div>
+    </section>
+
+    <section className="space-y-4 rounded-2xl border border-border/50 bg-card p-4 sm:p-5">
+      <div className="space-y-1">
+        <h2 className="text-base font-semibold tracking-tight text-foreground">
+          Kalkulasjon for vurderinger
+        </h2>
+        <p className="text-sm text-muted-foreground">
+          Velg sektor-forslag for typiske norske tall, eller juster manuelt.
+          Hver vurdering kan overstyre under Resultat. Kroner = tid × timepris ×
+          automasjonspotensial; myke gevinster vurderes separat.
+        </p>
+      </div>
+      <div className="space-y-4">
+        <div className="space-y-2">
+          <Label>Sektor-forslag</Label>
+          <div className="flex flex-wrap gap-2">
+            {CALC_SECTOR_PRESETS.map((preset) => (
+              <button
+                key={preset.id}
+                type="button"
+                aria-pressed={calcPresetId === preset.id}
+                onClick={() => {
+                  setCalcPresetId(preset.id);
+                  setCalcDays(preset.values.workingDays);
+                  setCalcHours(preset.values.workingHoursPerDay);
+                  setCalcOwnHourly(preset.values.hourlyRateOwnStaff);
+                  setCalcExtHourly(preset.values.hourlyRateExternal);
+                  setCalcBasis(preset.values.laborCostBasis);
+                  setCalcBuild(preset.values.buildCost);
+                  setCalcRun(preset.values.annualRunCost);
+                }}
+                className={cn(
+                  "h-10 rounded-full px-4 text-sm font-medium transition-colors",
+                  calcPresetId === preset.id
+                    ? "bg-foreground text-background"
+                    : "bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground",
+                )}
+              >
+                {preset.label}
+              </button>
+            ))}
+          </div>
+          {calcPresetId
+            ? (() => {
+                const preset = getCalcSectorPreset(calcPresetId);
+                if (!preset) return null;
+                return (
+                  <div className="bg-muted/25 space-y-2 rounded-xl px-3 py-3">
+                    <p className="text-muted-foreground text-xs leading-relaxed">
+                      {preset.blurb} Tallene er startpunkter — ikke offisielle
+                      satser.
+                    </p>
+                    <ul className="space-y-1">
+                      {preset.savingsFocus.map((line) => (
+                        <li
+                          key={line}
+                          className="text-muted-foreground flex gap-2 text-xs leading-relaxed"
+                        >
+                          <span className="text-foreground/40 mt-1.5 size-1 shrink-0 rounded-full bg-current" />
+                          {line}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                );
+              })()
+            : null}
+        </div>
+        <div className="space-y-2">
+          <Label>Standard arbeidsbasis</Label>
+          <div className="flex flex-wrap gap-2">
+            {(
+              [
+                ["own_staff", "Egne ansatte"],
+                ["external", "Eksterne / innleid"],
+              ] as const
+            ).map(([id, label]) => (
+              <button
+                key={id}
+                type="button"
+                aria-pressed={calcBasis === id}
+                onClick={() => setCalcBasis(id)}
+                className={
+                  calcBasis === id
+                    ? "h-10 rounded-full bg-foreground px-4 text-sm font-medium text-background"
+                    : "bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground h-10 rounded-full px-4 text-sm font-medium"
+                }
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-2">
+            <Label htmlFor="calc-own-hourly">Timepris egne ansatte (kr/t)</Label>
+            <Input
+              id="calc-own-hourly"
+              type="number"
+              min={0}
+              value={calcOwnHourly}
+              onChange={(e) => setCalcOwnHourly(Number(e.target.value) || 0)}
+            />
+            <p className="text-muted-foreground text-xs">
+              ≈{" "}
+              {annualCostFromHourlyRate(
+                calcOwnHourly,
+                calcDays,
+                calcHours,
+              ).toLocaleString("nb-NO")}{" "}
+              kr / årsverk
+            </p>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="calc-ext-hourly">
+              Timepris eksterne / innleid (kr/t)
+            </Label>
+            <Input
+              id="calc-ext-hourly"
+              type="number"
+              min={0}
+              value={calcExtHourly}
+              onChange={(e) => setCalcExtHourly(Number(e.target.value) || 0)}
+            />
+            <p className="text-muted-foreground text-xs">
+              ≈{" "}
+              {annualCostFromHourlyRate(
+                calcExtHourly,
+                calcDays,
+                calcHours,
+              ).toLocaleString("nb-NO")}{" "}
+              kr / årsverk
+            </p>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="calc-ws-days">Arbeidsdager / år</Label>
+            <Input
+              id="calc-ws-days"
+              type="number"
+              min={1}
+              max={366}
+              value={calcDays}
+              onChange={(e) => setCalcDays(Number(e.target.value) || 1)}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="calc-ws-hours">Timer / dag</Label>
+            <Input
+              id="calc-ws-hours"
+              type="number"
+              min={0.1}
+              max={24}
+              step={0.1}
+              value={calcHours}
+              onChange={(e) => setCalcHours(Number(e.target.value) || 0.1)}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="calc-ws-build">Standard byggekostnad</Label>
+            <Input
+              id="calc-ws-build"
+              type="number"
+              min={0}
+              value={calcBuild}
+              onChange={(e) => setCalcBuild(Number(e.target.value) || 0)}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="calc-ws-run">Standard årlig driftskostnad</Label>
+            <Input
+              id="calc-ws-run"
+              type="number"
+              min={0}
+              value={calcRun}
+              onChange={(e) => setCalcRun(Number(e.target.value) || 0)}
+            />
+          </div>
+        </div>
+        <Button
+          type="button"
+          className="h-10 rounded-full bg-foreground px-5 text-sm font-semibold text-background transition-opacity hover:opacity-90"
+          onClick={() => {
+            void (async () => {
+              try {
+                await updateWorkspace({
+                  workspaceId,
+                  calcWorkingDays: calcDays,
+                  calcWorkingHoursPerDay: calcHours,
+                  calcHourlyRateOwnStaff: calcOwnHourly,
+                  calcHourlyRateExternal: calcExtHourly,
+                  calcDefaultLaborCostBasis: calcBasis,
+                  calcDefaultBuildCost: calcBuild,
+                  calcDefaultAnnualRunCost: calcRun,
+                  calcSectorPresetId: calcPresetId,
+                });
+                toast.success("Kalkulasjonsstandard lagret.");
+              } catch (e) {
+                toast.error(
+                  e instanceof Error
+                    ? e.message
+                    : "Kunne ikke lagre kalkulasjon.",
+                );
+              }
+            })();
+          }}
+        >
+          Lagre kalkulasjon
         </Button>
       </div>
     </section>

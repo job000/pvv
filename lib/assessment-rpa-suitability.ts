@@ -360,5 +360,10 @@ export function workloadIsUserEntered(payload: AssessmentPayload): boolean {
 export function costsLookLikeDefaults(payload: AssessmentPayload): boolean {
   const build = payload.implementationBuildCost;
   const run = payload.annualRunCost;
-  return build == null && run == null;
+  const hasCustomBuild = build != null && build !== 350000;
+  const hasCustomRun = run != null && run !== 75000;
+  const hasCustomHourly =
+    typeof payload.hourlyLaborRate === "number" && payload.hourlyLaborRate > 0;
+  const hasCustomBasis = payload.laborCostBasis === "external";
+  return !hasCustomBuild && !hasCustomRun && !hasCustomHourly && !hasCustomBasis;
 }

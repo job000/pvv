@@ -37,6 +37,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
+import { resolveWorkspaceCalcDefaults } from "@/lib/assessment-calc-config";
 import type { AssessmentPayload } from "@/lib/assessment-types";
 import {
   derivedBaselineHoursFromPayload,
@@ -114,6 +115,8 @@ function normalizeDraftPayload(raw: AssessmentPayload): AssessmentPayload {
     rpaManualFallbackWhenRobotFails: raw.rpaManualFallbackWhenRobotFails ?? "",
     implementationBuildCost: raw.implementationBuildCost ?? 350000,
     annualRunCost: raw.annualRunCost ?? 75000,
+    laborCostBasis: raw.laborCostBasis ?? "own_staff",
+    hourlyLaborRate: raw.hourlyLaborRate,
     rpaBenefitKindsAndOperationsNotes:
       raw.rpaBenefitKindsAndOperationsNotes ?? "",
     valuePainPointIds: raw.valuePainPointIds ?? [],
@@ -402,6 +405,16 @@ export function AssessmentWizard({ assessmentId }: Props) {
     data?.assessment
       ? { workspaceId: data.assessment.workspaceId }
       : "skip",
+  );
+  const workspace = useQuery(
+    api.workspaces.get,
+    data?.assessment
+      ? { workspaceId: data.assessment.workspaceId }
+      : "skip",
+  );
+  const workspaceCalcDefaults = useMemo(
+    () => resolveWorkspaceCalcDefaults(workspace ?? undefined),
+    [workspace],
   );
   const saveDraft = useMutation(api.assessments.saveDraft);
   const updateAssessmentTitle = useMutation(api.assessments.updateAssessmentTitle);
@@ -1565,6 +1578,11 @@ export function AssessmentWizard({ assessmentId }: Props) {
                   hasProcessDesignDocument={Boolean(
                     processDesignData?.document,
                   )}
+                  canEdit={canEdit}
+                  workspaceCalcDefaults={workspaceCalcDefaults}
+                  calcSectorPresetId={workspace?.calcSectorPresetId}
+                  update={update}
+                  updateMany={updateMany}
                 />
               ) : (
                 <div className="space-y-1">

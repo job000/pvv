@@ -9,8 +9,6 @@ export const pulsBoardCopy = {
   pageSubtitle:
     "Hold rytmen — prioriter kort, koble dem til arbeid og flytt fremover.",
   tabBoard: "Tavle",
-  tabPipeline: "Pipeline",
-  pipelineSubtitle: "Se vurderinger gjennom livssyklusen.",
   filterPlaceholder: "Søk i kort…",
   filterAria: "Søk i kort",
   processFilterAria: "Filtrer på prosess",

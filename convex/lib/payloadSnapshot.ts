@@ -1,4 +1,8 @@
 import {
+  annualCostFromHourlyRate,
+  CALC_DEFAULTS,
+} from "../../lib/assessment-calc-config";
+import {
   clampLikert5,
   valueTagContextUnit01,
   type AssessmentInputSnapshot,
@@ -21,15 +25,15 @@ const SNAPSHOT_DEFAULTS: AssessmentInputSnapshot = {
   baselineHours: 800,
   reworkHours: 50,
   auditHours: 40,
-  avgCostPerYear: 850000,
-  workingDays: 230,
-  workingHoursPerDay: 7.5,
+  avgCostPerYear: CALC_DEFAULTS.avgCostPerYearOwn,
+  workingDays: CALC_DEFAULTS.workingDays,
+  workingHoursPerDay: CALC_DEFAULTS.workingHoursPerDay,
   employees: 3,
   criticalityBusinessImpact: 3,
   criticalityRegulatoryRisk: 3,
   valueContext01: 0,
-  buildCost: 350000,
-  annualRunCost: 75000,
+  buildCost: CALC_DEFAULTS.buildCost,
+  annualRunCost: CALC_DEFAULTS.annualRunCost,
   implementationDifficulty: 3,
   quickWinPotential: 3,
   readinessScore: 0,
@@ -146,10 +150,22 @@ export function payloadToSnapshot(
     baselineHours: Math.max(0, readNum(p, "baselineHours", SNAPSHOT_DEFAULTS.baselineHours)),
     reworkHours: Math.max(0, readNum(p, "reworkHours", SNAPSHOT_DEFAULTS.reworkHours)),
     auditHours: Math.max(0, readNum(p, "auditHours", SNAPSHOT_DEFAULTS.auditHours)),
-    avgCostPerYear: Math.max(
-      0,
-      readNum(p, "avgCostPerYear", SNAPSHOT_DEFAULTS.avgCostPerYear),
-    ),
+    avgCostPerYear: (() => {
+      const hourlyRaw = p.hourlyLaborRate;
+      const hourly =
+        typeof hourlyRaw === "number" && Number.isFinite(hourlyRaw) && hourlyRaw > 0
+          ? hourlyRaw
+          : typeof hourlyRaw === "string" && hourlyRaw.trim() !== ""
+            ? Number(hourlyRaw)
+            : NaN;
+      if (Number.isFinite(hourly) && hourly > 0) {
+        return annualCostFromHourlyRate(hourly, workingDays, workingHoursPerDay);
+      }
+      return Math.max(
+        0,
+        readNum(p, "avgCostPerYear", SNAPSHOT_DEFAULTS.avgCostPerYear),
+      );
+    })(),
     workingDays,
     workingHoursPerDay,
     employees,

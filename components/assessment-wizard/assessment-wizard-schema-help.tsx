@@ -81,9 +81,11 @@ export function AssessmentWizardSchemaHelp() {
                   Tallgrunnlag (timer, årsverk, kost)
                 </p>
                 <p className="text-muted-foreground leading-relaxed">
-                  Under «Kandidat og volum» — brukes til timer per år, FTE og
-                  besparelsesestimat. Uten realistiske anslag blir ikke
-                  tids-/kronbesparelse i modellen meningsfull for RPA-beslutning.
+                  Volum under «Kandidat og volum», timepris og egne/eksterne under
+                  «Resultat». Kronebesparelse ≈ automasjonspotensial × (timer ×
+                  timepris). Myke gevinster (sikkerhet, at arbeidet blir gjort)
+                  er egne beslutningssignaler — ikke oppfunnet i kroner.
+                  Standardverdier settes under arbeidsområdets innstillinger.
                 </p>
               </div>
             </div>
