@@ -592,6 +592,7 @@ export const listMineAcrossWorkspaces = query({
       Doc<"assessmentTasks"> & {
         assessmentTitle: string;
         workspaceName: string;
+        columnName: string | null;
         assigneeName: string | null;
         assignees: { userId: Id<"users">; name: string }[];
         githubIssueUrl: string | null;
@@ -610,6 +611,12 @@ export const listMineAcrossWorkspaces = query({
         .collect();
       const ws = await ctx.db.get(m.workspaceId);
       const titleById = new Map(tasks.map((t) => [t._id, t.title]));
+      const columnNameById = new Map<Id<"pulsBoardColumns">, string>();
+      for (const t of tasks) {
+        if (!t.columnId || columnNameById.has(t.columnId)) continue;
+        const col = await ctx.db.get(t.columnId);
+        if (col) columnNameById.set(t.columnId, col.name);
+      }
       for (const t of tasks) {
         const assessment = await ctx.db.get(t.assessmentId);
         if (!assessment) continue;
@@ -629,6 +636,9 @@ export const listMineAcrossWorkspaces = query({
           ...t,
           assessmentTitle: assessment.title,
           workspaceName: ws?.name ?? "",
+          columnName: t.columnId
+            ? (columnNameById.get(t.columnId) ?? null)
+            : null,
           assigneeName: assignees.length > 0 ? assignees.map((a) => a.name).join(", ") : null,
           assignees,
           githubIssueUrl,
@@ -1081,12 +1091,13 @@ export const moveTask = mutation({
       throw new Error("Fant ikke oppgaven.");
     }
     await requireTaskWriteAccess(ctx, row);
+    // Behold dashboardRank ved status/kolonne-endring, så gjenåpning
+    // havner på samme plass i «Puls på tvers» (ikke nederst).
     const patch: {
       columnId?: Id<"pulsBoardColumns">;
       priority?: number;
       status?: "open" | "done";
-      dashboardRank?: number;
-    } = { dashboardRank: Date.now() };
+    } = {};
 
     if (args.columnId !== undefined) {
       const col = await ctx.db.get(args.columnId);
@@ -1164,7 +1175,6 @@ export const completeTask = mutation({
     await ctx.db.patch(args.taskId, {
       status: "done",
       columnId: doneColumnId,
-      dashboardRank: Date.now(),
     });
     if (args.completeSubIssues === true) {
       await markSubtreeDone(ctx, args.taskId);

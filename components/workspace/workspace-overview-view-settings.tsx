@@ -176,7 +176,7 @@ export function WorkspaceOverviewViewSettings({
         size={compactTrigger ? "sm" : "default"}
         className={cn(
           compactTrigger
-            ? "h-9 min-h-[36px] gap-1.5 px-3 text-xs font-medium sm:h-9"
+            ? "h-10 min-h-10 gap-1.5 px-3.5 text-sm font-medium"
             : "h-11 min-h-[44px] gap-2 text-[13px] font-medium sm:h-10 sm:min-h-0",
           triggerClassName,
         )}

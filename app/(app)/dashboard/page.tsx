@@ -70,21 +70,21 @@ export default function DashboardPage() {
         <DashboardEntryRedirect />
       </Suspense>
 
-      <div className="mx-auto max-w-6xl space-y-12 px-4 pb-24 pt-8 sm:px-8 lg:px-10">
-        <header className="space-y-6">
-          <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
-            <div className="min-w-0 space-y-2">
-              <h1 className="font-heading text-3xl font-semibold tracking-tight text-foreground sm:text-[2rem]">
+      <div className="mx-auto max-w-6xl space-y-10 px-4 pb-24 pt-6 sm:px-8 sm:pt-8 lg:px-10">
+        <header className="space-y-5">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+            <div className="min-w-0 space-y-1.5">
+              <h1 className="font-heading text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
                 Oversikt
               </h1>
-              <p className="max-w-md text-[15px] leading-relaxed text-muted-foreground">
+              <p className="text-muted-foreground max-w-lg text-[15px] leading-relaxed">
                 Velg arbeidsområde og fortsett der du slapp.
               </p>
             </div>
             {defaultWorkspace ? (
               <Link
                 href={`/w/${defaultWorkspace._id}`}
-                className="inline-flex h-12 items-center justify-center gap-2 rounded-2xl bg-foreground px-6 text-sm font-semibold text-background transition-opacity hover:opacity-90"
+                className="bg-foreground text-background inline-flex h-11 items-center justify-center gap-2 rounded-xl px-5 text-sm font-semibold transition-opacity hover:opacity-90"
               >
                 Fortsett i {defaultWorkspace.name}
                 <ArrowUpRight className="size-4" aria-hidden />
@@ -92,22 +92,28 @@ export default function DashboardPage() {
             ) : null}
           </div>
 
-          <dl className="flex flex-wrap gap-3">
-            <div className="inline-flex items-baseline gap-2.5 rounded-2xl bg-muted/50 px-4 py-2.5 text-sm">
-              <dt className="text-muted-foreground">Områder</dt>
-              <dd className="font-semibold tabular-nums text-foreground">
+          <dl className="grid grid-cols-3 gap-2 sm:flex sm:flex-wrap sm:gap-2.5">
+            <div className="bg-muted/40 flex flex-col rounded-xl px-3 py-2.5 sm:inline-flex sm:min-w-[7.5rem] sm:flex-row sm:items-baseline sm:gap-2 sm:px-4">
+              <dt className="text-muted-foreground text-xs sm:text-sm">
+                Områder
+              </dt>
+              <dd className="text-base font-semibold tabular-nums text-foreground sm:text-sm">
                 {workspaces.length}
               </dd>
             </div>
-            <div className="inline-flex items-baseline gap-2.5 rounded-2xl bg-muted/50 px-4 py-2.5 text-sm">
-              <dt className="text-muted-foreground">Eier/admin</dt>
-              <dd className="font-semibold tabular-nums text-foreground">
+            <div className="bg-muted/40 flex flex-col rounded-xl px-3 py-2.5 sm:inline-flex sm:min-w-[7.5rem] sm:flex-row sm:items-baseline sm:gap-2 sm:px-4">
+              <dt className="text-muted-foreground text-xs sm:text-sm">
+                Eier/admin
+              </dt>
+              <dd className="text-base font-semibold tabular-nums text-foreground sm:text-sm">
                 {ownerOrAdminCount}
               </dd>
             </div>
-            <div className="inline-flex items-baseline gap-2.5 rounded-2xl bg-muted/50 px-4 py-2.5 text-sm">
-              <dt className="text-muted-foreground">I fokus</dt>
-              <dd className="font-semibold tabular-nums text-foreground">
+            <div className="bg-muted/40 flex flex-col rounded-xl px-3 py-2.5 sm:inline-flex sm:min-w-[7.5rem] sm:flex-row sm:items-baseline sm:gap-2 sm:px-4">
+              <dt className="text-muted-foreground text-xs sm:text-sm">
+                I fokus
+              </dt>
+              <dd className="text-base font-semibold tabular-nums text-foreground sm:text-sm">
                 {priorityCount}
               </dd>
             </div>
@@ -124,13 +130,13 @@ export default function DashboardPage() {
         <TasksBoard />
 
         {priorityHighlights !== undefined && priorityHighlights.length > 0 ? (
-          <section id="prioriteringer" className="scroll-mt-24 space-y-5">
+          <section id="prioriteringer" className="scroll-mt-24 space-y-4">
             <div className="flex items-end justify-between gap-3">
               <div className="space-y-1">
                 <h2 className="text-lg font-semibold tracking-tight text-foreground">
                   I fokus
                 </h2>
-                <p className="text-sm text-muted-foreground">
+                <p className="text-muted-foreground text-sm">
                   Det som bør tas videre snart.
                 </p>
               </div>
@@ -140,33 +146,33 @@ export default function DashboardPage() {
                     ? `/w/${defaultWorkspace._id}/vurderinger`
                     : `/w/${priorityHighlights[0]!.workspaceId}/vurderinger`
                 }
-                className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
+                className="text-muted-foreground hover:text-foreground text-sm font-medium transition-colors"
               >
                 Alle vurderinger
               </Link>
             </div>
-            <ul className="grid gap-3 sm:grid-cols-2">
+            <ul className="grid gap-2.5 sm:grid-cols-2">
               {priorityHighlights.map((row) => (
                 <li key={row.assessment._id}>
                   <Link
                     href={`/w/${row.workspaceId}/a/${row.assessment._id}`}
-                    className="group flex min-h-[5.5rem] w-full min-w-0 items-center gap-4 rounded-3xl border border-border/50 bg-card px-5 py-5 shadow-sm transition-colors hover:bg-muted/30"
+                    className="group hover:bg-muted/30 flex min-h-[4.75rem] w-full min-w-0 items-center gap-3 rounded-2xl border border-border/50 bg-card px-4 py-4 transition-colors sm:gap-4 sm:px-5"
                   >
                     <div className="min-w-0 flex-1 space-y-1">
                       <p className="truncate text-[15px] font-medium tracking-tight text-foreground">
                         {row.assessment.title}
                       </p>
-                      <p className="truncate text-sm text-muted-foreground">
+                      <p className="text-muted-foreground truncate text-sm">
                         {row.workspaceName}
                         {" · "}
                         {PIPELINE_STATUS_LABELS[row.pipelineStatus]}
                       </p>
                     </div>
-                    <span className="shrink-0 rounded-xl bg-muted/70 px-2.5 py-1 text-xs font-semibold tabular-nums text-foreground">
+                    <span className="bg-muted/70 shrink-0 rounded-lg px-2.5 py-1 text-xs font-semibold tabular-nums text-foreground">
                       {row.effectivePriority.toFixed(0)}
                     </span>
                     <ArrowRight
-                      className="size-4 shrink-0 text-muted-foreground/35 transition-transform group-hover:translate-x-0.5 group-hover:text-foreground"
+                      className="text-muted-foreground/35 size-4 shrink-0 transition-transform group-hover:translate-x-0.5 group-hover:text-foreground"
                       aria-hidden
                     />
                   </Link>
@@ -177,32 +183,32 @@ export default function DashboardPage() {
         ) : null}
 
         {mineAssessments && mineAssessments.length > 0 ? (
-          <section className="space-y-5">
+          <section className="space-y-4">
             <div className="space-y-1">
               <h2 className="text-lg font-semibold tracking-tight text-foreground">
                 Delte med deg
               </h2>
-              <p className="text-sm text-muted-foreground">
+              <p className="text-muted-foreground text-sm">
                 Vurderinger du er invitert inn i.
               </p>
             </div>
-            <ul className="grid gap-3 sm:grid-cols-2">
+            <ul className="grid gap-2.5 sm:grid-cols-2">
               {mineAssessments.map(({ assessment, role }) => (
                 <li key={assessment._id}>
                   <Link
                     href={`/w/${assessment.workspaceId}/a/${assessment._id}`}
-                    className="group flex min-h-[5.5rem] w-full min-w-0 items-center gap-4 rounded-3xl border border-border/50 bg-card px-5 py-5 shadow-sm transition-colors hover:bg-muted/30"
+                    className="group hover:bg-muted/30 flex min-h-[4.75rem] w-full min-w-0 items-center gap-3 rounded-2xl border border-border/50 bg-card px-4 py-4 transition-colors sm:gap-4 sm:px-5"
                   >
                     <div className="min-w-0 flex-1 space-y-1">
                       <p className="truncate text-[15px] font-medium tracking-tight text-foreground">
                         {assessment.title}
                       </p>
-                      <p className="text-sm text-muted-foreground">
+                      <p className="text-muted-foreground text-sm">
                         {SHARED_ROLE_LABELS[role] ?? role}
                       </p>
                     </div>
                     <ArrowRight
-                      className="size-4 shrink-0 text-muted-foreground/35 transition-transform group-hover:translate-x-0.5 group-hover:text-foreground"
+                      className="text-muted-foreground/35 size-4 shrink-0 transition-transform group-hover:translate-x-0.5 group-hover:text-foreground"
                       aria-hidden
                     />
                   </Link>

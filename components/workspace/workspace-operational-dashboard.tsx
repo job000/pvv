@@ -124,10 +124,10 @@ export function WorkspaceOperationalDashboard({
     true,
   );
   const [viewMode, setViewMode] = useState<ListViewMode>(
-    homeListPrefs?.viewMode ?? "cards",
+    homeListPrefs?.viewMode ?? "list",
   );
   const [pageSize, setPageSize] = useState<HomeListPageSize>(
-    homeListPrefs?.pageSize ?? 6,
+    homeListPrefs?.pageSize ?? 10,
   );
 
   useEffect(() => {
@@ -341,8 +341,22 @@ export function WorkspaceOperationalDashboard({
     };
   })();
 
+  /** Unngå at samme sak vises både som «gjør først» og i listen under. */
+  const primaryAssessmentId =
+    primarySpec.key === "assess"
+      ? nextNeedsAssessment?.assessmentId
+      : primarySpec.key === "prioritize"
+        ? nextReadyPrio?.assessmentId
+        : primarySpec.key === "ros"
+          ? nextRosDue?.assessmentId
+          : primarySpec.key === "hold"
+            ? nextOnHold?.assessmentId
+            : primarySpec.key === "recent"
+              ? latestWork?.assessmentId
+              : undefined;
+
   const actionItems: ActionItem[] = [];
-  if (pendingIntake.length > 0) {
+  if (pendingIntake.length > 0 && primarySpec.key !== "intake") {
     actionItems.push({
       key: "intake-queue",
       title:
@@ -356,6 +370,12 @@ export function WorkspaceOperationalDashboard({
   }
   for (const { row, action } of rankedActions) {
     if (actionItems.length >= pageSize) break;
+    if (
+      primaryAssessmentId != null &&
+      row.assessmentId === primaryAssessmentId
+    ) {
+      continue;
+    }
     actionItems.push({
       key: String(row.assessmentId),
       title: row.title,
@@ -364,6 +384,16 @@ export function WorkspaceOperationalDashboard({
       meta: action.meta,
     });
   }
+
+  const FLOW_SHORT: Record<number, string> = {
+    1: "Identifisering",
+    2: "Vurdering",
+    3: "Design",
+    4: "Utvikling",
+    5: "Testing",
+    6: "Produksjon",
+    7: "Drift",
+  };
 
   const overviewStats = [
     {
@@ -406,64 +436,45 @@ export function WorkspaceOperationalDashboard({
             : null;
 
   return (
-    <div
-      className={cn(
-        "mx-auto space-y-5 sm:space-y-6",
-        viewMode === "table" ? "max-w-4xl" : "max-w-2xl",
-      )}
-    >
+    <div className="mx-auto max-w-2xl space-y-5">
       <section
-        className="rounded-2xl border border-border/40 bg-muted/15 px-3 py-3 sm:px-4"
+        className="space-y-2"
         aria-labelledby="home-flow-heading"
       >
-        <div className="flex flex-wrap items-start justify-between gap-2">
-          <div className="min-w-0">
-            <h2
-              id="home-flow-heading"
-              className="text-xs font-semibold tracking-tight text-foreground"
-            >
-              Fra start til slutt
-            </h2>
-            <p className="text-muted-foreground mt-0.5 text-[11px] leading-snug">
-              Én sak om gangen: fullfør steget før du går videre.
-            </p>
-          </div>
-          {lifecycleHidden ? (
-            <button
-              type="button"
-              onClick={() => setLifecycleHidden(false)}
-              className="text-muted-foreground hover:text-foreground shrink-0 text-[11px] font-medium underline-offset-2 hover:underline"
-            >
-              Vis hele guiden
-            </button>
-          ) : (
-            <button
-              type="button"
-              onClick={() => setLifecycleHidden(true)}
-              className="text-muted-foreground hover:text-foreground shrink-0 text-[11px] font-medium underline-offset-2 hover:underline"
-            >
-              Skjul guide
-            </button>
-          )}
+        <div className="flex items-center justify-between gap-2">
+          <h2
+            id="home-flow-heading"
+            className="text-muted-foreground text-xs font-medium"
+          >
+            Flyt
+            {highlightedFlowStage != null ? (
+              <span className="text-foreground">
+                {" "}
+                · steg {highlightedFlowStage}
+              </span>
+            ) : null}
+          </h2>
+          <button
+            type="button"
+            onClick={() => setLifecycleHidden(!lifecycleHidden)}
+            className="text-muted-foreground hover:text-foreground shrink-0 text-xs font-medium underline-offset-2 hover:underline"
+          >
+            {lifecycleHidden ? "Guide" : "Skjul guide"}
+          </button>
         </div>
-        <ol className="mt-2.5 flex flex-wrap items-center gap-x-1 gap-y-1.5 text-[11px]">
-          {RPA_LIFECYCLE_STAGES.map((stage, i) => (
-            <li key={stage.id} className="inline-flex items-center gap-1">
-              {i > 0 ? (
-                <span className="text-muted-foreground/50" aria-hidden>
-                  →
-                </span>
-              ) : null}
+        <ol className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          {RPA_LIFECYCLE_STAGES.map((stage) => (
+            <li key={stage.id} className="shrink-0">
               <span
                 className={cn(
-                  "rounded-full px-2 py-0.5 font-medium",
+                  "inline-flex whitespace-nowrap rounded-lg px-2 py-1 text-[11px] font-medium",
                   highlightedFlowStage === stage.index
-                    ? "bg-foreground/90 text-background"
-                    : "bg-background text-muted-foreground ring-1 ring-border/50",
+                    ? "bg-foreground text-background"
+                    : "bg-muted/50 text-muted-foreground",
                 )}
                 title={stage.summary}
               >
-                {stage.index}. {stage.title}
+                {stage.index}. {FLOW_SHORT[stage.index] ?? stage.title}
               </span>
             </li>
           ))}
@@ -493,119 +504,71 @@ export function WorkspaceOperationalDashboard({
             navigationTarget={primarySpec.navigationTarget}
           />
 
-          <div className="grid grid-cols-3 gap-2">
+          <div className="flex flex-wrap gap-2">
             {overviewStats.map((s) => (
               <Link
                 key={s.label}
                 href={s.href}
                 className={cn(
-                  "rounded-xl border px-3 py-2.5 text-center transition-colors touch-manipulation",
+                  "inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors",
                   s.emphasize
-                    ? "border-foreground/20 bg-card hover:bg-muted/30"
-                    : "border-border/40 bg-muted/10 text-muted-foreground hover:bg-muted/20",
+                    ? "bg-muted text-foreground"
+                    : "text-muted-foreground hover:bg-muted/50 hover:text-foreground",
                 )}
               >
-                <p
-                  className={cn(
-                    "text-lg font-semibold tabular-nums",
-                    s.emphasize ? "text-foreground" : "text-muted-foreground",
-                  )}
-                >
-                  {s.value}
-                </p>
-                <p className="text-[11px] font-medium">{s.label}</p>
+                <span className="tabular-nums font-semibold">{s.value}</span>
+                {s.label}
               </Link>
             ))}
           </div>
         </section>
       ) : null}
 
-      {showActions ? (
+      {showActions && actionItems.length > 0 ? (
         <section className="space-y-3" aria-labelledby="home-actions-heading">
-          <div className="flex flex-wrap items-end justify-between gap-3">
-            <div className="min-w-0">
-              <h2
-                id="home-actions-heading"
-                className="font-heading text-base font-semibold tracking-tight"
-              >
-                Ta tak i først
-              </h2>
-              <p className="text-muted-foreground text-xs">
-                Én rad per sak — med neste steg i rekkefølgen.
-              </p>
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <ListViewModeToggle
-                value={viewMode}
-                onChange={(next) =>
-                  persistHomeList({ viewMode: next, pageSize })
-                }
-              />
-              <Link
-                href={`/w/${wid}/puls`}
-                className="text-muted-foreground hover:text-foreground shrink-0 text-xs font-medium underline-offset-2 hover:underline"
-              >
-                Puls
-              </Link>
-            </div>
+          <div className="flex items-center justify-between gap-3">
+            <h2
+              id="home-actions-heading"
+              className="text-sm font-semibold tracking-tight text-foreground"
+            >
+              Deretter
+            </h2>
+            <ListViewModeToggle
+              value={viewMode}
+              onChange={(next) =>
+                persistHomeList({ viewMode: next, pageSize })
+              }
+              showSelect={false}
+              showIcons
+            />
           </div>
 
-          {actionItems.length === 0 ? (
-            <div className="rounded-2xl border border-dashed border-border/50 px-4 py-8 text-center">
-              <p className="text-sm font-medium text-foreground">
-                Ingen kritiske køer akkurat nå
-              </p>
-              <p className="text-muted-foreground mt-1 text-xs">
-                Fortsett i vurderinger eller Puls når du er klar.
-              </p>
-              <div className="mt-4 flex flex-wrap justify-center gap-2">
-                <Link
-                  href={`/w/${wid}/vurderinger`}
-                  className="inline-flex h-10 items-center rounded-full bg-foreground px-4 text-xs font-semibold text-background"
-                >
-                  Vurderinger
-                </Link>
-                <Link
-                  href={`/w/${wid}/puls`}
-                  className="inline-flex h-10 items-center rounded-full border border-border/50 px-4 text-xs font-medium"
-                >
-                  Puls
-                </Link>
-              </div>
-            </div>
-          ) : viewMode === "cards" ? (
-            <ul className="grid gap-3 sm:grid-cols-2">
+          {viewMode === "cards" ? (
+            <ul className="grid gap-2 sm:grid-cols-2">
               {actionItems.map((item) => (
                 <li key={item.key} className="min-w-0">
                   <Link
                     href={item.href}
-                    className="hover:bg-muted/25 flex h-full min-h-24 flex-col justify-between gap-3 rounded-2xl border border-border/50 bg-card p-4 touch-manipulation transition-colors"
+                    className="hover:bg-muted/25 flex h-full flex-col gap-2 rounded-xl border border-border/50 bg-card p-3.5 transition-colors"
                   >
-                    <div className="min-w-0">
-                      <p className="line-clamp-2 text-sm font-semibold">
-                        {item.title}
-                      </p>
-                      <p className="text-muted-foreground mt-1.5 text-xs">
-                        {item.reason}
-                        {item.meta ? ` · ${item.meta}` : null}
-                      </p>
-                    </div>
-                    <span className="text-muted-foreground inline-flex items-center gap-1 text-xs font-medium">
-                      Åpne
-                      <ArrowRight className="size-3.5 opacity-60" aria-hidden />
-                    </span>
+                    <p className="line-clamp-2 text-sm font-semibold">
+                      {item.title}
+                    </p>
+                    <p className="text-muted-foreground text-xs">
+                      {item.reason}
+                      {item.meta ? ` · ${item.meta}` : null}
+                    </p>
                   </Link>
                 </li>
               ))}
             </ul>
           ) : viewMode === "table" ? (
-            <div className="-mx-1 overflow-x-auto overscroll-x-contain px-1">
-              <table className="w-full min-w-[28rem] border-collapse text-left text-sm">
+            <div className="-mx-1 overflow-x-auto px-1">
+              <table className="w-full min-w-[26rem] border-collapse text-left text-sm">
                 <thead>
                   <tr className="border-b border-border/50 text-xs text-muted-foreground">
-                    <th className="px-3 py-2.5 font-medium">Sak</th>
-                    <th className="px-3 py-2.5 font-medium">Hvorfor</th>
-                    <th className="px-3 py-2.5 font-medium">Detalj</th>
+                    <th className="px-3 py-2 font-medium">Sak</th>
+                    <th className="px-3 py-2 font-medium">Neste</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -614,19 +577,17 @@ export function WorkspaceOperationalDashboard({
                       key={item.key}
                       className="border-b border-border/30 last:border-0"
                     >
-                      <td className="px-3 py-3">
+                      <td className="px-3 py-2.5">
                         <Link
                           href={item.href}
-                          className="font-semibold text-foreground underline-offset-2 hover:underline"
+                          className="font-medium text-foreground underline-offset-2 hover:underline"
                         >
                           {item.title}
                         </Link>
                       </td>
-                      <td className="text-muted-foreground px-3 py-3 whitespace-nowrap">
+                      <td className="text-muted-foreground px-3 py-2.5 text-xs">
                         {item.reason}
-                      </td>
-                      <td className="text-muted-foreground px-3 py-3">
-                        {item.meta ?? "—"}
+                        {item.meta ? ` · ${item.meta}` : null}
                       </td>
                     </tr>
                   ))}
@@ -634,24 +595,24 @@ export function WorkspaceOperationalDashboard({
               </table>
             </div>
           ) : (
-            <ul className="divide-y divide-border/40 overflow-hidden rounded-2xl border border-border/50 bg-card">
+            <ul className="divide-y divide-border/40 overflow-hidden rounded-xl border border-border/50 bg-card">
               {actionItems.map((item) => (
                 <li key={item.key}>
                   <Link
                     href={item.href}
-                    className="hover:bg-muted/25 flex min-h-14 items-center gap-3 px-3.5 py-3 touch-manipulation transition-colors sm:px-4"
+                    className="hover:bg-muted/25 flex min-h-12 items-center gap-3 px-3.5 py-2.5 transition-colors"
                   >
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-semibold">
+                      <p className="truncate text-sm font-medium">
                         {item.title}
                       </p>
-                      <p className="text-muted-foreground mt-0.5 truncate text-xs">
+                      <p className="text-muted-foreground truncate text-xs">
                         {item.reason}
                         {item.meta ? ` · ${item.meta}` : null}
                       </p>
                     </div>
                     <ArrowRight
-                      className="text-muted-foreground size-4 shrink-0 opacity-50"
+                      className="text-muted-foreground size-4 shrink-0 opacity-40"
                       aria-hidden
                     />
                   </Link>
@@ -660,6 +621,18 @@ export function WorkspaceOperationalDashboard({
             </ul>
           )}
         </section>
+      ) : null}
+
+      {showActions && actionItems.length === 0 && showFocus ? (
+        <p className="text-muted-foreground text-center text-sm">
+          Ingen flere køer —{" "}
+          <Link
+            href={`/w/${wid}/vurderinger`}
+            className="text-foreground font-medium underline-offset-2 hover:underline"
+          >
+            alle vurderinger
+          </Link>
+        </p>
       ) : null}
     </div>
   );

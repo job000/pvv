@@ -8,6 +8,7 @@ import {
   LayoutDashboard,
   Settings,
   ShieldCheck,
+  Star,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -16,6 +17,21 @@ type WorkspaceRow = {
   workspace: Doc<"workspaces">;
   role: string;
 };
+
+const AVATAR_TONES = [
+  "bg-sky-500/15 text-sky-800 dark:text-sky-200",
+  "bg-emerald-500/15 text-emerald-800 dark:text-emerald-200",
+  "bg-amber-500/15 text-amber-900 dark:text-amber-200",
+  "bg-violet-500/15 text-violet-800 dark:text-violet-200",
+  "bg-rose-500/15 text-rose-800 dark:text-rose-200",
+  "bg-teal-500/15 text-teal-800 dark:text-teal-200",
+] as const;
+
+function avatarTone(name: string): string {
+  let n = 0;
+  for (let i = 0; i < name.length; i++) n += name.charCodeAt(i) * (i + 3);
+  return AVATAR_TONES[n % AVATAR_TONES.length]!;
+}
 
 export function DashboardLayout({
   workspaces,
@@ -32,71 +48,106 @@ export function DashboardLayout({
   return (
     <div className="mx-auto flex w-full max-w-[100rem] flex-col lg:flex-row lg:items-start">
       <aside
-        className="sticky top-14 z-30 hidden h-[calc(100dvh-3.5rem)] w-52 shrink-0 flex-col border-r border-border/60 bg-card lg:flex"
+        className="sticky top-14 z-30 hidden h-[calc(100dvh-3.5rem)] w-64 shrink-0 flex-col border-r border-border/50 bg-muted/20 lg:flex"
         aria-label="Dashboard-meny"
       >
-        <nav className="flex flex-col gap-0.5 px-2.5 pt-4">
-          <NavLink
-            href="/dashboard?oversikt=1"
-            active={pathname === "/dashboard"}
-            icon={LayoutDashboard}
-          >
-            Oversikt
-          </NavLink>
-          <NavLink
-            href="/bruker/innstillinger"
-            active={pathname?.startsWith("/bruker/") ?? false}
-            icon={Settings}
-          >
-            Innstillinger
-          </NavLink>
-          {saAccess?.isSuperAdmin && (
-            <NavLink
-              href="/superadmin"
-              active={pathname === "/superadmin"}
-              icon={ShieldCheck}
-            >
-              Superadmin
-            </NavLink>
-          )}
+        <div className="flex min-h-0 flex-1 flex-col px-3 pt-5 pb-4">
+          <div className="px-2 pb-4">
+            <p className="font-heading text-sm font-semibold tracking-tight text-foreground">
+              Puls
+            </p>
+            <p className="text-muted-foreground mt-0.5 text-xs leading-snug">
+              Oversikt og arbeidsområder
+            </p>
+          </div>
 
-          {workspaces.length > 0 && (
-            <>
-              <div className="mx-1 my-3 h-px bg-border/40" />
-              <p className="text-muted-foreground/60 px-2 pb-1 text-[10px] font-semibold uppercase tracking-widest">
-                Arbeidsområder
-              </p>
-              <div className="flex max-h-[min(45vh,360px)] flex-col gap-px overflow-y-auto [scrollbar-width:thin]">
-                {workspaces.map(({ workspace }) => {
+          <nav className="flex flex-col gap-1">
+            <NavLink
+              href="/dashboard?oversikt=1"
+              active={pathname === "/dashboard"}
+              icon={LayoutDashboard}
+            >
+              Oversikt
+            </NavLink>
+            <NavLink
+              href="/bruker/innstillinger"
+              active={pathname?.startsWith("/bruker/") ?? false}
+              icon={Settings}
+            >
+              Innstillinger
+            </NavLink>
+            {saAccess?.isSuperAdmin ? (
+              <NavLink
+                href="/superadmin"
+                active={pathname === "/superadmin"}
+                icon={ShieldCheck}
+              >
+                Superadmin
+              </NavLink>
+            ) : null}
+          </nav>
+
+          {workspaces.length > 0 ? (
+            <div className="mt-6 flex min-h-0 flex-1 flex-col">
+              <div className="mb-2 flex items-center justify-between px-2">
+                <p className="text-muted-foreground text-[11px] font-semibold tracking-wide uppercase">
+                  Arbeidsområder
+                </p>
+                <span className="text-muted-foreground/80 text-[11px] tabular-nums">
+                  {workspaces.length}
+                </span>
+              </div>
+              <div className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto pr-0.5 [scrollbar-width:thin]">
+                {workspaces.map(({ workspace, role }) => {
                   const isDefault = defaultWorkspaceId === workspace._id;
+                  const initial =
+                    workspace.name.trim().charAt(0).toUpperCase() || "?";
                   return (
                     <Link
                       key={workspace._id}
                       href={`/w/${workspace._id}`}
                       className={cn(
-                        "flex items-center gap-2 rounded-lg px-2 py-1.5 text-[13px] transition-colors",
+                        "group flex items-center gap-2.5 rounded-xl px-2 py-2 text-sm transition-colors",
                         isDefault
-                          ? "text-foreground font-medium"
-                          : "text-muted-foreground hover:text-foreground",
-                        "hover:bg-muted/45",
+                          ? "bg-background text-foreground shadow-sm ring-1 ring-border/60"
+                          : "text-muted-foreground hover:bg-background/70 hover:text-foreground",
                       )}
                     >
-                      <span className="flex size-5 shrink-0 items-center justify-center rounded bg-muted/50 text-[10px] font-bold text-muted-foreground">
-                        {workspace.name.charAt(0).toUpperCase()}
+                      <span
+                        className={cn(
+                          "flex size-8 shrink-0 items-center justify-center rounded-lg text-xs font-semibold",
+                          avatarTone(workspace.name),
+                        )}
+                      >
+                        {initial}
                       </span>
-                      <span className="min-w-0 flex-1 truncate">
-                        {workspace.name}
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate font-medium text-foreground">
+                          {workspace.name}
+                        </span>
+                        <span className="text-muted-foreground block truncate text-[11px] capitalize">
+                          {role === "owner"
+                            ? "Eier"
+                            : role === "admin"
+                              ? "Admin"
+                              : role === "viewer"
+                                ? "Visning"
+                                : "Medlem"}
+                        </span>
                       </span>
-                      {isDefault && (
-                        <span className="text-primary/70 text-[9px]">★</span>
-                      )}
+                      {isDefault ? (
+                        <Star
+                          className="size-3.5 shrink-0 fill-current text-amber-500"
+                          aria-label="Standard"
+                        />
+                      ) : null}
                     </Link>
                   );
                 })}
               </div>
-            </>
-          )}
-        </nav>
+            </div>
+          ) : null}
+        </div>
       </aside>
 
       <div className="min-w-0 flex-1">{children}</div>
@@ -115,19 +166,21 @@ function NavLink({
   icon: React.ComponentType<{ className?: string }>;
   children: React.ReactNode;
 }) {
-  const Comp = href.startsWith("#") ? "a" : Link;
   return (
-    <Comp
+    <Link
       href={href}
       className={cn(
-        "flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] font-medium transition-colors",
+        "flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors",
         active
-          ? "bg-muted text-foreground"
-          : "text-muted-foreground hover:bg-muted/45 hover:text-foreground",
+          ? "bg-background text-foreground shadow-sm ring-1 ring-border/60"
+          : "text-muted-foreground hover:bg-background/60 hover:text-foreground",
       )}
     >
-      <Icon className="size-4 shrink-0 opacity-60" aria-hidden />
+      <Icon
+        className={cn("size-4 shrink-0", active ? "opacity-90" : "opacity-55")}
+        aria-hidden
+      />
       {children}
-    </Comp>
+    </Link>
   );
 }

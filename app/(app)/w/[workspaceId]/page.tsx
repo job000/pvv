@@ -74,20 +74,24 @@ export default function WorkspaceOverviewPage() {
         <WorkspaceRosLinkDialogHost workspaceId={workspaceId} />
       </Suspense>
       <ProductPageHeader
+        className="sm:items-center"
         title={workspace.name}
         description={
           workspace.notes?.trim()
             ? workspace.notes
-            : "Hva som er viktigst å ta tak i nå."
+            : "Neste steg i arbeidsområdet."
         }
         actions={
           <div className="flex flex-wrap items-center gap-2">
-            <WorkspaceOverviewViewSettings workspaceId={workspaceId} />
+            <WorkspaceOverviewViewSettings
+              workspaceId={workspaceId}
+              compactTrigger
+            />
             <Link
               href={`/w/${workspaceId}/vurderinger`}
-              className="text-muted-foreground hover:text-foreground inline-flex h-11 items-center justify-center gap-1.5 rounded-full border border-border/50 px-4 text-sm font-medium transition-colors"
+              className="text-muted-foreground hover:text-foreground inline-flex h-10 items-center justify-center gap-1.5 rounded-xl border border-border/50 px-3.5 text-sm font-medium transition-colors"
             >
-              Alle vurderinger
+              Vurderinger
               <ArrowUpRight className="size-3.5" aria-hidden />
             </Link>
           </div>

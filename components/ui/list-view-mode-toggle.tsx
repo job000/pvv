@@ -38,8 +38,13 @@ export function ListViewModeToggle({
   return (
     <div className={cn("flex flex-wrap items-center gap-2", className)}>
       {showSelect ? (
-        <label className="flex items-center gap-2 text-sm text-muted-foreground">
-          <span className="sr-only sm:not-sr-only">Visning</span>
+        <label
+          className={cn(
+            "flex items-center gap-2 text-sm text-muted-foreground",
+            showIcons && "sm:hidden",
+          )}
+        >
+          <span className="sr-only">Visning</span>
           <span className="relative">
             <select
               aria-label="Visningsmodus"
@@ -58,7 +63,10 @@ export function ListViewModeToggle({
       ) : null}
       {showIcons ? (
         <div
-          className="hidden items-center gap-0.5 rounded-lg border border-border/50 bg-muted/30 p-1 sm:inline-flex"
+          className={cn(
+            "items-center gap-0.5 rounded-xl border border-border/50 bg-muted/30 p-1",
+            showSelect ? "hidden sm:inline-flex" : "inline-flex",
+          )}
           role="group"
           aria-label="Hurtigvisning"
         >
