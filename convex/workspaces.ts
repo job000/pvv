@@ -687,7 +687,18 @@ export const listWorkspaceInvites = query({
     if (!userId) {
       return [];
     }
-    await requireWorkspaceMember(ctx, args.workspaceId, userId, "admin");
+    const membership = await getWorkspaceMembership(
+      ctx,
+      args.workspaceId,
+      userId,
+    );
+    /** Kun admin/eier ser ventende e-postinvitasjoner — andre får tom liste (ikke feil). */
+    if (
+      !membership ||
+      (membership.role !== "owner" && membership.role !== "admin")
+    ) {
+      return [];
+    }
     const rows = await ctx.db
       .query("workspaceInvites")
       .withIndex("by_workspace", (q) =>

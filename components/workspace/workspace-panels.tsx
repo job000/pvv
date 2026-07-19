@@ -685,9 +685,12 @@ export function WorkspaceTeamPanel({
 }) {
   const membership = useQuery(api.workspaces.getMyMembership, { workspaceId });
   const members = useQuery(api.workspaces.listMembers, { workspaceId });
-  const pendingInvites = useQuery(api.workspaces.listWorkspaceInvites, {
-    workspaceId,
-  });
+  const isAdmin =
+    membership?.role === "owner" || membership?.role === "admin";
+  const pendingInvites = useQuery(
+    api.workspaces.listWorkspaceInvites,
+    membership !== undefined && isAdmin ? { workspaceId } : "skip",
+  );
   const inviteMember = useMutation(api.workspaces.inviteMember);
   const removeMember = useMutation(api.workspaces.removeMember);
   const updateMemberRole = useMutation(api.workspaces.updateMemberRole);
@@ -702,9 +705,6 @@ export function WorkspaceTeamPanel({
   const [inviteRole, setInviteRole] = useState<"admin" | "member" | "viewer">(
     "member",
   );
-
-  const isAdmin =
-    membership?.role === "owner" || membership?.role === "admin";
 
   const debouncedInviteEmail = useDebouncedInviteEmail(inviteEmail.trim(), 300);
   const invitePreview = useQuery(

@@ -1,5 +1,6 @@
 "use client";
 
+import { WorkspaceAdminGate } from "@/components/workspace/workspace-admin-gate";
 import { WorkspaceSettingsPanel } from "@/components/workspace/workspace-panels";
 import type { Id } from "@/convex/_generated/dataModel";
 import { useParams } from "next/navigation";
@@ -18,7 +19,12 @@ export default function WorkspaceSettingsPage() {
           Navn, detaljer og integrasjoner for arbeidsområdet.
         </p>
       </header>
-      <WorkspaceSettingsPanel workspaceId={workspaceId} />
+      <WorkspaceAdminGate
+        workspaceId={workspaceId}
+        title="Innstillinger styres av administratorer"
+      >
+        <WorkspaceSettingsPanel workspaceId={workspaceId} />
+      </WorkspaceAdminGate>
     </div>
   );
 }

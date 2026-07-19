@@ -1,8 +1,10 @@
 "use client";
 
 import type { ComponentType } from "react";
+import { api } from "@/convex/_generated/api";
 import { cn } from "@/lib/utils";
 import type { Id } from "@/convex/_generated/dataModel";
+import { useQuery } from "convex/react";
 import {
   Building2,
   ChartColumn,
@@ -21,7 +23,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
-import { Suspense } from "react";
+import { Suspense, useMemo } from "react";
 
 type NavKind = "default" | "vurderinger" | "prosesser" | "prosessdesign";
 
@@ -31,6 +33,8 @@ type NavItem = {
   icon: ComponentType<{ className?: string }>;
   exact: boolean;
   kind: NavKind;
+  /** Kun eier/admin ser lenken i menyen */
+  adminOnly?: boolean;
 };
 
 function navSections(wid: string): { heading: string | null; items: NavItem[] }[] {
@@ -131,6 +135,7 @@ function navSections(wid: string): { heading: string | null; items: NavItem[] }[
           icon: Share2,
           exact: false,
           kind: "default",
+          adminOnly: true,
         },
         {
           href: `/w/${wid}/innstillinger`,
@@ -138,6 +143,7 @@ function navSections(wid: string): { heading: string | null; items: NavItem[] }[
           icon: Settings2,
           exact: false,
           kind: "default",
+          adminOnly: true,
         },
       ],
     },
@@ -198,7 +204,17 @@ function WorkspaceNavInner({
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const wid = String(workspaceId);
-  const sections = navSections(wid);
+  const membership = useQuery(api.workspaces.getMyMembership, { workspaceId });
+  const isAdmin =
+    membership?.role === "owner" || membership?.role === "admin";
+  const sections = useMemo(() => {
+    return navSections(wid)
+      .map((section) => ({
+        ...section,
+        items: section.items.filter((item) => !item.adminOnly || isAdmin),
+      }))
+      .filter((section) => section.items.length > 0);
+  }, [wid, isAdmin]);
   const fane = searchParams.get("fane");
 
   return (

@@ -1,6 +1,7 @@
 "use client";
 
 import { api } from "@/convex/_generated/api";
+import type { Id } from "@/convex/_generated/dataModel";
 import { cn } from "@/lib/utils";
 import { useMutation, useQuery } from "convex/react";
 import {
@@ -73,6 +74,13 @@ export function CommandPalette() {
     return m?.[1] ?? null;
   }, [pathname]);
 
+  const membership = useQuery(
+    api.workspaces.getMyMembership,
+    wid ? { workspaceId: wid as Id<"workspaces"> } : "skip",
+  );
+  const isWorkspaceAdmin =
+    membership?.role === "owner" || membership?.role === "admin";
+
   const close = useCallback(() => {
     setOpen(false);
     setQuery("");
@@ -105,6 +113,7 @@ export function CommandPalette() {
         path: string;
         icon: ComponentType<{ className?: string }>;
         keywords?: string;
+        adminOnly?: boolean;
       }> = [
         { label: "Hjem", path: "", icon: LayoutDashboard, keywords: "oversikt hjem" },
         { label: "Oppgaver", path: "/oppgaver", icon: ListTodo, keywords: "tasks todo" },
@@ -117,10 +126,23 @@ export function CommandPalette() {
         { label: "Gevinster", path: "/gevinster", icon: ChartColumn, keywords: "benefits verdi" },
         { label: "PDF-eksport", path: "/pdf-forhandsvisning", icon: Eye, keywords: "rapport eksport" },
         { label: "Organisasjon", path: "/organisasjon", icon: Building2, keywords: "orgkart enheter" },
-        { label: "Team", path: "/delinger", icon: Share2, keywords: "deling medlemmer invitasjon" },
-        { label: "Innstillinger", path: "/innstillinger", icon: Settings2, keywords: "workspace innstillinger" },
+        {
+          label: "Team",
+          path: "/delinger",
+          icon: Share2,
+          keywords: "deling medlemmer invitasjon",
+          adminOnly: true,
+        },
+        {
+          label: "Innstillinger",
+          path: "/innstillinger",
+          icon: Settings2,
+          keywords: "workspace innstillinger",
+          adminOnly: true,
+        },
       ];
       for (const item of inWorkspace) {
+        if (item.adminOnly && !isWorkspaceAdmin) continue;
         list.push({
           id: `nav:${item.path || "home"}`,
           group: "Gå til",
@@ -190,7 +212,7 @@ export function CommandPalette() {
     );
 
     return list;
-  }, [wid, workspaces, go, setThemeAndPersist]);
+  }, [wid, workspaces, go, setThemeAndPersist, isWorkspaceAdmin]);
 
   const filtered = useMemo(() => {
     const q = normalize(query);

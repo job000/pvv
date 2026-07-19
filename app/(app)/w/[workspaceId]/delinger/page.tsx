@@ -1,5 +1,6 @@
 "use client";
 
+import { WorkspaceAdminGate } from "@/components/workspace/workspace-admin-gate";
 import { WorkspaceTeamPanel } from "@/components/workspace/workspace-panels";
 import type { Id } from "@/convex/_generated/dataModel";
 import { useParams } from "next/navigation";
@@ -19,7 +20,12 @@ export default function WorkspaceSharingPage() {
         </p>
       </header>
 
-      <WorkspaceTeamPanel workspaceId={workspaceId} />
+      <WorkspaceAdminGate
+        workspaceId={workspaceId}
+        title="Team styres av administratorer"
+      >
+        <WorkspaceTeamPanel workspaceId={workspaceId} />
+      </WorkspaceAdminGate>
     </div>
   );
 }
