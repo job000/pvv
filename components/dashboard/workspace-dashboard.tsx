@@ -273,7 +273,7 @@ export function WorkspaceDashboardGrid({
 
   return (
     <>
-      <section className="space-y-4 sm:space-y-5">
+      <section className="min-w-0 space-y-4 overflow-x-clip sm:space-y-5">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between sm:gap-4">
           <div className="min-w-0 space-y-1">
             <h2 className="text-base font-semibold tracking-tight text-foreground sm:text-lg">
@@ -339,8 +339,8 @@ export function WorkspaceDashboardGrid({
 
         {workspaces.length > 0 ? (
           <div className="space-y-3">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-              <label className="relative min-w-0 flex-1">
+            <div className="flex min-w-0 flex-col gap-3">
+              <label className="relative min-w-0 w-full">
                 <Search
                   className="text-muted-foreground pointer-events-none absolute top-1/2 left-3.5 size-4 -translate-y-1/2"
                   aria-hidden
@@ -352,12 +352,12 @@ export function WorkspaceDashboardGrid({
                   className={cn(fieldClass, "pl-11")}
                 />
               </label>
-              <div className="flex flex-wrap items-center gap-2">
+              <div className="flex min-w-0 flex-wrap items-center gap-2">
                 <button
                   type="button"
                   onClick={() => setFiltersOpen((v) => !v)}
                   className={cn(
-                    "inline-flex h-11 flex-1 items-center justify-center gap-2 rounded-xl border px-3.5 text-sm font-medium transition-colors touch-manipulation sm:flex-none",
+                    "inline-flex h-11 min-w-0 flex-1 items-center justify-center gap-2 rounded-xl border px-3.5 text-sm font-medium transition-colors touch-manipulation sm:flex-none",
                     filtersOpen || filtersActive
                       ? "border-foreground/20 bg-muted text-foreground"
                       : "border-border/50 bg-background text-muted-foreground hover:text-foreground",
@@ -489,7 +489,7 @@ export function WorkspaceDashboardGrid({
         ) : null}
 
         {pageItems.length > 0 && viewMode === "cards" ? (
-          <ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          <ul className="grid min-w-0 gap-3 sm:grid-cols-2 xl:grid-cols-3">
             {pageItems.map((row) => {
               const { workspace, role } = row;
               const isDefault = defaultWorkspaceId === workspace._id;
@@ -500,7 +500,7 @@ export function WorkspaceDashboardGrid({
                 <li key={workspace._id} className="min-w-0">
                   <article
                     className={cn(
-                      "group relative flex h-full flex-col rounded-2xl border border-border/50 bg-card p-4 transition-all sm:p-5",
+                      "group relative flex h-full min-w-0 flex-col overflow-hidden rounded-2xl border border-border/50 bg-card p-4 transition-all sm:p-5",
                       "hover:border-border hover:bg-muted/25",
                       isDefault && "ring-1 ring-foreground/12",
                     )}
@@ -564,7 +564,7 @@ export function WorkspaceDashboardGrid({
         ) : null}
 
         {pageItems.length > 0 && viewMode === "list" ? (
-          <ul className="flex flex-col gap-2">
+          <ul className="flex min-w-0 flex-col gap-2">
             {pageItems.map((row) => {
               const { workspace, role } = row;
               const isDefault = defaultWorkspaceId === workspace._id;

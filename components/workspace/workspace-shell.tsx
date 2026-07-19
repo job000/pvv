@@ -37,17 +37,20 @@ function DrawerFooter({ onNavigate }: { onNavigate?: () => void }) {
       </Link>
 
       {/* Tema + logg ut — synlig i drawer på mobil (skjult i toppbar) */}
-      <div className="flex items-center gap-1 md:hidden">
-        <ThemeModeToggle
-          className="size-11 rounded-xl"
-          onThemeChange={(value) => {
-            void patchUserSettings({ themePreference: value });
-          }}
-        />
+      <div className="space-y-2 md:hidden">
+        <div className="flex items-center justify-between gap-3 rounded-xl px-1">
+          <span className="text-muted-foreground text-sm">Utseende</span>
+          <ThemeModeToggle
+            className="size-11 rounded-xl"
+            onThemeChange={(value) => {
+              void patchUserSettings({ themePreference: value });
+            }}
+          />
+        </div>
         <Button
           type="button"
           variant="ghost"
-          className="text-muted-foreground hover:text-foreground h-11 flex-1 justify-start gap-2 rounded-xl px-3"
+          className="text-muted-foreground hover:text-foreground h-11 w-full justify-start gap-2 rounded-xl px-3"
           onClick={() => {
             onNavigate?.();
             void signOut();
@@ -56,11 +59,10 @@ function DrawerFooter({ onNavigate }: { onNavigate?: () => void }) {
           <LogOut className="size-4 opacity-70" aria-hidden />
           Logg ut
         </Button>
+        <p className="text-muted-foreground/70 px-1 text-[0.65rem]">
+          {PRODUCT_NAME}
+        </p>
       </div>
-
-      <p className="text-muted-foreground/70 px-1 pt-1 text-[0.65rem] md:hidden">
-        {PRODUCT_NAME}
-      </p>
     </div>
   );
 }

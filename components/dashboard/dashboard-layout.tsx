@@ -82,7 +82,7 @@ export function DashboardLayout({
   const showDesktopSidebar = !sidebarCollapsed;
 
   return (
-    <div className="mx-auto flex w-full max-w-[100rem] flex-col md:flex-row md:items-start">
+    <div className="mx-auto flex w-full max-w-[100rem] min-w-0 flex-col overflow-x-clip md:flex-row md:items-start">
       {showDesktopSidebar ? (
         <aside
           className={cn(
@@ -141,7 +141,7 @@ export function DashboardLayout({
         </SheetContent>
       </Sheet>
 
-      <div className="min-w-0 flex-1">{children}</div>
+      <div className="min-w-0 flex-1 overflow-x-clip">{children}</div>
     </div>
   );
 }
@@ -263,28 +263,29 @@ function DashboardNavPanel({
       </div>
 
       {mobileFooter ? (
-        <div className="shrink-0 space-y-1 border-t border-border/40 p-3 md:hidden">
-          <div className="flex items-center gap-1">
+        <div className="shrink-0 space-y-2 border-t border-border/40 p-3 md:hidden">
+          <div className="flex items-center justify-between gap-3 rounded-xl px-1">
+            <span className="text-muted-foreground text-sm">Utseende</span>
             <ThemeModeToggle
               className="size-11 rounded-xl"
               onThemeChange={(value) => {
                 void patchUserSettings({ themePreference: value });
               }}
             />
-            <Button
-              type="button"
-              variant="ghost"
-              className="text-muted-foreground hover:text-foreground h-11 flex-1 justify-start gap-2 rounded-xl px-3"
-              onClick={() => {
-                onNavigate?.();
-                void signOut();
-              }}
-            >
-              <LogOut className="size-4 opacity-70" aria-hidden />
-              Logg ut
-            </Button>
           </div>
-          <p className="text-muted-foreground/70 px-1 pt-0.5 text-[0.65rem]">
+          <Button
+            type="button"
+            variant="ghost"
+            className="text-muted-foreground hover:text-foreground h-11 w-full justify-start gap-2 rounded-xl px-3"
+            onClick={() => {
+              onNavigate?.();
+              void signOut();
+            }}
+          >
+            <LogOut className="size-4 opacity-70" aria-hidden />
+            Logg ut
+          </Button>
+          <p className="text-muted-foreground/70 px-1 text-[0.65rem]">
             {PRODUCT_NAME}
           </p>
         </div>

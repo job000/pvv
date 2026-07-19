@@ -58,6 +58,14 @@ export function AppShell({
     }
   }, [requireAuth, isLoading, isAuthenticated, router, pathname]);
 
+  const setMobileOpen = workspaceChrome?.setMobileOpen;
+
+  // Rydd opp etter sheet/drawer når vi bytter rute (f.eks. arbeidsområde → oversikt).
+  useEffect(() => {
+    document.body.style.overflow = "";
+    setMobileOpen?.(false);
+  }, [pathname, setMobileOpen]);
+
   if (requireAuth && (isLoading || !isAuthenticated)) {
     return (
       <div className="flex min-h-[50vh] flex-col items-center justify-center gap-2 px-4">
@@ -77,7 +85,7 @@ export function AppShell({
     : Boolean(workspaceChrome?.mobileOpen);
 
   return (
-    <div className="bg-background flex min-h-full flex-col">
+    <div className="bg-background flex min-h-full min-w-0 flex-col overflow-x-clip">
       <header className="sticky top-0 z-40 pt-[env(safe-area-inset-top)]">
         <div
           className={cn(

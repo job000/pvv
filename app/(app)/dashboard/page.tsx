@@ -70,9 +70,9 @@ export default function DashboardPage() {
         <DashboardEntryRedirect />
       </Suspense>
 
-      <div className="mx-auto max-w-6xl space-y-8 px-3 pb-[max(6rem,env(safe-area-inset-bottom))] pt-4 sm:space-y-10 sm:px-8 sm:pt-8 lg:px-10">
-        <header className="space-y-4 sm:space-y-5">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between sm:gap-4">
+      <div className="mx-auto w-full max-w-6xl min-w-0 space-y-8 overflow-x-clip px-3 pb-[max(6rem,env(safe-area-inset-bottom))] pt-4 sm:space-y-10 sm:px-8 sm:pt-8 lg:px-10">
+        <header className="min-w-0 space-y-4 sm:space-y-5">
+          <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-end sm:justify-between sm:gap-4">
             <div className="min-w-0 space-y-1">
               <h1 className="font-heading text-xl font-semibold tracking-tight text-foreground sm:text-3xl">
                 Oversikt
@@ -84,7 +84,7 @@ export default function DashboardPage() {
             {defaultWorkspace ? (
               <Link
                 href={`/w/${defaultWorkspace._id}`}
-                className="bg-foreground text-background inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl px-5 text-sm font-semibold transition-opacity hover:opacity-90 touch-manipulation sm:w-auto"
+                className="bg-foreground text-background inline-flex h-11 w-full min-w-0 max-w-full items-center justify-center gap-2 rounded-xl px-5 text-sm font-semibold transition-opacity hover:opacity-90 touch-manipulation sm:w-auto"
               >
                 <span className="truncate">
                   Fortsett i {defaultWorkspace.name}
@@ -94,28 +94,28 @@ export default function DashboardPage() {
             ) : null}
           </div>
 
-          <dl className="grid grid-cols-3 gap-1.5 sm:flex sm:flex-wrap sm:gap-2.5">
-            <div className="bg-muted/40 flex flex-col rounded-xl px-2.5 py-2 sm:inline-flex sm:min-w-[7.5rem] sm:flex-row sm:items-baseline sm:gap-2 sm:px-4 sm:py-2.5">
-              <dt className="text-muted-foreground text-[11px] sm:text-sm">
+          <dl className="grid min-w-0 grid-cols-3 gap-1.5">
+            <div className="bg-muted/40 flex min-w-0 flex-col rounded-xl px-2.5 py-2">
+              <dt className="text-muted-foreground truncate text-[11px] sm:text-xs">
                 Områder
               </dt>
-              <dd className="text-base font-semibold tabular-nums text-foreground sm:text-sm">
+              <dd className="text-base font-semibold tabular-nums text-foreground">
                 {workspaces.length}
               </dd>
             </div>
-            <div className="bg-muted/40 flex flex-col rounded-xl px-2.5 py-2 sm:inline-flex sm:min-w-[7.5rem] sm:flex-row sm:items-baseline sm:gap-2 sm:px-4 sm:py-2.5">
-              <dt className="text-muted-foreground text-[11px] sm:text-sm">
+            <div className="bg-muted/40 flex min-w-0 flex-col rounded-xl px-2.5 py-2">
+              <dt className="text-muted-foreground truncate text-[11px] sm:text-xs">
                 Eier/admin
               </dt>
-              <dd className="text-base font-semibold tabular-nums text-foreground sm:text-sm">
+              <dd className="text-base font-semibold tabular-nums text-foreground">
                 {ownerOrAdminCount}
               </dd>
             </div>
-            <div className="bg-muted/40 flex flex-col rounded-xl px-2.5 py-2 sm:inline-flex sm:min-w-[7.5rem] sm:flex-row sm:items-baseline sm:gap-2 sm:px-4 sm:py-2.5">
-              <dt className="text-muted-foreground text-[11px] sm:text-sm">
+            <div className="bg-muted/40 flex min-w-0 flex-col rounded-xl px-2.5 py-2">
+              <dt className="text-muted-foreground truncate text-[11px] sm:text-xs">
                 I fokus
               </dt>
-              <dd className="text-base font-semibold tabular-nums text-foreground sm:text-sm">
+              <dd className="text-base font-semibold tabular-nums text-foreground">
                 {priorityCount}
               </dd>
             </div>
@@ -153,12 +153,12 @@ export default function DashboardPage() {
                 Alle vurderinger
               </Link>
             </div>
-            <ul className="grid gap-2 sm:grid-cols-2 sm:gap-2.5">
+            <ul className="grid min-w-0 gap-2 sm:grid-cols-2 sm:gap-2.5">
               {priorityHighlights.map((row) => (
-                <li key={row.assessment._id}>
+                <li key={row.assessment._id} className="min-w-0">
                   <Link
                     href={`/w/${row.workspaceId}/a/${row.assessment._id}`}
-                    className="group hover:bg-muted/30 flex min-h-14 w-full min-w-0 items-center gap-3 rounded-2xl border border-border/50 bg-card px-3.5 py-3.5 transition-colors touch-manipulation active:bg-muted/40 sm:min-h-[4.75rem] sm:gap-4 sm:px-5 sm:py-4"
+                    className="group hover:bg-muted/30 flex min-h-14 w-full min-w-0 items-center gap-3 overflow-hidden rounded-2xl border border-border/50 bg-card px-3.5 py-3.5 transition-colors touch-manipulation active:bg-muted/40 sm:min-h-[4.75rem] sm:gap-4 sm:px-5 sm:py-4"
                   >
                     <div className="min-w-0 flex-1 space-y-1">
                       <p className="truncate text-[15px] font-medium tracking-tight text-foreground">
@@ -194,12 +194,12 @@ export default function DashboardPage() {
                 Vurderinger du er invitert inn i.
               </p>
             </div>
-            <ul className="grid gap-2 sm:grid-cols-2 sm:gap-2.5">
+            <ul className="grid min-w-0 gap-2 sm:grid-cols-2 sm:gap-2.5">
               {mineAssessments.map(({ assessment, role }) => (
-                <li key={assessment._id}>
+                <li key={assessment._id} className="min-w-0">
                   <Link
                     href={`/w/${assessment.workspaceId}/a/${assessment._id}`}
-                    className="group hover:bg-muted/30 flex min-h-14 w-full min-w-0 items-center gap-3 rounded-2xl border border-border/50 bg-card px-3.5 py-3.5 transition-colors touch-manipulation active:bg-muted/40 sm:min-h-[4.75rem] sm:gap-4 sm:px-5 sm:py-4"
+                    className="group hover:bg-muted/30 flex min-h-14 w-full min-w-0 items-center gap-3 overflow-hidden rounded-2xl border border-border/50 bg-card px-3.5 py-3.5 transition-colors touch-manipulation active:bg-muted/40 sm:min-h-[4.75rem] sm:gap-4 sm:px-5 sm:py-4"
                   >
                     <div className="min-w-0 flex-1 space-y-1">
                       <p className="truncate text-[15px] font-medium tracking-tight text-foreground">

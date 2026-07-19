@@ -550,7 +550,7 @@ export function TasksBoard() {
   return (
     <section
       id="oppgaver"
-      className="scroll-mt-20 space-y-3 sm:scroll-mt-24"
+      className="scroll-mt-20 min-w-0 space-y-3 overflow-x-clip sm:scroll-mt-24"
       aria-labelledby="tasks-board-heading"
     >
       <div className="overflow-hidden rounded-2xl border border-border/50 bg-card">
@@ -737,13 +737,13 @@ export function TasksBoard() {
             }}
             onDragCancel={() => setActiveDrag(null)}
           >
-            <div className="flex flex-col gap-4 lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(0,260px)]">
-              <div className="order-2 space-y-3 lg:order-1">
+            <div className="flex min-w-0 flex-col gap-4 lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(0,260px)]">
+              <div className="order-2 min-w-0 space-y-3 lg:order-1">
                 <SortableContext
                   items={pageOpenIds}
                   strategy={verticalListSortingStrategy}
                 >
-                  <div className="divide-y divide-border/40 self-start overflow-hidden rounded-2xl border border-border/50 bg-card">
+                  <div className="divide-y divide-border/40 min-w-0 self-start overflow-hidden rounded-2xl border border-border/50 bg-card">
                     {openTasks.length === 0 ? (
                       <p className="text-muted-foreground px-4 py-8 text-center text-sm">
                         {filtersActive
