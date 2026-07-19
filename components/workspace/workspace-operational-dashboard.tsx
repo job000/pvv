@@ -15,7 +15,9 @@ import { RpaLifecycleGuide } from "@/components/workspace/rpa-lifecycle-guide";
 import { formatRelativeUpdatedAt } from "@/lib/assessment-ui-helpers";
 import {
   dedupeDashboardRows,
+  filterHomeRowsByScope,
   homeNextActionForAssessment,
+  type HomeQueueScope,
   isRosDue,
   sortByHomeUrgency,
 } from "@/lib/home-next-action";
@@ -37,6 +39,7 @@ type HomeListPageSize = 6 | 10 | 20;
 export type WorkspaceHomeListPrefs = {
   viewMode: ListViewMode;
   pageSize: HomeListPageSize;
+  queueScope: HomeQueueScope;
 };
 
 /**
@@ -148,6 +151,8 @@ export function WorkspaceOperationalDashboard({
   const intakeQueue = useQuery(api.intakeSubmissions.listByWorkspace, {
     workspaceId,
   });
+  const myProfile = useQuery(api.users.getMyProfile);
+  const myUserId = myProfile?.user?._id as Id<"users"> | undefined;
   const setHomeListPrefs = useMutation(
     api.workspaceViewPrefs.setMyHomeListPrefs,
   );
@@ -161,7 +166,10 @@ export function WorkspaceOperationalDashboard({
     homeListPrefs?.viewMode ?? "list",
   );
   const [pageSize, setPageSize] = useState<HomeListPageSize>(
-    homeListPrefs?.pageSize ?? 10,
+    homeListPrefs?.pageSize ?? 6,
+  );
+  const [queueScope, setQueueScope] = useState<HomeQueueScope>(
+    homeListPrefs?.queueScope ?? "mine",
   );
 
   useEffect(() => {
@@ -175,18 +183,22 @@ export function WorkspaceOperationalDashboard({
     if (!homeListPrefs) return;
     setViewMode(homeListPrefs.viewMode);
     setPageSize(homeListPrefs.pageSize);
+    setQueueScope(homeListPrefs.queueScope);
   }, [homeListPrefs]);
 
   const persistHomeList = (next: {
     viewMode: ListViewMode;
     pageSize: HomeListPageSize;
+    queueScope: HomeQueueScope;
   }) => {
     setViewMode(next.viewMode);
     setPageSize(next.pageSize);
+    setQueueScope(next.queueScope);
     void setHomeListPrefs({
       workspaceId,
       homeListViewMode: next.viewMode,
       homeListPageSize: next.pageSize,
+      homeQueueScope: next.queueScope,
     });
   };
 
@@ -228,7 +240,6 @@ export function WorkspaceOperationalDashboard({
     recentlyUpdated,
   } = dash;
 
-  const latestWork = recentlyUpdated[0] ?? priorityTop[0] ?? null;
   const followUpCount = readyForPrioritizationCount + onHoldCount;
 
   /** Unike saker fra alle køer — én rad per vurdering. */
@@ -239,16 +250,40 @@ export function WorkspaceOperationalDashboard({
     ...(showPriority ? priorityTop : []),
     ...(showRecent ? recentlyUpdated : []),
   ]);
-  const rankedActions = sortByHomeUrgency(uniqueRows, wid);
-  const rosDueRows = uniqueRows
+  /** Personlig kø som standard — unngår støy når mange jobber i samme område. */
+  const scopedRows = filterHomeRowsByScope(uniqueRows, queueScope, myUserId);
+  const rankedActions = sortByHomeUrgency(scopedRows, wid);
+  const rosDueRows = scopedRows
     .filter((r) => isRosDue(r.pipelineStatus, r.rosLinked))
     .sort((a, b) => b.effectivePriority - a.effectivePriority);
+  const scopedReady = filterHomeRowsByScope(
+    readyForPrioritization,
+    queueScope,
+    myUserId,
+  );
+  const scopedBlocked = filterHomeRowsByScope(
+    blockedItems,
+    queueScope,
+    myUserId,
+  );
+  const scopedRecent = filterHomeRowsByScope(
+    recentlyUpdated,
+    queueScope,
+    myUserId,
+  );
+  const scopedPriority = filterHomeRowsByScope(
+    priorityTop,
+    queueScope,
+    myUserId,
+  );
+  const latestWork = scopedRecent[0] ?? scopedPriority[0] ?? null;
   const nextNeedsAssessment =
     rankedActions.find((x) => x.row.pipelineStatus === "not_assessed")?.row ??
     null;
-  const nextReadyPrio = readyForPrioritization[0] ?? null;
+  const nextReadyPrio = scopedReady[0] ?? null;
   const nextRosDue = rosDueRows[0] ?? null;
-  const nextOnHold = blockedItems[0] ?? null;
+  const nextOnHold = scopedBlocked[0] ?? null;
+  const totalScopedActions = rankedActions.length;
 
   const primarySpec: {
     key: string;
@@ -390,7 +425,12 @@ export function WorkspaceOperationalDashboard({
               : undefined;
 
   const actionItems: ActionItem[] = [];
-  if (pendingIntake.length > 0 && primarySpec.key !== "intake") {
+  // Forslag er områdesak — vis aggregat i Deretter bare når man ser hele området.
+  if (
+    queueScope === "all" &&
+    pendingIntake.length > 0 &&
+    primarySpec.key !== "intake"
+  ) {
     actionItems.push({
       key: "intake-queue",
       title:
@@ -402,12 +442,14 @@ export function WorkspaceOperationalDashboard({
       meta: pendingIntake.length === 1 ? "Venter" : undefined,
     });
   }
+  let skippedPrimary = false;
   for (const { row, action } of rankedActions) {
     if (actionItems.length >= pageSize) break;
     if (
       primaryAssessmentId != null &&
       row.assessmentId === primaryAssessmentId
     ) {
+      skippedPrimary = true;
       continue;
     }
     actionItems.push({
@@ -418,6 +460,12 @@ export function WorkspaceOperationalDashboard({
       meta: action.meta,
     });
   }
+  const remainingAfterCap = Math.max(
+    0,
+    totalScopedActions -
+      (skippedPrimary ? 1 : 0) -
+      actionItems.filter((i) => i.key !== "intake-queue").length,
+  );
 
   const FLOW_SHORT: Record<number, string> = {
     1: "Identifisering",
@@ -565,123 +613,195 @@ export function WorkspaceOperationalDashboard({
         </section>
       ) : null}
 
-      {showActions && actionItems.length > 0 ? (
+      {showActions ? (
         <section
           className="product-rise space-y-3"
           style={{ "--rise-delay": "0.12s" } as CSSProperties}
           aria-labelledby="home-actions-heading"
         >
-          <div className="flex items-center justify-between gap-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
             <h2
               id="home-actions-heading"
               className="text-sm font-semibold tracking-tight text-foreground"
             >
               Deretter
             </h2>
-            <ListViewModeToggle
-              value={viewMode}
-              onChange={(next) =>
-                persistHomeList({ viewMode: next, pageSize })
-              }
-              showSelect={false}
-              showIcons
-            />
+            <div className="flex flex-wrap items-center gap-2">
+              <div
+                role="group"
+                aria-label="Køomfang"
+                className="bg-muted/40 inline-flex rounded-full border border-border/50 p-0.5"
+              >
+                {(
+                  [
+                    ["mine", "Mine"],
+                    ["all", "Hele området"],
+                  ] as const
+                ).map(([id, label]) => (
+                  <button
+                    key={id}
+                    type="button"
+                    aria-pressed={queueScope === id}
+                    onClick={() =>
+                      persistHomeList({
+                        viewMode,
+                        pageSize,
+                        queueScope: id,
+                      })
+                    }
+                    className={cn(
+                      "h-8 rounded-full px-2.5 text-xs font-medium transition-colors touch-manipulation",
+                      queueScope === id
+                        ? "bg-background text-foreground shadow-sm"
+                        : "text-muted-foreground hover:text-foreground",
+                    )}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              <ListViewModeToggle
+                value={viewMode}
+                onChange={(next) =>
+                  persistHomeList({
+                    viewMode: next,
+                    pageSize,
+                    queueScope,
+                  })
+                }
+                showSelect={false}
+                showIcons
+              />
+            </div>
           </div>
 
-          {viewMode === "cards" ? (
-            <ul className="grid gap-2 sm:grid-cols-2">
-              {actionItems.map((item) => (
-                <li key={item.key} className="min-w-0">
-                  <Link
-                    href={item.href}
-                    className="group relative flex h-full flex-col gap-2 rounded-xl border border-border/50 bg-card p-3.5 transition-all duration-200 hover:-translate-y-0.5 hover:border-border hover:bg-muted/25 hover:shadow-[var(--shadow-card)]"
-                  >
-                    <ArrowRight
-                      className="text-muted-foreground absolute right-3 top-3.5 size-3.5 -translate-x-1 opacity-0 transition-all group-hover:translate-x-0 group-hover:opacity-60"
-                      aria-hidden
-                    />
-                    <p className="line-clamp-2 pr-5 text-sm font-semibold">
-                      {item.title}
-                    </p>
-                    <p className="text-muted-foreground text-xs">
-                      {item.reason}
-                      {item.meta ? ` · ${item.meta}` : null}
-                    </p>
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          ) : viewMode === "table" ? (
-            <div className="-mx-1 overflow-x-auto px-1">
-              <table className="w-full min-w-[26rem] border-collapse text-left text-sm">
-                <thead>
-                  <tr className="border-b border-border/50 text-xs text-muted-foreground">
-                    <th className="px-3 py-2 font-medium">Sak</th>
-                    <th className="px-3 py-2 font-medium">Neste</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {actionItems.map((item) => (
-                    <tr
-                      key={item.key}
-                      className="border-b border-border/30 last:border-0"
+          {actionItems.length > 0 ? (
+            viewMode === "cards" ? (
+              <ul className="grid gap-2 sm:grid-cols-2">
+                {actionItems.map((item) => (
+                  <li key={item.key} className="min-w-0">
+                    <Link
+                      href={item.href}
+                      className="group relative flex h-full flex-col gap-2 rounded-xl border border-border/50 bg-card p-3.5 transition-all duration-200 hover:-translate-y-0.5 hover:border-border hover:bg-muted/25 hover:shadow-[var(--shadow-card)]"
                     >
-                      <td className="px-3 py-2.5">
-                        <Link
-                          href={item.href}
-                          className="font-medium text-foreground underline-offset-2 hover:underline"
-                        >
-                          {item.title}
-                        </Link>
-                      </td>
-                      <td className="text-muted-foreground px-3 py-2.5 text-xs">
-                        {item.reason}
-                        {item.meta ? ` · ${item.meta}` : null}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ) : (
-            <ul className="divide-y divide-border/40 overflow-hidden rounded-xl border border-border/50 bg-card">
-              {actionItems.map((item) => (
-                <li key={item.key}>
-                  <Link
-                    href={item.href}
-                    className="group hover:bg-muted/25 flex min-h-12 items-center gap-3 px-3.5 py-2.5 transition-colors"
-                  >
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-medium">
+                      <ArrowRight
+                        className="text-muted-foreground absolute right-3 top-3.5 size-3.5 -translate-x-1 opacity-0 transition-all group-hover:translate-x-0 group-hover:opacity-60"
+                        aria-hidden
+                      />
+                      <p className="line-clamp-2 pr-5 text-sm font-semibold">
                         {item.title}
                       </p>
-                      <p className="text-muted-foreground truncate text-xs">
+                      <p className="text-muted-foreground text-xs">
                         {item.reason}
                         {item.meta ? ` · ${item.meta}` : null}
                       </p>
-                    </div>
-                    <ArrowRight
-                      className="text-muted-foreground size-4 shrink-0 opacity-40 transition-all group-hover:translate-x-0.5 group-hover:opacity-100"
-                      aria-hidden
-                    />
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
-      ) : null}
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            ) : viewMode === "table" ? (
+              <div className="-mx-1 overflow-x-auto px-1">
+                <table className="w-full min-w-[26rem] border-collapse text-left text-sm">
+                  <thead>
+                    <tr className="border-b border-border/50 text-xs text-muted-foreground">
+                      <th className="px-3 py-2 font-medium">Sak</th>
+                      <th className="px-3 py-2 font-medium">Neste</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {actionItems.map((item) => (
+                      <tr
+                        key={item.key}
+                        className="border-b border-border/30 last:border-0"
+                      >
+                        <td className="px-3 py-2.5">
+                          <Link
+                            href={item.href}
+                            className="font-medium text-foreground underline-offset-2 hover:underline"
+                          >
+                            {item.title}
+                          </Link>
+                        </td>
+                        <td className="text-muted-foreground px-3 py-2.5 text-xs">
+                          {item.reason}
+                          {item.meta ? ` · ${item.meta}` : null}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <ul className="divide-y divide-border/40 overflow-hidden rounded-xl border border-border/50 bg-card">
+                {actionItems.map((item) => (
+                  <li key={item.key}>
+                    <Link
+                      href={item.href}
+                      className="group hover:bg-muted/25 flex min-h-12 items-center gap-3 px-3.5 py-2.5 transition-colors"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-medium">
+                          {item.title}
+                        </p>
+                        <p className="text-muted-foreground truncate text-xs">
+                          {item.reason}
+                          {item.meta ? ` · ${item.meta}` : null}
+                        </p>
+                      </div>
+                      <ArrowRight
+                        className="text-muted-foreground size-4 shrink-0 opacity-40 transition-all group-hover:translate-x-0.5 group-hover:opacity-100"
+                        aria-hidden
+                      />
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            )
+          ) : showFocus ? (
+            <p className="text-muted-foreground text-sm">
+              {queueScope === "mine"
+                ? "Ingen egne vurderinger i kø. "
+                : "Ingen flere i kø. "}
+              <Link
+                href={`/w/${wid}/vurderinger`}
+                className="text-foreground font-medium underline-offset-2 hover:underline"
+              >
+                Se alle vurderinger
+              </Link>
+              {queueScope === "mine" ? (
+                <>
+                  {" "}
+                  eller bytt til{" "}
+                  <button
+                    type="button"
+                    className="text-foreground font-medium underline-offset-2 hover:underline"
+                    onClick={() =>
+                      persistHomeList({
+                        viewMode,
+                        pageSize,
+                        queueScope: "all",
+                      })
+                    }
+                  >
+                    hele området
+                  </button>
+                  .
+                </>
+              ) : null}
+            </p>
+          ) : null}
 
-      {showActions && actionItems.length === 0 && showFocus ? (
-        <p className="text-muted-foreground text-center text-sm">
-          Ingen flere køer —{" "}
-          <Link
-            href={`/w/${wid}/vurderinger`}
-            className="text-foreground font-medium underline-offset-2 hover:underline"
-          >
-            alle vurderinger
-          </Link>
-        </p>
+          {remainingAfterCap > 0 ? (
+            <div className="flex justify-end">
+              <Link
+                href={`/w/${wid}/vurderinger`}
+                className="text-muted-foreground hover:text-foreground text-xs font-medium underline-offset-2 hover:underline"
+              >
+                Se alle ({totalScopedActions})
+              </Link>
+            </div>
+          ) : null}
+        </section>
       ) : null}
     </div>
   );

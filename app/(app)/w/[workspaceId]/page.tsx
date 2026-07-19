@@ -50,6 +50,10 @@ export default function WorkspaceOverviewPage() {
         viewPrefs.homeListPageSize === 10 || viewPrefs.homeListPageSize === 20
           ? viewPrefs.homeListPageSize
           : (6 as const),
+      queueScope:
+        viewPrefs.homeQueueScope === "all"
+          ? ("all" as const)
+          : ("mine" as const),
     };
   }, [viewPrefs]);
 

@@ -40,6 +40,8 @@ const homeListPageSizeValidator = v.union(
   v.literal(20),
 );
 
+const homeQueueScopeValidator = v.union(v.literal("mine"), v.literal("all"));
+
 function cleanShortcutIds(ids: string[]): string[] {
   return [...new Set(ids)].filter((id) => ALLOWED_SHORTCUT_IDS.has(id));
 }
@@ -59,6 +61,7 @@ export const getMyWorkspaceViewPrefs = query({
       showBegreperSection: v.boolean(),
       homeListViewMode: v.optional(homeListViewModeValidator),
       homeListPageSize: v.optional(homeListPageSizeValidator),
+      homeQueueScope: v.optional(homeQueueScopeValidator),
       updatedAt: v.number(),
     }),
     v.null(),
@@ -91,6 +94,7 @@ export const setMyWorkspaceViewPrefs = mutation({
     showBegreperSection: v.boolean(),
     homeListViewMode: v.optional(homeListViewModeValidator),
     homeListPageSize: v.optional(homeListPageSizeValidator),
+    homeQueueScope: v.optional(homeQueueScopeValidator),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
@@ -117,6 +121,9 @@ export const setMyWorkspaceViewPrefs = mutation({
         ...(args.homeListPageSize !== undefined
           ? { homeListPageSize: args.homeListPageSize }
           : {}),
+        ...(args.homeQueueScope !== undefined
+          ? { homeQueueScope: args.homeQueueScope }
+          : {}),
         updatedAt: now,
       });
     } else {
@@ -130,6 +137,7 @@ export const setMyWorkspaceViewPrefs = mutation({
         showBegreperSection: args.showBegreperSection,
         homeListViewMode: args.homeListViewMode,
         homeListPageSize: args.homeListPageSize,
+        homeQueueScope: args.homeQueueScope,
         updatedAt: now,
       });
     }
@@ -143,6 +151,7 @@ export const setMyHomeListPrefs = mutation({
     workspaceId: v.id("workspaces"),
     homeListViewMode: homeListViewModeValidator,
     homeListPageSize: homeListPageSizeValidator,
+    homeQueueScope: v.optional(homeQueueScopeValidator),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
@@ -159,6 +168,9 @@ export const setMyHomeListPrefs = mutation({
       await ctx.db.patch(existing._id, {
         homeListViewMode: args.homeListViewMode,
         homeListPageSize: args.homeListPageSize,
+        ...(args.homeQueueScope !== undefined
+          ? { homeQueueScope: args.homeQueueScope }
+          : {}),
         updatedAt: now,
       });
     } else {
@@ -172,6 +184,7 @@ export const setMyHomeListPrefs = mutation({
         showBegreperSection: false,
         homeListViewMode: args.homeListViewMode,
         homeListPageSize: args.homeListPageSize,
+        homeQueueScope: args.homeQueueScope ?? "mine",
         updatedAt: now,
       });
     }

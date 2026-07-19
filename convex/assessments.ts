@@ -153,6 +153,7 @@ export type WorkspaceDashboardAssessmentRow = {
   rosLinked: boolean;
   /** @deprecated Bruk rosLinked */
   hasRosLink: boolean;
+  createdByUserId: Id<"users">;
   ownerName: string | null;
   nextStepHint: string;
   rosStatus: "not_started" | "in_progress" | "completed" | "not_applicable";
@@ -179,6 +180,7 @@ function buildDashboardRow(
     effectivePriority: effectivePriorityFromAssessment(a),
     rosLinked,
     hasRosLink: rosLinked,
+    createdByUserId: a.createdByUserId,
     ownerName,
     nextStepHint: nextStepHint(status),
     rosStatus: a.rosStatus ?? "not_started",

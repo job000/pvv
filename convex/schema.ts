@@ -720,6 +720,10 @@ export default defineSchema({
     homeListPageSize: v.optional(
       v.union(v.literal(6), v.literal(10), v.literal(20)),
     ),
+    /** Hjem-kø: mine vurderinger eller hele området. Manglende = mine. */
+    homeQueueScope: v.optional(
+      v.union(v.literal("mine"), v.literal("all")),
+    ),
     updatedAt: v.number(),
   }).index("by_user_workspace", ["userId", "workspaceId"]),
 

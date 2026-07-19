@@ -9,6 +9,8 @@ import {
   type PipelineStatus,
 } from "@/lib/assessment-pipeline";
 
+export type HomeQueueScope = "mine" | "all";
+
 export type HomeDashboardRow = {
   assessmentId: Id<"assessments">;
   title: string;
@@ -17,7 +19,20 @@ export type HomeDashboardRow = {
   effectivePriority: number;
   rosLinked: boolean;
   nextStepHint: string;
+  createdByUserId?: Id<"users">;
 };
+
+/** Filtrer hjem-kø til egne vurderinger når scope er «mine». */
+export function filterHomeRowsByScope<
+  T extends { createdByUserId?: Id<"users"> },
+>(
+  rows: T[],
+  scope: HomeQueueScope,
+  userId: Id<"users"> | undefined,
+): T[] {
+  if (scope !== "mine" || !userId) return rows;
+  return rows.filter((row) => row.createdByUserId === userId);
+}
 
 export type HomeNextAction = {
   reason: string;
