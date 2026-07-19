@@ -25,6 +25,7 @@ import {
   PULS_ISSUE_TYPE_ALIASES,
   PULS_ISSUE_TYPE_OPTIONS,
 } from "@/lib/puls-issue-types";
+import { removeMarkdownTaskByLabel } from "@/lib/markdown-tasks";
 import { isEmptyRichText } from "@/lib/rich-text";
 import { cn } from "@/lib/utils";
 import {
@@ -1549,6 +1550,11 @@ export function IssuesProjectBoard({
   const [busy, setBusy] = useState(false);
 
   const [createOpen, setCreateOpen] = useState(false);
+  /** When promoting a checklist item, restore description if create is cancelled. */
+  const checklistPromoteRestoreRef = useRef<{
+    taskId: Id<"assessmentTasks">;
+    previousDescription: string;
+  } | null>(null);
   const createLinkTargets = useQuery(
     api.assessmentTasks.listCreateLinkTargets,
     createOpen ? { workspaceId } : "skip",
@@ -2143,6 +2149,102 @@ export function IssuesProjectBoard({
     resetCreateForm(parent);
   };
 
+  const restoreChecklistPromoteIfNeeded = async () => {
+    const restore = checklistPromoteRestoreRef.current;
+    checklistPromoteRestoreRef.current = null;
+    if (!restore) return;
+    try {
+      await updateTask({
+        taskId: restore.taskId,
+        description: isEmptyRichText(restore.previousDescription)
+          ? null
+          : restore.previousDescription,
+      });
+      toast.message(pulsBoardCopy.checklistPromoteRestored);
+    } catch (err) {
+      toast.error(
+        err instanceof Error
+          ? err.message
+          : "Kunne ikke tilbakestille beskrivelsen",
+      );
+    }
+  };
+
+  const closeCreateDialog = () => {
+    setCreateOpen(false);
+    setCreateFullscreen(false);
+    void restoreChecklistPromoteIfNeeded();
+    resetCreateForm();
+  };
+
+  const promoteChecklistItem = async (item: {
+    label: string;
+    checked: boolean;
+    asSub: boolean;
+  }) => {
+    if (!selected?.canEdit || busy) return;
+    const parent = selected;
+    const previous = editDescription;
+    const result = removeMarkdownTaskByLabel(
+      previous,
+      item.label,
+      item.checked,
+    );
+    if (!result.removed) {
+      toast.error(pulsBoardCopy.checklistPromoteError);
+      return;
+    }
+
+    setBusy(true);
+    try {
+      await updateTask({
+        taskId: parent._id,
+        description: isEmptyRichText(result.next) ? null : result.next,
+      });
+      setEditDescription(result.next);
+      checklistPromoteRestoreRef.current = {
+        taskId: parent._id,
+        previousDescription: previous,
+      };
+      setSelected(null);
+      setCreateOpen(true);
+      if (item.asSub) {
+        resetCreateForm(parent);
+      } else {
+        resetCreateForm();
+        // Keep inherited links from the source card even for top-level.
+        setCreateAssessmentId(parent.assessmentId ?? "");
+        setCreateCandidateId(parent.candidateId ?? "");
+        setCreateRosId(parent.rosAnalysisId ?? "");
+        setCreatePddId(parent.processDesignDocumentId ?? "");
+        setCreateFormId(parent.intakeFormId ?? "");
+        setCreateLinksOpen(
+          Boolean(
+            parent.assessmentId ||
+              parent.candidateId ||
+              parent.rosAnalysisId ||
+              parent.processDesignDocumentId ||
+              parent.intakeFormId,
+          ),
+        );
+        setCreateColumnId(
+          parent.columnId &&
+            createColumnOptions.some((c) => c._id === parent.columnId)
+            ? parent.columnId
+            : defaultCreateColumnId,
+        );
+      }
+      setCreateTitle(result.label);
+      setCreateMoreOpen(true);
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Kunne ikke flytte sjekkpunkt",
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const onDragStart = (e: DragStartEvent) => {
     const card = cards.find((c) => c._id === e.active.id);
     setActiveDrag(card ?? null);
@@ -2286,6 +2388,7 @@ export function IssuesProjectBoard({
       toast.success(
         createParentId ? pulsBoardCopy.createdSub : pulsBoardCopy.created,
       );
+      checklistPromoteRestoreRef.current = null;
       setCreateOpen(false);
       resetCreateForm();
     } catch (err) {
@@ -3295,11 +3398,11 @@ export function IssuesProjectBoard({
       <Dialog
         open={createOpen}
         onOpenChange={(open) => {
-          setCreateOpen(open);
           if (!open) {
-            setCreateFullscreen(false);
-            resetCreateForm();
+            closeCreateDialog();
+            return;
           }
+          setCreateOpen(true);
         }}
       >
         <DialogContent
@@ -3657,7 +3760,7 @@ export function IssuesProjectBoard({
               type="button"
               variant="outline"
               className="min-h-11 touch-manipulation sm:min-h-9 max-sm:w-full"
-              onClick={() => setCreateOpen(false)}
+              onClick={closeCreateDialog}
             >
               Avbryt
             </Button>
@@ -3809,6 +3912,13 @@ export function IssuesProjectBoard({
                           selected.canEdit ? descInsertToken : null
                         }
                         onInsertConsumed={() => setDescInsertToken(null)}
+                        onPromoteChecklistItem={
+                          selected.canEdit
+                            ? (item) => {
+                                void promoteChecklistItem(item);
+                              }
+                            : undefined
+                        }
                         onUploadImage={
                           selected.canEdit
                             ? async (file) => {

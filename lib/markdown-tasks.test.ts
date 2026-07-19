@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 import {
   countMarkdownTasks,
+  removeMarkdownTaskByLabel,
   toggleMarkdownTaskAtIndex,
   toggleMarkdownTaskAtLine,
   toggleMarkdownTaskByLabel,
@@ -92,5 +93,24 @@ describe("markdown tasks", () => {
     expect(
       toggleMarkdownTaskByLabel(crlf, "Utviklings-VM", true),
     ).toContain("- [ ] Utviklings-VM");
+  });
+
+  test("removes a task line by label", () => {
+    const result = removeMarkdownTaskByLabel(
+      sample,
+      "Tilgang til MV test og prod",
+      false,
+    );
+    expect(result.removed).toBe(true);
+    expect(result.label).toBe("Tilgang til MV test og prod");
+    expect(result.next).toBe(
+      [
+        "Intro",
+        "- [ ] RPAbruker (PMA)",
+        "- [x] Utviklings-VM",
+        "",
+        "https://example.com",
+      ].join("\n"),
+    );
   });
 });

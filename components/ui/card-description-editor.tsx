@@ -1,6 +1,9 @@
 "use client";
 
-import { MarkdownView } from "@/components/ui/markdown-view";
+import {
+  MarkdownView,
+  type PromoteChecklistItem,
+} from "@/components/ui/markdown-view";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/lib/app-toast";
 import {
@@ -135,6 +138,7 @@ export function CardDescriptionEditor({
   onInsertConsumed,
   startInEditMode = false,
   onCommit,
+  onPromoteChecklistItem,
   /**
    * Last opp bilde til lagring og returner Markdown `![alt](url)`.
    * Anbefalt — unngår base64 i teksten.
@@ -152,6 +156,7 @@ export function CardDescriptionEditor({
   onInsertConsumed?: () => void;
   startInEditMode?: boolean;
   onCommit?: (next: string) => void | Promise<void>;
+  onPromoteChecklistItem?: (item: PromoteChecklistItem) => void;
   onUploadImage?: (file: File) => Promise<string>;
 }) {
   const [editing, setEditing] = useState(startInEditMode && !disabled);
@@ -307,7 +312,9 @@ export function CardDescriptionEditor({
           <div className="flex items-center gap-2">
             {!disabled ? (
               <p className="text-muted-foreground hidden text-[10px] sm:block">
-                Kryss av i sjekklister · Rediger for å endre tekst
+                {onPromoteChecklistItem
+                  ? "Kryss av · Høyreklikk for å lage kort · Rediger for tekst"
+                  : "Kryss av i sjekklister · Rediger for å endre tekst"}
               </p>
             ) : null}
             {!disabled ? (
@@ -328,6 +335,9 @@ export function CardDescriptionEditor({
             emptyLabel="Ingen beskrivelse ennå. Trykk Rediger for å legge til."
             onChange={disabled ? undefined : applyDescription}
             disabled={disabled || commitBusy}
+            onPromoteChecklistItem={
+              disabled || commitBusy ? undefined : onPromoteChecklistItem
+            }
           />
         </div>
       </div>
@@ -548,6 +558,9 @@ export function CardDescriptionEditor({
             emptyLabel="Ingenting å forhåndsvise ennå."
             onChange={disabled ? undefined : applyDescription}
             disabled={disabled || commitBusy}
+            onPromoteChecklistItem={
+              disabled || commitBusy ? undefined : onPromoteChecklistItem
+            }
           />
         </div>
       )}

@@ -8,6 +8,16 @@ import {
 } from "@/lib/markdown-tasks";
 import { isLikelyHtml, isLikelyMarkdown } from "@/lib/rich-text";
 import { cn } from "@/lib/utils";
+import { ListTree, SquareKanban } from "lucide-react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type MouseEvent as ReactMouseEvent,
+  type TouchEvent as ReactTouchEvent,
+} from "react";
+import { createPortal } from "react-dom";
 import type { Components } from "react-markdown";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -17,6 +27,19 @@ const mdClass = cn(
   "[&>*:first-child]:mt-0 [&>*:last-child]:mb-0",
 );
 
+export type PromoteChecklistItem = {
+  label: string;
+  checked: boolean;
+  asSub: boolean;
+};
+
+type TaskMenuState = {
+  x: number;
+  y: number;
+  label: string;
+  checked: boolean;
+};
+
 function hastLine(node: unknown): number | null {
   if (!node || typeof node !== "object") return null;
   const pos = (node as { position?: { start?: { line?: number } } }).position;
@@ -24,12 +47,41 @@ function hastLine(node: unknown): number | null {
   return typeof line === "number" && line >= 1 ? line : null;
 }
 
+function taskLabelFromLi(li: Element | null): string {
+  return (li?.textContent ?? "").replace(/\s+/g, " ").trim();
+}
+
 function buildComponents(options: {
   interactive: boolean;
   source: string;
   onToggleTask?: (next: string) => void;
+  onOpenTaskMenu?: (menu: TaskMenuState) => void;
 }): Components {
-  const { interactive, source, onToggleTask } = options;
+  const { interactive, source, onToggleTask, onOpenTaskMenu } = options;
+  const canPromote = Boolean(onOpenTaskMenu);
+
+  const openMenuFromEvent = (
+    e: ReactMouseEvent | ReactTouchEvent,
+    li: Element | null,
+    checked: boolean,
+  ) => {
+    if (!onOpenTaskMenu || !li) return;
+    const label = taskLabelFromLi(li);
+    if (!label) return;
+    const point =
+      "clientX" in e
+        ? { x: e.clientX, y: e.clientY }
+        : e.touches[0]
+          ? { x: e.touches[0].clientX, y: e.touches[0].clientY }
+          : e.changedTouches[0]
+            ? {
+                x: e.changedTouches[0].clientX,
+                y: e.changedTouches[0].clientY,
+              }
+            : null;
+    if (!point) return;
+    onOpenTaskMenu({ ...point, label, checked });
+  };
 
   return {
     h1: ({ children }) => (
@@ -69,18 +121,49 @@ function buildComponents(options: {
         {children}
       </ol>
     ),
-    li: ({ className, children }) => {
+    li: ({ className, children, node }) => {
       const isTask = Boolean(
         className && /\btask-list-item\b/.test(className),
       );
+      const checkedFromClass = Boolean(
+        className && /\btask-list-item-checked\b/.test(className),
+      );
+
+      if (!isTask || !canPromote) {
+        return (
+          <li
+            className={cn(
+              "leading-relaxed",
+              isTask &&
+                "flex list-none items-start gap-2 [&:has(input:checked)]:text-muted-foreground [&:has(input:checked)]:line-through",
+              className,
+            )}
+          >
+            {children}
+          </li>
+        );
+      }
+
       return (
         <li
           className={cn(
             "leading-relaxed",
-            isTask &&
-              "flex list-none items-start gap-2 [&:has(input:checked)]:text-muted-foreground [&:has(input:checked)]:line-through",
+            "flex list-none items-start gap-2 [&:has(input:checked)]:text-muted-foreground [&:has(input:checked)]:line-through",
+            "rounded-md px-0.5 -mx-0.5",
             className,
           )}
+          data-task-line={hastLine(node) ?? undefined}
+          onContextMenu={(e) => {
+            e.preventDefault();
+            const input = e.currentTarget.querySelector<HTMLInputElement>(
+              'input[type="checkbox"]',
+            );
+            openMenuFromEvent(
+              e,
+              e.currentTarget,
+              input?.checked ?? checkedFromClass,
+            );
+          }}
         >
           {children}
         </li>
@@ -109,9 +192,22 @@ function buildComponents(options: {
         <input
           type="checkbox"
           checked={isChecked}
+          onContextMenu={
+            canPromote
+              ? (e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  openMenuFromEvent(
+                    e,
+                    e.currentTarget.closest("li"),
+                    isChecked,
+                  );
+                }
+              : undefined
+          }
           onChange={(e) => {
             const li = e.currentTarget.closest("li");
-            const label = (li?.textContent ?? "").replace(/\s+/g, " ").trim();
+            const label = taskLabelFromLi(li);
 
             // 1) Match by visible label — avoids index/line drift from remark
             const byLabel = toggleMarkdownTaskByLabel(
@@ -227,6 +323,7 @@ export function MarkdownView({
   emptyLabel,
   onChange,
   disabled,
+  onPromoteChecklistItem,
 }: {
   value: string;
   className?: string;
@@ -234,9 +331,102 @@ export function MarkdownView({
   /** When set, GFM task-list checkboxes are clickable and update markdown. */
   onChange?: (next: string) => void;
   disabled?: boolean;
+  /** Right-click / long-press on a checklist item to turn it into a card. */
+  onPromoteChecklistItem?: (item: PromoteChecklistItem) => void;
 }) {
   const source = normalizeMarkdownNewlines(value ?? "");
   const interactive = Boolean(onChange) && !disabled;
+  const canPromote = Boolean(onPromoteChecklistItem) && !disabled;
+  const [menu, setMenu] = useState<TaskMenuState | null>(null);
+  const [mounted, setMounted] = useState(false);
+  const longPressRef = useRef<{
+    timer: number;
+    x: number;
+    y: number;
+    label: string;
+    checked: boolean;
+  } | null>(null);
+  const rootRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => setMounted(true), []);
+
+  useEffect(() => {
+    if (!menu) return;
+    const close = () => setMenu(null);
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") close();
+    };
+    window.addEventListener("pointerdown", close);
+    window.addEventListener("keydown", onKey);
+    window.addEventListener("resize", close);
+    window.addEventListener("scroll", close, true);
+    return () => {
+      window.removeEventListener("pointerdown", close);
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("resize", close);
+      window.removeEventListener("scroll", close, true);
+    };
+  }, [menu]);
+
+  const openTaskMenu = useCallback((next: TaskMenuState) => {
+    setMenu(next);
+  }, []);
+
+  const clearLongPress = useCallback(() => {
+    if (longPressRef.current) {
+      window.clearTimeout(longPressRef.current.timer);
+      longPressRef.current = null;
+    }
+  }, []);
+
+  const onTouchStartCapture = useCallback(
+    (e: ReactTouchEvent<HTMLDivElement>) => {
+      if (!canPromote) return;
+      const target = e.target as HTMLElement | null;
+      const li = target?.closest?.("li.task-list-item") as HTMLElement | null;
+      if (!li || !rootRef.current?.contains(li)) return;
+      const touch = e.touches[0];
+      if (!touch) return;
+      const input = li.querySelector<HTMLInputElement>('input[type="checkbox"]');
+      const label = taskLabelFromLi(li);
+      if (!label) return;
+      clearLongPress();
+      longPressRef.current = {
+        x: touch.clientX,
+        y: touch.clientY,
+        label,
+        checked: input?.checked ?? false,
+        timer: window.setTimeout(() => {
+          const pending = longPressRef.current;
+          longPressRef.current = null;
+          if (!pending) return;
+          openTaskMenu({
+            x: pending.x,
+            y: pending.y,
+            label: pending.label,
+            checked: pending.checked,
+          });
+        }, 480),
+      };
+    },
+    [canPromote, clearLongPress, openTaskMenu],
+  );
+
+  const onTouchMoveCapture = useCallback(
+    (e: ReactTouchEvent<HTMLDivElement>) => {
+      const pending = longPressRef.current;
+      if (!pending) return;
+      const touch = e.touches[0];
+      if (!touch) return;
+      if (
+        Math.abs(touch.clientX - pending.x) > 10 ||
+        Math.abs(touch.clientY - pending.y) > 10
+      ) {
+        clearLongPress();
+      }
+    },
+    [clearLongPress],
+  );
 
   if (!source.trim()) {
     return emptyLabel ? (
@@ -255,14 +445,85 @@ export function MarkdownView({
     interactive,
     source,
     onToggleTask: onChange,
+    onOpenTaskMenu: canPromote ? openTaskMenu : undefined,
   });
 
+  const menuStyle = menu
+    ? {
+        left: Math.max(8, Math.min(menu.x, window.innerWidth - 240)),
+        top: Math.max(8, Math.min(menu.y, window.innerHeight - 140)),
+      }
+    : undefined;
+
   return (
-    <div className={cn(mdClass, className)}>
+    <div
+      ref={rootRef}
+      className={cn(mdClass, className)}
+      onTouchStartCapture={canPromote ? onTouchStartCapture : undefined}
+      onTouchEndCapture={canPromote ? clearLongPress : undefined}
+      onTouchCancelCapture={canPromote ? clearLongPress : undefined}
+      onTouchMoveCapture={canPromote ? onTouchMoveCapture : undefined}
+    >
       {/* Same string for parse + toggle — no trim offset between view and source */}
       <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
         {source}
       </ReactMarkdown>
+
+      {mounted && menu && onPromoteChecklistItem
+        ? createPortal(
+            <div
+              role="menu"
+              aria-label="Sjekkpunkt"
+              className="bg-background border-border/70 fixed z-[300] min-w-[13.5rem] overflow-hidden rounded-xl border shadow-2xl"
+              style={menuStyle}
+              onPointerDown={(e) => e.stopPropagation()}
+            >
+              <p className="text-muted-foreground border-b border-border/50 px-3 py-2 text-[11px] leading-snug">
+                <span className="text-foreground font-medium">
+                  {menu.label.length > 48
+                    ? `${menu.label.slice(0, 48)}…`
+                    : menu.label}
+                </span>
+              </p>
+              <button
+                type="button"
+                role="menuitem"
+                className="hover:bg-muted/70 flex w-full items-center gap-2.5 px-3 py-2.5 text-left text-sm touch-manipulation"
+                onClick={() => {
+                  onPromoteChecklistItem({
+                    label: menu.label,
+                    checked: menu.checked,
+                    asSub: true,
+                  });
+                  setMenu(null);
+                }}
+              >
+                <ListTree className="size-4 shrink-0 opacity-70" aria-hidden />
+                Opprett som delkort
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                className="hover:bg-muted/70 flex w-full items-center gap-2.5 px-3 py-2.5 text-left text-sm touch-manipulation"
+                onClick={() => {
+                  onPromoteChecklistItem({
+                    label: menu.label,
+                    checked: menu.checked,
+                    asSub: false,
+                  });
+                  setMenu(null);
+                }}
+              >
+                <SquareKanban
+                  className="size-4 shrink-0 opacity-70"
+                  aria-hidden
+                />
+                Opprett som kort
+              </button>
+            </div>,
+            document.body,
+          )
+        : null}
     </div>
   );
 }

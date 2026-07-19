@@ -105,3 +105,59 @@ export function toggleMarkdownTaskAtLine(
   lines[i] = `${match[1]}[${nextMarker}]${match[3]}`;
   return lines.join("\n");
 }
+
+export type RemoveMarkdownTaskResult = {
+  next: string;
+  removed: boolean;
+  /** Visible label text of the removed task item. */
+  label: string;
+};
+
+/**
+ * Remove a GFM task-list line by its visible label text.
+ * Prefers matching `currentlyChecked` when provided.
+ */
+export function removeMarkdownTaskByLabel(
+  markdown: string,
+  itemText: string,
+  currentlyChecked?: boolean,
+): RemoveMarkdownTaskResult {
+  const needle = itemText.replace(/\s+/g, " ").trim();
+  if (!needle) {
+    return { next: markdown, removed: false, label: "" };
+  }
+
+  const lines = normalizeMarkdownNewlines(markdown).split("\n");
+
+  const tryRemove = (requireCheckedMatch: boolean): RemoveMarkdownTaskResult | null => {
+    for (let i = 0; i < lines.length; i++) {
+      const match = TASK_ITEM_RE.exec(lines[i]!);
+      if (!match) continue;
+      const lineText = match[3]!.replace(/\s+/g, " ").trim();
+      if (lineText !== needle) continue;
+      if (
+        requireCheckedMatch &&
+        currentlyChecked !== undefined &&
+        isCheckedMarker(match[2]!) !== currentlyChecked
+      ) {
+        continue;
+      }
+      const nextLines = [...lines.slice(0, i), ...lines.slice(i + 1)];
+      return {
+        next: nextLines.join("\n"),
+        removed: true,
+        label: lineText,
+      };
+    }
+    return null;
+  };
+
+  return (
+    tryRemove(currentlyChecked !== undefined) ??
+    tryRemove(false) ?? {
+      next: markdown,
+      removed: false,
+      label: needle,
+    }
+  );
+}
