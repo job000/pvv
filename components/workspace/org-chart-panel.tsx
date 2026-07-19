@@ -33,9 +33,11 @@ import {
   Minus,
   PenLine,
   Plus,
+  Scan,
   Shield,
   Trash2,
   Users,
+  X,
 } from "lucide-react";
 import {
   createContext,
@@ -1905,13 +1907,79 @@ function AddRootOrganizationForm({
 const ORG_CHART_ZOOM_MIN = 0.28;
 const ORG_CHART_ZOOM_MAX = 2.5;
 const ORG_CHART_ZOOM_STEP = 1.1;
-/** Standard startvisning: litt zoomet ut + kompakte kort gir bedre oversikt. */
+/** Desktop-standard. Mobil/nettbrett settes via surface. */
 const ORG_CHART_ZOOM_INITIAL = 0.88;
 /** Under denne zoomen vises oversikts-noder (ikke fullt kortinnhold). */
 const ORG_CHART_OVERVIEW_ZOOM = 0.58;
 
+type OrgChartSurface = "phone" | "tablet" | "desktop";
+
+function getOrgChartSurface(): OrgChartSurface {
+  if (typeof window === "undefined") return "desktop";
+  if (window.matchMedia("(max-width: 767px)").matches) return "phone";
+  if (window.matchMedia("(max-width: 1023px)").matches) return "tablet";
+  return "desktop";
+}
+
+function initialZoomForSurface(surface: OrgChartSurface): number {
+  if (surface === "phone") return 0.52;
+  if (surface === "tablet") return 0.68;
+  return ORG_CHART_ZOOM_INITIAL;
+}
+
+function structureHintForSurface(
+  surface: OrgChartSurface,
+  canEdit: boolean,
+): string {
+  if (surface === "phone") {
+    return "Dra for å flytte · knip for å zoome · trykk enhet";
+  }
+  if (surface === "tablet") {
+    return "Dra eller knip · tilpass for hele treet · trykk enhet";
+  }
+  return canEdit
+    ? "Scroll, Ctrl/Cmd+hjul for zoom, mellomrom+dra for å flytte"
+    : "Scroll i kartet · Ctrl/Cmd+hjul zoomer";
+}
+
+function viewportClassForSurface(
+  surface: OrgChartSurface,
+  immersive: boolean,
+): string {
+  if (surface === "phone") {
+    return immersive
+      ? "h-full max-h-none min-h-0 touch-none pb-24 pt-16"
+      : "max-h-[min(80dvh,40rem)] min-h-[min(68dvh,26rem)] touch-none pb-40 pt-[5.5rem]";
+  }
+  if (surface === "tablet") {
+    return immersive
+      ? "h-full max-h-none min-h-0 touch-none pb-20 pt-14"
+      : "max-h-[min(74dvh,48rem)] min-h-[min(58dvh,32rem)] touch-none pb-36 pt-[5.75rem]";
+  }
+  return immersive
+    ? "h-full max-h-none min-h-0 touch-pan-x touch-pan-y pb-28 pt-[5rem]"
+    : "max-h-[min(78vh,56rem)] min-h-[28rem] touch-pan-x touch-pan-y pb-28 pt-[5rem]";
+}
+
 function clampOrgChartZoom(z: number) {
   return Math.min(ORG_CHART_ZOOM_MAX, Math.max(ORG_CHART_ZOOM_MIN, z));
+}
+
+function useOrgChartSurface(): OrgChartSurface {
+  const [surface, setSurface] = useState<OrgChartSurface>("desktop");
+  useEffect(() => {
+    const sync = () => setSurface(getOrgChartSurface());
+    sync();
+    const mqPhone = window.matchMedia("(max-width: 767px)");
+    const mqTablet = window.matchMedia("(max-width: 1023px)");
+    mqPhone.addEventListener("change", sync);
+    mqTablet.addEventListener("change", sync);
+    return () => {
+      mqPhone.removeEventListener("change", sync);
+      mqTablet.removeEventListener("change", sync);
+    };
+  }, []);
+  return surface;
 }
 
 export function OrgChartPanel({
@@ -1994,34 +2062,44 @@ export function OrgChartPanel({
     return m;
   }, [allContacts]);
 
-  const [chartZoom, setChartZoom] = useState(ORG_CHART_ZOOM_INITIAL);
+  const chartSurface = useOrgChartSurface();
+  const touchFirst =
+    chartSurface === "phone" || chartSurface === "tablet";
+
+  const [chartZoom, setChartZoom] = useState(() =>
+    initialZoomForSurface(getOrgChartSurface()),
+  );
+  /** Desktop: valgfri dra-modus. Touch: alltid pan (knapp skjules). */
   const [chartPanMode, setChartPanMode] = useState(false);
+  const [spacePanHeld, setSpacePanHeld] = useState(false);
   const [chartIsPanning, setChartIsPanning] = useState(false);
   const [chartPinchActive, setChartPinchActive] = useState(false);
   const chartZoomRef = useRef(chartZoom);
   useEffect(() => {
     chartZoomRef.current = chartZoom;
   }, [chartZoom]);
+  const chartPanModeRef = useRef(chartPanMode);
+  useEffect(() => {
+    chartPanModeRef.current = chartPanMode;
+  }, [chartPanMode]);
+  const spacePanHeldRef = useRef(spacePanHeld);
+  useEffect(() => {
+    spacePanHeldRef.current = spacePanHeld;
+  }, [spacePanHeld]);
+  const chartSurfaceRef = useRef(chartSurface);
+  useEffect(() => {
+    chartSurfaceRef.current = chartSurface;
+  }, [chartSurface]);
   const pinchBaseZoomRef = useRef(1);
   const chartViewportRef = useRef<HTMLDivElement>(null);
   const chartHostRef = useRef<HTMLDivElement>(null);
+  const structureDetailsRef = useRef<HTMLDetailsElement>(null);
+  const chartNaturalSizeLiveRef = useRef({ w: 0, h: 0 });
   /**
    * CSS-immersiv «full skjerm» — iOS/iPadOS støtter ikke requestFullscreen på
    * vilkårlige elementer; native API feilet stille før.
    */
   const [chartIsFullscreen, setChartIsFullscreen] = useState(false);
-
-  /** Touch/penn: start med dra-modus på — ellers virker Hand-knappen «ødelagt». */
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const mq = window.matchMedia("(pointer: coarse)");
-    const apply = () => {
-      if (mq.matches) setChartPanMode(true);
-    };
-    apply();
-    mq.addEventListener("change", apply);
-    return () => mq.removeEventListener("change", apply);
-  }, []);
 
   useEffect(() => {
     if (!chartIsFullscreen) return;
@@ -2037,8 +2115,88 @@ export function OrgChartPanel({
     };
   }, [chartIsFullscreen]);
 
+  /** Mellomrom = midlertidig dra på desktop (som Figma/Maps). */
+  useEffect(() => {
+    if (chartSurface !== "desktop") {
+      setSpacePanHeld(false);
+      return;
+    }
+    const isTypingTarget = (t: EventTarget | null) => {
+      if (!(t instanceof HTMLElement)) return false;
+      const tag = t.tagName;
+      return (
+        tag === "INPUT" ||
+        tag === "TEXTAREA" ||
+        tag === "SELECT" ||
+        t.isContentEditable
+      );
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.code !== "Space" || e.repeat || isTypingTarget(e.target)) return;
+      e.preventDefault();
+      setSpacePanHeld(true);
+    };
+    const onKeyUp = (e: KeyboardEvent) => {
+      if (e.code === "Space") setSpacePanHeld(false);
+    };
+    const onBlur = () => setSpacePanHeld(false);
+    window.addEventListener("keydown", onKeyDown);
+    window.addEventListener("keyup", onKeyUp);
+    window.addEventListener("blur", onBlur);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("keyup", onKeyUp);
+      window.removeEventListener("blur", onBlur);
+    };
+  }, [chartSurface]);
+
+  const fitChartToViewRef = useRef<(attempt?: number) => void>(() => {});
+
+  const fitChartToView = useCallback((attempt = 0) => {
+    const vp = chartViewportRef.current;
+    const size = chartNaturalSizeLiveRef.current;
+    if (!vp) return;
+    /* Closed <details> eller måling ikke klar ennå — prøv igjen. */
+    if (vp.clientWidth < 32 || size.w < 8 || size.h < 8) {
+      if (attempt < 12) {
+        window.setTimeout(() => fitChartToView(attempt + 1), 60);
+      }
+      return;
+    }
+    const surface = chartSurfaceRef.current;
+    const padX = surface === "phone" ? 24 : surface === "tablet" ? 40 : 56;
+    const padY = surface === "phone" ? 140 : surface === "tablet" ? 120 : 96;
+    const scale = Math.min(
+      (vp.clientWidth - padX) / size.w,
+      (vp.clientHeight - padY) / size.h,
+      surface === "desktop" ? 1 : 1.05,
+    );
+    setChartZoom(clampOrgChartZoom(scale));
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        const el = chartViewportRef.current;
+        if (!el) return;
+        el.scrollLeft = Math.max(0, (el.scrollWidth - el.clientWidth) / 2);
+        el.scrollTop = Math.max(0, (el.scrollHeight - el.clientHeight) * 0.06);
+      });
+    });
+  }, []);
+
+  useEffect(() => {
+    fitChartToViewRef.current = fitChartToView;
+  }, [fitChartToView]);
+
   const toggleChartFullscreen = useCallback(() => {
-    setChartIsFullscreen((v) => !v);
+    setChartIsFullscreen((v) => {
+      const next = !v;
+      if (next) {
+        setOrgSearch("");
+        if (chartSurfaceRef.current !== "desktop") {
+          window.setTimeout(() => fitChartToViewRef.current(0), 120);
+        }
+      }
+      return next;
+    });
   }, []);
 
   /**
@@ -2050,20 +2208,13 @@ export function OrgChartPanel({
     if (!el) return;
 
     /**
-     * Zoom kun med Ctrl (Win/Linux) eller Cmd (macOS) + hjul — standard for
-     * «pinch-to-zoom»-simulering på trackpad i Chrome/Safari.
-     * Uten modifikator: vanlig vertikal rulling i viewport (pan).
-     * Shift+hjul: horisontal rulling (ikke zoom).
-     * Safari pinch: gesturechange (under).
+     * Ctrl/Cmd + hjul = zoom (desktop + mus/trackpad på nettbrett).
+     * Vanlig hjul/to-finger-scroll: native overflow. Pinch: pointer/gesture.
      */
     const onWheel = (e: WheelEvent) => {
-      if (e.shiftKey && !e.ctrlKey && !e.metaKey) {
-        return;
-      }
+      if (e.shiftKey && !e.ctrlKey && !e.metaKey) return;
       const zoomChord = e.ctrlKey || e.metaKey;
-      if (!zoomChord) {
-        return;
-      }
+      if (!zoomChord) return;
       e.preventDefault();
       const dy = e.deltaY;
       if (dy === 0) return;
@@ -2077,7 +2228,7 @@ export function OrgChartPanel({
       setChartZoom(clampOrgChartZoom(next));
     };
 
-    /** Safari / WebKit: sporingsflate pinch (scale relativt til gesturestart). */
+    /** Safari / WebKit trackpad pinch. */
     const onGestureStart = (e: Event) => {
       e.preventDefault();
       pinchBaseZoomRef.current = chartZoomRef.current;
@@ -2107,12 +2258,11 @@ export function OrgChartPanel({
     startY: number;
     startSl: number;
     startSt: number;
-    /** Venter på terskel før pan (så trykk på kort fortsatt fungerer). */
     armed: boolean;
     captured: boolean;
+    moved: boolean;
   } | null>(null);
 
-  /** Touch pinch (Chrome/Android/iPad) — to pekere, avstand → zoom. */
   const touchPointersRef = useRef(
     new Map<number, { x: number; y: number }>(),
   );
@@ -2120,6 +2270,9 @@ export function OrgChartPanel({
     startDist: number;
     startZoom: number;
   } | null>(null);
+  /** Unngå at pan/knip utløser kort-klikk etterpå. */
+  const suppressNextClickRef = useRef(false);
+  const pinchDidZoomRef = useRef(false);
 
   useEffect(() => {
     const el = chartViewportRef.current;
@@ -2127,12 +2280,18 @@ export function OrgChartPanel({
 
     const interactiveSelector =
       "button, a, summary, input, textarea, select, label, [role='dialog'], [role='listbox'], [role='option'], [role='toolbar']";
-    const PAN_SLOP_PX = 10;
 
     const pointerDist = (
       a: { x: number; y: number },
       b: { x: number; y: number },
     ) => Math.hypot(a.x - b.x, a.y - b.y);
+
+    const armClickSuppress = () => {
+      suppressNextClickRef.current = true;
+      window.setTimeout(() => {
+        suppressNextClickRef.current = false;
+      }, 450);
+    };
 
     const shouldArmPan = (e: PointerEvent) => {
       const t = e.target as HTMLElement | null;
@@ -2141,6 +2300,7 @@ export function OrgChartPanel({
       if (touchPointersRef.current.size >= 2) return false;
       if (pinchSessionRef.current) return false;
 
+      const surface = chartSurfaceRef.current;
       const isMouse = e.pointerType === "mouse";
       const isTouchOrPen =
         e.pointerType === "touch" || e.pointerType === "pen";
@@ -2152,25 +2312,24 @@ export function OrgChartPanel({
           return true;
         }
         if (e.button !== 0) return false;
-        if (e.altKey) return true;
-        if (chartPanMode && !onCard) return true;
+        if (e.altKey || spacePanHeldRef.current) return true;
+        /* Desktop hånd-modus: pan i bakgrunn; kort forblir klikkbare uten dra. */
+        if (chartPanModeRef.current) return !onCard;
         return false;
       }
 
       if (!isTouchOrPen) return false;
 
-      /**
-       * Touch/penn:
-       * - Dra-modus: kan starte pan også på kort (etter terskel → trykk OK).
-       * - Uten dra-modus: pan kun i prikkebakgrunn.
-       */
-      if (chartPanMode) return true;
+      /* Mobil/nettbrett: alltid én-finger-pan (med terskel). */
+      if (surface === "phone" || surface === "tablet") return true;
+      if (chartPanModeRef.current) return true;
       return !onCard;
     };
 
     const endPan = (e: PointerEvent) => {
       const s = panSessionRef.current;
       if (!s || e.pointerId !== s.pointerId) return;
+      if (s.moved) armClickSuppress();
       if (s.captured) {
         try {
           el.releasePointerCapture(e.pointerId);
@@ -2197,6 +2356,7 @@ export function OrgChartPanel({
               startDist: dist,
               startZoom: chartZoomRef.current,
             };
+            pinchDidZoomRef.current = false;
             setChartPinchActive(true);
             e.preventDefault();
           }
@@ -2214,18 +2374,8 @@ export function OrgChartPanel({
         startSt: el.scrollTop,
         armed: true,
         captured: false,
+        moved: false,
       };
-
-      /* Mus: pan med en gang. Touch/penn: vent på bevegelse så trykk fortsatt virker. */
-      if (e.pointerType === "mouse") {
-        panSessionRef.current.captured = true;
-        setChartIsPanning(true);
-        try {
-          el.setPointerCapture(e.pointerId);
-        } catch {
-          /* ignore */
-        }
-      }
     };
 
     const onPointerMove = (e: PointerEvent) => {
@@ -2245,9 +2395,13 @@ export function OrgChartPanel({
         const dist = pointerDist(pts[0]!, pts[1]!);
         if (dist > 8 && pinch.startDist > 8) {
           e.preventDefault();
-          setChartZoom(
-            clampOrgChartZoom(pinch.startZoom * (dist / pinch.startDist)),
+          const next = clampOrgChartZoom(
+            pinch.startZoom * (dist / pinch.startDist),
           );
+          if (Math.abs(next - chartZoomRef.current) > 0.002) {
+            pinchDidZoomRef.current = true;
+          }
+          setChartZoom(next);
         }
         return;
       }
@@ -2257,9 +2411,16 @@ export function OrgChartPanel({
 
       const dx = e.clientX - s.startX;
       const dy = e.clientY - s.startY;
+      const slop =
+        chartSurfaceRef.current === "phone"
+          ? 14
+          : chartSurfaceRef.current === "tablet"
+            ? 12
+            : 8;
 
-      if (!s.captured) {
-        if (Math.hypot(dx, dy) < PAN_SLOP_PX) return;
+      if (!s.moved) {
+        if (Math.hypot(dx, dy) < slop) return;
+        s.moved = true;
         s.captured = true;
         setChartIsPanning(true);
         try {
@@ -2277,23 +2438,36 @@ export function OrgChartPanel({
     const onPointerUp = (e: PointerEvent) => {
       touchPointersRef.current.delete(e.pointerId);
       if (touchPointersRef.current.size < 2) {
+        if (pinchSessionRef.current && pinchDidZoomRef.current) {
+          armClickSuppress();
+        }
         pinchSessionRef.current = null;
+        pinchDidZoomRef.current = false;
         setChartPinchActive(false);
       }
       endPan(e);
+    };
+
+    const onClickCapture = (e: MouseEvent) => {
+      if (!suppressNextClickRef.current) return;
+      e.preventDefault();
+      e.stopPropagation();
+      suppressNextClickRef.current = false;
     };
 
     el.addEventListener("pointerdown", onPointerDown);
     el.addEventListener("pointermove", onPointerMove, { passive: false });
     el.addEventListener("pointerup", onPointerUp);
     el.addEventListener("pointercancel", onPointerUp);
+    el.addEventListener("click", onClickCapture, true);
     return () => {
       el.removeEventListener("pointerdown", onPointerDown);
       el.removeEventListener("pointermove", onPointerMove);
       el.removeEventListener("pointerup", onPointerUp);
       el.removeEventListener("pointercancel", onPointerUp);
+      el.removeEventListener("click", onClickCapture, true);
     };
-  }, [chartPanMode, rows]);
+  }, [rows]);
 
   const zoomOut = useCallback(() => {
     setChartZoom((z) => clampOrgChartZoom(z / ORG_CHART_ZOOM_STEP));
@@ -2301,10 +2475,9 @@ export function OrgChartPanel({
   const zoomIn = useCallback(() => {
     setChartZoom((z) => clampOrgChartZoom(z * ORG_CHART_ZOOM_STEP));
   }, []);
-  const resetZoom = useCallback(
-    () => setChartZoom(ORG_CHART_ZOOM_INITIAL),
-    [],
-  );
+  const resetZoom = useCallback(() => {
+    setChartZoom(initialZoomForSurface(chartSurfaceRef.current));
+  }, []);
 
   const cardRefs = useRef(new Map<string, HTMLElement>());
   const registerCardRef = useCallback(
@@ -2386,16 +2559,58 @@ export function OrgChartPanel({
     const el = chartContentRef.current;
     if (!el) return;
     const measure = () => {
-      setChartNaturalSize({
+      const next = {
         w: Math.ceil(el.scrollWidth),
         h: Math.ceil(el.scrollHeight),
-      });
+      };
+      chartNaturalSizeLiveRef.current = next;
+      setChartNaturalSize(next);
     };
     measure();
     const ro = new ResizeObserver(measure);
     ro.observe(el);
     return () => ro.disconnect();
   }, [rows, overviewMode, canEdit]);
+
+  /** Mobil/nettbrett: tilpass kart når struktur åpnes. */
+  useEffect(() => {
+    const details = structureDetailsRef.current;
+    if (!details) return;
+    const onToggle = () => {
+      if (!details.open) return;
+      if (chartSurfaceRef.current === "desktop") return;
+      window.setTimeout(() => fitChartToView(0), 80);
+    };
+    details.addEventListener("toggle", onToggle);
+    return () => details.removeEventListener("toggle", onToggle);
+  }, [fitChartToView, rows]);
+
+  /** Rotasjon / større layout-endring: tilpass på touch-flater. */
+  useEffect(() => {
+    if (!touchFirst) return;
+    let timer: number | undefined;
+    let lastW = window.innerWidth;
+    let lastH = window.innerHeight;
+    const scheduleFit = () => {
+      window.clearTimeout(timer);
+      timer = window.setTimeout(() => fitChartToView(0), 180);
+    };
+    const onResize = () => {
+      const dw = Math.abs(window.innerWidth - lastW);
+      const dh = Math.abs(window.innerHeight - lastH);
+      if (dw < 48 && dh < 48) return;
+      lastW = window.innerWidth;
+      lastH = window.innerHeight;
+      scheduleFit();
+    };
+    window.addEventListener("orientationchange", scheduleFit);
+    window.addEventListener("resize", onResize);
+    return () => {
+      window.clearTimeout(timer);
+      window.removeEventListener("orientationchange", scheduleFit);
+      window.removeEventListener("resize", onResize);
+    };
+  }, [touchFirst, fitChartToView]);
 
   const orgSearchMatches = useMemo(() => {
     const q = orgSearch.trim().toLowerCase();
@@ -2471,7 +2686,10 @@ export function OrgChartPanel({
           </p>
         </div>
       ) : (
-        <details className="group/structure rounded-2xl border border-border/50 bg-card/40 open:bg-card/60 open:shadow-sm">
+        <details
+          ref={structureDetailsRef}
+          className="group/structure rounded-2xl border border-border/50 bg-card/40 open:bg-card/60 open:shadow-sm"
+        >
           <summary className="flex cursor-pointer list-none items-center gap-3 px-4 py-3.5 text-left sm:px-5 [&::-webkit-details-marker]:hidden">
             <Building2 className="text-muted-foreground size-5 shrink-0" aria-hidden />
             <div className="min-w-0 flex-1">
@@ -2479,9 +2697,7 @@ export function OrgChartPanel({
                 {canEdit ? "Struktur" : "Organisasjonskart"}
               </p>
               <p className="text-muted-foreground text-xs leading-snug">
-                {canEdit
-                  ? "Se og rediger enheter, kontakter og hierarki"
-                  : "Se enheter og hvordan arbeidet er plassert"}
+                {structureHintForSurface(chartSurface, !!canEdit)}
               </p>
             </div>
             <ChevronRight className="text-muted-foreground size-5 shrink-0 transition-transform group-open/structure:rotate-90" />
@@ -2499,14 +2715,18 @@ export function OrgChartPanel({
           <div
             ref={chartViewportRef}
             className={cn(
-              "max-h-[min(78dvh,56rem)] min-h-[min(70dvh,26rem)] overflow-auto overscroll-contain pb-32 pt-[5.5rem] sm:min-h-[26rem] sm:pb-28 sm:pt-[5rem]",
-              /* touch-none: egen pan/pinch (native scroll + CSS zoom kolliderer på mobil). */
-              "touch-none",
-              // Prikk-rutenett som canvas-bakgrunn — signaliserer «flate du kan dra og zoome i».
+              "overflow-auto overscroll-contain",
+              viewportClassForSurface(chartSurface, chartIsFullscreen),
+              chartSurface === "desktop" &&
+                !chartIsFullscreen &&
+                "md:min-h-[32rem] lg:min-h-[36rem]",
+              // Prikk-rutenett som canvas-bakgrunn
               "bg-[radial-gradient(color-mix(in_oklab,var(--border)_75%,transparent)_1px,transparent_1px)] [background-size:22px_22px]",
-              chartPanMode && !chartIsPanning && "cursor-grab",
-              (chartIsPanning || chartPinchActive) && "cursor-grabbing select-none",
-              chartIsFullscreen && "h-full max-h-none min-h-0",
+              (touchFirst || chartPanMode || spacePanHeld) &&
+                !chartIsPanning &&
+                "cursor-grab",
+              (chartIsPanning || chartPinchActive || spacePanHeld) &&
+                "cursor-grabbing select-none",
             )}
             role="tree"
             aria-label="Organisasjonstre"
@@ -2559,112 +2779,148 @@ export function OrgChartPanel({
                 </div>
               </div>
             </div>
-            {overviewMode ? (
-              <p className="text-muted-foreground pointer-events-none absolute bottom-[5.5rem] left-1/2 z-10 w-[min(20rem,calc(100%-2rem))] -translate-x-1/2 rounded-full bg-background/90 px-3 py-1.5 text-center text-[11px] font-medium shadow-sm backdrop-blur-sm sm:bottom-24">
+            {overviewMode && !(touchFirst && chartIsFullscreen) ? (
+              <p className="text-muted-foreground pointer-events-none absolute bottom-[6.5rem] left-1/2 z-10 w-[min(20rem,calc(100%-2rem))] -translate-x-1/2 rounded-full bg-background/90 px-3 py-1.5 text-center text-[11px] font-medium shadow-sm backdrop-blur-sm md:bottom-24">
                 Oversikt — trykk en enhet for å zoome inn
               </p>
             ) : null}
           </div>
 
-          {/* Søk + kontroller over canvas — egen lag, stopper pan fra å «stjele» trykk. */}
-          <div
-            ref={orgSearchWrapRef}
-            className="pointer-events-auto absolute left-2 right-2 z-50 flex items-start gap-2 top-[max(0.75rem,env(safe-area-inset-top))] sm:left-3 sm:right-auto sm:w-[min(20rem,calc(100%-1.5rem))]"
-            onPointerDown={(e) => e.stopPropagation()}
-          >
-            <div className="min-w-0 flex-1 sm:flex-none sm:w-full">
-              <SearchInput
-                value={orgSearch}
-                onChange={(e) => setOrgSearch(e.target.value)}
-                placeholder="Søk enhet eller kode"
-                aria-label="Søk i organisasjonskartet"
-                aria-controls="org-chart-search-results"
-                aria-expanded={
-                  orgSearch.trim().length > 0 && orgSearchMatches.length > 0
-                }
-                inputClassName="h-11 rounded-2xl border-border/50 bg-background/95 text-base shadow-md backdrop-blur-md sm:h-10 sm:rounded-full sm:text-sm"
-              />
-              {orgSearch.trim().length > 0 && orgSearchMatches.length > 0 ? (
-                <ul
-                  id="org-chart-search-results"
-                  role="listbox"
-                  className="border-border/60 bg-card absolute left-0 right-0 top-full z-[60] mt-1.5 max-h-60 overflow-auto rounded-2xl border py-1 shadow-lg ring-1 ring-black/[0.06] dark:ring-white/[0.08]"
-                >
-                  {orgSearchMatches.slice(0, 14).map((u) => (
-                    <li key={u._id} role="presentation">
-                      <button
-                        type="button"
-                        role="option"
-                        className="hover:bg-muted/80 flex min-h-11 w-full items-baseline gap-2 px-3 py-2.5 text-left text-sm transition-colors"
-                        onClick={() => {
-                          onCardSurfaceActivate(u._id);
-                          setOrgSearch("");
-                        }}
-                      >
-                        <span className="text-foreground min-w-0 flex-1 font-medium leading-snug">
-                          {u.name}
-                        </span>
-                        {u.localCode?.trim() ? (
-                          <span className="text-muted-foreground shrink-0 font-mono text-[11px] tabular-nums">
-                            {u.localCode.trim()}
-                          </span>
-                        ) : null}
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              ) : orgSearch.trim().length > 0 &&
-                orgSearchMatches.length === 0 ? (
-                <p className="border-border/60 bg-card text-muted-foreground absolute left-0 right-0 top-full z-[60] mt-1.5 rounded-2xl border px-3 py-2.5 text-xs shadow-lg ring-1 ring-black/[0.06]">
-                  Ingen treff — prøv et annet søkeord.
-                </p>
-              ) : null}
-            </div>
-            {chartIsFullscreen ? (
-              <Button
-                type="button"
-                variant="secondary"
-                size="icon-lg"
-                className="shrink-0 rounded-2xl shadow-md sm:hidden"
-                onClick={toggleChartFullscreen}
-                aria-label="Lukk full skjerm"
-                title="Lukk full skjerm"
-              >
-                <Minimize2 className="size-5" aria-hidden />
-              </Button>
-            ) : null}
-          </div>
-
-          {/*
-            Touch-først dock: store, jevnt fordelte mål.
-            Tidligere kompakt «sm»-pille var for trang og fullskjerm feilet på iOS.
-          */}
-          <div
-            className="pointer-events-auto absolute inset-x-2 z-50 bottom-[max(0.75rem,env(safe-area-inset-bottom))] sm:inset-x-auto sm:right-3"
-            onPointerDown={(e) => e.stopPropagation()}
-          >
+          {/* Fullskjerm touch: kun tydelig lukk — ingen søk/hint over kartet. */}
+          {touchFirst && chartIsFullscreen ? (
             <div
-              className="border-border/60 bg-background/95 mx-auto flex w-full max-w-lg items-center gap-1 rounded-2xl border p-1.5 shadow-xl backdrop-blur-md sm:mx-0 sm:w-auto sm:max-w-none sm:gap-0.5 sm:rounded-full sm:p-1"
-              role="toolbar"
-              aria-label="Kartkontroller"
+              className="pointer-events-auto absolute inset-x-0 top-0 z-50 flex justify-end px-3 pt-[max(0.65rem,env(safe-area-inset-top))]"
+              onPointerDown={(e) => e.stopPropagation()}
             >
               <Button
                 type="button"
-                variant={chartPanMode ? "secondary" : "ghost"}
-                size="icon-lg"
-                className="rounded-xl sm:size-10 sm:min-h-10 sm:min-w-10 sm:rounded-full"
-                onClick={() => setChartPanMode((v) => !v)}
-                aria-pressed={chartPanMode}
-                aria-label={
-                  chartPanMode ? "Dra-modus på" : "Slå på dra for å flytte kart"
-                }
-                title="Dra i kartet for å flytte. Knip med to fingre for å zoome."
+                variant="secondary"
+                className="h-12 min-h-12 gap-2 rounded-full px-5 text-base font-semibold shadow-lg"
+                onClick={toggleChartFullscreen}
+                aria-label="Lukk full skjerm"
               >
-                <Hand className="size-5" aria-hidden />
+                <X className="size-5" aria-hidden />
+                Lukk
               </Button>
+            </div>
+          ) : (
+            <div
+              ref={orgSearchWrapRef}
+              className={cn(
+                "pointer-events-auto absolute z-50 flex items-start gap-2 top-[max(0.75rem,env(safe-area-inset-top))]",
+                touchFirst
+                  ? "inset-x-2"
+                  : "left-3 right-auto w-[min(20rem,calc(100%-1.5rem))]",
+              )}
+              onPointerDown={(e) => e.stopPropagation()}
+            >
+              <div className="min-w-0 flex-1">
+                <SearchInput
+                  value={orgSearch}
+                  onChange={(e) => setOrgSearch(e.target.value)}
+                  placeholder="Søk enhet eller kode"
+                  aria-label="Søk i organisasjonskartet"
+                  aria-controls="org-chart-search-results"
+                  aria-expanded={
+                    orgSearch.trim().length > 0 && orgSearchMatches.length > 0
+                  }
+                  inputClassName={cn(
+                    "border-border/50 bg-background/95 shadow-md backdrop-blur-md",
+                    touchFirst
+                      ? "h-12 rounded-2xl text-base"
+                      : "h-10 rounded-full text-sm",
+                  )}
+                />
+                {orgSearch.trim().length > 0 && orgSearchMatches.length > 0 ? (
+                  <ul
+                    id="org-chart-search-results"
+                    role="listbox"
+                    className="border-border/60 bg-card absolute left-0 right-0 top-full z-[60] mt-1.5 max-h-60 overflow-auto rounded-2xl border py-1 shadow-lg ring-1 ring-black/[0.06] dark:ring-white/[0.08]"
+                  >
+                    {orgSearchMatches.slice(0, 14).map((u) => (
+                      <li key={u._id} role="presentation">
+                        <button
+                          type="button"
+                          role="option"
+                          className="hover:bg-muted/80 flex min-h-11 w-full items-baseline gap-2 px-3 py-2.5 text-left text-sm transition-colors"
+                          onClick={() => {
+                            onCardSurfaceActivate(u._id);
+                            setOrgSearch("");
+                          }}
+                        >
+                          <span className="text-foreground min-w-0 flex-1 font-medium leading-snug">
+                            {u.name}
+                          </span>
+                          {u.localCode?.trim() ? (
+                            <span className="text-muted-foreground shrink-0 font-mono text-[11px] tabular-nums">
+                              {u.localCode.trim()}
+                            </span>
+                          ) : null}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                ) : orgSearch.trim().length > 0 &&
+                  orgSearchMatches.length === 0 ? (
+                  <p className="border-border/60 bg-card text-muted-foreground absolute left-0 right-0 top-full z-[60] mt-1.5 rounded-2xl border px-3 py-2.5 text-xs shadow-lg ring-1 ring-black/[0.06]">
+                    Ingen treff — prøv et annet søkeord.
+                  </p>
+                ) : null}
+              </div>
+            </div>
+          )}
+
+          {/* Plattformtilpasset verktøylinje */}
+          <div
+            className={cn(
+              "pointer-events-auto absolute z-50 bottom-[max(0.75rem,env(safe-area-inset-bottom))]",
+              touchFirst && chartIsFullscreen
+                ? "right-3 left-auto"
+                : touchFirst
+                  ? "inset-x-2"
+                  : "right-3 left-auto",
+            )}
+            onPointerDown={(e) => e.stopPropagation()}
+          >
+            <div
+              className={cn(
+                "border-border/60 bg-background/95 flex items-center gap-0.5 border shadow-xl backdrop-blur-md",
+                touchFirst && chartIsFullscreen
+                  ? "rounded-full p-1"
+                  : touchFirst
+                    ? "mx-auto w-full max-w-lg rounded-2xl p-1.5"
+                    : "rounded-full p-1",
+              )}
+              role="toolbar"
+              aria-label="Kartkontroller"
+            >
+              {/* Hånd kun på desktop — mobil/nettbrett panorerer alltid. */}
+              {chartSurface === "desktop" ? (
+                <Button
+                  type="button"
+                  variant={chartPanMode || spacePanHeld ? "secondary" : "ghost"}
+                  size="icon-lg"
+                  className="size-10 min-h-10 min-w-10 rounded-full"
+                  onClick={() => setChartPanMode((v) => !v)}
+                  aria-pressed={chartPanMode}
+                  aria-label={
+                    chartPanMode
+                      ? "Dra-modus på"
+                      : "Slå på dra for å flytte kart"
+                  }
+                  title="Dra i bakgrunnen. Hold mellomrom for midlertidig dra. Midtklikk/Alt+dra også."
+                >
+                  <Hand className="size-4" aria-hidden />
+                </Button>
+              ) : null}
 
               <div
-                className="bg-muted/60 flex min-w-0 flex-1 items-center gap-0.5 rounded-xl p-0.5 sm:flex-none sm:bg-transparent sm:p-0"
+                className={cn(
+                  "flex min-w-0 items-center gap-0.5",
+                  touchFirst && !chartIsFullscreen
+                    ? "bg-muted/60 flex-1 rounded-xl p-0.5"
+                    : "flex-none",
+                )}
                 role="group"
                 aria-label="Zoom"
               >
@@ -2672,20 +2928,35 @@ export function OrgChartPanel({
                   type="button"
                   variant="ghost"
                   size="icon-lg"
-                  className="rounded-xl sm:size-10 sm:min-h-10 sm:min-w-10 sm:rounded-full"
+                  className={cn(
+                    "rounded-xl",
+                    touchFirst && !chartIsFullscreen
+                      ? "size-12 min-h-12 min-w-12"
+                      : "size-10 min-h-10 min-w-10 rounded-full",
+                  )}
                   onClick={zoomOut}
                   disabled={chartZoom <= ORG_CHART_ZOOM_MIN + 1e-6}
                   aria-label="Zoom ut"
                   title="Zoom ut"
                 >
-                  <Minus className="size-5" aria-hidden />
+                  <Minus
+                    className={
+                      touchFirst && !chartIsFullscreen ? "size-5" : "size-4"
+                    }
+                    aria-hidden
+                  />
                 </Button>
                 <button
                   type="button"
                   onClick={resetZoom}
-                  className="text-foreground hover:bg-background/80 min-h-11 min-w-[3.75rem] flex-1 touch-manipulation rounded-xl px-2 text-center text-sm font-semibold tabular-nums transition-colors sm:min-h-10 sm:min-w-[3.25rem] sm:flex-none sm:rounded-full sm:text-xs"
-                  title={`Tilbakestill til ${Math.round(ORG_CHART_ZOOM_INITIAL * 100)} %`}
-                  aria-label={`Tilbakestill zoom til ${Math.round(ORG_CHART_ZOOM_INITIAL * 100)} prosent`}
+                  className={cn(
+                    "text-foreground hover:bg-background/80 touch-manipulation text-center font-semibold tabular-nums transition-colors",
+                    touchFirst && !chartIsFullscreen
+                      ? "min-h-12 min-w-[3.75rem] flex-1 rounded-xl px-2 text-sm"
+                      : "min-h-10 min-w-[3.25rem] rounded-full px-1.5 text-xs",
+                  )}
+                  title="Tilbakestill zoom for denne enheten"
+                  aria-label={`Tilbakestill zoom til ${Math.round(initialZoomForSurface(chartSurface) * 100)} prosent`}
                 >
                   <span aria-live="polite">
                     {Math.round(chartZoom * 100)}%
@@ -2695,41 +2966,95 @@ export function OrgChartPanel({
                   type="button"
                   variant="ghost"
                   size="icon-lg"
-                  className="rounded-xl sm:size-10 sm:min-h-10 sm:min-w-10 sm:rounded-full"
+                  className={cn(
+                    "rounded-xl",
+                    touchFirst && !chartIsFullscreen
+                      ? "size-12 min-h-12 min-w-12"
+                      : "size-10 min-h-10 min-w-10 rounded-full",
+                  )}
                   onClick={zoomIn}
                   disabled={chartZoom >= ORG_CHART_ZOOM_MAX - 1e-6}
                   aria-label="Zoom inn"
                   title="Zoom inn"
                 >
-                  <Plus className="size-5" aria-hidden />
+                  <Plus
+                    className={
+                      touchFirst && !chartIsFullscreen ? "size-5" : "size-4"
+                    }
+                    aria-hidden
+                  />
                 </Button>
               </div>
 
               <Button
                 type="button"
-                variant={chartIsFullscreen ? "secondary" : "ghost"}
+                variant="ghost"
                 size="icon-lg"
-                className="rounded-xl sm:size-10 sm:min-h-10 sm:min-w-10 sm:rounded-full"
-                onClick={toggleChartFullscreen}
-                aria-pressed={chartIsFullscreen}
-                aria-label={
-                  chartIsFullscreen
-                    ? "Lukk full skjerm"
-                    : "Åpne kart i full skjerm"
-                }
-                title={
-                  chartIsFullscreen
-                    ? "Lukk full skjerm (Esc)"
-                    : "Fyll hele skjermen"
-                }
-              >
-                {chartIsFullscreen ? (
-                  <Minimize2 className="size-5" aria-hidden />
-                ) : (
-                  <Maximize2 className="size-5" aria-hidden />
+                className={cn(
+                  "rounded-xl",
+                  touchFirst && !chartIsFullscreen
+                    ? "size-12 min-h-12 min-w-12"
+                    : "size-10 min-h-10 min-w-10 rounded-full",
                 )}
+                onClick={() => fitChartToView(0)}
+                aria-label="Tilpass kartet til skjermen"
+                title="Tilpass hele treet til synlig flate"
+              >
+                <Scan
+                  className={
+                    touchFirst && !chartIsFullscreen ? "size-5" : "size-4"
+                  }
+                  aria-hidden
+                />
               </Button>
+
+              {/* Fullskjerm-knapp: skjult på touch i fullskjerm (bruk «Lukk» øverst). */}
+              {!(touchFirst && chartIsFullscreen) ? (
+                <Button
+                  type="button"
+                  variant={chartIsFullscreen ? "secondary" : "ghost"}
+                  size="icon-lg"
+                  className={cn(
+                    "rounded-xl",
+                    touchFirst
+                      ? "size-12 min-h-12 min-w-12"
+                      : "size-10 min-h-10 min-w-10 rounded-full",
+                  )}
+                  onClick={toggleChartFullscreen}
+                  aria-pressed={chartIsFullscreen}
+                  aria-label={
+                    chartIsFullscreen
+                      ? "Lukk full skjerm"
+                      : "Åpne kart i full skjerm"
+                  }
+                  title={
+                    chartIsFullscreen
+                      ? "Lukk full skjerm (Esc)"
+                      : "Fyll hele skjermen"
+                  }
+                >
+                  {chartIsFullscreen ? (
+                    <Minimize2 className="size-4" aria-hidden />
+                  ) : (
+                    <Maximize2
+                      className={touchFirst ? "size-5" : "size-4"}
+                      aria-hidden
+                    />
+                  )}
+                </Button>
+              ) : null}
             </div>
+            {touchFirst && !chartIsFullscreen ? (
+              chartSurface === "phone" ? (
+                <p className="text-muted-foreground mt-1.5 text-center text-[10px] font-medium tracking-wide">
+                  Dra · knip · tilpass
+                </p>
+              ) : (
+                <p className="text-muted-foreground mt-1.5 text-center text-[10px] font-medium tracking-wide">
+                  Dra eller knip · Scan tilpasser hele treet
+                </p>
+              )
+            ) : null}
           </div>
         </div>
         </OrgChartInteractionContext.Provider>
