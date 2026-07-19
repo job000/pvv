@@ -711,8 +711,9 @@ function OrgBranch({
     >
       <div
         className={cn(
-          "group/card relative w-full min-w-[188px] max-w-[15.5rem] sm:min-w-[200px] sm:max-w-[16.5rem]",
-          canEdit && "pb-4 sm:pb-5",
+          "group/card relative w-full min-w-[200px] max-w-[15.5rem] sm:min-w-[200px] sm:max-w-[16.5rem]",
+          /* Rom til store touch-mål for + rundt kortet (mobil/penn). */
+          canEdit && "px-5 pb-8 pt-1 sm:px-3 sm:pb-6 sm:pt-0",
         )}
       >
       <div
@@ -1014,11 +1015,12 @@ function OrgBranch({
 
       {canEdit ? (
         <>
+          {/* Venstre + skjules under lg — unngår kollisjon mellom nabokort på mobil/nettbrett. */}
           <button
             type="button"
             className={cn(
-              "border-border/55 bg-background/95 text-primary hover:bg-primary/10 hover:border-primary/35 absolute left-0 top-1/2 z-30 flex size-8 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border shadow-md ring-1 ring-black/[0.04] backdrop-blur-sm transition-[opacity,transform,box-shadow] hover:shadow-lg focus-visible:opacity-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary active:scale-95 dark:ring-white/[0.06]",
-              "touch-manipulation opacity-100 sm:opacity-0 sm:group-hover/card:opacity-100 sm:group-focus-within/card:opacity-100",
+              "border-border/55 bg-background/95 text-primary hover:bg-primary/10 hover:border-primary/35 absolute left-0 top-1/2 z-30 hidden size-11 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border shadow-md ring-1 ring-black/[0.04] backdrop-blur-sm transition-[opacity,transform,box-shadow] hover:shadow-lg focus-visible:opacity-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary active:scale-95 lg:flex lg:size-9 dark:ring-white/[0.06]",
+              "touch-manipulation opacity-100 lg:opacity-0 lg:group-hover/card:opacity-100 lg:group-focus-within/card:opacity-100",
             )}
             onClick={(e) => {
               e.stopPropagation();
@@ -1027,13 +1029,13 @@ function OrgBranch({
             aria-label={`Ny enhet ved siden av ${unit.name}`}
             title="Ny på samme nivå (søsken)"
           >
-            <Plus className="size-3.5 stroke-[2.5]" aria-hidden />
+            <Plus className="size-4 stroke-[2.5] lg:size-3.5" aria-hidden />
           </button>
           <button
             type="button"
             className={cn(
-              "border-border/55 bg-background/95 text-primary hover:bg-primary/10 hover:border-primary/35 absolute right-0 top-1/2 z-30 flex size-8 translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border shadow-md ring-1 ring-black/[0.04] backdrop-blur-sm transition-[opacity,transform,box-shadow] hover:shadow-lg focus-visible:opacity-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary active:scale-95 dark:ring-white/[0.06]",
-              "touch-manipulation opacity-100 sm:opacity-0 sm:group-hover/card:opacity-100 sm:group-focus-within/card:opacity-100",
+              "border-border/55 bg-background/95 text-primary hover:bg-primary/10 hover:border-primary/35 absolute right-0 top-1/2 z-30 flex size-11 translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border shadow-md ring-1 ring-black/[0.04] backdrop-blur-sm transition-[opacity,transform,box-shadow] hover:shadow-lg focus-visible:opacity-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary active:scale-95 sm:size-10 lg:size-9 dark:ring-white/[0.06]",
+              "touch-manipulation opacity-100 lg:opacity-0 lg:group-hover/card:opacity-100 lg:group-focus-within/card:opacity-100",
             )}
             onClick={(e) => {
               e.stopPropagation();
@@ -1042,13 +1044,13 @@ function OrgBranch({
             aria-label={`Ny enhet ved siden av ${unit.name}`}
             title="Ny på samme nivå (søsken)"
           >
-            <Plus className="size-3.5 stroke-[2.5]" aria-hidden />
+            <Plus className="size-4 stroke-[2.5] lg:size-3.5" aria-hidden />
           </button>
           <button
             type="button"
             className={cn(
-              "border-border/55 bg-background/95 text-primary hover:bg-primary/10 hover:border-primary/35 absolute bottom-0 left-1/2 z-30 flex size-8 -translate-x-1/2 translate-y-1/2 items-center justify-center rounded-full border shadow-md ring-1 ring-black/[0.04] backdrop-blur-sm transition-[opacity,transform,box-shadow] hover:shadow-lg focus-visible:opacity-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary active:scale-95 dark:ring-white/[0.06]",
-              "touch-manipulation opacity-100 sm:opacity-0 sm:group-hover/card:opacity-100 sm:group-focus-within/card:opacity-100",
+              "border-border/55 bg-background/95 text-primary hover:bg-primary/10 hover:border-primary/35 absolute bottom-0 left-1/2 z-30 flex size-11 -translate-x-1/2 translate-y-1/2 items-center justify-center rounded-full border shadow-md ring-1 ring-black/[0.04] backdrop-blur-sm transition-[opacity,transform,box-shadow] hover:shadow-lg focus-visible:opacity-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary active:scale-95 sm:size-10 lg:size-9 dark:ring-white/[0.06]",
+              "touch-manipulation opacity-100 lg:opacity-0 lg:group-hover/card:opacity-100 lg:group-focus-within/card:opacity-100",
             )}
             onClick={(e) => {
               e.stopPropagation();
@@ -1057,7 +1059,7 @@ function OrgBranch({
             aria-label={`Ny underenhet under ${unit.name}`}
             title="Ny underenhet"
           >
-            <Plus className="size-3.5 stroke-[2.5]" aria-hidden />
+            <Plus className="size-4 stroke-[2.5] lg:size-3.5" aria-hidden />
           </button>
         </>
       ) : null}
@@ -1073,18 +1075,18 @@ function OrgBranch({
             aria-hidden
           />
           <div
-            className="relative w-full min-w-max max-w-[min(100vw-2rem,72rem)] px-1"
+            className="relative w-full min-w-max max-w-[min(100vw-1rem,72rem)] px-3 sm:px-2 lg:px-1"
             role="group"
             aria-label={`Underenheter av ${unit.name}`}
           >
             <div
               className={cn(
-                "grid w-full gap-x-3 gap-y-5",
-                kids.length > 1 && "border-t border-foreground/20 pt-5",
+                "grid w-full gap-x-8 gap-y-8 sm:gap-x-6 sm:gap-y-6 lg:gap-x-5",
+                kids.length > 1 && "border-t border-foreground/20 pt-6 sm:pt-5",
                 kids.length === 1 && "justify-items-center",
               )}
               style={{
-                gridTemplateColumns: `repeat(${kids.length}, minmax(168px, 1fr))`,
+                gridTemplateColumns: `repeat(${kids.length}, minmax(220px, 1fr))`,
               }}
             >
               {kids.map((ch) => (
@@ -1919,6 +1921,7 @@ export function OrgChartPanel({
   const [chartZoom, setChartZoom] = useState(ORG_CHART_ZOOM_INITIAL);
   const [chartPanMode, setChartPanMode] = useState(false);
   const [chartIsPanning, setChartIsPanning] = useState(false);
+  const [chartPinchActive, setChartPinchActive] = useState(false);
   const chartZoomRef = useRef(chartZoom);
   useEffect(() => {
     chartZoomRef.current = chartZoom;
@@ -1927,6 +1930,18 @@ export function OrgChartPanel({
   const chartViewportRef = useRef<HTMLDivElement>(null);
   const chartHostRef = useRef<HTMLDivElement>(null);
   const [chartIsFullscreen, setChartIsFullscreen] = useState(false);
+
+  /** Touch/penn: start med dra-modus på — ellers virker Hand-knappen «ødelagt». */
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const mq = window.matchMedia("(pointer: coarse)");
+    const apply = () => {
+      if (mq.matches) setChartPanMode(true);
+    };
+    apply();
+    mq.addEventListener("change", apply);
+    return () => mq.removeEventListener("change", apply);
+  }, []);
 
   useEffect(() => {
     const sync = () => {
@@ -1980,7 +1995,6 @@ export function OrgChartPanel({
       e.preventDefault();
       const dy = e.deltaY;
       if (dy === 0) return;
-      // Jevn zoom: liten faktor per piksel (trackpad) og fortsatt fornuftig med musehjul
       const intensity =
         e.deltaMode === WheelEvent.DOM_DELTA_LINE
           ? 0.18
@@ -2021,6 +2035,18 @@ export function OrgChartPanel({
     startY: number;
     startSl: number;
     startSt: number;
+    /** Venter på terskel før pan (så trykk på kort fortsatt fungerer). */
+    armed: boolean;
+    captured: boolean;
+  } | null>(null);
+
+  /** Touch pinch (Chrome/Android/iPad) — to pekere, avstand → zoom. */
+  const touchPointersRef = useRef(
+    new Map<number, { x: number; y: number }>(),
+  );
+  const pinchSessionRef = useRef<{
+    startDist: number;
+    startZoom: number;
   } | null>(null);
 
   useEffect(() => {
@@ -2028,69 +2054,172 @@ export function OrgChartPanel({
     if (!el) return;
 
     const interactiveSelector =
-      "button, a, summary, input, textarea, select, label, [role='dialog']";
+      "button, a, summary, input, textarea, select, label, [role='dialog'], [role='listbox'], [role='option'], [role='toolbar']";
+    const PAN_SLOP_PX = 10;
 
-    const shouldStartPan = (e: PointerEvent) => {
-      if (e.pointerType !== "mouse") return false;
+    const pointerDist = (
+      a: { x: number; y: number },
+      b: { x: number; y: number },
+    ) => Math.hypot(a.x - b.x, a.y - b.y);
+
+    const shouldArmPan = (e: PointerEvent) => {
       const t = e.target as HTMLElement | null;
       if (!t || !el.contains(t)) return false;
       if (t.closest(interactiveSelector)) return false;
+      if (touchPointersRef.current.size >= 2) return false;
+      if (pinchSessionRef.current) return false;
 
-      if (e.button === 1) {
-        e.preventDefault();
-        return true;
+      const isMouse = e.pointerType === "mouse";
+      const isTouchOrPen =
+        e.pointerType === "touch" || e.pointerType === "pen";
+      const onCard = !!t.closest("[data-org-chart-card]");
+
+      if (isMouse) {
+        if (e.button === 1) {
+          e.preventDefault();
+          return true;
+        }
+        if (e.button !== 0) return false;
+        if (e.altKey) return true;
+        if (chartPanMode && !onCard) return true;
+        return false;
       }
-      if (e.button !== 0) return false;
-      if (e.altKey) return true;
-      if (chartPanMode && !t.closest("[data-org-chart-card]")) return true;
-      return false;
+
+      if (!isTouchOrPen) return false;
+
+      /**
+       * Touch/penn:
+       * - Dra-modus: kan starte pan også på kort (etter terskel → trykk OK).
+       * - Uten dra-modus: pan kun i prikkebakgrunn.
+       */
+      if (chartPanMode) return true;
+      return !onCard;
+    };
+
+    const endPan = (e: PointerEvent) => {
+      const s = panSessionRef.current;
+      if (!s || e.pointerId !== s.pointerId) return;
+      if (s.captured) {
+        try {
+          el.releasePointerCapture(e.pointerId);
+        } catch {
+          /* ignore */
+        }
+      }
+      panSessionRef.current = null;
+      setChartIsPanning(false);
     };
 
     const onPointerDown = (e: PointerEvent) => {
-      if (!shouldStartPan(e)) return;
+      if (e.pointerType === "touch" || e.pointerType === "pen") {
+        touchPointersRef.current.set(e.pointerId, {
+          x: e.clientX,
+          y: e.clientY,
+        });
+        if (touchPointersRef.current.size === 2) {
+          endPan(e);
+          const pts = [...touchPointersRef.current.values()];
+          const dist = pointerDist(pts[0]!, pts[1]!);
+          if (dist > 8) {
+            pinchSessionRef.current = {
+              startDist: dist,
+              startZoom: chartZoomRef.current,
+            };
+            setChartPinchActive(true);
+            e.preventDefault();
+          }
+          return;
+        }
+      }
+
+      if (!shouldArmPan(e)) return;
+
       panSessionRef.current = {
         pointerId: e.pointerId,
         startX: e.clientX,
         startY: e.clientY,
         startSl: el.scrollLeft,
         startSt: el.scrollTop,
+        armed: true,
+        captured: false,
       };
-      setChartIsPanning(true);
-      try {
-        el.setPointerCapture(e.pointerId);
-      } catch {
-        /* ignore */
+
+      /* Mus: pan med en gang. Touch/penn: vent på bevegelse så trykk fortsatt virker. */
+      if (e.pointerType === "mouse") {
+        panSessionRef.current.captured = true;
+        setChartIsPanning(true);
+        try {
+          el.setPointerCapture(e.pointerId);
+        } catch {
+          /* ignore */
+        }
       }
     };
 
     const onPointerMove = (e: PointerEvent) => {
+      if (
+        (e.pointerType === "touch" || e.pointerType === "pen") &&
+        touchPointersRef.current.has(e.pointerId)
+      ) {
+        touchPointersRef.current.set(e.pointerId, {
+          x: e.clientX,
+          y: e.clientY,
+        });
+      }
+
+      const pinch = pinchSessionRef.current;
+      if (pinch && touchPointersRef.current.size >= 2) {
+        const pts = [...touchPointersRef.current.values()];
+        const dist = pointerDist(pts[0]!, pts[1]!);
+        if (dist > 8 && pinch.startDist > 8) {
+          e.preventDefault();
+          setChartZoom(
+            clampOrgChartZoom(pinch.startZoom * (dist / pinch.startDist)),
+          );
+        }
+        return;
+      }
+
       const s = panSessionRef.current;
-      if (!s || e.pointerId !== s.pointerId) return;
-      el.scrollLeft = s.startSl - (e.clientX - s.startX);
-      el.scrollTop = s.startSt - (e.clientY - s.startY);
+      if (!s || e.pointerId !== s.pointerId || !s.armed) return;
+
+      const dx = e.clientX - s.startX;
+      const dy = e.clientY - s.startY;
+
+      if (!s.captured) {
+        if (Math.hypot(dx, dy) < PAN_SLOP_PX) return;
+        s.captured = true;
+        setChartIsPanning(true);
+        try {
+          el.setPointerCapture(e.pointerId);
+        } catch {
+          /* ignore */
+        }
+      }
+
+      e.preventDefault();
+      el.scrollLeft = s.startSl - dx;
+      el.scrollTop = s.startSt - dy;
     };
 
-    const endPan = (e: PointerEvent) => {
-      const s = panSessionRef.current;
-      if (!s || e.pointerId !== s.pointerId) return;
-      panSessionRef.current = null;
-      setChartIsPanning(false);
-      try {
-        el.releasePointerCapture(e.pointerId);
-      } catch {
-        /* ignore */
+    const onPointerUp = (e: PointerEvent) => {
+      touchPointersRef.current.delete(e.pointerId);
+      if (touchPointersRef.current.size < 2) {
+        pinchSessionRef.current = null;
+        setChartPinchActive(false);
       }
+      endPan(e);
     };
 
     el.addEventListener("pointerdown", onPointerDown);
-    el.addEventListener("pointermove", onPointerMove);
-    el.addEventListener("pointerup", endPan);
-    el.addEventListener("pointercancel", endPan);
+    el.addEventListener("pointermove", onPointerMove, { passive: false });
+    el.addEventListener("pointerup", onPointerUp);
+    el.addEventListener("pointercancel", onPointerUp);
     return () => {
       el.removeEventListener("pointerdown", onPointerDown);
       el.removeEventListener("pointermove", onPointerMove);
-      el.removeEventListener("pointerup", endPan);
-      el.removeEventListener("pointercancel", endPan);
+      el.removeEventListener("pointerup", onPointerUp);
+      el.removeEventListener("pointercancel", onPointerUp);
     };
   }, [chartPanMode, rows]);
 
@@ -2321,21 +2450,25 @@ export function OrgChartPanel({
           <div
             ref={chartViewportRef}
             className={cn(
-              "max-h-[min(82vh,56rem)] min-h-[26rem] overflow-auto overscroll-contain touch-pan-x touch-pan-y pb-24 pt-[4.75rem]",
+              "max-h-[min(78dvh,56rem)] min-h-[min(70dvh,26rem)] overflow-auto overscroll-contain pb-28 pt-[5.25rem] sm:min-h-[26rem] sm:pb-24 sm:pt-[4.75rem]",
+              /* touch-none: egen pan/pinch (native scroll + CSS zoom kolliderer på mobil). */
+              "touch-none",
               // Prikk-rutenett som canvas-bakgrunn — signaliserer «flate du kan dra og zoome i».
               "bg-[radial-gradient(color-mix(in_oklab,var(--border)_75%,transparent)_1px,transparent_1px)] [background-size:22px_22px]",
               chartPanMode && !chartIsPanning && "cursor-grab",
-              chartIsPanning && "cursor-grabbing select-none",
+              (chartIsPanning || chartPinchActive) && "cursor-grabbing select-none",
               chartIsFullscreen && "h-[100dvh] max-h-none",
             )}
             role="tree"
             aria-label="Organisasjonstre"
           >
             <div
-              className="flex min-w-min flex-wrap justify-center gap-8 px-6 sm:gap-10"
+              className="flex min-w-min flex-wrap justify-center gap-10 px-8 py-2 sm:gap-10 sm:px-6"
               style={{
                 zoom: chartZoom,
-                transition: "zoom 0.2s cubic-bezier(0.25, 0.1, 0.25, 1)",
+                transition: chartPinchActive
+                  ? "none"
+                  : "zoom 0.2s cubic-bezier(0.25, 0.1, 0.25, 1)",
               }}
             >
               {roots.map((u) => (
@@ -2361,7 +2494,7 @@ export function OrgChartPanel({
           {/* Flytende søk oppå kartet — samme mønster som kartverktøy (Figma, Maps). */}
           <div
             ref={orgSearchWrapRef}
-            className="absolute left-3 z-20 w-[min(19rem,calc(100%-1.5rem))] top-[max(0.75rem,env(safe-area-inset-top))]"
+            className="absolute left-2 z-20 w-[min(19rem,calc(100%-5.5rem))] top-[max(0.75rem,env(safe-area-inset-top))] sm:left-3 sm:w-[min(19rem,calc(100%-1.5rem))]"
           >
             <SearchInput
               value={orgSearch}
@@ -2410,9 +2543,9 @@ export function OrgChartPanel({
             ) : null}
           </div>
 
-          {/* Flytende verktøylinje: panorering, zoom og fullskjerm — kun ikoner. */}
+          {/* Flytende verktøylinje: panorering, zoom og fullskjerm — store touch-mål. */}
           <div
-            className="border-border/50 bg-background/95 absolute right-3 z-20 flex items-center gap-0.5 rounded-full border p-1 shadow-lg backdrop-blur-sm bottom-[max(0.75rem,env(safe-area-inset-bottom))]"
+            className="border-border/50 bg-background/95 absolute right-2 z-20 flex items-center gap-0.5 rounded-full border p-1.5 shadow-lg backdrop-blur-sm bottom-[max(0.75rem,env(safe-area-inset-bottom))] sm:right-3 sm:p-1"
             role="toolbar"
             aria-label="Visning og zoom"
           >
@@ -2420,11 +2553,11 @@ export function OrgChartPanel({
               type="button"
               variant={chartPanMode ? "secondary" : "ghost"}
               size="sm"
-              className="size-9 min-h-9 min-w-9 touch-manipulation rounded-full px-0"
+              className="size-11 min-h-11 min-w-11 touch-manipulation rounded-full px-0 sm:size-9 sm:min-h-9 sm:min-w-9"
               onClick={() => setChartPanMode((v) => !v)}
               aria-pressed={chartPanMode}
               aria-label="Dra for å flytte kartet"
-              title="Dra-kart: dra i bakgrunnen utenfor kort, eller hold Alt og dra. Midtklikk panorerer også."
+              title="Dra i prikkebakgrunnen med finger/penn/mus. Knip for å zoome. Alt+dra eller midtklikk på desktop."
             >
               <Hand className="mx-auto size-4" aria-hidden />
             </Button>
@@ -2433,7 +2566,7 @@ export function OrgChartPanel({
               type="button"
               variant="ghost"
               size="sm"
-              className="size-9 min-h-9 min-w-9 touch-manipulation rounded-full px-0"
+              className="size-11 min-h-11 min-w-11 touch-manipulation rounded-full px-0 sm:size-9 sm:min-h-9 sm:min-w-9"
               onClick={zoomOut}
               disabled={chartZoom <= ORG_CHART_ZOOM_MIN + 1e-6}
               aria-label="Zoom ut"
@@ -2444,7 +2577,7 @@ export function OrgChartPanel({
             <button
               type="button"
               onClick={resetZoom}
-              className="text-muted-foreground hover:text-foreground min-w-[2.75rem] touch-manipulation rounded-full px-1 py-1.5 text-center text-[11px] font-semibold tabular-nums transition-colors"
+              className="text-muted-foreground hover:text-foreground min-h-11 min-w-[3rem] touch-manipulation rounded-full px-1.5 py-1.5 text-center text-xs font-semibold tabular-nums transition-colors sm:min-h-0 sm:min-w-[2.75rem] sm:text-[11px]"
               title={`Tilbakestill til standardvisning (${Math.round(ORG_CHART_ZOOM_INITIAL * 100)} %)`}
               aria-label={`Tilbakestill zoom til standardvisning ${Math.round(ORG_CHART_ZOOM_INITIAL * 100)} prosent`}
             >
@@ -2454,7 +2587,7 @@ export function OrgChartPanel({
               type="button"
               variant="ghost"
               size="sm"
-              className="size-9 min-h-9 min-w-9 touch-manipulation rounded-full px-0"
+              className="size-11 min-h-11 min-w-11 touch-manipulation rounded-full px-0 sm:size-9 sm:min-h-9 sm:min-w-9"
               onClick={zoomIn}
               disabled={chartZoom >= ORG_CHART_ZOOM_MAX - 1e-6}
               aria-label="Zoom inn"
@@ -2467,7 +2600,7 @@ export function OrgChartPanel({
               type="button"
               variant="ghost"
               size="sm"
-              className="size-9 min-h-9 min-w-9 touch-manipulation rounded-full px-0"
+              className="size-11 min-h-11 min-w-11 touch-manipulation rounded-full px-0 sm:size-9 sm:min-h-9 sm:min-w-9"
               onClick={() => void toggleChartFullscreen()}
               aria-pressed={chartIsFullscreen}
               aria-label={
