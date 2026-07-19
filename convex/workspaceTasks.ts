@@ -261,12 +261,12 @@ export const listMyInWorkspace = query({
       }
       const ids = resolveAssessmentAssigneeIds(t);
       const states = t.assigneeStates as AssigneeState[] | undefined;
-      const contextTitle = assessment?.title.trim() || t.title.trim() || "Puls";
+      const contextTitle = assessment?.title.trim() || t.title.trim() || "Tavler";
       const href = t.boardId
-        ? `/w/${args.workspaceId}/puls/${t.boardId}?task=${t._id}`
+        ? `/w/${args.workspaceId}/tavler/${t.boardId}?task=${t._id}`
         : t.assessmentId
           ? `/w/${args.workspaceId}/a/${t.assessmentId}`
-          : `/w/${args.workspaceId}/puls`;
+          : `/w/${args.workspaceId}/tavler`;
       const myStatus = resolveMyAssignmentStatus(ids, states, userId, t.status);
       if (myStatus) {
         const assignerUserId = resolveAssignerUserId(
@@ -743,7 +743,7 @@ export const respond = mutation({
       const assessment = row.assessmentId
         ? await ctx.db.get(row.assessmentId)
         : null;
-      const contextTitle = assessment?.title.trim() || row.title.trim() || "Puls";
+      const contextTitle = assessment?.title.trim() || row.title.trim() || "Tavler";
       const href = `/w/${row.workspaceId}/oppgaver`;
       const assignerUserId = resolveAssignerUserId(
         states,

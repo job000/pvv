@@ -1,11 +1,12 @@
 /**
- * Produkttekster for Puls-tavlen (arbeidskort / delkort).
+ * Produkttekster for Tavler (arbeidskort / delkort).
  * Unngår «sak»/«issue» som høres ut som GitHub eller saksbehandling.
+ * Interne kode-/API-navn kan fortsatt bruke «puls».
  */
 
 export const pulsBoardCopy = {
-  navLabel: "Puls",
-  pageTitle: "Puls",
+  navLabel: "Tavler",
+  pageTitle: "Tavler",
   pageSubtitle:
     "Hold rytmen — prioriter kort, koble dem til arbeid og flytt fremover.",
   tabBoard: "Tavle",
@@ -60,15 +61,15 @@ export const pulsBoardCopy = {
     `«${title}» har åpne delkort. Velg om hele treet også skal markeres ferdig.`,
   completeAll: "Fullfør kort og delkort",
   completeOnly: "Kun dette kortet",
-  openBoard: "Åpne Puls",
+  openBoard: "Åpne Tavler",
   notifyBody: (assessmentTitle: string) =>
-    `På vurderingen «${assessmentTitle}». Åpne kortet under Puls.`,
+    `På vurderingen «${assessmentTitle}». Åpne kortet under Tavler.`,
   notifyAssigned: (title: string) => `Du er tildelt «${title}»`,
 } as const;
 
 /**
- * Hub: `/puls`. Tavle: `/puls/[boardId]`.
- * Kort i dialog: `?task=`. Egen side: `/puls/[boardId]/task/[taskId]`.
+ * Hub: `/tavler`. Tavle: `/tavler/[boardId]`.
+ * Kort i dialog: `?task=`. Egen side: `/tavler/[boardId]/task/[taskId]`.
  */
 export function pulsBoardPath(
   workspaceId: string,
@@ -77,13 +78,13 @@ export function pulsBoardPath(
   opts?: { page?: boolean },
 ) {
   if (boardId && taskId && opts?.page) {
-    return `/w/${workspaceId}/puls/${boardId}/task/${encodeURIComponent(taskId)}`;
+    return `/w/${workspaceId}/tavler/${boardId}/task/${encodeURIComponent(taskId)}`;
   }
   if (boardId && taskId) {
-    return `/w/${workspaceId}/puls/${boardId}?task=${encodeURIComponent(taskId)}`;
+    return `/w/${workspaceId}/tavler/${boardId}?task=${encodeURIComponent(taskId)}`;
   }
   if (boardId) {
-    return `/w/${workspaceId}/puls/${boardId}`;
+    return `/w/${workspaceId}/tavler/${boardId}`;
   }
-  return `/w/${workspaceId}/puls`;
+  return `/w/${workspaceId}/tavler`;
 }

@@ -401,7 +401,7 @@ export const update = mutation({
 });
 
 /**
- * Slett Puls-kort og tilhørende notater/filer.
+ * Slett kort og tilhørende notater/filer.
  * Berører aldri GitHub — kun Convex/Puls-data.
  */
 async function deletePulsBoardTaskCascade(
@@ -431,7 +431,7 @@ async function deletePulsBoardTaskCascade(
 }
 
 /**
- * Slett Puls-tavle (eier).
+ * Slett tavle (eier).
  * Kun lokal Puls-data — ingen sletting/endring i GitHub Projects eller issues.
  */
 export const remove = mutation({
@@ -452,7 +452,7 @@ export const remove = mutation({
       throw new Error("Du kan ikke slette den siste tavlen i arbeidsområdet.");
     }
 
-    // Slett Puls-kort på tavlen (kopier/lokale kort — GitHub urørt)
+    // Slett kort på tavlen (kopier/lokale kort — GitHub urørt)
     let deletedCards = 0;
     for (;;) {
       const batch = await ctx.db
@@ -651,9 +651,9 @@ export const removeMember = mutation({
       if (board) {
         await insertUserInAppNotification(ctx, {
           userId: args.userId,
-          title: `Fjernet fra Puls-tavlen «${board.name}»`,
+          title: `Fjernet fra tavlen «${board.name}»`,
           body: "Du har ikke lenger tilgang til denne tavlen.",
-          href: `/w/${board.workspaceId}/puls`,
+          href: `/w/${board.workspaceId}/tavler`,
         });
       }
     }
@@ -779,9 +779,9 @@ export const inviteByEmail = mutation({
         });
         await insertUserInAppNotification(ctx, {
           userId: foundUser._id,
-          title: `Du er lagt til på Puls-tavlen «${board.name}»`,
+          title: `Du er lagt til på tavlen «${board.name}»`,
           body: `Rolle: ${roleNb(args.role)}.`,
-          href: `/w/${board.workspaceId}/puls/${args.boardId}`,
+          href: `/w/${board.workspaceId}/tavler/${args.boardId}`,
         });
         await ctx.db.patch(args.boardId, { updatedAt: Date.now() });
         return { kind: "linked" as const };

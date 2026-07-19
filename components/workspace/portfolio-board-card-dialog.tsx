@@ -336,10 +336,10 @@ export function PortfolioBoardCardDialog({
                 canEdit
               />
               <Link
-                href={`/w/${workspaceId}/puls`}
+                href={`/w/${workspaceId}/tavler`}
                 className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 text-xs font-medium underline-offset-2 hover:underline"
               >
-                Åpne Puls
+                Åpne Tavler
                 <ArrowUpRight className="size-3" aria-hidden />
               </Link>
             </div>

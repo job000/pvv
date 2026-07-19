@@ -547,7 +547,7 @@ export function TasksBoard() {
     openTasks.length === 0
       ? doneTasks.length > 0
         ? `${doneTasks.length} ferdig · ingen åpne`
-        : "Ingen Puls-oppgaver ennå"
+        : "Ingen kort ennå"
       : `${openTasks.length} åpne på tvers av områder`;
 
   const editIsDone = editTask?.status === "done";
@@ -572,14 +572,14 @@ export function TasksBoard() {
                 id="tasks-board-heading"
                 className="text-foreground text-base font-semibold tracking-tight"
               >
-                Puls på tvers
+                Tavler på tvers
               </h2>
               <span className="text-muted-foreground text-sm tabular-nums">
                 {summaryLine}
               </span>
             </div>
             <p className="text-muted-foreground text-sm">
-              Kort liste over Puls-oppgaver. Kolonner og tavle styres per
+              Kort liste over tavlekort på tvers. Kolonner og tavle styres per
               vurdering — ikke her.
             </p>
           </div>

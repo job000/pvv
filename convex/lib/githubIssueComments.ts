@@ -264,7 +264,7 @@ export function buildImportedDescription(args: {
   const unmatched = args.unmatchedAssigneeLogins ?? [];
   if (unmatched.length > 0) {
     meta.push(
-      `Tildelt på GitHub (ikke match i Puls): ${unmatched.map((l) => `@${l}`).join(", ")}`,
+      `Tildelt på GitHub (ikke match i Tavler): ${unmatched.map((l) => `@${l}`).join(", ")}`,
     );
   }
   if (meta.length > 0) {

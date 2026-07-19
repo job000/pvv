@@ -501,7 +501,7 @@ export function WorkspaceOperationalDashboard({
         ? `/w/${wid}/a/${nextReadyPrio.assessmentId}`
         : nextOnHold
           ? `/w/${wid}/a/${nextOnHold.assessmentId}`
-          : `/w/${wid}/puls`,
+          : `/w/${wid}/tavler`,
       emphasize: followUpCount > 0,
     },
   ] as const;

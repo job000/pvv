@@ -4,7 +4,7 @@ import type { Id } from "@/convex/_generated/dataModel";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useEffect } from "react";
 
-/** Gammel URL — omdirigerer til /puls */
+/** Gammel URL — omdirigerer til /tavler */
 export default function WorkspaceSakerRedirectPage() {
   const params = useParams();
   const router = useRouter();
@@ -14,10 +14,10 @@ export default function WorkspaceSakerRedirectPage() {
   useEffect(() => {
     const task = searchParams.get("task");
     const qs = task ? `?task=${encodeURIComponent(task)}` : "";
-    router.replace(`/w/${workspaceId}/puls${qs}`);
+    router.replace(`/w/${workspaceId}/tavler${qs}`);
   }, [router, searchParams, workspaceId]);
 
   return (
-    <p className="text-muted-foreground text-sm">Flytter til Puls …</p>
+    <p className="text-muted-foreground text-sm">Flytter til Tavler …</p>
   );
 }

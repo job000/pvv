@@ -4,17 +4,17 @@ import type { Id } from "@/convex/_generated/dataModel";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect } from "react";
 
-/** Gammel URL — omdirigerer til /puls */
+/** Gammel URL — omdirigerer til /tavler */
 export default function WorkspacePortefoljeRedirectPage() {
   const params = useParams();
   const router = useRouter();
   const workspaceId = params.workspaceId as Id<"workspaces">;
 
   useEffect(() => {
-    router.replace(`/w/${workspaceId}/puls`);
+    router.replace(`/w/${workspaceId}/tavler`);
   }, [router, workspaceId]);
 
   return (
-    <p className="text-muted-foreground text-sm">Flytter til Puls …</p>
+    <p className="text-muted-foreground text-sm">Flytter til Tavler …</p>
   );
 }

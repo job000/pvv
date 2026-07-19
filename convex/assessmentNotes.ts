@@ -115,7 +115,7 @@ export const add = mutation({
     });
 
     const title = assessment.title.trim() || "vurdering";
-    const href = `/w/${assessment.workspaceId}/puls`;
+    const href = `/w/${assessment.workspaceId}/tavler`;
     const notifyIds = new Set(mentioned);
     if (notifyParentAuthor) notifyIds.add(notifyParentAuthor);
 

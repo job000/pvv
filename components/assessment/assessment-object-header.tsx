@@ -67,7 +67,7 @@ export function AssessmentObjectHeader({
     : `/w/${wid}/ros`;
   const processDesignHref =
     assessmentId != null ? `/w/${wid}/a/${assessmentId}/prosessdesign` : null;
-  const pulsHref = `/w/${wid}/puls`;
+  const pulsHref = `/w/${wid}/tavler`;
   const inOps = isProdOrMonitoring(pipelineStatus);
   const hint = nextStepHint(pipelineStatus);
 
@@ -136,7 +136,7 @@ export function AssessmentObjectHeader({
             className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 font-medium underline-offset-4 transition-colors hover:underline"
           >
             <Kanban className="size-3.5" aria-hidden />
-            Åpne Puls
+            Åpne Tavler
           </Link>
           {processDesignHref ? (
             <Link

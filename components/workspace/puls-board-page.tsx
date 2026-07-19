@@ -55,10 +55,10 @@ export function PulsBoardPage({
           Du mangler tilgang, eller tavlen er slettet.
         </p>
         <Link
-          href={`/w/${workspaceId}/puls`}
+          href={`/w/${workspaceId}/tavler`}
           className="text-sky-800 dark:text-sky-200 inline-flex text-sm font-medium underline-offset-2 hover:underline"
         >
-          Tilbake til Puls
+          Tilbake til Tavler
         </Link>
       </div>
     );
@@ -69,7 +69,7 @@ export function PulsBoardPage({
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
           <Link
-            href={`/w/${workspaceId}/puls`}
+            href={`/w/${workspaceId}/tavler`}
             className="text-muted-foreground hover:text-foreground mb-1 inline-flex min-h-9 items-center gap-1 text-xs font-medium"
           >
             <ArrowLeft className="size-3.5" aria-hidden />
@@ -191,7 +191,7 @@ export function PulsBoardPage({
             <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-4">
               <p className="text-sm font-medium">Slett tavle</p>
               <p className="text-muted-foreground mt-1 text-xs leading-relaxed">
-                Sletter tavlen og Puls-kortene her. GitHub Projects, issues og
+                Sletter tavlen og kortene her. GitHub Projects, issues og
                 kommentarer på GitHub endres ikke.
               </p>
               <Button
@@ -203,8 +203,8 @@ export function PulsBoardPage({
                 onClick={() => {
                   if (
                     !window.confirm(
-                      `Slette Puls-tavlen «${board.name}»?\n\n` +
-                        `Puls-kort på tavlen slettes her.\n` +
+                      `Slette tavlen «${board.name}»?\n\n` +
+                        `Kort på tavlen slettes her.\n` +
                         `Ingenting slettes eller endres i GitHub.\n\n` +
                         `Dette kan ikke angres.`,
                     )
@@ -216,10 +216,10 @@ export function PulsBoardPage({
                     .then((r) => {
                       toast.success(
                         r.deletedCards > 0
-                          ? `Tavle slettet · ${r.deletedCards} Puls-kort fjernet (GitHub urørt)`
+                          ? `Tavle slettet · ${r.deletedCards} kort fjernet (GitHub urørt)`
                           : "Tavle slettet (GitHub urørt)",
                       );
-                      router.push(`/w/${workspaceId}/puls`);
+                      router.push(`/w/${workspaceId}/tavler`);
                     })
                     .catch((err: unknown) =>
                       toast.error(
@@ -232,7 +232,7 @@ export function PulsBoardPage({
                 }}
               >
                 <Trash2 className="size-3.5" />
-                Slett Puls-tavle
+                Slett tavle
               </Button>
             </div>
           ) : null}

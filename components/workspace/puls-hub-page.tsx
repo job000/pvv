@@ -394,7 +394,7 @@ export function PulsHubPage({
               value={boardSearch}
               onChange={(e) => setBoardSearch(e.target.value)}
               placeholder="Søk tavler…"
-              aria-label="Søk i Puls-tavler"
+              aria-label="Søk i tavler"
               className="h-11 w-full min-w-0 rounded-full border-border/50 sm:max-w-sm"
             />
             <ListViewModeToggle
@@ -567,7 +567,7 @@ export function PulsHubPage({
               id="create-puls-board-title"
               className="font-heading text-lg font-semibold"
             >
-              Ny Puls-tavle
+              Ny tavle
             </h2>
             <p className="text-muted-foreground mt-1 text-sm">
               Velg kolonnestruktur — mal eller importer fra GitHub Project. Du
@@ -669,7 +669,7 @@ export function PulsHubPage({
                       Importer kolonner fra GitHub
                     </p>
                     <p className="text-muted-foreground mt-0.5 text-xs leading-relaxed">
-                      Statusvalg fra Projects v2 blir Puls-kolonner. Krever
+                      Statusvalg fra Projects v2 blir kolonner. Krever
                       GitHub-token på arbeidsområdet.
                     </p>
                   </div>

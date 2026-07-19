@@ -53,7 +53,7 @@ type Props = {
     payload: AssessmentPayload,
     meta?: { revision: number },
   ) => void;
-  /** Forhåndsvalgt Puls-korttype (f.eks. fra ?puls=endring) */
+  /** Forhåndsvalgt korttype (f.eks. fra ?puls=endring) */
   defaultPulsIssueType?: PulsIssueType | null;
   /** Når true: ekstra hint om endring i prod/overvåkning */
   showOpsChangeHint?: boolean;
@@ -412,13 +412,13 @@ export function AssessmentCollaborationPanel({
         </CardContent>
       </Card>
 
-      {/* Puls-kort knyttet til denne vurderingen */}
+      {/* kort knyttet til denne vurderingen */}
       <div className="space-y-3">
         <div className="flex items-center gap-2">
           <ListTree className="text-primary size-5 shrink-0" aria-hidden />
           <div>
             <h3 className="font-heading text-base font-semibold leading-tight">
-              Kort på Puls
+              Kort på Tavler
             </h3>
             <p className="text-muted-foreground text-sm">
               Hvert kort står for seg selv. Delkort er bare en kobling — opprett,
@@ -427,7 +427,7 @@ export function AssessmentCollaborationPanel({
             {showOpsChangeHint ? (
               <p className="text-muted-foreground mt-1.5 text-sm">
                 Prosessen kan stå i produksjon eller overvåkning. Endringsønsker,
-                feil og nye funksjoner håndteres som Puls-kort her.
+                feil og nye funksjoner håndteres som kort her.
               </p>
             ) : null}
           </div>

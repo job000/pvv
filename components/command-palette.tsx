@@ -111,7 +111,7 @@ export function CommandPalette() {
         { label: "Skjemaer", path: "/skjemaer", icon: FileText, keywords: "forslag intake skjema" },
         { label: "Prosesser", path: "/vurderinger?fane=prosesser", icon: Users, keywords: "prosessregister" },
         { label: "Vurderinger", path: "/vurderinger", icon: ClipboardList, keywords: "assessment kandidat" },
-        { label: "Puls", path: "/puls", icon: Kanban, keywords: "tavle board kanban" },
+        { label: "Tavler", path: "/tavler", icon: Kanban, keywords: "puls tavle board kanban" },
         { label: "Prosessdesign", path: "/prosessdesign", icon: ScrollText, keywords: "pdd diagram" },
         { label: "Risiko (ROS)", path: "/ros", icon: Shield, keywords: "risiko analyse" },
         { label: "Gevinster", path: "/gevinster", icon: ChartColumn, keywords: "benefits verdi" },

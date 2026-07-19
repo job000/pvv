@@ -158,8 +158,8 @@ export const add = mutation({
 
     const taskTitle = task.title.trim() || "sak";
     const href = task.boardId
-      ? `/w/${task.workspaceId}/puls/${task.boardId}?task=${args.taskId}`
-      : `/w/${task.workspaceId}/puls?task=${args.taskId}`;
+      ? `/w/${task.workspaceId}/tavler/${task.boardId}?task=${args.taskId}`
+      : `/w/${task.workspaceId}/tavler?task=${args.taskId}`;
 
     /** Varsle: @-taggede, tildelte på saken, og tråd-eier ved svar */
     const notifyIds = new Set<Id<"users">>(mentioned);

@@ -1125,9 +1125,9 @@ export const create = mutation({
     );
     const notifyBody =
       linkCtx.linkKind === "none"
-        ? "Åpne kortet under Puls."
-        : `Koblet til «${linkCtx.linkLabel}». Åpne kortet under Puls.`;
-    const pulsHref = `/w/${workspaceId}/puls/${boardId}?task=${taskId}`;
+        ? "Åpne kortet under Tavler."
+        : `Koblet til «${linkCtx.linkLabel}». Åpne kortet under Tavler.`;
+    const pulsHref = `/w/${workspaceId}/tavler/${boardId}?task=${taskId}`;
     for (const uid of uniqueIds) {
       if (uid !== userId) {
         await insertUserInAppNotification(ctx, {
@@ -1142,7 +1142,7 @@ export const create = mutation({
   },
 });
 
-/** Valg for «Kobling»-velgeren ved opprettelse av Puls-kort. */
+/** Valg for «Kobling»-velgeren ved opprettelse av kort. */
 export const listCreateLinkTargets = query({
   args: { workspaceId: v.id("workspaces") },
   returns: v.object({
@@ -1333,11 +1333,11 @@ export const update = mutation({
     );
     const notifyBody =
       linkCtx.linkKind === "none"
-        ? "Åpne kortet under Puls."
-        : `Koblet til «${linkCtx.linkLabel}». Åpne kortet under Puls.`;
+        ? "Åpne kortet under Tavler."
+        : `Koblet til «${linkCtx.linkLabel}». Åpne kortet under Tavler.`;
     const pulsHref = row.boardId
-      ? `/w/${row.workspaceId}/puls/${row.boardId}?task=${args.taskId}`
-      : `/w/${row.workspaceId}/puls?task=${args.taskId}`;
+      ? `/w/${row.workspaceId}/tavler/${row.boardId}?task=${args.taskId}`
+      : `/w/${row.workspaceId}/tavler?task=${args.taskId}`;
     const patch: Record<string, unknown> = {};
     if (args.title !== undefined) {
       const t = args.title.trim();
@@ -1555,7 +1555,7 @@ export const moveTask = mutation({
     }
     await requireTaskWriteAccess(ctx, row);
     // Behold dashboardRank ved status/kolonne-endring, så gjenåpning
-    // havner på samme plass i «Puls på tvers» (ikke nederst).
+    // havner på samme plass i «Tavler på tvers» (ikke nederst).
     const patch: {
       columnId?: Id<"pulsBoardColumns">;
       priority?: number;
@@ -1677,8 +1677,8 @@ export const completeTask = mutation({
     const actor = await ctx.db.get(userId);
     const actorName = actor?.name?.trim() || actor?.email || "Noen";
     const boardPath = row.boardId
-      ? `/w/${row.workspaceId}/puls/${row.boardId}?task=${args.taskId}`
-      : `/w/${row.workspaceId}/puls?task=${args.taskId}`;
+      ? `/w/${row.workspaceId}/tavler/${row.boardId}?task=${args.taskId}`
+      : `/w/${row.workspaceId}/tavler?task=${args.taskId}`;
     const bodyBase = comment
       ? `${actorName} fullførte «${row.title}»: ${comment}`
       : `${actorName} markerte «${row.title}» som ferdig.`;
@@ -1697,7 +1697,7 @@ export const completeTask = mutation({
   },
 });
 
-/** Flytt kort (og delkort) til en annen Puls-tavle i samme workspace. */
+/** Flytt kort (og delkort) til en annen tavle i samme workspace. */
 export const moveToBoard = mutation({
   args: {
     taskId: v.id("assessmentTasks"),

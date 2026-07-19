@@ -1,36 +1,24 @@
 "use client";
 
-import {
-  ProductLoadingBlock,
-  ProductStack,
-} from "@/components/product";
-import { PulsBoardPage } from "@/components/workspace/puls-board-page";
-import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
-import { useQuery } from "convex/react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
+import { useEffect } from "react";
 
-export default function WorkspacePulsBoardPage() {
+/** Gammel URL — omdirigerer til /tavler/[boardId] */
+export default function WorkspacePulsBoardRedirectPage() {
   const params = useParams();
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const workspaceId = params.workspaceId as Id<"workspaces">;
-  const boardId = params.boardId as Id<"pulsBoards">;
-  const workspace = useQuery(api.workspaces.get, { workspaceId });
+  const boardId = params.boardId as string;
 
-  if (workspace === undefined) {
-    return (
-      <ProductLoadingBlock label="Laster …" className="min-h-[30vh]" />
-    );
-  }
-
-  if (workspace === null) {
-    return (
-      <p className="text-destructive text-sm">Fant ikke arbeidsområdet.</p>
-    );
-  }
+  useEffect(() => {
+    const qs = searchParams.toString();
+    const suffix = qs ? `?${qs}` : "";
+    router.replace(`/w/${workspaceId}/tavler/${boardId}${suffix}`);
+  }, [boardId, router, searchParams, workspaceId]);
 
   return (
-    <ProductStack className="max-w-none space-y-0 pb-[max(1rem,env(safe-area-inset-bottom))] sm:space-y-0">
-      <PulsBoardPage workspaceId={workspaceId} boardId={boardId} />
-    </ProductStack>
+    <p className="text-muted-foreground text-sm">Flytter til Tavler …</p>
   );
 }
