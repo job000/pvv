@@ -1164,7 +1164,7 @@ export const listGithubProjectSingleSelectFields = action({
     if (!userId) {
       throw new Error("Du må være innlogget.");
     }
-    await ctx.runQuery(internal.candidates.assertMemberForWorkspace, {
+    await ctx.runQuery(internal.candidates.assertAdminForWorkspace, {
       workspaceId: args.workspaceId,
       userId,
     });
@@ -1357,6 +1357,10 @@ async function createGithubRepoIssueForCandidateCore(
     args.candidateId,
     userId,
   );
+  await ctx.runQuery(internal.candidates.assertAdminForWorkspace, {
+    workspaceId: candidate.workspaceId,
+    userId,
+  });
   if (candidate.githubProjectItemNodeId) {
     throw new Error(
       "Prosessen er allerede koblet til GitHub-prosjektet. Bruk «Send til GitHub» eller fjern koblingen først.",
@@ -1485,6 +1489,10 @@ export const registerCandidateToGithubProject = action({
       args.candidateId,
       userId,
     );
+    await ctx.runQuery(internal.candidates.assertAdminForWorkspace, {
+      workspaceId: candidate.workspaceId,
+      userId,
+    });
     if (candidate.githubProjectItemNodeId) {
       throw new Error(
         "Prosessen er allerede registrert i prosjektet. Bruk «Oppdater status» eller «Fjern fra prosjekt».",
@@ -1979,7 +1987,7 @@ export const previewGithubProjectColumnsForPuls = action({
     if (!userId) {
       throw new Error("Du må være innlogget.");
     }
-    await ctx.runQuery(internal.candidates.assertMemberForWorkspace, {
+    await ctx.runQuery(internal.candidates.assertAdminForWorkspace, {
       workspaceId: args.workspaceId,
       userId,
     });

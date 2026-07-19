@@ -769,7 +769,7 @@ export const importGithubProjectItemsToBoard = action({
     if (!userId) {
       throw new Error("Du må være innlogget.");
     }
-    await ctx.runQuery(internal.candidates.assertMemberForWorkspace, {
+    await ctx.runQuery(internal.candidates.assertAdminForWorkspace, {
       workspaceId: args.workspaceId,
       userId,
     });

@@ -1090,8 +1090,8 @@ export const listGithubProjectsForWorkspace = action({
 });
 
 /**
- * Samme prosjektliste som admin-visningen, men for medlemmer som oppretter Puls-tavle
- * og vil importere kolonner fra et GitHub Project.
+ * Prosjektliste for å importere kolonner til Tavler (bruker områdets PAT).
+ * Kun admin — samme token som under Innstillinger.
  */
 export const listGithubProjectsForPulsImport = action({
   args: { workspaceId: v.id("workspaces") },
@@ -1101,7 +1101,7 @@ export const listGithubProjectsForPulsImport = action({
     if (!userId) {
       throw new Error("Du må være innlogget.");
     }
-    await ctx.runQuery(internal.candidates.assertMemberForWorkspace, {
+    await ctx.runQuery(internal.candidates.assertAdminForWorkspace, {
       workspaceId: args.workspaceId,
       userId,
     });

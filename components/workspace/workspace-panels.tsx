@@ -2557,6 +2557,7 @@ export function WorkspaceCandidatesPanel({
                             </button>
                           ) : null}
                           {!hasGithub &&
+                          isAdmin &&
                           canEditCandidates &&
                           canQuickAddGithubCard ? (
                             <Button
@@ -2703,45 +2704,50 @@ export function WorkspaceCandidatesPanel({
                 Ny prosess
               </Button>
             </div>
-            <div
-              className="mb-4 flex gap-1 rounded-2xl border border-border/35 bg-muted/25 p-1"
-              role="tablist"
-              aria-label="Opprett prosess"
-            >
-              <button
-                type="button"
-                role="tab"
-                aria-selected={createTab === "github"}
-                className={cn(
-                  "flex flex-1 items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors sm:py-2",
-                  createTab === "github"
-                    ? "bg-background text-foreground shadow-sm ring-1 ring-border/40"
-                    : "text-muted-foreground hover:text-foreground",
-                )}
-                onClick={() => setCreateTab("github")}
+            {isAdmin ? (
+              <div
+                className="mb-4 flex gap-1 rounded-2xl border border-border/35 bg-muted/25 p-1"
+                role="tablist"
+                aria-label="Opprett prosess"
               >
-                <GitBranch className="size-4 shrink-0 opacity-80" aria-hidden />
-                Fra GitHub
-              </button>
-              <button
-                type="button"
-                role="tab"
-                aria-selected={createTab === "manual"}
-                className={cn(
-                  "flex flex-1 items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors sm:py-2",
-                  createTab === "manual"
-                    ? "bg-background text-foreground shadow-sm ring-1 ring-border/40"
-                    : "text-muted-foreground hover:text-foreground",
-                )}
-                onClick={() => setCreateTab("manual")}
-              >
-                <Plus className="size-4 shrink-0 opacity-80" aria-hidden />
-                Opprett selv
-              </button>
-            </div>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={createTab === "github"}
+                  className={cn(
+                    "flex flex-1 items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors sm:py-2",
+                    createTab === "github"
+                      ? "bg-background text-foreground shadow-sm ring-1 ring-border/40"
+                      : "text-muted-foreground hover:text-foreground",
+                  )}
+                  onClick={() => setCreateTab("github")}
+                >
+                  <GitBranch
+                    className="size-4 shrink-0 opacity-80"
+                    aria-hidden
+                  />
+                  Fra GitHub
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={createTab === "manual"}
+                  className={cn(
+                    "flex flex-1 items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors sm:py-2",
+                    createTab === "manual"
+                      ? "bg-background text-foreground shadow-sm ring-1 ring-border/40"
+                      : "text-muted-foreground hover:text-foreground",
+                  )}
+                  onClick={() => setCreateTab("manual")}
+                >
+                  <Plus className="size-4 shrink-0 opacity-80" aria-hidden />
+                  Opprett selv
+                </button>
+              </div>
+            ) : null}
 
-            {/* GitHub import panel */}
-            {createTab === "github" ? (
+            {/* GitHub import panel — admin (bruker områdets token) */}
+            {isAdmin && createTab === "github" ? (
               <div className="space-y-3">
                 {w.githubProjectNodeId?.trim() ? (
                   <div
@@ -3136,7 +3142,7 @@ export function WorkspaceCandidatesPanel({
             ) : null}
 
             {/* Manual creation panel */}
-            {createTab === "manual" ? (
+            {!isAdmin || createTab === "manual" ? (
               <div className="rounded-2xl border border-dashed border-border/50 bg-muted/15 px-4 py-5">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <div className="space-y-1">
@@ -3164,7 +3170,10 @@ export function WorkspaceCandidatesPanel({
         {/* hubMode: vis kun en kompakt «Importer fra GitHub»-disclosure når det er
             aktuelt, slik at hovedflaten holdes ren. Manuell opprettelse skjer fra
             «Ny prosess»-knappen øverst. */}
-        {hubMode && canEditCandidates && w.githubProjectNodeId?.trim() ? (
+        {hubMode &&
+        isAdmin &&
+        canEditCandidates &&
+        w.githubProjectNodeId?.trim() ? (
           <details
             data-tutorial-anchor="github-prosess"
             className="group pt-2 text-sm"

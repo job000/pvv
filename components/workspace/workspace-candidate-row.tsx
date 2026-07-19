@@ -816,7 +816,7 @@ export function WorkspaceCandidateRow({
                     Fjern fra prosjekt
                   </Button>
                 </>
-              ) : (
+              ) : isAdmin ? (
                 <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
                   <Button
                     type="button"
@@ -892,6 +892,10 @@ export function WorkspaceCandidateRow({
                     </Button>
                   ) : null}
                 </div>
+              ) : (
+                <p className="text-muted-foreground text-sm">
+                  Be en admin om å registrere prosessen i GitHub-prosjektet.
+                </p>
               )}
             </div>
           ) : canEdit ? (

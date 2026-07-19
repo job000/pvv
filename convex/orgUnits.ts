@@ -132,7 +132,7 @@ export const create = mutation({
   },
   handler: async (ctx, args) => {
     const userId = await requireUserId(ctx);
-    await requireWorkspaceMember(ctx, args.workspaceId, userId, "member");
+    await requireWorkspaceMember(ctx, args.workspaceId, userId, "admin");
     const name = args.name.trim();
     if (!name) {
       throw new Error("Navn er påkrevd.");
@@ -199,7 +199,7 @@ export const addContact = mutation({
     if (!unit) {
       throw new Error("Enheten finnes ikke.");
     }
-    await requireWorkspaceMember(ctx, unit.workspaceId, userId, "member");
+    await requireWorkspaceMember(ctx, unit.workspaceId, userId, "admin");
     const name = args.name.trim();
     if (!name) {
       throw new Error("Navn er påkrevd.");
@@ -236,7 +236,7 @@ export const updateContact = mutation({
     if (!row) {
       throw new Error("Kontakten finnes ikke.");
     }
-    await requireWorkspaceMember(ctx, row.workspaceId, userId, "member");
+    await requireWorkspaceMember(ctx, row.workspaceId, userId, "admin");
     const patch: {
       name?: string;
       title?: string;
@@ -278,7 +278,7 @@ export const removeContact = mutation({
     if (!row) {
       throw new Error("Kontakten finnes ikke.");
     }
-    await requireWorkspaceMember(ctx, row.workspaceId, userId, "member");
+    await requireWorkspaceMember(ctx, row.workspaceId, userId, "admin");
     await ctx.db.delete(args.contactId);
     return null;
   },
@@ -293,7 +293,7 @@ export const importLegacyContact = mutation({
     if (!unit) {
       throw new Error("Enheten finnes ikke.");
     }
-    await requireWorkspaceMember(ctx, unit.workspaceId, userId, "member");
+    await requireWorkspaceMember(ctx, unit.workspaceId, userId, "admin");
     const hasLegacy = !!(
       unit.merkantilContactName ||
       unit.merkantilContactEmail ||
@@ -351,7 +351,7 @@ export const update = mutation({
     if (!row) {
       throw new Error("Enheten finnes ikke.");
     }
-    await requireWorkspaceMember(ctx, row.workspaceId, userId, "member");
+    await requireWorkspaceMember(ctx, row.workspaceId, userId, "admin");
     const patch: Record<string, unknown> = { updatedAt: Date.now() };
     if (args.name !== undefined) {
       const n = args.name.trim();
@@ -432,7 +432,7 @@ export const move = mutation({
     if (!unit) {
       throw new Error("Enheten finnes ikke.");
     }
-    await requireWorkspaceMember(ctx, unit.workspaceId, userId, "member");
+    await requireWorkspaceMember(ctx, unit.workspaceId, userId, "admin");
 
     const currentParent = unit.parentId ?? null;
     const targetParent = args.newParentId;

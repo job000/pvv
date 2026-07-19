@@ -323,7 +323,7 @@ export const publishTemplate = mutation({
     if (!form) {
       throw new Error("Skjemaet finnes ikke.");
     }
-    await requireWorkspaceMember(ctx, form.workspaceId, userId, "member");
+    await requireWorkspaceMember(ctx, form.workspaceId, userId, "admin");
     if (args.enabled && form.sourceTemplateFormId) {
       throw new Error("Kopier fra mal kan ikke deles videre som mal ennå.");
     }
@@ -478,7 +478,7 @@ export const archive = mutation({
     if (!form) {
       throw new Error("Skjemaet finnes ikke.");
     }
-    await requireWorkspaceMember(ctx, form.workspaceId, userId, "member");
+    await requireWorkspaceMember(ctx, form.workspaceId, userId, "admin");
     await ctx.db.patch(args.formId, {
       status: "archived",
       updatedAt: Date.now(),
@@ -564,7 +564,16 @@ export const setStatus = mutation({
     if (!form) {
       throw new Error("Skjemaet finnes ikke.");
     }
-    await requireWorkspaceMember(ctx, form.workspaceId, userId, "member");
+    /** Publiser / avpubliser / arkiver er admin — utkastredigering er egen mutasjon. */
+    if (
+      args.status === "published" ||
+      args.status === "archived" ||
+      form.status === "published"
+    ) {
+      await requireWorkspaceMember(ctx, form.workspaceId, userId, "admin");
+    } else {
+      await requireWorkspaceMember(ctx, form.workspaceId, userId, "member");
+    }
 
     if (args.status === "published") {
       const questions = await ctx.db

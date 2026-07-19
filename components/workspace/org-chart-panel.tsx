@@ -1864,13 +1864,10 @@ export function OrgChartPanel({
     [moveUnit],
   );
 
-  const canEdit =
-    membership &&
-    (membership.role === "owner" ||
-      membership.role === "admin" ||
-      membership.role === "member");
   const isAdmin =
     membership?.role === "owner" || membership?.role === "admin";
+  /** Kun admin/eier bygger orgkart — alle medlemmer kan se. */
+  const canEdit = isAdmin;
 
   const { roots, childrenByParent } = useMemo(() => {
     if (!rows) {

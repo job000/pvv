@@ -187,6 +187,18 @@ export const assertMemberForWorkspace = internalQuery({
   },
 });
 
+/** For GitHub-import og andre handlinger som bruker områdets token. */
+export const assertAdminForWorkspace = internalQuery({
+  args: {
+    workspaceId: v.id("workspaces"),
+    userId: v.id("users"),
+  },
+  handler: async (ctx, args) => {
+    await requireWorkspaceMember(ctx, args.workspaceId, args.userId, "admin");
+    return true;
+  },
+});
+
 /** Data til rik Markdown for GitHub-prosjekt-utkast (PVV + ROS + notater). */
 export const getCandidateGithubSyncContext = internalQuery({
   args: { candidateId: v.id("candidates") },
@@ -1073,7 +1085,7 @@ export const createFromGithubProjectItem = mutation({
   },
   handler: async (ctx, args) => {
     const userId = await requireUserId(ctx);
-    await requireWorkspaceMember(ctx, args.workspaceId, userId, "member");
+    await requireWorkspaceMember(ctx, args.workspaceId, userId, "admin");
     const name = args.name.trim();
     const code = args.code
       .trim()
@@ -1170,7 +1182,7 @@ export const createCandidateFromGithubIssue = mutation({
   },
   handler: async (ctx, args) => {
     const userId = await requireUserId(ctx);
-    await requireWorkspaceMember(ctx, args.workspaceId, userId, "member");
+    await requireWorkspaceMember(ctx, args.workspaceId, userId, "admin");
     const name = args.name.trim();
     const code = args.code
       .trim()

@@ -27,7 +27,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 function candidateMatchesGithubIssue(
   c: Doc<"candidates">,
@@ -104,6 +104,13 @@ export function GithubIssueStartCard({
     (membership.role === "owner" ||
       membership.role === "admin" ||
       membership.role === "member");
+  const isAdmin =
+    membership?.role === "owner" || membership?.role === "admin";
+  useEffect(() => {
+    if (!isAdmin && activeTab === "github") {
+      setActiveTab("process");
+    }
+  }, [isAdmin, activeTab]);
   const selectedCandidate =
     (candidates ?? []).find((candidate) => candidate._id === selectedCandidateId) ?? null;
   const existingAssessment =
@@ -422,19 +429,28 @@ export function GithubIssueStartCard({
       : actionLabel;
   const heading = variant === "assessment" ? "Ny vurdering" : "Ny ROS";
 
-  const tabs: { id: StartTab; icon: React.ReactNode; label: string; desc: string }[] = [
+  const tabs: {
+    id: StartTab;
+    icon: React.ReactNode;
+    label: string;
+    desc: string;
+  }[] = [
     {
       id: "process",
       icon: <FileStack className="size-4" aria-hidden />,
       label: "Prosess",
       desc: "Fra registrert prosess",
     },
-    {
-      id: "github",
-      icon: <GitBranch className="size-4" aria-hidden />,
-      label: "GitHub",
-      desc: "Fra issue-lenke",
-    },
+    ...(isAdmin
+      ? [
+          {
+            id: "github" as const,
+            icon: <GitBranch className="size-4" aria-hidden />,
+            label: "GitHub",
+            desc: "Fra issue-lenke",
+          },
+        ]
+      : []),
     {
       id: "new",
       icon: <Plus className="size-4" aria-hidden />,

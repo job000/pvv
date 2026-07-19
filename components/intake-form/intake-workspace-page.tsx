@@ -1841,6 +1841,9 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
     myWorkspaceMembership !== undefined &&
     myWorkspaceMembership !== null &&
     myWorkspaceMembership.role !== "viewer";
+  const canPublishForms =
+    myWorkspaceMembership?.role === "owner" ||
+    myWorkspaceMembership?.role === "admin";
 
   const pendingCount = submissions.filter(
     (submission) => submission.status === "submitted" || submission.status === "under_review",
@@ -2291,7 +2294,8 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
                                   right: formMoreMenuPos.right,
                                 }}
                               >
-                                {selectedForm.status === "published" ? (
+                                {canPublishForms &&
+                                selectedForm.status === "published" ? (
                                   <button
                                     type="button"
                                     role="menuitem"
@@ -2303,7 +2307,8 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
                                   >
                                     Avpubliser
                                   </button>
-                                ) : selectedForm.status === "draft" ? (
+                                ) : canPublishForms &&
+                                  selectedForm.status === "draft" ? (
                                   <button
                                     type="button"
                                     role="menuitem"
@@ -2343,18 +2348,20 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
                                 >
                                   Se forslag
                                 </button>
-                                <button
-                                  type="button"
-                                  role="menuitem"
-                                  className="hover:bg-muted flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-sm text-destructive"
-                                  onClick={() => {
-                                    setFormMoreOpen(false);
-                                    void handleArchiveForm();
-                                  }}
-                                >
-                                  <Trash2 className="size-3.5" aria-hidden />
-                                  Arkiver
-                                </button>
+                                {canPublishForms ? (
+                                  <button
+                                    type="button"
+                                    role="menuitem"
+                                    className="hover:bg-muted flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-sm text-destructive"
+                                    onClick={() => {
+                                      setFormMoreOpen(false);
+                                      void handleArchiveForm();
+                                    }}
+                                  >
+                                    <Trash2 className="size-3.5" aria-hidden />
+                                    Arkiver
+                                  </button>
+                                ) : null}
                               </div>
                             </>,
                             document.body,
@@ -3683,15 +3690,21 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
                         Del som mal, deretter aktiver kopi i annet område.
                       </p>
                     </div>
-                    <Button
-                      type="button"
-                      variant={selectedForm.isTemplate ? "secondary" : "outline"}
-                      className="w-full shrink-0 rounded-xl sm:w-auto"
-                      disabled={Boolean(selectedForm.sourceTemplateFormId)}
-                      onClick={() => handleToggleTemplate(!selectedForm.isTemplate)}
-                    >
-                      {selectedForm.isTemplate ? "Fjern som mal" : "Del som mal"}
-                    </Button>
+                    {canPublishForms ? (
+                      <Button
+                        type="button"
+                        variant={selectedForm.isTemplate ? "secondary" : "outline"}
+                        className="w-full shrink-0 rounded-xl sm:w-auto"
+                        disabled={Boolean(selectedForm.sourceTemplateFormId)}
+                        onClick={() =>
+                          handleToggleTemplate(!selectedForm.isTemplate)
+                        }
+                      >
+                        {selectedForm.isTemplate
+                          ? "Fjern som mal"
+                          : "Del som mal"}
+                      </Button>
+                    ) : null}
                   </div>
                   {selectedForm.sourceTemplateFormId ? (
                     <p className="text-muted-foreground mt-3 text-xs leading-snug">

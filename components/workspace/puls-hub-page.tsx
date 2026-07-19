@@ -97,6 +97,7 @@ export function PulsHubPage({
 
   const data = useQuery(api.pulsBoards.listMineInWorkspace, { workspaceId });
   const workspace = useQuery(api.workspaces.get, { workspaceId });
+  const membership = useQuery(api.workspaces.getMyMembership, { workspaceId });
   const assessments = useQuery(api.assessments.listByWorkspace, {
     workspaceId,
   });
@@ -104,6 +105,8 @@ export function PulsHubPage({
     includeEmpty: true,
   });
 
+  const isAdmin =
+    membership?.role === "owner" || membership?.role === "admin";
   const workspaceGithubProjectId =
     workspace?.githubProjectNodeId?.trim() ?? "";
 
@@ -218,12 +221,16 @@ export function PulsHubPage({
       toast.error("Gi tavlen et navn");
       return;
     }
-    if (columnSource === "github" && githubColumns.length === 0) {
+    const effectiveColumnSource: ColumnSource =
+      isAdmin && columnSource === "github" ? "github" : "template";
+    if (effectiveColumnSource === "github" && githubColumns.length === 0) {
       toast.error("Hent kolonner fra et GitHub-prosjekt først");
       return;
     }
     const shouldImportTasks =
-      columnSource === "github" && importTasks && githubFieldId.trim() !== "";
+      effectiveColumnSource === "github" &&
+      importTasks &&
+      githubFieldId.trim() !== "";
     if (shouldImportTasks) {
       if (assessmentChoice === "existing" && !existingAssessmentId) {
         toast.error("Velg en vurdering for oppgavene");
@@ -237,9 +244,9 @@ export function PulsHubPage({
         name: n,
         description: description.trim() || undefined,
         columnTemplate:
-          columnSource === "template" ? createTemplate : undefined,
+          effectiveColumnSource === "template" ? createTemplate : undefined,
         columnNames:
-          columnSource === "github"
+          effectiveColumnSource === "github"
             ? githubColumns.map((c) => c.name)
             : undefined,
       });
@@ -277,7 +284,7 @@ export function PulsHubPage({
         toast.success(`Tavle opprettet · ${parts.join(" · ")}${capNote}`);
       } else {
         toast.success(
-          columnSource === "github"
+          effectiveColumnSource === "github"
             ? "Tavle opprettet med kolonner fra GitHub"
             : "Tavle opprettet",
         );
@@ -570,8 +577,9 @@ export function PulsHubPage({
               Ny tavle
             </h2>
             <p className="text-muted-foreground mt-1 text-sm">
-              Velg kolonnestruktur — mal eller importer fra GitHub Project. Du
-              blir eier og kan invitere andre etterpå.
+              {isAdmin
+                ? "Velg kolonnestruktur — mal eller importer fra GitHub Project. Du blir eier og kan invitere andre etterpå."
+                : "Velg kolonnestruktur fra en mal. Du blir eier og kan invitere andre etterpå."}
             </p>
           </DialogHeader>
           <DialogBody className="min-w-0 space-y-4">
@@ -595,42 +603,44 @@ export function PulsHubPage({
               />
             </div>
 
-            <div className="space-y-2">
-              <Label>Kolonnekilde</Label>
-              <div className="bg-muted/30 inline-flex rounded-xl border border-border/50 p-1">
-                <button
-                  type="button"
-                  onClick={() => setColumnSource("template")}
-                  className={cn(
-                    "min-h-9 rounded-lg px-3 text-xs font-medium",
-                    columnSource === "template"
-                      ? "bg-background text-foreground shadow-sm"
-                      : "text-muted-foreground hover:text-foreground",
-                  )}
-                >
-                  Mal
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setColumnSource("github");
-                    if (githubColumns.length === 0 && !githubBusy) {
-                      void loadGithubProjects();
-                    }
-                  }}
-                  className={cn(
-                    "min-h-9 rounded-lg px-3 text-xs font-medium",
-                    columnSource === "github"
-                      ? "bg-background text-foreground shadow-sm"
-                      : "text-muted-foreground hover:text-foreground",
-                  )}
-                >
-                  GitHub Project
-                </button>
+            {isAdmin ? (
+              <div className="space-y-2">
+                <Label>Kolonnekilde</Label>
+                <div className="bg-muted/30 inline-flex rounded-xl border border-border/50 p-1">
+                  <button
+                    type="button"
+                    onClick={() => setColumnSource("template")}
+                    className={cn(
+                      "min-h-9 rounded-lg px-3 text-xs font-medium",
+                      columnSource === "template"
+                        ? "bg-background text-foreground shadow-sm"
+                        : "text-muted-foreground hover:text-foreground",
+                    )}
+                  >
+                    Mal
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setColumnSource("github");
+                      if (githubColumns.length === 0 && !githubBusy) {
+                        void loadGithubProjects();
+                      }
+                    }}
+                    className={cn(
+                      "min-h-9 rounded-lg px-3 text-xs font-medium",
+                      columnSource === "github"
+                        ? "bg-background text-foreground shadow-sm"
+                        : "text-muted-foreground hover:text-foreground",
+                    )}
+                  >
+                    GitHub Project
+                  </button>
+                </div>
               </div>
-            </div>
+            ) : null}
 
-            {columnSource === "template" ? (
+            {columnSource === "template" || !isAdmin ? (
               <div className="space-y-2">
                 <Label>Kolonnestruktur</Label>
                 <div className="grid min-w-0 gap-2">
@@ -850,8 +860,11 @@ export function PulsHubPage({
               disabled={
                 busy ||
                 !name.trim() ||
-                (columnSource === "github" && githubColumns.length === 0) ||
-                (columnSource === "github" &&
+                (isAdmin &&
+                  columnSource === "github" &&
+                  githubColumns.length === 0) ||
+                (isAdmin &&
+                  columnSource === "github" &&
                   importTasks &&
                   assessmentChoice === "existing" &&
                   !existingAssessmentId)
@@ -861,7 +874,7 @@ export function PulsHubPage({
               {busy ? (
                 <Loader2 className="mr-1.5 size-3.5 animate-spin" aria-hidden />
               ) : null}
-              {importTasks && columnSource === "github"
+              {isAdmin && importTasks && columnSource === "github"
                 ? "Opprett og hent oppgaver"
                 : "Opprett tavle"}
             </Button>
