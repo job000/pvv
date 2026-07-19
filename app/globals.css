@@ -58,7 +58,8 @@
   --card-foreground: oklch(0.28 0.022 250);
   --popover: oklch(0.978 0.005 245);
   --popover-foreground: oklch(0.28 0.022 250);
-  --primary: oklch(0.44 0.055 235);
+  /* Elektrisk indigo-blå primær (Linear-inspirert) */
+  --primary: oklch(0.51 0.17 265);
   --primary-foreground: oklch(0.985 0.003 240);
   --secondary: oklch(0.935 0.01 245);
   --secondary-foreground: oklch(0.3 0.02 248);
@@ -69,63 +70,71 @@
   --destructive: oklch(0.577 0.245 27.325);
   --border: oklch(0.87 0.012 245);
   --input: oklch(0.91 0.01 245);
-  --ring: oklch(0.58 0.04 235);
-  --chart-1: oklch(0.72 0.04 235);
-  --chart-2: oklch(0.58 0.03 200);
-  --chart-3: oklch(0.48 0.025 250);
-  --chart-4: oklch(0.4 0.02 250);
-  --chart-5: oklch(0.32 0.018 250);
+  --ring: oklch(0.55 0.14 265);
+  /* Chart-palett: CVD-validert rekkefølge (fargeblind-sikker nabopar-avstand) */
+  --chart-1: #2a78d6;
+  --chart-2: #008300;
+  --chart-3: #e87ba4;
+  --chart-4: #eda100;
+  --chart-5: #1baf7a;
   --radius: 0.625rem;
   --sidebar: oklch(0.945 0.009 245);
   --sidebar-foreground: oklch(0.28 0.022 250);
-  --sidebar-primary: oklch(0.44 0.055 235);
+  --sidebar-primary: oklch(0.51 0.17 265);
   --sidebar-primary-foreground: oklch(0.985 0.003 240);
   --sidebar-accent: oklch(0.925 0.012 245);
   --sidebar-accent-foreground: oklch(0.3 0.02 248);
   --sidebar-border: oklch(0.87 0.012 245);
-  --sidebar-ring: oklch(0.58 0.04 235);
+  --sidebar-ring: oklch(0.55 0.14 265);
   --app-header-height: 3.5rem;
   --page-max-width: 72rem;
   --touch-target-min: 2.75rem;
   --shadow-card: 0 1px 2px oklch(0.3 0.02 250 / 0.05),
     0 6px 20px oklch(0.3 0.02 250 / 0.06);
   --shadow-elevated: 0 10px 32px -14px oklch(0.3 0.02 250 / 0.14);
+  /* Glød rundt primær-CTA — følger --primary i begge moduser */
+  --shadow-glow: 0 1px 2px oklch(0.25 0.05 265 / 0.22),
+    0 8px 24px -10px color-mix(in oklab, var(--primary) 55%, transparent);
 }
 
 .dark {
-  --background: oklch(0.19 0.012 248);
+  /* Dypere, Linear-aktig mørk modus — nesten sort med kjølig blåstikk */
+  --background: oklch(0.145 0.01 262);
   --foreground: oklch(0.95 0.008 240);
-  --card: oklch(0.23 0.014 248);
+  --card: oklch(0.185 0.012 260);
   --card-foreground: oklch(0.95 0.008 240);
-  --popover: oklch(0.23 0.014 248);
+  --popover: oklch(0.205 0.012 260);
   --popover-foreground: oklch(0.95 0.008 240);
-  --primary: oklch(0.76 0.05 230);
-  --primary-foreground: oklch(0.22 0.015 248);
-  --secondary: oklch(0.28 0.014 248);
+  --primary: oklch(0.56 0.17 265);
+  --primary-foreground: oklch(0.985 0.003 240);
+  --secondary: oklch(0.235 0.012 258);
   --secondary-foreground: oklch(0.95 0.008 240);
-  --muted: oklch(0.28 0.014 248);
-  --muted-foreground: oklch(0.76 0.01 240);
-  --accent: oklch(0.28 0.014 248);
+  --muted: oklch(0.235 0.012 258);
+  --muted-foreground: oklch(0.74 0.012 250);
+  --accent: oklch(0.235 0.012 258);
   --accent-foreground: oklch(0.95 0.008 240);
   --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0.003 240 / 12%);
-  --input: oklch(1 0.003 240 / 16%);
-  --ring: oklch(0.66 0.03 230);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --sidebar: oklch(0.22 0.014 248);
+  --border: oklch(1 0.003 240 / 10%);
+  --input: oklch(1 0.003 240 / 14%);
+  --ring: oklch(0.62 0.14 265);
+  /* Samme validerte palett, trinnet for mørk flate */
+  --chart-1: #3987e5;
+  --chart-2: #008300;
+  --chart-3: #d55181;
+  --chart-4: #c98500;
+  --chart-5: #199e70;
+  --sidebar: oklch(0.165 0.01 262);
   --sidebar-foreground: oklch(0.95 0.008 240);
-  --sidebar-primary: oklch(0.76 0.05 230);
-  --sidebar-primary-foreground: oklch(0.22 0.015 248);
-  --sidebar-accent: oklch(0.28 0.014 248);
+  --sidebar-primary: oklch(0.56 0.17 265);
+  --sidebar-primary-foreground: oklch(0.985 0.003 240);
+  --sidebar-accent: oklch(0.235 0.012 258);
   --sidebar-accent-foreground: oklch(0.95 0.008 240);
-  --sidebar-border: oklch(1 0.003 240 / 12%);
-  --sidebar-ring: oklch(0.66 0.03 230);
-  --shadow-card: 0 1px 2px oklch(0 0 0 / 0.08), 0 4px 20px oklch(0 0 0 / 0.2);
-  --shadow-elevated: 0 8px 32px -12px oklch(0 0 0 / 0.45);
+  --sidebar-border: oklch(1 0.003 240 / 10%);
+  --sidebar-ring: oklch(0.62 0.14 265);
+  --shadow-card: 0 1px 2px oklch(0 0 0 / 0.12), 0 4px 20px oklch(0 0 0 / 0.28);
+  --shadow-elevated: 0 8px 32px -12px oklch(0 0 0 / 0.55);
+  --shadow-glow: 0 1px 2px oklch(0 0 0 / 0.3),
+    0 10px 28px -10px color-mix(in oklab, var(--primary) 60%, transparent);
 }
 
 @layer base {
@@ -148,7 +157,17 @@
     background-attachment: fixed;
   }
   .dark body {
-    background-image: none;
+    /* Svak «aurora» øverst — gir dybde uten å forstyrre innhold */
+    background-image: radial-gradient(
+        ellipse 90% 60% at 50% -12%,
+        oklch(0.38 0.09 265 / 0.2),
+        transparent 55%
+      ),
+      radial-gradient(
+        ellipse 60% 40% at 100% 110%,
+        oklch(0.3 0.06 290 / 0.12),
+        transparent 55%
+      );
   }
   html {
     @apply font-sans;
@@ -186,6 +205,50 @@
   }
   .product-focus {
     @apply outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50;
+  }
+  /** Primær-CTA — subtil topp-gradient + glød. Brukes av button-variants (default). */
+  .product-cta-glow {
+    background-image: linear-gradient(to bottom, oklch(1 0 0 / 0.16), transparent 55%);
+    box-shadow: inset 0 1px 0 oklch(1 0 0 / 0.14), var(--shadow-glow);
+  }
+  .product-cta-glow:hover {
+    filter: brightness(1.07);
+  }
+  .product-cta-glow:active {
+    filter: brightness(0.98);
+  }
+  /** Myk entré-animasjon — opt-in: <div class="product-rise" style="--rise-delay:.08s"> */
+  .product-rise {
+    animation: product-rise 0.5s cubic-bezier(0.22, 0.61, 0.36, 1) both;
+    animation-delay: var(--rise-delay, 0s);
+  }
+  /** Vercel-aktig gradient-overskrift — opt-in på store titler */
+  .product-text-gradient {
+    background: linear-gradient(
+      180deg,
+      var(--foreground),
+      color-mix(in oklab, var(--foreground) 60%, transparent)
+    );
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+}
+
+@keyframes product-rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .product-rise {
+    animation: none;
   }
 }
 
