@@ -44,16 +44,19 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
 } from "react";
 
 type OrgChartInteraction = {
-  registerCardRef: (id: Id<"orgUnits">, el: HTMLDivElement | null) => void;
+  registerCardRef: (id: Id<"orgUnits">, el: HTMLElement | null) => void;
   focusPulse: { id: Id<"orgUnits">; token: number } | null;
   highlightedUnitId: Id<"orgUnits"> | null;
   onCardSurfaceActivate: (id: Id<"orgUnits">) => void;
+  /** Under ~55 % zoom: kompakte noder (unngår uleselig «full»-kort). */
+  overviewMode: boolean;
 };
 
 const OrgChartInteractionContext = createContext<OrgChartInteraction | null>(
@@ -648,12 +651,64 @@ function OrgBranch({
   );
 
   const orgChartCtx = useContext(OrgChartInteractionContext);
+  const overviewMode = orgChartCtx?.overviewMode ?? false;
 
   const cardShellRef = useCallback(
-    (node: HTMLDivElement | null) => {
+    (node: HTMLElement | null) => {
       orgChartCtx?.registerCardRef(unit._id, node);
     },
     [orgChartCtx, unit._id],
+  );
+
+  const childBranches = (
+    <div
+      className={cn(
+        "relative w-full min-w-max px-2",
+        overviewMode ? "px-1" : "px-3 sm:px-2 lg:px-1",
+      )}
+      role="group"
+      aria-label={`Underenheter av ${unit.name}`}
+    >
+      <div
+        className={cn(
+          "grid w-max gap-y-6",
+          overviewMode ? "gap-x-5" : "gap-x-8 sm:gap-x-6 lg:gap-x-5 gap-y-8 sm:gap-y-6",
+          kids.length > 1 && "border-t border-foreground/20 pt-5 sm:pt-5",
+          kids.length === 1 && "justify-items-center",
+        )}
+        style={{
+          /* Fast kolonnebredde — unngår at 1fr klemmer kort når treet er bredt. */
+          gridTemplateColumns: `repeat(${Math.max(kids.length, 1)}, ${
+            overviewMode ? "11.75rem" : "15.25rem"
+          })`,
+        }}
+      >
+        {kids.map((ch) => (
+          <div key={ch._id} className="flex flex-col items-center">
+            {kids.length > 1 ? (
+              <div
+                className="mb-0 h-3 w-px shrink-0 bg-foreground/20"
+                aria-hidden
+              />
+            ) : null}
+            <OrgBranch
+              workspaceId={workspaceId}
+              unit={ch}
+              parentOfUnit={unit}
+              childrenByParent={childrenByParent}
+              allOrgUnits={allOrgUnits}
+              contactsByUnit={contactsByUnit}
+              rosByUnit={rosByUnit}
+              depth={depth + 1}
+              canEdit={canEdit}
+              isAdmin={isAdmin}
+              onRemove={onRemove}
+              onMove={onMove}
+            />
+          </div>
+        ))}
+      </div>
+    </div>
   );
 
   useEffect(() => {
@@ -703,15 +758,62 @@ function OrgBranch({
     }
   }
 
+  if (overviewMode) {
+    return (
+      <div
+        className="flex w-[11.75rem] flex-col items-center"
+        role="treeitem"
+        aria-expanded={kids.length > 0}
+      >
+        <button
+          type="button"
+          ref={cardShellRef}
+          data-org-chart-card
+          className={cn(
+            "flex w-full flex-col gap-0.5 rounded-xl border border-border/50 bg-card px-3 py-2.5 text-left shadow-sm transition-[box-shadow,border-color] hover:border-border hover:shadow-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary dark:border-white/[0.08]",
+            orgChartCtx?.highlightedUnitId === unit._id &&
+              "ring-1 ring-primary/60 ring-offset-2 ring-offset-background",
+          )}
+          onClick={() => orgChartCtx?.onCardSurfaceActivate(unit._id)}
+        >
+          {unit.localCode?.trim() ? (
+            <span className="text-muted-foreground font-mono text-[10px] font-medium tabular-nums">
+              {unit.localCode.trim()}
+            </span>
+          ) : null}
+          <span className="text-foreground line-clamp-2 text-sm font-semibold leading-snug">
+            {unit.name}
+          </span>
+          <span className="text-muted-foreground truncate text-[10px]">
+            {ORG_UNIT_KIND_LABELS[unit.kind]}
+            {kids.length > 0 ? ` · ${kids.length}` : ""}
+          </span>
+        </button>
+        {kids.length > 0 ? (
+          <>
+            <div
+              className={cn(
+                "w-px shrink-0 bg-foreground/20",
+                kids.length === 1 ? "h-6" : "h-4",
+              )}
+              aria-hidden
+            />
+            {childBranches}
+          </>
+        ) : null}
+      </div>
+    );
+  }
+
   return (
     <div
-      className="flex flex-col items-center"
+      className="flex w-[15.25rem] flex-col items-center"
       role="treeitem"
       aria-expanded={kids.length > 0}
     >
       <div
         className={cn(
-          "group/card relative w-full min-w-[200px] max-w-[15.5rem] sm:min-w-[200px] sm:max-w-[16.5rem]",
+          "group/card relative w-full",
           /* Rom til store touch-mål for + rundt kortet (mobil/penn). */
           canEdit && "px-5 pb-8 pt-1 sm:px-3 sm:pb-6 sm:pt-0",
         )}
@@ -1074,50 +1176,7 @@ function OrgBranch({
             )}
             aria-hidden
           />
-          <div
-            className="relative w-full min-w-max max-w-[min(100vw-1rem,72rem)] px-3 sm:px-2 lg:px-1"
-            role="group"
-            aria-label={`Underenheter av ${unit.name}`}
-          >
-            <div
-              className={cn(
-                "grid w-full gap-x-8 gap-y-8 sm:gap-x-6 sm:gap-y-6 lg:gap-x-5",
-                kids.length > 1 && "border-t border-foreground/20 pt-6 sm:pt-5",
-                kids.length === 1 && "justify-items-center",
-              )}
-              style={{
-                gridTemplateColumns: `repeat(${kids.length}, minmax(220px, 1fr))`,
-              }}
-            >
-              {kids.map((ch) => (
-                <div
-                  key={ch._id}
-                  className="flex flex-col items-center"
-                >
-                  {kids.length > 1 ? (
-                    <div
-                      className="mb-0 h-3 w-px shrink-0 bg-foreground/20"
-                      aria-hidden
-                    />
-                  ) : null}
-                  <OrgBranch
-                    workspaceId={workspaceId}
-                    unit={ch}
-                    parentOfUnit={unit}
-                    childrenByParent={childrenByParent}
-                    allOrgUnits={allOrgUnits}
-                    contactsByUnit={contactsByUnit}
-                    rosByUnit={rosByUnit}
-                    depth={depth + 1}
-                    canEdit={canEdit}
-                    isAdmin={isAdmin}
-                    onRemove={onRemove}
-                    onMove={onMove}
-                  />
-                </div>
-              ))}
-            </div>
-          </div>
+          {childBranches}
         </>
       ) : null}
 
@@ -1828,11 +1887,13 @@ function AddRootOrganizationForm({
   );
 }
 
-const ORG_CHART_ZOOM_MIN = 0.22;
+const ORG_CHART_ZOOM_MIN = 0.28;
 const ORG_CHART_ZOOM_MAX = 2.5;
 const ORG_CHART_ZOOM_STEP = 1.1;
 /** Standard startvisning: litt zoomet ut + kompakte kort gir bedre oversikt. */
 const ORG_CHART_ZOOM_INITIAL = 0.88;
+/** Under denne zoomen vises oversikts-noder (ikke fullt kortinnhold). */
+const ORG_CHART_OVERVIEW_ZOOM = 0.58;
 
 function clampOrgChartZoom(z: number) {
   return Math.min(ORG_CHART_ZOOM_MAX, Math.max(ORG_CHART_ZOOM_MIN, z));
@@ -2230,9 +2291,9 @@ export function OrgChartPanel({
     [],
   );
 
-  const cardRefs = useRef(new Map<string, HTMLDivElement>());
+  const cardRefs = useRef(new Map<string, HTMLElement>());
   const registerCardRef = useCallback(
-    (id: Id<"orgUnits">, el: HTMLDivElement | null) => {
+    (id: Id<"orgUnits">, el: HTMLElement | null) => {
       if (el) {
         cardRefs.current.set(id, el);
       } else {
@@ -2253,10 +2314,15 @@ export function OrgChartPanel({
   const [activeOrgUnitId, setActiveOrgUnitId] = useState<Id<"orgUnits"> | "">("");
   const orgSearchWrapRef = useRef<HTMLDivElement | null>(null);
 
+  const overviewMode = chartZoom < ORG_CHART_OVERVIEW_ZOOM;
+
   const onCardSurfaceActivate = useCallback((id: Id<"orgUnits">) => {
     setActiveOrgUnitId(id);
     setHighlightedUnitId(id);
-    setChartZoom((z) => clampOrgChartZoom(z < 1 ? 1 : z));
+    /* Fra oversikt: zoom inn til lesbart kort. */
+    setChartZoom((z) =>
+      clampOrgChartZoom(z < ORG_CHART_OVERVIEW_ZOOM ? 1 : z < 1 ? 1 : z),
+    );
     setFocusPulse({ id, token: Date.now() });
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
@@ -2275,14 +2341,34 @@ export function OrgChartPanel({
       focusPulse,
       highlightedUnitId,
       onCardSurfaceActivate,
+      overviewMode,
     }),
     [
       registerCardRef,
       focusPulse,
       highlightedUnitId,
       onCardSurfaceActivate,
+      overviewMode,
     ],
   );
+
+  const chartContentRef = useRef<HTMLDivElement>(null);
+  const [chartNaturalSize, setChartNaturalSize] = useState({ w: 0, h: 0 });
+
+  useLayoutEffect(() => {
+    const el = chartContentRef.current;
+    if (!el) return;
+    const measure = () => {
+      setChartNaturalSize({
+        w: Math.ceil(el.scrollWidth),
+        h: Math.ceil(el.scrollHeight),
+      });
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [rows, overviewMode, canEdit]);
 
   const orgSearchMatches = useMemo(() => {
     const q = orgSearch.trim().toLowerCase();
@@ -2459,33 +2545,59 @@ export function OrgChartPanel({
             role="tree"
             aria-label="Organisasjonstre"
           >
-            <div
-              className="flex min-w-min flex-wrap justify-center gap-10 px-8 py-2 sm:gap-10 sm:px-6"
-              style={{
-                zoom: chartZoom,
-                transition: chartPinchActive
-                  ? "none"
-                  : "zoom 0.2s cubic-bezier(0.25, 0.1, 0.25, 1)",
-              }}
-            >
-              {roots.map((u) => (
-                <OrgBranch
-                  key={u._id}
-                  workspaceId={workspaceId}
-                  unit={u}
-                  parentOfUnit={null}
-                  childrenByParent={childrenByParent}
-                  allOrgUnits={rows ?? []}
-                  contactsByUnit={contactsByUnit}
-                  rosByUnit={rosRollup?.byOrgUnitId}
-                  depth={0}
-                  canEdit={!!canEdit}
-                  isAdmin={!!isAdmin}
-                  onRemove={handleRemoveOrgUnit}
-                  onMove={handleMoveOrgUnit}
-                />
-              ))}
+            {/*
+              transform:scale (ikke CSS zoom) — zoom deformerte kort i Safari/iOS.
+              Ytre boks får layout-størrelse = naturlig × skala for korrekt scroll.
+            */}
+            <div className="flex w-full justify-center px-4 py-3 sm:px-6">
+              <div
+                className="relative"
+                style={{
+                  width:
+                    chartNaturalSize.w > 0
+                      ? chartNaturalSize.w * chartZoom
+                      : undefined,
+                  height:
+                    chartNaturalSize.h > 0
+                      ? chartNaturalSize.h * chartZoom
+                      : undefined,
+                }}
+              >
+                <div
+                  ref={chartContentRef}
+                  className="flex w-max origin-top-left flex-wrap justify-center gap-10"
+                  style={{
+                    transform: `scale(${chartZoom})`,
+                    transition: chartPinchActive
+                      ? "none"
+                      : "transform 0.2s cubic-bezier(0.25, 0.1, 0.25, 1)",
+                  }}
+                >
+                  {roots.map((u) => (
+                    <OrgBranch
+                      key={u._id}
+                      workspaceId={workspaceId}
+                      unit={u}
+                      parentOfUnit={null}
+                      childrenByParent={childrenByParent}
+                      allOrgUnits={rows ?? []}
+                      contactsByUnit={contactsByUnit}
+                      rosByUnit={rosRollup?.byOrgUnitId}
+                      depth={0}
+                      canEdit={!!canEdit}
+                      isAdmin={!!isAdmin}
+                      onRemove={handleRemoveOrgUnit}
+                      onMove={handleMoveOrgUnit}
+                    />
+                  ))}
+                </div>
+              </div>
             </div>
+            {overviewMode ? (
+              <p className="text-muted-foreground pointer-events-none absolute bottom-[5.5rem] left-1/2 z-10 w-[min(20rem,calc(100%-2rem))] -translate-x-1/2 rounded-full bg-background/90 px-3 py-1.5 text-center text-[11px] font-medium shadow-sm backdrop-blur-sm sm:bottom-24">
+                Oversikt — trykk en enhet for å zoome inn
+              </p>
+            ) : null}
           </div>
 
           {/* Søk + kontroller over canvas — egen lag, stopper pan fra å «stjele» trykk. */}
