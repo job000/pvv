@@ -1090,6 +1090,8 @@ export default defineSchema({
     detailSize: v.optional(
       v.union(v.literal("normal"), v.literal("large"), v.literal("full")),
     ),
+    /** Vis kort beskrivelsesutdrag på tavlekort. */
+    showCardDescription: v.optional(v.boolean()),
     filters: v.object({
       query: v.string(),
       assignee: v.string(),

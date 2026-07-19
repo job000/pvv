@@ -58,9 +58,9 @@
   --card-foreground: oklch(0.28 0.022 250);
   --popover: oklch(0.978 0.005 245);
   --popover-foreground: oklch(0.28 0.022 250);
-  /* Elektrisk indigo-blå primær (Linear-inspirert) */
-  --primary: oklch(0.51 0.17 265);
-  --primary-foreground: oklch(0.985 0.003 240);
+  /* Rolig slate-blå primær — moderne, flat CTA */
+  --primary: oklch(0.44 0.08 255);
+  --primary-foreground: oklch(0.99 0.002 250);
   --secondary: oklch(0.935 0.01 245);
   --secondary-foreground: oklch(0.3 0.02 248);
   --muted: oklch(0.935 0.01 245);
@@ -70,7 +70,7 @@
   --destructive: oklch(0.577 0.245 27.325);
   --border: oklch(0.87 0.012 245);
   --input: oklch(0.91 0.01 245);
-  --ring: oklch(0.55 0.14 265);
+  --ring: oklch(0.5 0.07 255);
   /* Chart-palett: CVD-validert rekkefølge (fargeblind-sikker nabopar-avstand) */
   --chart-1: #2a78d6;
   --chart-2: #008300;
@@ -80,21 +80,22 @@
   --radius: 0.625rem;
   --sidebar: oklch(0.945 0.009 245);
   --sidebar-foreground: oklch(0.28 0.022 250);
-  --sidebar-primary: oklch(0.51 0.17 265);
-  --sidebar-primary-foreground: oklch(0.985 0.003 240);
+  --sidebar-primary: oklch(0.44 0.08 255);
+  --sidebar-primary-foreground: oklch(0.99 0.002 250);
   --sidebar-accent: oklch(0.925 0.012 245);
   --sidebar-accent-foreground: oklch(0.3 0.02 248);
   --sidebar-border: oklch(0.87 0.012 245);
-  --sidebar-ring: oklch(0.55 0.14 265);
+  --sidebar-ring: oklch(0.5 0.07 255);
   --app-header-height: 3.5rem;
   --page-max-width: 72rem;
   --touch-target-min: 2.75rem;
   --shadow-card: 0 1px 2px oklch(0.3 0.02 250 / 0.05),
     0 6px 20px oklch(0.3 0.02 250 / 0.06);
   --shadow-elevated: 0 10px 32px -14px oklch(0.3 0.02 250 / 0.14);
-  /* Glød rundt primær-CTA — følger --primary i begge moduser */
-  --shadow-glow: 0 1px 2px oklch(0.25 0.05 265 / 0.22),
-    0 8px 24px -10px color-mix(in oklab, var(--primary) 55%, transparent);
+  /* Diskret elevasjon for primær-CTA — ingen neon-glød */
+  --shadow-glow: 0 1px 0 oklch(1 0 0 / 0.12) inset,
+    0 1px 2px oklch(0.25 0.03 255 / 0.1),
+    0 4px 12px -4px oklch(0.3 0.04 255 / 0.18);
 }
 
 .dark {
@@ -105,8 +106,8 @@
   --card-foreground: oklch(0.95 0.008 240);
   --popover: oklch(0.205 0.012 260);
   --popover-foreground: oklch(0.95 0.008 240);
-  --primary: oklch(0.56 0.17 265);
-  --primary-foreground: oklch(0.985 0.003 240);
+  --primary: oklch(0.72 0.08 250);
+  --primary-foreground: oklch(0.18 0.02 255);
   --secondary: oklch(0.235 0.012 258);
   --secondary-foreground: oklch(0.95 0.008 240);
   --muted: oklch(0.235 0.012 258);
@@ -116,7 +117,7 @@
   --destructive: oklch(0.704 0.191 22.216);
   --border: oklch(1 0.003 240 / 10%);
   --input: oklch(1 0.003 240 / 14%);
-  --ring: oklch(0.62 0.14 265);
+  --ring: oklch(0.68 0.07 250);
   /* Samme validerte palett, trinnet for mørk flate */
   --chart-1: #3987e5;
   --chart-2: #008300;
@@ -125,16 +126,17 @@
   --chart-5: #199e70;
   --sidebar: oklch(0.165 0.01 262);
   --sidebar-foreground: oklch(0.95 0.008 240);
-  --sidebar-primary: oklch(0.56 0.17 265);
-  --sidebar-primary-foreground: oklch(0.985 0.003 240);
+  --sidebar-primary: oklch(0.72 0.08 250);
+  --sidebar-primary-foreground: oklch(0.18 0.02 255);
   --sidebar-accent: oklch(0.235 0.012 258);
   --sidebar-accent-foreground: oklch(0.95 0.008 240);
   --sidebar-border: oklch(1 0.003 240 / 10%);
-  --sidebar-ring: oklch(0.62 0.14 265);
+  --sidebar-ring: oklch(0.68 0.07 250);
   --shadow-card: 0 1px 2px oklch(0 0 0 / 0.12), 0 4px 20px oklch(0 0 0 / 0.28);
   --shadow-elevated: 0 8px 32px -12px oklch(0 0 0 / 0.55);
-  --shadow-glow: 0 1px 2px oklch(0 0 0 / 0.3),
-    0 10px 28px -10px color-mix(in oklab, var(--primary) 60%, transparent);
+  --shadow-glow: 0 1px 0 oklch(1 0 0 / 0.14) inset,
+    0 1px 2px oklch(0 0 0 / 0.28),
+    0 4px 14px -6px oklch(0 0 0 / 0.35);
 }
 
 @layer base {
@@ -206,16 +208,30 @@
   .product-focus {
     @apply outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50;
   }
-  /** Primær-CTA — subtil topp-gradient + glød. Brukes av button-variants (default). */
+  /** Primær-CTA — flat, moderne flate med diskret elevasjon. */
   .product-cta-glow {
-    background-image: linear-gradient(to bottom, oklch(1 0 0 / 0.16), transparent 55%);
-    box-shadow: inset 0 1px 0 oklch(1 0 0 / 0.14), var(--shadow-glow);
+    box-shadow: var(--shadow-glow);
+    transition:
+      background-color 160ms ease,
+      box-shadow 160ms ease,
+      transform 120ms ease,
+      opacity 160ms ease;
   }
   .product-cta-glow:hover {
-    filter: brightness(1.07);
+    background-color: color-mix(in oklab, var(--primary) 88%, white);
+    box-shadow:
+      0 1px 0 oklch(1 0 0 / 0.16) inset,
+      0 2px 6px -2px oklch(0.3 0.04 255 / 0.16);
+  }
+  .dark .product-cta-glow:hover {
+    background-color: color-mix(in oklab, var(--primary) 86%, white);
+    box-shadow:
+      0 1px 0 oklch(1 0 0 / 0.18) inset,
+      0 2px 8px -3px oklch(0 0 0 / 0.4);
   }
   .product-cta-glow:active {
-    filter: brightness(0.98);
+    transform: translateY(0.5px);
+    box-shadow: 0 1px 0 oklch(1 0 0 / 0.08) inset;
   }
   /** Myk entré-animasjon — opt-in: <div class="product-rise" style="--rise-delay:.08s"> */
   .product-rise {

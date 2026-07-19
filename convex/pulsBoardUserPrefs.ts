@@ -71,6 +71,7 @@ const prefsReturnValidator = v.object({
   activeViewId: v.optional(v.id("pulsBoardViews")),
   commentsPlacement: v.optional(commentsPlacementValidator),
   detailSize: v.optional(detailSizeValidator),
+  showCardDescription: v.optional(v.boolean()),
   filters: filtersValidator,
   updatedAt: v.number(),
 });
@@ -98,6 +99,7 @@ export const getMine = query({
       activeViewId: row.activeViewId,
       commentsPlacement: row.commentsPlacement,
       detailSize: row.detailSize,
+      showCardDescription: row.showCardDescription,
       filters: row.filters,
       updatedAt: row.updatedAt,
     };
@@ -112,6 +114,7 @@ export const setMine = mutation({
     activeViewId: v.optional(v.union(v.id("pulsBoardViews"), v.null())),
     commentsPlacement: v.optional(commentsPlacementValidator),
     detailSize: v.optional(detailSizeValidator),
+    showCardDescription: v.optional(v.boolean()),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
@@ -139,6 +142,9 @@ export const setMine = mutation({
       ...(args.detailSize !== undefined
         ? { detailSize: args.detailSize }
         : {}),
+      ...(args.showCardDescription !== undefined
+        ? { showCardDescription: args.showCardDescription }
+        : {}),
     };
     if (existing) {
       await ctx.db.patch(existing._id, patch);
@@ -154,6 +160,7 @@ export const setMine = mutation({
             : args.activeViewId,
         commentsPlacement: args.commentsPlacement,
         detailSize: args.detailSize,
+        showCardDescription: args.showCardDescription,
         updatedAt: now,
       });
     }
@@ -169,6 +176,7 @@ export const setUiMine = mutation({
     activeViewId: v.optional(v.union(v.id("pulsBoardViews"), v.null())),
     commentsPlacement: v.optional(commentsPlacementValidator),
     detailSize: v.optional(detailSizeValidator),
+    showCardDescription: v.optional(v.boolean()),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
@@ -196,6 +204,9 @@ export const setUiMine = mutation({
       ...(args.detailSize !== undefined
         ? { detailSize: args.detailSize }
         : {}),
+      ...(args.showCardDescription !== undefined
+        ? { showCardDescription: args.showCardDescription }
+        : {}),
     };
 
     if (existing) {
@@ -212,6 +223,7 @@ export const setUiMine = mutation({
             : args.activeViewId,
         commentsPlacement: args.commentsPlacement,
         detailSize: args.detailSize,
+        showCardDescription: args.showCardDescription,
         updatedAt: now,
       });
     }

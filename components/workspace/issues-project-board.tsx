@@ -26,7 +26,7 @@ import {
   PULS_ISSUE_TYPE_OPTIONS,
 } from "@/lib/puls-issue-types";
 import { removeMarkdownTaskByLabel } from "@/lib/markdown-tasks";
-import { isEmptyRichText } from "@/lib/rich-text";
+import { htmlToPlainText, isEmptyRichText } from "@/lib/rich-text";
 import { cn } from "@/lib/utils";
 import {
   DndContext,
@@ -576,6 +576,26 @@ function AssigneeStack({ names }: { names: string[] }) {
   );
 }
 
+/** Kort utdrag av beskrivelse til tavlekort (én linje). */
+function cardDescriptionPreview(
+  description: string | undefined,
+  maxChars = 88,
+): string | null {
+  if (!description?.trim() || isEmptyRichText(description)) return null;
+  const plain = htmlToPlainText(description)
+    .replace(/!\[[^\]]*\]\([^)]*\)/g, "")
+    .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")
+    .replace(/^#{1,6}\s+/gm, "")
+    .replace(/^[\t ]*(?:[-*+]|\d+\.)\s+\[[ xX]\]\s+/gm, "")
+    .replace(/^[\t ]*(?:[-*+]|\d+\.)\s+/gm, "")
+    .replace(/[*_`~]+/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!plain) return null;
+  if (plain.length <= maxChars) return plain;
+  return `${plain.slice(0, maxChars - 1).trimEnd()}…`;
+}
+
 function IssueCardView({
   card,
   columnLabel,
@@ -583,6 +603,7 @@ function IssueCardView({
   dragListeners,
   dragAttributes,
   onOpen,
+  showDescription = false,
 }: {
   card: BoardCard;
   columnLabel?: string;
@@ -590,10 +611,14 @@ function IssueCardView({
   dragListeners?: object;
   dragAttributes?: object;
   onOpen: () => void;
+  showDescription?: boolean;
 }) {
   const isSub = Boolean(card.parentTaskId);
   const process = card.linkedProcesses[0];
   const extraProcesses = Math.max(0, card.linkedProcesses.length - 1);
+  const descriptionPreview = showDescription
+    ? cardDescriptionPreview(card.description)
+    : null;
 
   return (
     <div
@@ -634,6 +659,12 @@ function IssueCardView({
       <p className="text-[13px] font-semibold leading-snug text-foreground">
         {card.title}
       </p>
+
+      {descriptionPreview ? (
+        <p className="text-muted-foreground mt-1 line-clamp-2 text-[11px] leading-snug">
+          {descriptionPreview}
+        </p>
+      ) : null}
 
       <div className="mt-2 flex flex-wrap gap-1">
         <FieldChip>
@@ -686,10 +717,12 @@ function DraggableIssueCard({
   card,
   columnLabel,
   onOpen,
+  showDescription = false,
 }: {
   card: BoardCard;
   columnLabel?: string;
   onOpen: () => void;
+  showDescription?: boolean;
 }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } =
     useDraggable({ id: card._id, disabled: !card.canEdit });
@@ -707,6 +740,7 @@ function DraggableIssueCard({
         dragListeners={card.canEdit ? listeners : undefined}
         dragAttributes={card.canEdit ? attributes : undefined}
         onOpen={onOpen}
+        showDescription={showDescription}
       />
     </div>
   );
@@ -1010,6 +1044,7 @@ function BoardColumn({
   onRename,
   onRemove,
   canManage,
+  showCardDescription = false,
 }: {
   column: BoardColumnDoc;
   cards: BoardCard[];
@@ -1017,6 +1052,7 @@ function BoardColumn({
   onRename?: (nextName: string) => void | Promise<void>;
   onRemove?: () => void;
   canManage?: boolean;
+  showCardDescription?: boolean;
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(column.name);
@@ -1125,6 +1161,7 @@ function BoardColumn({
             card={card}
             columnLabel={column.name}
             onOpen={() => onOpenCard(card)}
+            showDescription={showCardDescription}
           />
         ))}
         {remaining > 0 ? (
@@ -1288,6 +1325,7 @@ export function IssuesProjectBoard({
   const [commentsPlacement, setCommentsPlacement] =
     useState<CommentsPlacement>("tab");
   const [detailSize, setDetailSize] = useState<DetailSize>("large");
+  const [showCardDescription, setShowCardDescription] = useState(false);
   const [descInsertToken, setDescInsertToken] = useState<string | null>(null);
   const [prefsHydrated, setPrefsHydrated] = useState(false);
   const [viewsHydrated, setViewsHydrated] = useState(false);
@@ -1297,8 +1335,16 @@ export function IssuesProjectBoard({
   const [boardScrollAtEnd, setBoardScrollAtEnd] = useState(false);
   const persistTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const viewFilterTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const uiPrefsRef = useRef({ commentsPlacement, detailSize });
-  uiPrefsRef.current = { commentsPlacement, detailSize };
+  const uiPrefsRef = useRef({
+    commentsPlacement,
+    detailSize,
+    showCardDescription,
+  });
+  uiPrefsRef.current = {
+    commentsPlacement,
+    detailSize,
+    showCardDescription,
+  };
   const activeViewIdRef = useRef(activeViewId);
   activeViewIdRef.current = activeViewId;
   const myUserId = myProfile?.user?._id as Id<"users"> | undefined;
@@ -1307,6 +1353,7 @@ export function IssuesProjectBoard({
   const persistUiLocal = (extras?: {
     commentsPlacement?: CommentsPlacement;
     detailSize?: DetailSize;
+    showCardDescription?: boolean;
     activeViewId?: Id<"pulsBoardViews"> | "";
   }) => {
     try {
@@ -1316,6 +1363,9 @@ export function IssuesProjectBoard({
           commentsPlacement:
             extras?.commentsPlacement ?? uiPrefsRef.current.commentsPlacement,
           detailSize: extras?.detailSize ?? uiPrefsRef.current.detailSize,
+          showCardDescription:
+            extras?.showCardDescription ??
+            uiPrefsRef.current.showCardDescription,
           activeViewId:
             extras?.activeViewId !== undefined
               ? extras.activeViewId
@@ -1370,6 +1420,7 @@ export function IssuesProjectBoard({
       ) {
         setDetailSize(savedPrefs.detailSize);
       }
+      setShowCardDescription(savedPrefs.showCardDescription === true);
     } else {
       try {
         const uiRaw = localStorage.getItem(`puls-board-ui:${boardId}`);
@@ -1377,6 +1428,7 @@ export function IssuesProjectBoard({
           const ui = JSON.parse(uiRaw) as {
             commentsPlacement?: CommentsPlacement;
             detailSize?: DetailSize;
+            showCardDescription?: boolean;
           };
           if (
             ui.commentsPlacement === "tab" ||
@@ -1390,6 +1442,9 @@ export function IssuesProjectBoard({
             ui.detailSize === "full"
           ) {
             setDetailSize(ui.detailSize);
+          }
+          if (typeof ui.showCardDescription === "boolean") {
+            setShowCardDescription(ui.showCardDescription);
           }
         }
       } catch {
@@ -1442,11 +1497,13 @@ export function IssuesProjectBoard({
     ) {
       setDetailSize(savedPrefs.detailSize);
     }
+    setShowCardDescription(savedPrefs.showCardDescription === true);
   }, [
     prefsHydrated,
     savedPrefs?.updatedAt,
     savedPrefs?.commentsPlacement,
     savedPrefs?.detailSize,
+    savedPrefs?.showCardDescription,
   ]);
 
   const selectView = (view: BoardViewDoc) => {
@@ -3100,6 +3157,7 @@ export function IssuesProjectBoard({
                     cards={list}
                     onOpenCard={openDetail}
                     canManage={canManageColumns}
+                    showCardDescription={showCardDescription}
                     onRename={async (nextName) => {
                       try {
                         await renameColumn({
@@ -3147,6 +3205,7 @@ export function IssuesProjectBoard({
                   columnLabel={labelForCard(activeDrag)}
                   isDragging
                   onOpen={() => undefined}
+                  showDescription={showCardDescription}
                 />
               </div>
             ) : null}

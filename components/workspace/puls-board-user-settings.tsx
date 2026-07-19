@@ -30,6 +30,7 @@ export function PulsBoardUserSettings({
   const [commentsPlacement, setCommentsPlacement] =
     useState<CommentsPlacement>("tab");
   const [detailSize, setDetailSize] = useState<DetailSize>("large");
+  const [showCardDescription, setShowCardDescription] = useState(false);
 
   useEffect(() => {
     if (saved === undefined) return;
@@ -37,6 +38,7 @@ export function PulsBoardUserSettings({
       setViewMode("columns");
       setCommentsPlacement("tab");
       setDetailSize("large");
+      setShowCardDescription(false);
       return;
     }
     if (
@@ -59,12 +61,14 @@ export function PulsBoardUserSettings({
     ) {
       setDetailSize(saved.detailSize);
     }
+    setShowCardDescription(saved.showCardDescription === true);
   }, [saved]);
 
   const save = async (patch: {
     viewMode?: ViewMode;
     commentsPlacement?: CommentsPlacement;
     detailSize?: DetailSize;
+    showCardDescription?: boolean;
   }) => {
     setBusy(true);
     try {
@@ -75,6 +79,8 @@ export function PulsBoardUserSettings({
           JSON.stringify({
             commentsPlacement: patch.commentsPlacement ?? commentsPlacement,
             detailSize: patch.detailSize ?? detailSize,
+            showCardDescription:
+              patch.showCardDescription ?? showCardDescription,
           }),
         );
         if (patch.viewMode) {
@@ -156,9 +162,29 @@ export function PulsBoardUserSettings({
         <div>
           <p className="text-sm font-medium">Kortvisning</p>
           <p className="text-muted-foreground mt-0.5 text-xs leading-relaxed">
-            Hvordan kort åpnes, og om kommentarer ligger under oversikten.
+            Hva som vises på tavlekortene, og hvordan kort åpnes.
           </p>
         </div>
+
+        <label className="flex cursor-pointer items-start gap-2.5 text-sm">
+          <input
+            type="checkbox"
+            className="mt-1 size-3.5 accent-foreground"
+            disabled={busy}
+            checked={showCardDescription}
+            onChange={(e) => {
+              const next = e.target.checked;
+              setShowCardDescription(next);
+              void save({ showCardDescription: next });
+            }}
+          />
+          <span>
+            <span className="font-medium">Vis beskrivelse på kort</span>
+            <span className="text-muted-foreground mt-0.5 block text-xs leading-relaxed">
+              Viser en kort tekstlinje under tittelen — ikke hele beskrivelsen.
+            </span>
+          </span>
+        </label>
 
         <label className="flex cursor-pointer items-start gap-2.5 text-sm">
           <input
@@ -239,6 +265,7 @@ export function PulsBoardUserSettings({
                 setViewMode("columns");
                 setCommentsPlacement("tab");
                 setDetailSize("large");
+                setShowCardDescription(false);
                 try {
                   localStorage.removeItem(`puls-board-ui:${boardId}`);
                   localStorage.removeItem(`puls-board-view:${boardId}`);
