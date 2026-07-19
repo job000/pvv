@@ -615,7 +615,14 @@ export const patchImportedGithubCard = internalMutation({
   handler: async (ctx, args) => {
     const row = await ctx.db.get(args.taskId);
     if (!row) throw new Error("Fant ikke saken.");
-    const { userId } = await requireAssessmentEdit(ctx, row.assessmentId);
+    let userId: Id<"users">;
+    if (row.boardId) {
+      ({ userId } = await requirePulsBoardAccess(ctx, row.boardId, "editor"));
+    } else if (row.assessmentId) {
+      ({ userId } = await requireAssessmentEdit(ctx, row.assessmentId));
+    } else {
+      throw new Error("Kortet mangler tilgangskontekst.");
+    }
     const patch: Record<string, unknown> = {};
     if (args.title !== undefined) {
       const t = args.title.trim().slice(0, 200);
@@ -700,14 +707,18 @@ export const insertImportedGithubNote = internalMutation({
   handler: async (ctx, args) => {
     const task = await ctx.db.get(args.taskId);
     if (!task) throw new Error("Fant ikke saken.");
-    const { assessment, userId } = await requireAssessmentEdit(
-      ctx,
-      task.assessmentId,
-    );
+    let userId: Id<"users">;
+    if (task.boardId) {
+      ({ userId } = await requirePulsBoardAccess(ctx, task.boardId, "editor"));
+    } else if (task.assessmentId) {
+      ({ userId } = await requireAssessmentEdit(ctx, task.assessmentId));
+    } else {
+      throw new Error("Kortet mangler tilgangskontekst.");
+    }
     const body = args.body.trim().slice(0, NOTE_MAX);
     if (!body) throw new Error("Kommentaren er tom.");
     return await ctx.db.insert("assessmentTaskNotes", {
-      workspaceId: assessment.workspaceId,
+      workspaceId: task.workspaceId,
       assessmentId: task.assessmentId,
       taskId: args.taskId,
       authorUserId: userId,

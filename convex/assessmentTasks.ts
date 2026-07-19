@@ -38,7 +38,12 @@ async function requireTaskWriteAccess(
     );
     return userId;
   }
-  const { userId } = await requireAssessmentEdit(ctx, task.assessmentId);
+  if (task.assessmentId) {
+    const { userId } = await requireAssessmentEdit(ctx, task.assessmentId);
+    return userId;
+  }
+  const userId = await requireUserId(ctx);
+  await requireWorkspaceMember(ctx, task.workspaceId, userId, "editor");
   return userId;
 }
 
@@ -141,14 +146,7 @@ function subtreeHeight(
   return max;
 }
 
-async function loadAssessmentParentMaps(
-  ctx: QueryCtx,
-  assessmentId: Id<"assessments">,
-) {
-  const siblings = await ctx.db
-    .query("assessmentTasks")
-    .withIndex("by_assessment", (q) => q.eq("assessmentId", assessmentId))
-    .collect();
+function buildParentMaps(siblings: Doc<"assessmentTasks">[]) {
   const parentById = new Map<
     Id<"assessmentTasks">,
     Id<"assessmentTasks"> | undefined
@@ -166,6 +164,38 @@ async function loadAssessmentParentMaps(
     }
   }
   return { parentById, childrenByParent };
+}
+
+async function loadAssessmentParentMaps(
+  ctx: QueryCtx,
+  assessmentId: Id<"assessments">,
+) {
+  const siblings = await ctx.db
+    .query("assessmentTasks")
+    .withIndex("by_assessment", (q) => q.eq("assessmentId", assessmentId))
+    .collect();
+  return buildParentMaps(siblings);
+}
+
+async function loadTaskParentMaps(
+  ctx: QueryCtx,
+  task: Doc<"assessmentTasks">,
+) {
+  if (task.boardId) {
+    const siblings = await ctx.db
+      .query("assessmentTasks")
+      .withIndex("by_board", (q) => q.eq("boardId", task.boardId!))
+      .collect();
+    return buildParentMaps(siblings);
+  }
+  if (task.assessmentId) {
+    return await loadAssessmentParentMaps(ctx, task.assessmentId);
+  }
+  const siblings = await ctx.db
+    .query("assessmentTasks")
+    .withIndex("by_workspace", (q) => q.eq("workspaceId", task.workspaceId))
+    .collect();
+  return buildParentMaps(siblings);
 }
 
 function resolveAssigneeIds(row: Doc<"assessmentTasks">): Id<"users">[] {
@@ -232,14 +262,25 @@ async function assertCanSetParent(
   if (!parent) {
     throw new Error("Fant ikke foreldresaken.");
   }
-  if (parent.assessmentId !== child.assessmentId) {
+  if (parent.workspaceId !== child.workspaceId) {
+    throw new Error("Under-sak må være i samme arbeidsområde som forelderen.");
+  }
+  if (
+    parent.boardId &&
+    child.boardId &&
+    parent.boardId !== child.boardId
+  ) {
+    throw new Error("Under-sak må være på samme tavle som forelderen.");
+  }
+  if (
+    parent.assessmentId &&
+    child.assessmentId &&
+    parent.assessmentId !== child.assessmentId
+  ) {
     throw new Error("Under-sak må være på samme vurdering som forelderen.");
   }
 
-  const { parentById, childrenByParent } = await loadAssessmentParentMaps(
-    ctx,
-    child.assessmentId,
-  );
+  const { parentById, childrenByParent } = await loadTaskParentMaps(ctx, child);
 
   // Syklus: child må ikke ligge i ancestor-kjeden til ny forelder
   let walk: Id<"assessmentTasks"> | undefined = parentId;
@@ -306,10 +347,26 @@ const boardLinkedRosValidator = v.object({
   status: v.string(),
 });
 
+const boardLinkKindValidator = v.union(
+  v.literal("none"),
+  v.literal("assessment"),
+  v.literal("process"),
+  v.literal("ros"),
+  v.literal("pdd"),
+  v.literal("form"),
+);
+
 const boardCardValidator = v.object({
   _id: v.id("assessmentTasks"),
   workspaceId: v.id("workspaces"),
-  assessmentId: v.id("assessments"),
+  assessmentId: v.union(v.id("assessments"), v.null()),
+  candidateId: v.union(v.id("candidates"), v.null()),
+  rosAnalysisId: v.union(v.id("rosAnalyses"), v.null()),
+  processDesignDocumentId: v.union(
+    v.id("processDesignDocuments"),
+    v.null(),
+  ),
+  intakeFormId: v.union(v.id("intakeForms"), v.null()),
   boardId: v.union(v.id("pulsBoards"), v.null()),
   columnId: v.union(v.id("pulsBoardColumns"), v.null()),
   title: v.string(),
@@ -328,6 +385,9 @@ const boardCardValidator = v.object({
   dashboardRank: v.optional(v.number()),
   createdAt: v.number(),
   assessmentTitle: v.string(),
+  linkKind: boardLinkKindValidator,
+  linkLabel: v.string(),
+  linkHref: v.union(v.string(), v.null()),
   assigneeName: v.union(v.string(), v.null()),
   assignees: v.array(v.object({ userId: v.id("users"), name: v.string() })),
   githubIssueUrl: v.union(v.string(), v.null()),
@@ -339,6 +399,100 @@ const boardCardValidator = v.object({
   linkedRos: v.array(boardLinkedRosValidator),
   canEdit: v.boolean(),
 });
+
+async function resolveTaskLinkContext(
+  ctx: QueryCtx,
+  task: Doc<"assessmentTasks">,
+  assessmentTitle: string | null,
+): Promise<{
+  linkKind:
+    | "none"
+    | "assessment"
+    | "process"
+    | "ros"
+    | "pdd"
+    | "form";
+  linkLabel: string;
+  linkHref: string | null;
+}> {
+  const ws = task.workspaceId;
+  const parts: string[] = [];
+  let primaryKind:
+    | "none"
+    | "assessment"
+    | "process"
+    | "ros"
+    | "pdd"
+    | "form" = "none";
+  let primaryHref: string | null = null;
+
+  if (task.assessmentId) {
+    const label = assessmentTitle?.trim() || "Vurdering";
+    parts.push(label);
+    if (primaryKind === "none") {
+      primaryKind = "assessment";
+      primaryHref = `/w/${ws}/a/${task.assessmentId}`;
+    }
+  }
+  if (task.candidateId) {
+    const cand = await ctx.db.get(task.candidateId);
+    const label = cand
+      ? cand.code
+        ? `${cand.code} — ${cand.name}`
+        : cand.name
+      : "Prosess";
+    parts.push(label);
+    if (primaryKind === "none") {
+      primaryKind = "process";
+      primaryHref = `/w/${ws}/vurderinger?fane=prosesser&rediger=${task.candidateId}`;
+    }
+  }
+  if (task.rosAnalysisId) {
+    const ros = await ctx.db.get(task.rosAnalysisId);
+    const label = ros?.title?.trim() || "ROS";
+    parts.push(label);
+    if (primaryKind === "none") {
+      primaryKind = "ros";
+      primaryHref = ros ? `/w/${ws}/ros/a/${ros._id}` : null;
+    }
+  }
+  if (task.processDesignDocumentId) {
+    const doc = await ctx.db.get(task.processDesignDocumentId);
+    const assessment = doc ? await ctx.db.get(doc.assessmentId) : null;
+    const payload = doc?.payload as { processTitle?: string } | undefined;
+    const title =
+      (typeof payload?.processTitle === "string"
+        ? payload.processTitle.replace(/<[^>]+>/g, "").trim()
+        : "") ||
+      assessment?.title?.trim() ||
+      "Prosessdesign";
+    parts.push(title);
+    if (primaryKind === "none") {
+      primaryKind = "pdd";
+      primaryHref = assessment
+        ? `/w/${ws}/a/${assessment._id}/prosessdesign`
+        : null;
+    }
+  }
+  if (task.intakeFormId) {
+    const form = await ctx.db.get(task.intakeFormId);
+    const label = form?.title?.trim() || "Skjema";
+    parts.push(label);
+    if (primaryKind === "none") {
+      primaryKind = "form";
+      primaryHref = form ? `/w/${ws}/skjemaer?form=${form._id}` : null;
+    }
+  }
+
+  if (parts.length === 0) {
+    return { linkKind: "none", linkLabel: "Uten kobling", linkHref: null };
+  }
+  return {
+    linkKind: primaryKind,
+    linkLabel: parts.join(" · "),
+    linkHref: primaryHref,
+  };
+}
 
 async function buildBoardCards(
   ctx: QueryCtx,
@@ -417,7 +571,11 @@ async function buildBoardCards(
     const out: Array<{
       _id: Id<"assessmentTasks">;
       workspaceId: Id<"workspaces">;
-      assessmentId: Id<"assessments">;
+      assessmentId: Id<"assessments"> | null;
+      candidateId: Id<"candidates"> | null;
+      rosAnalysisId: Id<"rosAnalyses"> | null;
+      processDesignDocumentId: Id<"processDesignDocuments"> | null;
+      intakeFormId: Id<"intakeForms"> | null;
       boardId: Id<"pulsBoards"> | null;
       columnId: Id<"pulsBoardColumns"> | null;
       title: string;
@@ -436,6 +594,15 @@ async function buildBoardCards(
       dashboardRank?: number;
       createdAt: number;
       assessmentTitle: string;
+      linkKind:
+        | "none"
+        | "assessment"
+        | "process"
+        | "ros"
+        | "pdd"
+        | "form";
+      linkLabel: string;
+      linkHref: string | null;
       assigneeName: string | null;
       assignees: { userId: Id<"users">; name: string }[];
       githubIssueUrl: string | null;
@@ -457,9 +624,12 @@ async function buildBoardCards(
     }> = [];
 
     for (const t of tasks) {
-      const assessment = await ctx.db.get(t.assessmentId);
-      if (!assessment) continue;
-      if (!(await canReadAssessment(ctx, assessment, userId))) continue;
+      let assessment: Doc<"assessments"> | null = null;
+      if (t.assessmentId) {
+        assessment = await ctx.db.get(t.assessmentId);
+        if (!assessment) continue;
+        if (!(await canReadAssessment(ctx, assessment, userId))) continue;
+      }
 
       const ids = resolveAssigneeIds(t);
       const assignees: { userId: Id<"users">; name: string }[] = [];
@@ -481,10 +651,60 @@ async function buildBoardCards(
         : [];
       const columnId = resolveColumnForLegacy(cols, t);
 
+      const linkedProcesses: Array<{
+        id: Id<"candidates">;
+        name: string;
+        code: string;
+      }> = [];
+      if (t.candidateId) {
+        const cand = await ctx.db.get(t.candidateId);
+        if (cand) {
+          linkedProcesses.push({
+            id: cand._id,
+            name: cand.name,
+            code: cand.code,
+          });
+        }
+      } else if (t.assessmentId) {
+        linkedProcesses.push(
+          ...(processesByAssessment.get(t.assessmentId) ?? []),
+        );
+      }
+
+      const linkedRos: Array<{
+        id: Id<"rosAnalyses">;
+        title: string;
+        status: string;
+      }> = [];
+      if (t.rosAnalysisId) {
+        const ros = await ctx.db.get(t.rosAnalysisId);
+        if (ros) {
+          const status =
+            ros.reviewScheduleActive === false
+              ? "inaktiv"
+              : ros.nextReviewAt != null
+                ? "planlagt"
+                : "koblet";
+          linkedRos.push({ id: ros._id, title: ros.title, status });
+        }
+      } else if (t.assessmentId) {
+        linkedRos.push(...(rosByAssessment.get(t.assessmentId) ?? []));
+      }
+
+      const link = await resolveTaskLinkContext(
+        ctx,
+        t,
+        assessment?.title ?? null,
+      );
+
       out.push({
         _id: t._id,
         workspaceId: t.workspaceId,
-        assessmentId: t.assessmentId,
+        assessmentId: t.assessmentId ?? null,
+        candidateId: t.candidateId ?? null,
+        rosAnalysisId: t.rosAnalysisId ?? null,
+        processDesignDocumentId: t.processDesignDocumentId ?? null,
+        intakeFormId: t.intakeFormId ?? null,
         boardId: t.boardId ?? null,
         columnId,
         title: t.title,
@@ -502,7 +722,10 @@ async function buildBoardCards(
         milestone: t.milestone,
         dashboardRank: t.dashboardRank,
         createdAt: t.createdAt,
-        assessmentTitle: assessment.title,
+        assessmentTitle: assessment?.title ?? link.linkLabel,
+        linkKind: link.linkKind,
+        linkLabel: link.linkLabel,
+        linkHref: link.linkHref,
         assigneeName:
           assignees.length > 0
             ? assignees.map((a) => a.name).join(", ")
@@ -515,10 +738,13 @@ async function buildBoardCards(
         depth: taskDepth(t._id, parentById),
         subIssueCount: children.length,
         subIssueDoneCount: children.filter((c) => c.status === "done").length,
-        linkedProcesses: processesByAssessment.get(t.assessmentId) ?? [],
-        linkedRos: rosByAssessment.get(t.assessmentId) ?? [],
+        linkedProcesses,
+        linkedRos,
         canEdit:
-          canEditBoard || (await canEditAssessment(ctx, assessment, userId)),
+          canEditBoard ||
+          (assessment
+            ? await canEditAssessment(ctx, assessment, userId)
+            : false),
       });
     }
 
@@ -618,9 +844,12 @@ export const listMineAcrossWorkspaces = query({
         if (col) columnNameById.set(t.columnId, col.name);
       }
       for (const t of tasks) {
-        const assessment = await ctx.db.get(t.assessmentId);
-        if (!assessment) continue;
-        if (!(await canReadAssessment(ctx, assessment, userId))) continue;
+        let assessment: Doc<"assessments"> | null = null;
+        if (t.assessmentId) {
+          assessment = await ctx.db.get(t.assessmentId);
+          if (!assessment) continue;
+          if (!(await canReadAssessment(ctx, assessment, userId))) continue;
+        }
         const ids = resolveAssigneeIds(t);
         const assignees: { userId: Id<"users">; name: string }[] = [];
         for (const uid of ids) {
@@ -632,9 +861,14 @@ export const listMineAcrossWorkspaces = query({
             ? `https://github.com/${t.githubRepoFullName}/issues/${t.githubIssueNumber}`
             : null;
         const children = tasks.filter((c) => c.parentTaskId === t._id);
+        const link = await resolveTaskLinkContext(
+          ctx,
+          t,
+          assessment?.title ?? null,
+        );
         enriched.push({
           ...t,
-          assessmentTitle: assessment.title,
+          assessmentTitle: assessment?.title ?? link.linkLabel,
           workspaceName: ws?.name ?? "",
           columnName: t.columnId
             ? (columnNameById.get(t.columnId) ?? null)
@@ -669,7 +903,13 @@ export const listMineAcrossWorkspaces = query({
 
 export const create = mutation({
   args: {
-    assessmentId: v.id("assessments"),
+    /** Når kortet ikke knyttes til vurdering — krev boardId eller workspaceId */
+    workspaceId: v.optional(v.id("workspaces")),
+    assessmentId: v.optional(v.id("assessments")),
+    candidateId: v.optional(v.id("candidates")),
+    rosAnalysisId: v.optional(v.id("rosAnalyses")),
+    processDesignDocumentId: v.optional(v.id("processDesignDocuments")),
+    intakeFormId: v.optional(v.id("intakeForms")),
     boardId: v.optional(v.id("pulsBoards")),
     columnId: v.optional(v.id("pulsBoardColumns")),
     title: v.string(),
@@ -690,26 +930,80 @@ export const create = mutation({
   },
   returns: v.id("assessmentTasks"),
   handler: async (ctx, args) => {
-    const { assessment, userId } = await requireAssessmentEdit(
-      ctx,
-      args.assessmentId,
-    );
+    let userId: Id<"users">;
+    let workspaceId: Id<"workspaces">;
+    let assessment: Doc<"assessments"> | null = null;
+    let assessmentId = args.assessmentId;
+    let candidateId = args.candidateId;
+    let rosAnalysisId = args.rosAnalysisId;
+    let processDesignDocumentId = args.processDesignDocumentId;
+    let intakeFormId = args.intakeFormId;
+
+    if (assessmentId) {
+      const access = await requireAssessmentEdit(ctx, assessmentId);
+      assessment = access.assessment;
+      userId = access.userId;
+      workspaceId = assessment.workspaceId;
+    } else if (args.boardId) {
+      const access = await requirePulsBoardAccess(ctx, args.boardId, "editor");
+      userId = access.userId;
+      workspaceId = access.board.workspaceId;
+    } else if (args.workspaceId) {
+      userId = await requireUserId(ctx);
+      await requireWorkspaceMember(ctx, args.workspaceId, userId, "editor");
+      workspaceId = args.workspaceId;
+    } else {
+      throw new Error(
+        "Kortet må knyttes til en tavle, et arbeidsområde eller en vurdering.",
+      );
+    }
+
     let boardId = args.boardId;
     let boardDoc: Doc<"pulsBoards"> | null = null;
     if (boardId) {
       const access = await requirePulsBoardAccess(ctx, boardId, "editor");
       boardDoc = access.board;
-      if (boardDoc.workspaceId !== assessment.workspaceId) {
+      if (boardDoc.workspaceId !== workspaceId) {
         throw new Error("Tavlen tilhører ikke samme arbeidsområde.");
       }
+      userId = access.userId;
     } else {
-      boardId = await ensureDefaultPulsBoard(
-        ctx,
-        assessment.workspaceId,
-        userId,
-      );
+      boardId = await ensureDefaultPulsBoard(ctx, workspaceId, userId);
       const access = await requirePulsBoardAccess(ctx, boardId, "editor");
       boardDoc = access.board;
+    }
+
+    if (candidateId) {
+      const cand = await ctx.db.get(candidateId);
+      if (!cand || cand.workspaceId !== workspaceId) {
+        throw new Error("Prosessen finnes ikke i dette arbeidsområdet.");
+      }
+    }
+    if (rosAnalysisId) {
+      const ros = await ctx.db.get(rosAnalysisId);
+      if (!ros || ros.workspaceId !== workspaceId) {
+        throw new Error("ROS-analysen finnes ikke i dette arbeidsområdet.");
+      }
+    }
+    if (processDesignDocumentId) {
+      const doc = await ctx.db.get(processDesignDocumentId);
+      if (!doc || doc.workspaceId !== workspaceId) {
+        throw new Error("Prosessdesign finnes ikke i dette arbeidsområdet.");
+      }
+      // PDD hører til en vurdering — sett den hvis ikke valgt eksplisitt
+      if (!assessmentId) {
+        assessmentId = doc.assessmentId;
+        assessment = await ctx.db.get(doc.assessmentId);
+        if (assessment) {
+          await requireAssessmentEdit(ctx, assessmentId);
+        }
+      }
+    }
+    if (intakeFormId) {
+      const form = await ctx.db.get(intakeFormId);
+      if (!form || form.workspaceId !== workspaceId) {
+        throw new Error("Skjemaet finnes ikke i dette arbeidsområdet.");
+      }
     }
 
     const cols = await ensureDefaultColumns(ctx, boardDoc);
@@ -750,16 +1044,34 @@ export const create = mutation({
     let parentTaskId: Id<"assessmentTasks"> | undefined;
     if (args.parentTaskId) {
       const parent = await ctx.db.get(args.parentTaskId);
-      if (!parent || parent.assessmentId !== args.assessmentId) {
-        throw new Error("Foreldrekortet finnes ikke på denne vurderingen.");
+      if (!parent || parent.workspaceId !== workspaceId) {
+        throw new Error("Foreldrekortet finnes ikke i dette arbeidsområdet.");
       }
       if (parent.boardId && parent.boardId !== boardId) {
         throw new Error("Foreldrekortet ligger på en annen tavle.");
       }
-      const { parentById } = await loadAssessmentParentMaps(
-        ctx,
-        args.assessmentId,
-      );
+      if (
+        assessmentId &&
+        parent.assessmentId &&
+        parent.assessmentId !== assessmentId
+      ) {
+        throw new Error("Foreldrekortet hører til en annen vurdering.");
+      }
+      // Arv koblinger fra forelder hvis ikke satt
+      if (!assessmentId && parent.assessmentId) {
+        assessmentId = parent.assessmentId;
+      }
+      if (!candidateId && parent.candidateId) candidateId = parent.candidateId;
+      if (!rosAnalysisId && parent.rosAnalysisId) {
+        rosAnalysisId = parent.rosAnalysisId;
+      }
+      if (!processDesignDocumentId && parent.processDesignDocumentId) {
+        processDesignDocumentId = parent.processDesignDocumentId;
+      }
+      if (!intakeFormId && parent.intakeFormId) {
+        intakeFormId = parent.intakeFormId;
+      }
+      const { parentById } = await loadTaskParentMaps(ctx, parent);
       const parentDepth = taskDepth(args.parentTaskId, parentById);
       if (parentDepth + 1 > MAX_NESTING_DEPTH) {
         throw new Error(
@@ -770,8 +1082,12 @@ export const create = mutation({
     }
 
     const taskId = await ctx.db.insert("assessmentTasks", {
-      workspaceId: assessment.workspaceId,
-      assessmentId: args.assessmentId,
+      workspaceId,
+      assessmentId,
+      candidateId,
+      rosAnalysisId,
+      processDesignDocumentId,
+      intakeFormId,
       boardId,
       columnId,
       title,
@@ -794,19 +1110,158 @@ export const create = mutation({
       dashboardRank: now,
       createdAt: now,
     });
-    const atitle = assessment.title.trim() || "vurdering";
-    const pulsHref = `/w/${assessment.workspaceId}/puls/${boardId}?task=${taskId}`;
+
+    const linkCtx = await resolveTaskLinkContext(
+      ctx,
+      {
+        workspaceId,
+        assessmentId,
+        candidateId,
+        rosAnalysisId,
+        processDesignDocumentId,
+        intakeFormId,
+      } as Doc<"assessmentTasks">,
+      assessment?.title ?? null,
+    );
+    const notifyBody =
+      linkCtx.linkKind === "none"
+        ? "Åpne kortet under Puls."
+        : `Koblet til «${linkCtx.linkLabel}». Åpne kortet under Puls.`;
+    const pulsHref = `/w/${workspaceId}/puls/${boardId}?task=${taskId}`;
     for (const uid of uniqueIds) {
       if (uid !== userId) {
         await insertUserInAppNotification(ctx, {
           userId: uid,
           title: `Du er tildelt «${title}»`,
-          body: `På vurderingen «${atitle}». Åpne kortet under Puls.`,
+          body: notifyBody,
           href: pulsHref,
         });
       }
     }
     return taskId;
+  },
+});
+
+/** Valg for «Kobling»-velgeren ved opprettelse av Puls-kort. */
+export const listCreateLinkTargets = query({
+  args: { workspaceId: v.id("workspaces") },
+  returns: v.object({
+    assessments: v.array(
+      v.object({ id: v.id("assessments"), title: v.string() }),
+    ),
+    processes: v.array(
+      v.object({
+        id: v.id("candidates"),
+        name: v.string(),
+        code: v.string(),
+      }),
+    ),
+    ros: v.array(
+      v.object({ id: v.id("rosAnalyses"), title: v.string() }),
+    ),
+    pdds: v.array(
+      v.object({
+        id: v.id("processDesignDocuments"),
+        title: v.string(),
+        assessmentId: v.id("assessments"),
+      }),
+    ),
+    forms: v.array(
+      v.object({ id: v.id("intakeForms"), title: v.string() }),
+    ),
+  }),
+  handler: async (ctx, args) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) {
+      return {
+        assessments: [],
+        processes: [],
+        ros: [],
+        pdds: [],
+        forms: [],
+      };
+    }
+    await requireWorkspaceMember(ctx, args.workspaceId, userId, "viewer");
+
+    const assessmentsRaw = await ctx.db
+      .query("assessments")
+      .withIndex("by_workspace", (q) => q.eq("workspaceId", args.workspaceId))
+      .take(200);
+    const assessments: Array<{ id: Id<"assessments">; title: string }> = [];
+    for (const a of assessmentsRaw) {
+      if (!(await canReadAssessment(ctx, a, userId))) continue;
+      assessments.push({
+        id: a._id,
+        title: a.title.trim() || "Uten tittel",
+      });
+    }
+    assessments.sort((a, b) => a.title.localeCompare(b.title, "nb"));
+
+    const processesRaw = await ctx.db
+      .query("candidates")
+      .withIndex("by_workspace", (q) => q.eq("workspaceId", args.workspaceId))
+      .take(300);
+    const processes = processesRaw
+      .map((c) => ({ id: c._id, name: c.name, code: c.code }))
+      .sort((a, b) =>
+        (a.code || a.name).localeCompare(b.code || b.name, "nb"),
+      );
+
+    const rosRaw = await ctx.db
+      .query("rosAnalyses")
+      .withIndex("by_workspace_updated", (q) =>
+        q.eq("workspaceId", args.workspaceId),
+      )
+      .order("desc")
+      .take(200);
+    const ros = rosRaw
+      .map((r) => ({
+        id: r._id,
+        title: r.title.trim() || "Uten tittel",
+      }))
+      .sort((a, b) => a.title.localeCompare(b.title, "nb"));
+
+    const pddRaw = await ctx.db
+      .query("processDesignDocuments")
+      .withIndex("by_workspace", (q) => q.eq("workspaceId", args.workspaceId))
+      .take(200);
+    const pdds: Array<{
+      id: Id<"processDesignDocuments">;
+      title: string;
+      assessmentId: Id<"assessments">;
+    }> = [];
+    for (const doc of pddRaw) {
+      const a = await ctx.db.get(doc.assessmentId);
+      if (!a) continue;
+      if (!(await canReadAssessment(ctx, a, userId))) continue;
+      const payload = doc.payload as { processTitle?: string } | undefined;
+      const fromPayload =
+        typeof payload?.processTitle === "string"
+          ? payload.processTitle.replace(/<[^>]+>/g, "").trim()
+          : "";
+      pdds.push({
+        id: doc._id,
+        title: fromPayload || a.title.trim() || "Prosessdesign",
+        assessmentId: doc.assessmentId,
+      });
+    }
+    pdds.sort((a, b) => a.title.localeCompare(b.title, "nb"));
+
+    const formsRaw = await ctx.db
+      .query("intakeForms")
+      .withIndex("by_workspace_and_updated_at", (q) =>
+        q.eq("workspaceId", args.workspaceId),
+      )
+      .order("desc")
+      .take(100);
+    const forms = formsRaw
+      .map((f) => ({
+        id: f._id,
+        title: f.title.trim() || "Uten tittel",
+      }))
+      .sort((a, b) => a.title.localeCompare(b.title, "nb"));
+
+    return { assessments, processes, ros, pdds, forms };
   },
 });
 
@@ -868,8 +1323,21 @@ export const update = mutation({
       throw new Error("Fant ikke oppgaven.");
     }
     const userId = await requireTaskWriteAccess(ctx, row);
-    const assessment = await ctx.db.get(row.assessmentId);
-    if (!assessment) throw new Error("Vurdering finnes ikke.");
+    const assessment = row.assessmentId
+      ? await ctx.db.get(row.assessmentId)
+      : null;
+    const linkCtx = await resolveTaskLinkContext(
+      ctx,
+      row,
+      assessment?.title ?? null,
+    );
+    const notifyBody =
+      linkCtx.linkKind === "none"
+        ? "Åpne kortet under Puls."
+        : `Koblet til «${linkCtx.linkLabel}». Åpne kortet under Puls.`;
+    const pulsHref = row.boardId
+      ? `/w/${row.workspaceId}/puls/${row.boardId}?task=${args.taskId}`
+      : `/w/${row.workspaceId}/puls?task=${args.taskId}`;
     const patch: Record<string, unknown> = {};
     if (args.title !== undefined) {
       const t = args.title.trim();
@@ -896,16 +1364,12 @@ export const update = mutation({
           : undefined;
       const oldIds = new Set(resolveAssigneeIds(row));
       const added = newIds.filter((id) => !oldIds.has(id));
-      const atitle = assessment.title.trim() || "vurdering";
-      const pulsHref = row.boardId
-        ? `/w/${assessment.workspaceId}/puls/${row.boardId}?task=${args.taskId}`
-        : `/w/${assessment.workspaceId}/puls?task=${args.taskId}`;
       for (const uid of added) {
         if (uid !== userId) {
           await insertUserInAppNotification(ctx, {
             userId: uid,
             title: `Du er tildelt «${row.title}»`,
-            body: `På vurderingen «${atitle}». Åpne kortet under Puls.`,
+            body: notifyBody,
             href: pulsHref,
           });
         }
@@ -926,14 +1390,11 @@ export const update = mutation({
           !previousIds.has(args.assigneeUserId) &&
           args.assigneeUserId !== userId
         ) {
-          const atitle = assessment.title.trim() || "vurdering";
           await insertUserInAppNotification(ctx, {
             userId: args.assigneeUserId,
             title: `Du er tildelt «${row.title}»`,
-            body: `På vurderingen «${atitle}». Åpne kortet under Puls.`,
-            href: row.boardId
-              ? `/w/${assessment.workspaceId}/puls/${row.boardId}?task=${args.taskId}`
-              : `/w/${assessment.workspaceId}/puls?task=${args.taskId}`,
+            body: notifyBody,
+            href: pulsHref,
           });
         }
       } else {
@@ -1066,9 +1527,11 @@ export const reorderDashboard = mutation({
     for (const id of args.orderedTaskIds) {
       const row = await ctx.db.get(id);
       if (!row) continue;
-      const assessment = await ctx.db.get(row.assessmentId);
-      if (!assessment) continue;
-      if (!(await canEditAssessment(ctx, assessment, userId))) continue;
+      try {
+        await requireTaskWriteAccess(ctx, row);
+      } catch {
+        continue;
+      }
       await ctx.db.patch(id, { dashboardRank: rank++ });
     }
   },

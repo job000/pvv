@@ -253,13 +253,20 @@ export const listMyInWorkspace = query({
     const assignedByMe: AssignedByMeItem[] = [];
 
     for (const t of assessmentTasks) {
-      const assessment = await ctx.db.get(t.assessmentId);
-      if (!assessment) continue;
-      if (!(await canReadAssessment(ctx, assessment, userId))) continue;
+      let assessment: Doc<"assessments"> | null = null;
+      if (t.assessmentId) {
+        assessment = await ctx.db.get(t.assessmentId);
+        if (!assessment) continue;
+        if (!(await canReadAssessment(ctx, assessment, userId))) continue;
+      }
       const ids = resolveAssessmentAssigneeIds(t);
       const states = t.assigneeStates as AssigneeState[] | undefined;
-      const contextTitle = assessment.title.trim() || "Vurdering";
-      const href = `/w/${args.workspaceId}/a/${t.assessmentId}`;
+      const contextTitle = assessment?.title.trim() || t.title.trim() || "Puls";
+      const href = t.boardId
+        ? `/w/${args.workspaceId}/puls/${t.boardId}?task=${t._id}`
+        : t.assessmentId
+          ? `/w/${args.workspaceId}/a/${t.assessmentId}`
+          : `/w/${args.workspaceId}/puls`;
       const myStatus = resolveMyAssignmentStatus(ids, states, userId, t.status);
       if (myStatus) {
         const assignerUserId = resolveAssignerUserId(
@@ -733,8 +740,10 @@ export const respond = mutation({
         throw new Error("Du er ikke tildelt denne oppgaven.");
       }
       const states = row.assigneeStates as AssigneeState[] | undefined;
-      const assessment = await ctx.db.get(row.assessmentId);
-      const contextTitle = assessment?.title.trim() || "vurdering";
+      const assessment = row.assessmentId
+        ? await ctx.db.get(row.assessmentId)
+        : null;
+      const contextTitle = assessment?.title.trim() || row.title.trim() || "Puls";
       const href = `/w/${row.workspaceId}/oppgaver`;
       const assignerUserId = resolveAssignerUserId(
         states,

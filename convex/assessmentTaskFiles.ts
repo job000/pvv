@@ -1,7 +1,55 @@
 import { v } from "convex/values";
-import { mutation, query } from "./_generated/server";
-import type { Id } from "./_generated/dataModel";
-import { requireAssessmentEdit, requireAssessmentRead } from "./lib/access";
+import {
+  mutation,
+  query,
+  type MutationCtx,
+  type QueryCtx,
+} from "./_generated/server";
+import type { Doc, Id } from "./_generated/dataModel";
+import {
+  requireAssessmentEdit,
+  requireAssessmentRead,
+  requirePulsBoardAccess,
+  requireUserId,
+  requireWorkspaceMember,
+} from "./lib/access";
+
+async function requireTaskFileWriteAccess(
+  ctx: MutationCtx,
+  task: Doc<"assessmentTasks">,
+): Promise<Id<"users">> {
+  if (task.boardId) {
+    const { userId } = await requirePulsBoardAccess(
+      ctx,
+      task.boardId,
+      "editor",
+    );
+    return userId;
+  }
+  if (task.assessmentId) {
+    const { userId } = await requireAssessmentEdit(ctx, task.assessmentId);
+    return userId;
+  }
+  const userId = await requireUserId(ctx);
+  await requireWorkspaceMember(ctx, task.workspaceId, userId, "editor");
+  return userId;
+}
+
+async function requireTaskFileReadAccess(
+  ctx: QueryCtx | MutationCtx,
+  task: Doc<"assessmentTasks">,
+): Promise<void> {
+  if (task.assessmentId) {
+    await requireAssessmentRead(ctx, task.assessmentId);
+    return;
+  }
+  if (task.boardId) {
+    await requirePulsBoardAccess(ctx, task.boardId, "viewer");
+    return;
+  }
+  const userId = await requireUserId(ctx);
+  await requireWorkspaceMember(ctx, task.workspaceId, userId, "viewer");
+}
 
 const MAX_FILE_BYTES = 15 * 1024 * 1024;
 const MAX_FILES_PER_TASK = 40;
@@ -90,7 +138,7 @@ export const generateUploadUrl = mutation({
   handler: async (ctx, args) => {
     const task = await ctx.db.get(args.taskId);
     if (!task) throw new Error("Fant ikke saken.");
-    await requireAssessmentEdit(ctx, task.assessmentId);
+    await requireTaskFileWriteAccess(ctx, task);
     return await ctx.storage.generateUploadUrl();
   },
 });
@@ -111,10 +159,7 @@ export const attach = mutation({
   handler: async (ctx, args) => {
     const task = await ctx.db.get(args.taskId);
     if (!task) throw new Error("Fant ikke saken.");
-    const { assessment, userId } = await requireAssessmentEdit(
-      ctx,
-      task.assessmentId,
-    );
+    const userId = await requireTaskFileWriteAccess(ctx, task);
 
     const fileName = args.fileName.trim().slice(0, 180);
     if (!fileName) {
@@ -167,7 +212,7 @@ export const attach = mutation({
     }
 
     const fileId = await ctx.db.insert("assessmentTaskFiles", {
-      workspaceId: assessment.workspaceId,
+      workspaceId: task.workspaceId,
       taskId: args.taskId,
       noteId: args.noteId,
       storageId: args.storageId,
@@ -199,9 +244,7 @@ export const remove = mutation({
       await ctx.storage.delete(row.storageId);
       return null;
     }
-    const { userId } = await requireAssessmentEdit(ctx, task.assessmentId);
-    // Uploader or anyone with edit can remove
-    void userId;
+    await requireTaskFileWriteAccess(ctx, task);
     await ctx.db.delete(args.fileId);
     await ctx.storage.delete(row.storageId);
     return null;
@@ -214,7 +257,7 @@ export const listByTask = query({
   handler: async (ctx, args) => {
     const task = await ctx.db.get(args.taskId);
     if (!task) return [];
-    await requireAssessmentRead(ctx, task.assessmentId);
+    await requireTaskFileReadAccess(ctx, task);
     const rows = await ctx.db
       .query("assessmentTaskFiles")
       .withIndex("by_task", (q) => q.eq("taskId", args.taskId))

@@ -1,7 +1,13 @@
 import { v } from "convex/values";
-import { mutation, query } from "./_generated/server";
-import type { Id } from "./_generated/dataModel";
-import { requireAssessmentEdit, requireAssessmentRead } from "./lib/access";
+import { mutation, query, type MutationCtx } from "./_generated/server";
+import type { Doc, Id } from "./_generated/dataModel";
+import {
+  requireAssessmentEdit,
+  requireAssessmentRead,
+  requirePulsBoardAccess,
+  requireUserId,
+  requireWorkspaceMember,
+} from "./lib/access";
 import { htmlToPlainText, isEmptyRichText } from "../lib/rich-text";
 import { insertUserInAppNotification } from "./userInAppNotifications";
 
@@ -20,6 +26,27 @@ function resolveTaskAssigneeIds(task: {
   return [];
 }
 
+async function requireTaskNoteWriteAccess(
+  ctx: MutationCtx,
+  task: Doc<"assessmentTasks">,
+): Promise<Id<"users">> {
+  if (task.boardId) {
+    const { userId } = await requirePulsBoardAccess(
+      ctx,
+      task.boardId,
+      "editor",
+    );
+    return userId;
+  }
+  if (task.assessmentId) {
+    const { userId } = await requireAssessmentEdit(ctx, task.assessmentId);
+    return userId;
+  }
+  const userId = await requireUserId(ctx);
+  await requireWorkspaceMember(ctx, task.workspaceId, userId, "editor");
+  return userId;
+}
+
 export const listByTask = query({
   args: { taskId: v.id("assessmentTasks") },
   returns: v.array(
@@ -27,7 +54,7 @@ export const listByTask = query({
       _id: v.id("assessmentTaskNotes"),
       _creationTime: v.number(),
       workspaceId: v.id("workspaces"),
-      assessmentId: v.id("assessments"),
+      assessmentId: v.optional(v.id("assessments")),
       taskId: v.id("assessmentTasks"),
       authorUserId: v.id("users"),
       body: v.string(),
@@ -41,7 +68,14 @@ export const listByTask = query({
   handler: async (ctx, args) => {
     const task = await ctx.db.get(args.taskId);
     if (!task) return [];
-    await requireAssessmentRead(ctx, task.assessmentId);
+    if (task.assessmentId) {
+      await requireAssessmentRead(ctx, task.assessmentId);
+    } else if (task.boardId) {
+      await requirePulsBoardAccess(ctx, task.boardId, "viewer");
+    } else {
+      const userId = await requireUserId(ctx);
+      await requireWorkspaceMember(ctx, task.workspaceId, userId, "viewer");
+    }
 
     const rows = await ctx.db
       .query("assessmentTaskNotes")
@@ -80,10 +114,7 @@ export const add = mutation({
     if (!task) {
       throw new Error("Fant ikke saken.");
     }
-    const { assessment, userId } = await requireAssessmentEdit(
-      ctx,
-      task.assessmentId,
-    );
+    const userId = await requireTaskNoteWriteAccess(ctx, task);
 
     const body = args.body.trim();
     if (isEmptyRichText(body)) {
@@ -115,7 +146,7 @@ export const add = mutation({
     const mentioned = [...new Set(args.mentionedUserIds ?? [])].slice(0, 20);
     const now = Date.now();
     const noteId = await ctx.db.insert("assessmentTaskNotes", {
-      workspaceId: assessment.workspaceId,
+      workspaceId: task.workspaceId,
       assessmentId: task.assessmentId,
       taskId: args.taskId,
       authorUserId: userId,
@@ -127,8 +158,8 @@ export const add = mutation({
 
     const taskTitle = task.title.trim() || "sak";
     const href = task.boardId
-      ? `/w/${assessment.workspaceId}/puls/${task.boardId}?task=${args.taskId}`
-      : `/w/${assessment.workspaceId}/puls?task=${args.taskId}`;
+      ? `/w/${task.workspaceId}/puls/${task.boardId}?task=${args.taskId}`
+      : `/w/${task.workspaceId}/puls?task=${args.taskId}`;
 
     /** Varsle: @-taggede, tildelte på saken, og tråd-eier ved svar */
     const notifyIds = new Set<Id<"users">>(mentioned);

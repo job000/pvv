@@ -208,6 +208,7 @@ export function DialogFooter({
     <div
       className={cn(
         "border-border/60 bg-muted/10 flex shrink-0 flex-col gap-2 border-t px-5 py-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end sm:px-8 sm:py-4",
+        "max-sm:px-4 max-sm:pb-[max(0.75rem,env(safe-area-inset-bottom))]",
         className,
       )}
     >

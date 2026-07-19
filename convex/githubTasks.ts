@@ -12,9 +12,11 @@ import {
   query,
 } from "./_generated/server";
 import {
+  canAccessPulsBoard,
   canEditAssessment,
   getWorkspaceMembership,
   requireAssessmentEdit,
+  requirePulsBoardAccess,
   requireUserId,
   requireWorkspaceMember,
 } from "./lib/access";
@@ -287,20 +289,33 @@ export const assertCanEditTask = internalQuery({
     if (!row) {
       return { ok: false as const };
     }
-    const assessment = await ctx.db.get(row.assessmentId);
-    if (!assessment) {
-      return { ok: false as const };
+    if (row.boardId) {
+      const board = await ctx.db.get(row.boardId);
+      if (
+        board &&
+        (await canAccessPulsBoard(ctx, board, args.userId, "editor"))
+      ) {
+        const workspace = await ctx.db.get(row.workspaceId);
+        return { ok: true as const, task: row, workspace };
+      }
     }
-    const can = await canEditAssessment(ctx, assessment, args.userId);
-    if (!can) {
-      return { ok: false as const };
+    if (row.assessmentId) {
+      const assessment = await ctx.db.get(row.assessmentId);
+      if (!assessment) {
+        return { ok: false as const };
+      }
+      const can = await canEditAssessment(ctx, assessment, args.userId);
+      if (!can) {
+        return { ok: false as const };
+      }
+      const workspace = await ctx.db.get(row.workspaceId);
+      return {
+        ok: true as const,
+        task: row,
+        workspace,
+      };
     }
-    const workspace = await ctx.db.get(row.workspaceId);
-    return {
-      ok: true as const,
-      task: row,
-      workspace,
-    };
+    return { ok: false as const };
   },
 });
 
@@ -1373,7 +1388,14 @@ export const linkGithubIssue = mutation({
     if (!row) {
       throw new Error("Fant ikke oppgaven.");
     }
-    await requireAssessmentEdit(ctx, row.assessmentId);
+    if (row.boardId) {
+      await requirePulsBoardAccess(ctx, row.boardId, "editor");
+    } else if (row.assessmentId) {
+      await requireAssessmentEdit(ctx, row.assessmentId);
+    } else {
+      const userId = await requireUserId(ctx);
+      await requireWorkspaceMember(ctx, row.workspaceId, userId, "editor");
+    }
     let repo: string;
     let num: number;
     if (args.issueUrl !== undefined && args.issueUrl.trim() !== "") {
@@ -1410,7 +1432,14 @@ export const unlinkGithubIssue = mutation({
     if (!row) {
       throw new Error("Fant ikke oppgaven.");
     }
-    await requireAssessmentEdit(ctx, row.assessmentId);
+    if (row.boardId) {
+      await requirePulsBoardAccess(ctx, row.boardId, "editor");
+    } else if (row.assessmentId) {
+      await requireAssessmentEdit(ctx, row.assessmentId);
+    } else {
+      const userId = await requireUserId(ctx);
+      await requireWorkspaceMember(ctx, row.workspaceId, userId, "editor");
+    }
     await ctx.db.patch(args.taskId, {
       githubRepoFullName: undefined,
       githubIssueNumber: undefined,

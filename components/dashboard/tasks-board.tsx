@@ -257,9 +257,14 @@ export function TasksBoard() {
   );
   const assessmentAccessForEdit = useQuery(
     api.assessments.getMyAccess,
-    editTask ? { assessmentId: editTask.assessmentId } : "skip",
+    editTask?.assessmentId
+      ? { assessmentId: editTask.assessmentId }
+      : "skip",
   );
-  const canEdit = assessmentAccessForEdit?.canEdit ?? false;
+  const canEdit =
+    editTask?.assessmentId == null
+      ? true
+      : (assessmentAccessForEdit?.canEdit ?? false);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),

@@ -1145,10 +1145,19 @@ export default defineSchema({
     .index("by_board", ["boardId"])
     .index("by_email", ["email"]),
 
-  /** Oppgaver knyttet til én vurdering (tildeling, varsling, dashboard) — Puls-kort */
+  /** Oppgaver / Puls-kort — valgfri kobling til vurdering, prosess, ROS, PDD eller skjema */
   assessmentTasks: defineTable({
     workspaceId: v.id("workspaces"),
-    assessmentId: v.id("assessments"),
+    /** Valgfri: kort kan handle om ROS/prosess/PDD/skjema uten vurdering */
+    assessmentId: v.optional(v.id("assessments")),
+    /** Direkte kobling til prosess i registeret */
+    candidateId: v.optional(v.id("candidates")),
+    /** Direkte kobling til ROS-analyse */
+    rosAnalysisId: v.optional(v.id("rosAnalyses")),
+    /** Direkte kobling til prosessdesigndokument */
+    processDesignDocumentId: v.optional(v.id("processDesignDocuments")),
+    /** Direkte kobling til innsendingsskjema */
+    intakeFormId: v.optional(v.id("intakeForms")),
     /** Puls-tavle kortet ligger på */
     boardId: v.optional(v.id("pulsBoards")),
     /** Kolonne på Puls-tavlen */
@@ -1156,7 +1165,7 @@ export default defineSchema({
     title: v.string(),
     description: v.optional(v.string()),
     /**
-     * Delkort: peker på foreldrekort i samme vurdering (flernivå tillatt i app-logikk).
+     * Delkort: peker på foreldrekort i samme tavle/workspace (flernivå tillatt i app-logikk).
      */
     parentTaskId: v.optional(v.id("assessmentTasks")),
     /** @deprecated Bruk assigneeUserIds for flere ansvarlige */
@@ -1219,6 +1228,10 @@ export default defineSchema({
     .index("by_column", ["columnId"])
     .index("by_assignee", ["assigneeUserId"])
     .index("by_parent", ["parentTaskId"])
+    .index("by_candidate", ["candidateId"])
+    .index("by_ros_analysis", ["rosAnalysisId"])
+    .index("by_process_design_document", ["processDesignDocumentId"])
+    .index("by_intake_form", ["intakeFormId"])
     .index("by_github_issue", ["githubRepoFullName", "githubIssueNumber"]),
 
   /** Korte team-notater på vurderingen (samarbeid / hvem sa hva) */
@@ -1241,7 +1254,8 @@ export default defineSchema({
   /** Kommentarer på sakskort (issue / under-sak) med @-tagging */
   assessmentTaskNotes: defineTable({
     workspaceId: v.id("workspaces"),
-    assessmentId: v.id("assessments"),
+    /** Valgfri når Puls-kortet ikke er knyttet til en vurdering */
+    assessmentId: v.optional(v.id("assessments")),
     taskId: v.id("assessmentTasks"),
     authorUserId: v.id("users"),
     body: v.string(),

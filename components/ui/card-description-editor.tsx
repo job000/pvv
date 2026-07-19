@@ -129,6 +129,7 @@ export function CardDescriptionEditor({
   disabled,
   className,
   rows = 6,
+  placeholder,
   "aria-label": ariaLabel = "Beskrivelse",
   insertToken,
   onInsertConsumed,
@@ -145,6 +146,7 @@ export function CardDescriptionEditor({
   disabled?: boolean;
   className?: string;
   rows?: number;
+  placeholder?: string;
   "aria-label"?: string;
   insertToken?: string | null;
   onInsertConsumed?: () => void;
@@ -342,10 +344,10 @@ export function CardDescriptionEditor({
         >
           {(
             [
-              ["edit", "Rediger", Type],
-              ["preview", "Forhåndsvis", Eye],
+              ["edit", "Rediger", "Rediger", Type],
+              ["preview", "Forhåndsvis", "Vis", Eye],
             ] as const
-          ).map(([id, label, Icon]) => (
+          ).map(([id, label, shortLabel, Icon]) => (
             <button
               key={id}
               type="button"
@@ -354,14 +356,15 @@ export function CardDescriptionEditor({
               disabled={disabled}
               onClick={() => setPane(id)}
               className={cn(
-                "inline-flex h-7 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium",
+                "inline-flex h-8 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium touch-manipulation sm:h-7",
                 pane === id
                   ? "bg-foreground text-background shadow-sm"
                   : "text-muted-foreground hover:text-foreground",
               )}
             >
               <Icon className="size-3" aria-hidden />
-              {label}
+              <span className="sm:hidden">{shortLabel}</span>
+              <span className="hidden sm:inline">{label}</span>
             </button>
           ))}
         </div>
@@ -498,6 +501,7 @@ export function CardDescriptionEditor({
             onChange={(e) => pushValue(e.target.value)}
             disabled={disabled}
             placeholder={
+              placeholder ??
               "Skriv fritt — vanlig tekst fungerer.\n\nEksempler:\nDette er en vanlig setning.\n\n**fet** og *kursiv*\n- punkt\n- [ ] sjekkliste\n\nTips: bruk bilde-knappen (ikke lim inn som base64)."
             }
             rows={rows + 2}
@@ -526,11 +530,19 @@ export function CardDescriptionEditor({
               e.preventDefault();
               void insertImageFile(file);
             }}
-            className="min-h-[10rem] resize-y rounded-none border-0 bg-transparent px-3.5 py-3 text-sm leading-6 shadow-none focus-visible:ring-0"
+            className={cn(
+              "resize-y rounded-none border-0 bg-transparent px-3.5 py-3 text-base leading-6 shadow-none focus-visible:ring-0 sm:text-sm",
+              rows <= 4 ? "min-h-[7.5rem]" : "min-h-[10rem]",
+            )}
           />
         </>
       ) : (
-        <div className="min-h-[10rem] px-3.5 py-3">
+        <div
+          className={cn(
+            "px-3.5 py-3",
+            rows <= 4 ? "min-h-[7.5rem]" : "min-h-[10rem]",
+          )}
+        >
           <MarkdownView
             value={value}
             emptyLabel="Ingenting å forhåndsvise ennå."

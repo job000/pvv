@@ -43,6 +43,10 @@ import {
 import { useMutation, useQuery } from "convex/react";
 import { FilterToolbar } from "@/components/ui/filter-toolbar";
 import {
+  SearchableSelect,
+  type SearchableSelectOption,
+} from "@/components/ui/searchable-select";
+import {
   AlertTriangle,
   ArrowLeft,
   CalendarClock,
@@ -66,7 +70,6 @@ import {
   Trash2,
   Unlink,
   User,
-  UserPlus,
   UserRoundX,
   Workflow,
   X,
@@ -93,10 +96,22 @@ type LinkedRos = {
   status: string;
 };
 
+type BoardLinkKind =
+  | "none"
+  | "assessment"
+  | "process"
+  | "ros"
+  | "pdd"
+  | "form";
+
 type BoardCard = {
   _id: Id<"assessmentTasks">;
   workspaceId: Id<"workspaces">;
-  assessmentId: Id<"assessments">;
+  assessmentId: Id<"assessments"> | null;
+  candidateId?: Id<"candidates"> | null;
+  rosAnalysisId?: Id<"rosAnalyses"> | null;
+  processDesignDocumentId?: Id<"processDesignDocuments"> | null;
+  intakeFormId?: Id<"intakeForms"> | null;
   boardId?: Id<"pulsBoards"> | null;
   columnId?: Id<"pulsBoardColumns"> | null;
   title: string;
@@ -115,6 +130,9 @@ type BoardCard = {
   dashboardRank?: number;
   createdAt: number;
   assessmentTitle: string;
+  linkKind?: BoardLinkKind;
+  linkLabel?: string;
+  linkHref?: string | null;
   assigneeName: string | null;
   assignees: { userId: Id<"users">; name: string }[];
   githubIssueUrl: string | null;
@@ -222,37 +240,34 @@ function CompactSelect({
   value,
   onChange,
   disabled,
-  children,
+  options,
   "aria-label": ariaLabel,
+  allowClear = true,
+  clearLabel = "Ingen",
 }: {
   id: string;
   value: string;
   onChange: (value: string) => void;
   disabled?: boolean;
-  children: ReactNode;
+  options: SearchableSelectOption[];
   "aria-label": string;
+  allowClear?: boolean;
+  clearLabel?: string;
 }) {
   return (
-    <div className="relative max-w-sm">
-      <select
-        id={id}
-        aria-label={ariaLabel}
-        value={value}
-        disabled={disabled}
-        onChange={(e) => onChange(e.target.value)}
-        className={cn(
-          "border-input bg-background flex h-10 w-full min-w-0 cursor-pointer appearance-none rounded-lg border px-3 pr-9 text-sm shadow-sm transition-[border-color,box-shadow]",
-          "focus-visible:border-ring focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30",
-          "disabled:cursor-not-allowed disabled:opacity-60",
-        )}
-      >
-        {children}
-      </select>
-      <ChevronDown
-        className="text-muted-foreground pointer-events-none absolute right-2.5 top-1/2 size-3.5 -translate-y-1/2 opacity-70"
-        aria-hidden
-      />
-    </div>
+    <SearchableSelect
+      id={id}
+      value={value}
+      onChange={onChange}
+      options={options}
+      disabled={disabled}
+      aria-label={ariaLabel}
+      allowClear={allowClear}
+      clearLabel={clearLabel}
+      placeholder={clearLabel}
+      className="max-w-sm"
+      triggerClassName="h-10 min-h-10 rounded-lg"
+    />
   );
 }
 
@@ -307,37 +322,24 @@ function AssigneePicker({
         </ul>
       )}
       {canEdit && available.length > 0 ? (
-        <div className="relative max-w-xs">
-          <UserPlus
-            className="text-muted-foreground pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2"
-            aria-hidden
-          />
-          <select
-            aria-label="Legg til tildelt"
-            value=""
-            onChange={(e) => {
-              const id = e.target.value as Id<"users">;
-              if (!id) return;
-              if (selectedIds.includes(id)) return;
-              onChange([...selectedIds, id]);
-            }}
-            className={cn(
-              "border-input bg-background flex h-9 w-full cursor-pointer appearance-none rounded-lg border pl-8 pr-8 text-sm",
-              "text-muted-foreground focus-visible:border-ring focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30",
-            )}
-          >
-            <option value="">Legg til person…</option>
-            {available.map((m) => (
-              <option key={m.userId} value={m.userId}>
-                {m.label}
-              </option>
-            ))}
-          </select>
-          <ChevronDown
-            className="text-muted-foreground pointer-events-none absolute right-2.5 top-1/2 size-3.5 -translate-y-1/2 opacity-70"
-            aria-hidden
-          />
-        </div>
+        <SearchableSelect
+          value=""
+          onChange={(next) => {
+            const id = next as Id<"users">;
+            if (!id) return;
+            if (selectedIds.includes(id)) return;
+            onChange([...selectedIds, id]);
+          }}
+          options={available.map((m) => ({
+            value: m.userId,
+            label: m.label,
+          }))}
+          aria-label="Legg til tildelt"
+          placeholder="Legg til person…"
+          allowClear={false}
+          className="max-w-xs"
+          triggerClassName="h-9 min-h-9 rounded-lg"
+        />
       ) : null}
     </div>
   );
@@ -431,8 +433,18 @@ type BoardColumnDoc = {
 
 /** Normaliser kort fra API (eldre payloads uten arrays). */
 function normalizeBoardCard(raw: BoardCard): BoardCard {
+  const linkKind = raw.linkKind ?? (raw.assessmentId ? "assessment" : "none");
+  const linkLabel =
+    raw.linkLabel?.trim() ||
+    raw.assessmentTitle?.trim() ||
+    (linkKind === "none" ? "Uten kobling" : "Kobling");
   return {
     ...raw,
+    assessmentId: raw.assessmentId ?? null,
+    candidateId: raw.candidateId ?? null,
+    rosAnalysisId: raw.rosAnalysisId ?? null,
+    processDesignDocumentId: raw.processDesignDocumentId ?? null,
+    intakeFormId: raw.intakeFormId ?? null,
     depth: raw.depth ?? 0,
     columnId: raw.columnId ?? null,
     labels: Array.isArray(raw.labels) ? raw.labels : undefined,
@@ -441,6 +453,10 @@ function normalizeBoardCard(raw: BoardCard): BoardCard {
       : [],
     linkedRos: Array.isArray(raw.linkedRos) ? raw.linkedRos : [],
     assignees: Array.isArray(raw.assignees) ? raw.assignees : [],
+    linkKind,
+    linkLabel,
+    linkHref: raw.linkHref ?? null,
+    assessmentTitle: raw.assessmentTitle?.trim() || linkLabel,
   };
 }
 
@@ -657,7 +673,7 @@ function IssueCardView({
 
       <div className="mt-2.5 flex items-center justify-between gap-2">
         <p className="text-muted-foreground truncate text-[11px]">
-          {card.assessmentTitle}
+          {card.linkLabel || card.assessmentTitle}
         </p>
         <AssigneeStack names={card.assignees.map((a) => a.name)} />
       </div>
@@ -1157,6 +1173,7 @@ const DETAIL_TABS: { id: DetailTab; label: string }[] = [
 ];
 
 type DetailSize = "normal" | "large" | "full";
+
 type CommentsPlacement = "tab" | "overview";
 
 export function IssuesProjectBoard({
@@ -1189,9 +1206,6 @@ export function IssuesProjectBoard({
   const columnsRaw = useQuery(api.pulsBoardColumns.listByBoard, { boardId });
   const boardMeta = useQuery(api.pulsBoards.get, { boardId });
   const otherBoards = useQuery(api.pulsBoards.listMineInWorkspace, {
-    workspaceId,
-  });
-  const assessments = useQuery(api.assessments.listByWorkspace, {
     workspaceId,
   });
   const workspace = useQuery(api.workspaces.get, { workspaceId });
@@ -1535,10 +1549,27 @@ export function IssuesProjectBoard({
   const [busy, setBusy] = useState(false);
 
   const [createOpen, setCreateOpen] = useState(false);
+  const createLinkTargets = useQuery(
+    api.assessmentTasks.listCreateLinkTargets,
+    createOpen ? { workspaceId } : "skip",
+  );
   const [createTitle, setCreateTitle] = useState("");
   const [createAssessmentId, setCreateAssessmentId] = useState<
     Id<"assessments"> | ""
   >("");
+  const [createCandidateId, setCreateCandidateId] = useState<
+    Id<"candidates"> | ""
+  >("");
+  const [createRosId, setCreateRosId] = useState<Id<"rosAnalyses"> | "">("");
+  const [createPddId, setCreatePddId] = useState<
+    Id<"processDesignDocuments"> | ""
+  >("");
+  const [createFormId, setCreateFormId] = useState<Id<"intakeForms"> | "">("");
+  const [createLinksOpen, setCreateLinksOpen] = useState(false);
+  const [createDescription, setCreateDescription] = useState("");
+  const [createIssueType, setCreateIssueType] = useState("Oppgave");
+  const [createMoreOpen, setCreateMoreOpen] = useState(false);
+  const [createFullscreen, setCreateFullscreen] = useState(false);
   const [createParentId, setCreateParentId] = useState<
     Id<"assessmentTasks"> | ""
   >("");
@@ -1577,7 +1608,9 @@ export function IssuesProjectBoard({
 
   const assessmentFilterOptions = useMemo(() => {
     const map = new Map<Id<"assessments">, string>();
-    for (const c of cards) map.set(c.assessmentId, c.assessmentTitle);
+    for (const c of cards) {
+      if (c.assessmentId) map.set(c.assessmentId, c.assessmentTitle);
+    }
     return [...map.entries()]
       .map(([id, title]) => ({ id, title }))
       .sort((a, b) => a.title.localeCompare(b.title, "nb"));
@@ -1841,25 +1874,120 @@ export function IssuesProjectBoard({
   };
 
   const createParentOptions = useMemo(() => {
-    if (!createAssessmentId) return [];
     return cards
-      .filter((c) => c.assessmentId === createAssessmentId)
+      .filter((c) => {
+        if (createAssessmentId && c.assessmentId) {
+          return c.assessmentId === createAssessmentId;
+        }
+        return true;
+      })
       .sort((a, b) => {
         if (a.depth !== b.depth) return a.depth - b.depth;
         return a.title.localeCompare(b.title, "nb");
       });
   }, [cards, createAssessmentId]);
 
+  const createLinkOptionLists = useMemo(() => {
+    const targets = createLinkTargets;
+    if (!targets) {
+      return {
+        assessments: [] as SearchableSelectOption[],
+        processes: [] as SearchableSelectOption[],
+        ros: [] as SearchableSelectOption[],
+        pdds: [] as SearchableSelectOption[],
+        forms: [] as SearchableSelectOption[],
+      };
+    }
+    return {
+      assessments: targets.assessments.map((a) => ({
+        value: a.id,
+        label: a.title,
+      })),
+      processes: targets.processes.map((p) => ({
+        value: p.id,
+        label: p.code ? `${p.code} — ${p.name}` : p.name,
+      })),
+      ros: targets.ros.map((r) => ({ value: r.id, label: r.title })),
+      pdds: targets.pdds.map((d) => ({ value: d.id, label: d.title })),
+      forms: targets.forms.map((f) => ({ value: f.id, label: f.title })),
+    };
+  }, [createLinkTargets]);
+
+  const createLinkSummary = useMemo(() => {
+    const chips: Array<{ key: string; label: string; onClear: () => void }> =
+      [];
+    if (createAssessmentId) {
+      const title =
+        createLinkTargets?.assessments.find((a) => a.id === createAssessmentId)
+          ?.title ?? "Vurdering";
+      chips.push({
+        key: "assessment",
+        label: title,
+        onClear: () => setCreateAssessmentId(""),
+      });
+    }
+    if (createCandidateId) {
+      const p = createLinkTargets?.processes.find(
+        (x) => x.id === createCandidateId,
+      );
+      chips.push({
+        key: "process",
+        label: p
+          ? p.code
+            ? `${p.code} — ${p.name}`
+            : p.name
+          : "Prosess",
+        onClear: () => setCreateCandidateId(""),
+      });
+    }
+    if (createRosId) {
+      chips.push({
+        key: "ros",
+        label:
+          createLinkTargets?.ros.find((r) => r.id === createRosId)?.title ??
+          "ROS",
+        onClear: () => setCreateRosId(""),
+      });
+    }
+    if (createPddId) {
+      chips.push({
+        key: "pdd",
+        label:
+          createLinkTargets?.pdds.find((d) => d.id === createPddId)?.title ??
+          "PDD",
+        onClear: () => setCreatePddId(""),
+      });
+    }
+    if (createFormId) {
+      chips.push({
+        key: "form",
+        label:
+          createLinkTargets?.forms.find((f) => f.id === createFormId)?.title ??
+          "Skjema",
+        onClear: () => setCreateFormId(""),
+      });
+    }
+    return chips;
+  }, [
+    createAssessmentId,
+    createCandidateId,
+    createFormId,
+    createLinkTargets,
+    createPddId,
+    createRosId,
+  ]);
+
   const linkParentOptions = useMemo(() => {
     if (!selected) return [];
     const blocked = collectDescendantIds(selected._id, cards);
     return cards
-      .filter(
-        (c) =>
-          c.assessmentId === selected.assessmentId &&
-          c._id !== selected._id &&
-          !blocked.has(c._id),
-      )
+      .filter((c) => {
+        if (c._id === selected._id || blocked.has(c._id)) return false;
+        if (selected.assessmentId && c.assessmentId) {
+          return c.assessmentId === selected.assessmentId;
+        }
+        return true;
+      })
       .sort((a, b) => {
         if (a.depth !== b.depth) return a.depth - b.depth;
         return a.title.localeCompare(b.title, "nb");
@@ -1875,12 +2003,6 @@ export function IssuesProjectBoard({
         return a.title.localeCompare(b.title, "nb");
       });
   }, [selected, cards]);
-
-  const assessmentOptions = useMemo(() => {
-    return (assessments ?? [])
-      .map((a) => ({ id: a._id, title: a.title.trim() || "Uten tittel" }))
-      .sort((a, b) => a.title.localeCompare(b.title, "nb"));
-  }, [assessments]);
 
   const memberOptions = useMemo(() => {
     return (members ?? [])
@@ -1986,20 +2108,39 @@ export function IssuesProjectBoard({
     }
   };
 
-  const openCreateAsSub = (parent: BoardCard) => {
-    setCreateOpen(true);
+  const resetCreateForm = (parent?: BoardCard) => {
     setCreateTitle("");
-    setCreateAssessmentId(parent.assessmentId);
-    setCreateParentId(parent._id);
-    const parentCol =
-      parent.columnId && createColumnOptions.some((c) => c._id === parent.columnId)
+    setCreateDescription("");
+    setCreateIssueType(parent?.issueType?.trim() || "Oppgave");
+    setCreateMoreOpen(Boolean(parent));
+    const hasInheritedLinks = Boolean(
+      parent?.assessmentId ||
+        parent?.candidateId ||
+        parent?.rosAnalysisId ||
+        parent?.processDesignDocumentId ||
+        parent?.intakeFormId,
+    );
+    setCreateLinksOpen(hasInheritedLinks);
+    setCreateParentId(parent?._id ?? "");
+    setCreateColumnId(
+      parent?.columnId &&
+        createColumnOptions.some((c) => c._id === parent.columnId)
         ? parent.columnId
-        : defaultCreateColumnId;
-    setCreateColumnId(parentCol);
-    // Datoer er valgfrie for delkort — ikke arv fra forelder
+        : defaultCreateColumnId,
+    );
     setCreateStart("");
     setCreateDue("");
     setCreateAssigneeIds([]);
+    setCreateAssessmentId(parent?.assessmentId ?? "");
+    setCreateCandidateId(parent?.candidateId ?? "");
+    setCreateRosId(parent?.rosAnalysisId ?? "");
+    setCreatePddId(parent?.processDesignDocumentId ?? "");
+    setCreateFormId(parent?.intakeFormId ?? "");
+  };
+
+  const openCreateAsSub = (parent: BoardCard) => {
+    setCreateOpen(true);
+    resetCreateForm(parent);
   };
 
   const onDragStart = (e: DragStartEvent) => {
@@ -2114,10 +2255,6 @@ export function IssuesProjectBoard({
       toast.error("Tittel mangler");
       return;
     }
-    if (!createAssessmentId) {
-      toast.error("Velg hvilken vurdering kortet hører til");
-      return;
-    }
     const startAt = fromDateInput(createStart);
     const dueAt = fromDateInput(createDue);
     if (startAt && dueAt && startAt > dueAt) {
@@ -2127,9 +2264,18 @@ export function IssuesProjectBoard({
     setBusy(true);
     try {
       await createTask({
-        assessmentId: createAssessmentId,
         boardId,
+        workspaceId,
         title,
+        description: isEmptyRichText(createDescription)
+          ? undefined
+          : createDescription,
+        issueType: createIssueType.trim() || undefined,
+        assessmentId: createAssessmentId || undefined,
+        candidateId: createCandidateId || undefined,
+        rosAnalysisId: createRosId || undefined,
+        processDesignDocumentId: createPddId || undefined,
+        intakeFormId: createFormId || undefined,
         columnId: createColumnId || undefined,
         parentTaskId: createParentId || undefined,
         startAt: startAt ?? undefined,
@@ -2141,12 +2287,7 @@ export function IssuesProjectBoard({
         createParentId ? pulsBoardCopy.createdSub : pulsBoardCopy.created,
       );
       setCreateOpen(false);
-      setCreateTitle("");
-      setCreateParentId("");
-      setCreateColumnId(defaultCreateColumnId);
-      setCreateStart("");
-      setCreateDue("");
-      setCreateAssigneeIds([]);
+      resetCreateForm();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Kunne ikke opprette");
     } finally {
@@ -2169,9 +2310,6 @@ export function IssuesProjectBoard({
       </div>
     );
   }
-
-  const selectClass =
-    "border-input bg-background h-9 w-full min-w-0 rounded-lg border px-2 text-sm sm:w-auto sm:min-w-[9.5rem]";
 
   const activeFilterChips: { key: string; label: string; clear: () => void }[] =
     [];
@@ -2557,13 +2695,7 @@ export function IssuesProjectBoard({
             className="h-9 rounded-lg"
             onClick={() => {
               setCreateOpen(true);
-              setCreateTitle("");
-              setCreateParentId("");
-              setCreateColumnId(defaultCreateColumnId);
-              setCreateStart("");
-              setCreateDue("");
-              setCreateAssessmentId(assessmentOptions[0]?.id ?? "");
-              setCreateAssigneeIds([]);
+              resetCreateForm();
             }}
           >
             <Plus className="size-3.5" />
@@ -2652,126 +2784,131 @@ export function IssuesProjectBoard({
             <FilterToolbar>
               <div className="min-w-0 space-y-1">
                 <Label className="text-xs">Ansvarlig</Label>
-                <select
-                  className={selectClass}
+                <SearchableSelect
+                  aria-label="Ansvarlig"
                   value={filters.assignee}
-                  onChange={(e) =>
-                    patchFilters({
-                      assignee: e.target.value as AssigneeFilter,
-                    })
+                  onChange={(v) =>
+                    patchFilters({ assignee: v as AssigneeFilter })
                   }
-                >
-                  <option value="all">Alle</option>
-                  <option value="me">Meg</option>
-                  <option value="unassigned">Utildelt</option>
-                  {assigneeFilterOptions.map((m) => (
-                    <option key={m.userId} value={m.userId}>
-                      {m.label}
-                    </option>
-                  ))}
-                </select>
+                  allowClear={false}
+                  options={[
+                    { value: "all", label: "Alle" },
+                    { value: "me", label: "Meg" },
+                    { value: "unassigned", label: "Utildelt" },
+                    ...assigneeFilterOptions.map((m) => ({
+                      value: m.userId,
+                      label: m.label,
+                    })),
+                  ]}
+                  triggerClassName="min-h-10 rounded-lg"
+                />
               </div>
               <div className="min-w-0 space-y-1">
                 <Label className="text-xs">Kolonne</Label>
-                <select
-                  className={selectClass}
+                <SearchableSelect
+                  aria-label="Kolonne"
                   value={filters.columnId}
-                  onChange={(e) =>
+                  onChange={(v) =>
                     patchFilters({
-                      columnId: e.target.value as Id<"pulsBoardColumns"> | "",
+                      columnId: v as Id<"pulsBoardColumns"> | "",
                     })
                   }
-                >
-                  <option value="">Alle kolonner</option>
-                  {columns.map((c) => (
-                    <option key={c._id} value={c._id}>
-                      {c.name}
-                    </option>
-                  ))}
-                </select>
+                  clearLabel="Alle kolonner"
+                  placeholder="Alle kolonner"
+                  options={columns.map((c) => ({
+                    value: c._id,
+                    label: c.name,
+                  }))}
+                  triggerClassName="min-h-10 rounded-lg"
+                />
               </div>
               <div className="min-w-0 space-y-1">
                 <Label className="text-xs">Type</Label>
-                <select
-                  className={selectClass}
+                <SearchableSelect
+                  aria-label="Type"
                   value={filters.cardType}
-                  onChange={(e) =>
-                    patchFilters({
-                      cardType: e.target.value as CardTypeFilter,
-                    })
+                  onChange={(v) =>
+                    patchFilters({ cardType: v as CardTypeFilter })
                   }
-                >
-                  <option value="all">Alle kort</option>
-                  <option value="top">Toppnivå</option>
-                  <option value="sub">Delkort</option>
-                </select>
+                  allowClear={false}
+                  options={[
+                    { value: "all", label: "Alle kort" },
+                    { value: "top", label: "Toppnivå" },
+                    { value: "sub", label: "Delkort" },
+                  ]}
+                  triggerClassName="min-h-10 rounded-lg"
+                />
               </div>
               <div className="min-w-0 space-y-1">
                 <Label className="text-xs">Status</Label>
-                <select
-                  className={selectClass}
+                <SearchableSelect
+                  aria-label="Status"
                   value={filters.status}
-                  onChange={(e) =>
-                    patchFilters({ status: e.target.value as StatusFilter })
+                  onChange={(v) =>
+                    patchFilters({ status: v as StatusFilter })
                   }
-                >
-                  <option value="all">Åpne og ferdige</option>
-                  <option value="open">Kun åpne</option>
-                  <option value="done">Kun ferdige</option>
-                </select>
+                  allowClear={false}
+                  options={[
+                    { value: "all", label: "Åpne og ferdige" },
+                    { value: "open", label: "Kun åpne" },
+                    { value: "done", label: "Kun ferdige" },
+                  ]}
+                  triggerClassName="min-h-10 rounded-lg"
+                />
               </div>
               <div className="min-w-0 space-y-1">
                 <Label className="text-xs">Frist</Label>
-                <select
-                  className={selectClass}
+                <SearchableSelect
+                  aria-label="Frist"
                   value={filters.due}
-                  onChange={(e) =>
-                    patchFilters({ due: e.target.value as DueFilter })
-                  }
-                >
-                  <option value="all">Alle frister</option>
-                  <option value="overdue">Forfalt</option>
-                  <option value="week">Neste 7 dager</option>
-                  <option value="none">Uten frist</option>
-                </select>
+                  onChange={(v) => patchFilters({ due: v as DueFilter })}
+                  allowClear={false}
+                  options={[
+                    { value: "all", label: "Alle frister" },
+                    { value: "overdue", label: "Forfalt" },
+                    { value: "week", label: "Neste 7 dager" },
+                    { value: "none", label: "Uten frist" },
+                  ]}
+                  triggerClassName="min-h-10 rounded-lg"
+                />
               </div>
               <div className="min-w-0 space-y-1">
                 <Label className="text-xs">Prosess</Label>
-                <select
-                  className={selectClass}
+                <SearchableSelect
+                  aria-label="Prosess"
                   value={filters.processId}
-                  onChange={(e) =>
+                  onChange={(v) =>
                     patchFilters({
-                      processId: e.target.value as Id<"candidates"> | "",
+                      processId: v as Id<"candidates"> | "",
                     })
                   }
-                >
-                  <option value="">{pulsBoardCopy.allProcesses}</option>
-                  {processFilterOptions.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.code ? `${p.code} — ${p.name}` : p.name}
-                    </option>
-                  ))}
-                </select>
+                  clearLabel={pulsBoardCopy.allProcesses}
+                  placeholder={pulsBoardCopy.allProcesses}
+                  options={processFilterOptions.map((p) => ({
+                    value: p.id,
+                    label: p.code ? `${p.code} — ${p.name}` : p.name,
+                  }))}
+                  triggerClassName="min-h-10 rounded-lg"
+                />
               </div>
               <div className="min-w-0 space-y-1">
                 <Label className="text-xs">Vurdering</Label>
-                <select
-                  className={selectClass}
+                <SearchableSelect
+                  aria-label="Vurdering"
                   value={filters.assessmentId}
-                  onChange={(e) =>
+                  onChange={(v) =>
                     patchFilters({
-                      assessmentId: e.target.value as Id<"assessments"> | "",
+                      assessmentId: v as Id<"assessments"> | "",
                     })
                   }
-                >
-                  <option value="">Alle vurderinger</option>
-                  {assessmentFilterOptions.map((a) => (
-                    <option key={a.id} value={a.id}>
-                      {a.title}
-                    </option>
-                  ))}
-                </select>
+                  clearLabel="Alle vurderinger"
+                  placeholder="Alle vurderinger"
+                  options={assessmentFilterOptions.map((a) => ({
+                    value: a.id,
+                    label: a.title,
+                  }))}
+                  triggerClassName="min-h-10 rounded-lg"
+                />
               </div>
             </FilterToolbar>
           </div>
@@ -2947,13 +3084,19 @@ export function IssuesProjectBoard({
                     ) : null}
                   </td>
                   <td className="text-muted-foreground px-3 py-2.5">
-                    <select
-                      className="border-input bg-background h-8 max-w-[10rem] rounded-md border px-1.5 text-xs"
+                    <SearchableSelect
+                      aria-label="Kolonne"
                       value={card.columnId ?? ""}
                       disabled={!card.canEdit}
-                      onChange={(e) => {
-                        const columnId = e.target
-                          .value as Id<"pulsBoardColumns">;
+                      allowClear={false}
+                      className="max-w-[10rem]"
+                      triggerClassName="h-8 min-h-8 rounded-md px-2 text-xs"
+                      options={columns.map((c) => ({
+                        value: c._id,
+                        label: c.name,
+                      }))}
+                      onChange={(v) => {
+                        const columnId = v as Id<"pulsBoardColumns">;
                         const col = columns.find((c) => c._id === columnId);
                         if (!col) return;
                         if (col.isDone && card.status !== "done") {
@@ -2969,13 +3112,7 @@ export function IssuesProjectBoard({
                             ),
                         );
                       }}
-                    >
-                      {columns.map((c) => (
-                        <option key={c._id} value={c._id}>
-                          {c.name}
-                        </option>
-                      ))}
-                    </select>
+                    />
                   </td>
                   <td className="text-muted-foreground max-w-[12rem] truncate px-3 py-2.5">
                     {card.assessmentTitle}
@@ -3046,18 +3183,21 @@ export function IssuesProjectBoard({
             </div>
             <div className="space-y-1">
               <Label htmlFor="create-view-layout">Layout</Label>
-              <select
+              <SearchableSelect
                 id="create-view-layout"
-                className="border-input bg-background h-10 w-full rounded-lg border px-3 text-sm"
+                aria-label="Layout"
                 value={createViewLayout}
-                onChange={(e) =>
-                  setCreateViewLayout(e.target.value as BoardViewLayout)
+                onChange={(v) =>
+                  setCreateViewLayout(v as BoardViewLayout)
                 }
-              >
-                <option value="board">Tavle</option>
-                <option value="table">Tabell</option>
-                <option value="roadmap">Roadmap</option>
-              </select>
+                allowClear={false}
+                options={[
+                  { value: "board", label: "Tavle" },
+                  { value: "table", label: "Tabell" },
+                  { value: "roadmap", label: "Roadmap" },
+                ]}
+                triggerClassName="min-h-10 rounded-lg"
+              />
             </div>
           </DialogBody>
           <DialogFooter>
@@ -3152,160 +3292,379 @@ export function IssuesProjectBoard({
         </DialogContent>
       </Dialog>
 
-      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-        <DialogContent size="md" titleId="create-issue-title">
-          <DialogHeader>
-            <h2
-              id="create-issue-title"
-              className="font-heading text-lg font-semibold"
-            >
-              {createParentId
-                ? pulsBoardCopy.createSubTitle
-                : pulsBoardCopy.createTitle}
-            </h2>
-            <p className="text-muted-foreground mt-1 text-sm">
-              {createParentId
-                ? pulsBoardCopy.createHintSub
-                : pulsBoardCopy.createHint}
-            </p>
+      <Dialog
+        open={createOpen}
+        onOpenChange={(open) => {
+          setCreateOpen(open);
+          if (!open) {
+            setCreateFullscreen(false);
+            resetCreateForm();
+          }
+        }}
+      >
+        <DialogContent
+          size={createFullscreen ? "5xl" : "lg"}
+          fillViewport={createFullscreen}
+          titleId="create-issue-title"
+          className={cn(
+            !createFullscreen &&
+              "max-sm:h-[min(92dvh,42rem)] max-sm:max-h-[calc(100dvh-env(safe-area-inset-top,0px)-0.5rem)] max-sm:rounded-b-none",
+          )}
+        >
+          <DialogHeader className="max-sm:space-y-0 max-sm:pb-3">
+            {!createFullscreen ? (
+              <div
+                className="mx-auto mb-2.5 h-1 w-10 rounded-full bg-border sm:hidden"
+                aria-hidden
+              />
+            ) : null}
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <h2
+                  id="create-issue-title"
+                  className="font-heading text-[1.35rem] font-semibold tracking-tight sm:text-lg"
+                >
+                  {createParentId
+                    ? pulsBoardCopy.createSubTitle
+                    : pulsBoardCopy.createTitle}
+                </h2>
+                <p className="text-muted-foreground mt-1 text-sm leading-snug max-sm:line-clamp-2">
+                  {createParentId
+                    ? pulsBoardCopy.createHintSub
+                    : pulsBoardCopy.createHint}
+                </p>
+              </div>
+              <button
+                type="button"
+                title={
+                  createFullscreen
+                    ? pulsBoardCopy.createSizeExitFull
+                    : pulsBoardCopy.createSizeFull
+                }
+                aria-label={
+                  createFullscreen
+                    ? pulsBoardCopy.createSizeExitFull
+                    : pulsBoardCopy.createSizeFull
+                }
+                aria-pressed={createFullscreen}
+                className="text-muted-foreground hover:text-foreground hidden size-9 shrink-0 items-center justify-center rounded-lg border border-border/50 touch-manipulation sm:inline-flex"
+                onClick={() => setCreateFullscreen((v) => !v)}
+              >
+                {createFullscreen ? (
+                  <Minimize2 className="size-3.5" aria-hidden />
+                ) : (
+                  <Maximize2 className="size-3.5" aria-hidden />
+                )}
+              </button>
+            </div>
           </DialogHeader>
-          <DialogBody className="space-y-4">
-            <div className="space-y-1">
+          <DialogBody className="space-y-5 max-sm:space-y-4 max-sm:pb-2">
+            <div className="space-y-1.5">
               <Label htmlFor="create-title">Tittel</Label>
               <Input
                 id="create-title"
                 value={createTitle}
                 onChange={(e) => setCreateTitle(e.target.value)}
                 placeholder="Hva skal gjøres?"
-                className="min-h-11 sm:min-h-9"
+                className="min-h-12 text-base sm:min-h-10 sm:text-sm"
               />
             </div>
-            <div className="space-y-1">
-              <Label htmlFor="create-assessment">Vurdering</Label>
-              <select
-                id="create-assessment"
-                className="border-input bg-background flex min-h-11 w-full rounded-lg border px-2 text-sm sm:min-h-9"
-                value={createAssessmentId}
-                onChange={(e) => {
-                  setCreateAssessmentId(
-                    e.target.value as Id<"assessments"> | "",
-                  );
-                  setCreateParentId("");
-                }}
-              >
-                <option value="">Velg vurdering …</option>
-                {assessmentOptions.map((a) => (
-                  <option key={a.id} value={a.id}>
-                    {a.title}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="space-y-1">
-              <Label htmlFor="create-parent">{pulsBoardCopy.parentLabel}</Label>
-              <select
-                id="create-parent"
-                className="border-input bg-background flex min-h-11 w-full rounded-lg border px-2 text-sm sm:min-h-9"
-                value={createParentId}
-                onChange={(e) =>
-                  setCreateParentId(
-                    e.target.value as Id<"assessmentTasks"> | "",
-                  )
-                }
-                disabled={!createAssessmentId}
-              >
-                <option value="">{pulsBoardCopy.parentNone}</option>
-                {createParentOptions.map((p) => (
-                  <option key={p._id} value={p._id}>
-                    {pulsBoardCopy.parentUnder(parentOptionLabel(p))}
-                  </option>
-                ))}
-              </select>
-              <p className="text-muted-foreground text-[11px]">
-                {pulsBoardCopy.parentHint}
-              </p>
-            </div>
-            <div className="space-y-1">
-              <Label htmlFor="create-column">Kolonne / status</Label>
-              <select
-                id="create-column"
-                className="border-input bg-background flex min-h-11 w-full rounded-lg border px-2 text-sm sm:min-h-9"
-                value={createColumnId}
-                onChange={(e) =>
-                  setCreateColumnId(
-                    e.target.value as Id<"pulsBoardColumns"> | "",
-                  )
-                }
-              >
-                {createColumnOptions.length === 0 ? (
-                  <option value="">Ingen kolonner</option>
-                ) : (
-                  createColumnOptions.map((c) => (
-                    <option key={c._id} value={c._id}>
-                      {c.name}
-                    </option>
-                  ))
-                )}
-              </select>
-              <p className="text-muted-foreground text-[11px]">
-                Velg hvor kortet skal ligge. Ferdig-kolonnen er ikke tilgjengelig
-                for nye kort.
-              </p>
-            </div>
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <div className="space-y-1">
-                <Label htmlFor="create-start">Startdato (valgfritt)</Label>
-                <Input
-                  id="create-start"
-                  type="date"
-                  value={createStart}
-                  onChange={(e) => setCreateStart(e.target.value)}
-                  className="min-h-11 sm:min-h-9"
-                />
-              </div>
-              <div className="space-y-1">
-                <Label htmlFor="create-due">Sluttdato (valgfritt)</Label>
-                <Input
-                  id="create-due"
-                  type="date"
-                  value={createDue}
-                  onChange={(e) => setCreateDue(e.target.value)}
-                  className="min-h-11 sm:min-h-9"
-                />
-              </div>
-            </div>
-            <p className="text-muted-foreground -mt-2 text-[11px]">
-              {createParentId
-                ? "Datoer er valgfrie for delkort — du kan la dem stå tomme."
-                : "Datoer er valgfrie — du kan la dem stå tomme."}
-            </p>
+
             <div className="space-y-1.5">
-              <Label>Tildelt</Label>
-              <p className="text-muted-foreground text-[11px]">
-                Valgfritt — nye tildelte får varsel.
-              </p>
-              <AssigneePicker
-                selectedIds={createAssigneeIds}
-                members={memberOptions}
-                canEdit
-                onChange={setCreateAssigneeIds}
-                emptyLabel="Ingen tildelt ennå"
+              <Label id="create-issue-type-label">Type</Label>
+              <div
+                role="group"
+                aria-labelledby="create-issue-type-label"
+                className="grid grid-cols-2 gap-2 sm:hidden"
+              >
+                {ISSUE_TYPE_OPTIONS.map((t) => {
+                  const active = createIssueType === t;
+                  return (
+                    <button
+                      key={t}
+                      type="button"
+                      aria-pressed={active}
+                      onClick={() => setCreateIssueType(t)}
+                      className={cn(
+                        "min-h-11 rounded-xl border px-3 text-sm font-medium touch-manipulation transition-colors",
+                        active
+                          ? "border-foreground/25 bg-foreground text-background"
+                          : "border-border/60 bg-background text-foreground hover:bg-muted/50",
+                      )}
+                    >
+                      {t}
+                    </button>
+                  );
+                })}
+              </div>
+              <div className="hidden sm:block sm:max-w-[10rem]">
+                <SearchableSelect
+                  id="create-issue-type"
+                  aria-label="Type"
+                  value={createIssueType}
+                  onChange={setCreateIssueType}
+                  options={optionsWithCurrent(
+                    ISSUE_TYPE_OPTIONS,
+                    createIssueType,
+                  ).map((t) => ({ value: t, label: t }))}
+                  allowClear={false}
+                  placeholder="Velg type"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label>Beskrivelse</Label>
+              <CardDescriptionEditor
+                key={createOpen ? "create-open" : "create-closed"}
+                aria-label="Beskrivelse"
+                value={createDescription}
+                onChange={setCreateDescription}
+                startInEditMode
+                rows={createFullscreen ? 10 : 4}
+                placeholder="Valgfritt — hva skal gjøres, hvorfor, eller lenker."
               />
             </div>
+
+            <div className="space-y-2">
+              <button
+                type="button"
+                className="hover:bg-muted/40 flex min-h-12 w-full items-center justify-between gap-2 rounded-2xl border border-border/50 px-3.5 text-left text-sm touch-manipulation sm:min-h-10 sm:rounded-xl sm:px-3"
+                onClick={() => setCreateLinksOpen((v) => !v)}
+                aria-expanded={createLinksOpen}
+              >
+                <span className="min-w-0">
+                  <span className="text-foreground font-medium">
+                    {createLinksOpen
+                      ? pulsBoardCopy.createLinkHide
+                      : pulsBoardCopy.createLinkShow}
+                  </span>
+                  {!createLinksOpen && createLinkSummary.length > 0 ? (
+                    <span className="text-muted-foreground ml-2 text-xs">
+                      ({createLinkSummary.length})
+                    </span>
+                  ) : null}
+                </span>
+                <ChevronDown
+                  className={cn(
+                    "text-muted-foreground size-4 shrink-0 transition-transform",
+                    createLinksOpen && "rotate-180",
+                  )}
+                  aria-hidden
+                />
+              </button>
+
+              {!createLinksOpen && createLinkSummary.length > 0 ? (
+                <div className="flex flex-wrap gap-2 px-0.5">
+                  {createLinkSummary.map((chip) => (
+                    <button
+                      key={chip.key}
+                      type="button"
+                      onClick={chip.onClear}
+                      className="bg-muted text-foreground inline-flex max-w-full items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium touch-manipulation"
+                      title="Fjern kobling"
+                    >
+                      <span className="truncate">{chip.label}</span>
+                      <X className="size-3.5 shrink-0 opacity-60" aria-hidden />
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+
+              {createLinksOpen ? (
+                <div className="space-y-3 rounded-2xl border border-border/60 bg-muted/15 p-3.5 sm:p-3">
+                  <p className="text-muted-foreground text-xs leading-snug sm:text-[11px]">
+                    {createLinkTargets === undefined
+                      ? "Laster koblinger …"
+                      : pulsBoardCopy.createLinkHint}
+                  </p>
+                  <div className="grid gap-3.5 sm:grid-cols-2 sm:gap-3">
+                    {(
+                      [
+                        {
+                          id: "create-link-assessment",
+                          label: pulsBoardCopy.createLinkAssessment,
+                          value: createAssessmentId,
+                          onChange: (v: string) =>
+                            setCreateAssessmentId(
+                              v as Id<"assessments"> | "",
+                            ),
+                          options: createLinkOptionLists.assessments,
+                          empty: "Ingen vurdering",
+                        },
+                        {
+                          id: "create-link-process",
+                          label: pulsBoardCopy.createLinkProcess,
+                          value: createCandidateId,
+                          onChange: (v: string) =>
+                            setCreateCandidateId(
+                              v as Id<"candidates"> | "",
+                            ),
+                          options: createLinkOptionLists.processes,
+                          empty: "Ingen prosess",
+                        },
+                        {
+                          id: "create-link-ros",
+                          label: pulsBoardCopy.createLinkRos,
+                          value: createRosId,
+                          onChange: (v: string) =>
+                            setCreateRosId(v as Id<"rosAnalyses"> | ""),
+                          options: createLinkOptionLists.ros,
+                          empty: "Ingen ROS",
+                        },
+                        {
+                          id: "create-link-pdd",
+                          label: pulsBoardCopy.createLinkPdd,
+                          value: createPddId,
+                          onChange: (v: string) =>
+                            setCreatePddId(
+                              v as Id<"processDesignDocuments"> | "",
+                            ),
+                          options: createLinkOptionLists.pdds,
+                          empty: "Ingen PDD",
+                        },
+                        {
+                          id: "create-link-form",
+                          label: pulsBoardCopy.createLinkForm,
+                          value: createFormId,
+                          onChange: (v: string) =>
+                            setCreateFormId(v as Id<"intakeForms"> | ""),
+                          options: createLinkOptionLists.forms,
+                          empty: "Ingen skjema",
+                        },
+                      ] as const
+                    ).map((row) => (
+                      <div key={row.id} className="space-y-1">
+                        <Label htmlFor={row.id} className="text-xs">
+                          {row.label}
+                        </Label>
+                        <SearchableSelect
+                          id={row.id}
+                          aria-label={row.label}
+                          value={row.value}
+                          onChange={row.onChange}
+                          options={row.options}
+                          placeholder={row.empty}
+                          clearLabel={row.empty}
+                          searchPlaceholder={pulsBoardCopy.createLinkSearch}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+            </div>
+
+            <button
+              type="button"
+              className="text-muted-foreground hover:text-foreground flex min-h-12 w-full items-center justify-between gap-2 rounded-2xl border border-border/50 px-3.5 text-left text-sm touch-manipulation sm:min-h-9 sm:rounded-xl sm:px-3"
+              onClick={() => setCreateMoreOpen((v) => !v)}
+              aria-expanded={createMoreOpen}
+            >
+              <span>
+                {createMoreOpen
+                  ? pulsBoardCopy.createLess
+                  : pulsBoardCopy.createMore}
+              </span>
+              <ChevronDown
+                className={cn(
+                  "size-4 shrink-0 transition-transform",
+                  createMoreOpen && "rotate-180",
+                )}
+                aria-hidden
+              />
+            </button>
+
+            {createMoreOpen ? (
+              <div className="grid gap-3.5 sm:grid-cols-2 sm:gap-3">
+                <div className="space-y-1.5 sm:col-span-2 sm:space-y-1">
+                  <Label htmlFor="create-parent">
+                    {pulsBoardCopy.parentLabel}
+                  </Label>
+                  <SearchableSelect
+                    id="create-parent"
+                    aria-label={pulsBoardCopy.parentLabel}
+                    value={createParentId}
+                    onChange={(v) =>
+                      setCreateParentId(v as Id<"assessmentTasks"> | "")
+                    }
+                    options={createParentOptions.map((p) => ({
+                      value: p._id,
+                      label: pulsBoardCopy.parentUnder(parentOptionLabel(p)),
+                    }))}
+                    placeholder={pulsBoardCopy.parentNone}
+                    clearLabel={pulsBoardCopy.parentNone}
+                  />
+                </div>
+                <div className="space-y-1.5 sm:space-y-1">
+                  <Label htmlFor="create-column">Kolonne</Label>
+                  <SearchableSelect
+                    id="create-column"
+                    aria-label="Kolonne"
+                    value={createColumnId}
+                    onChange={(v) =>
+                      setCreateColumnId(v as Id<"pulsBoardColumns"> | "")
+                    }
+                    options={createColumnOptions.map((c) => ({
+                      value: c._id,
+                      label: c.name,
+                    }))}
+                    allowClear={false}
+                    placeholder={
+                      createColumnOptions.length === 0
+                        ? "Ingen kolonner"
+                        : "Velg kolonne"
+                    }
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-3 sm:contents">
+                  <div className="space-y-1.5 sm:space-y-1">
+                    <Label htmlFor="create-start">Startdato</Label>
+                    <Input
+                      id="create-start"
+                      type="date"
+                      value={createStart}
+                      onChange={(e) => setCreateStart(e.target.value)}
+                      className="min-h-12 text-base sm:min-h-10 sm:text-sm"
+                    />
+                  </div>
+                  <div className="space-y-1.5 sm:space-y-1">
+                    <Label htmlFor="create-due">Sluttdato</Label>
+                    <Input
+                      id="create-due"
+                      type="date"
+                      value={createDue}
+                      onChange={(e) => setCreateDue(e.target.value)}
+                      className="min-h-12 text-base sm:min-h-10 sm:text-sm"
+                    />
+                  </div>
+                </div>
+                <div className="space-y-1.5 sm:col-span-2">
+                  <Label>Tildelt</Label>
+                  <AssigneePicker
+                    selectedIds={createAssigneeIds}
+                    members={memberOptions}
+                    canEdit
+                    onChange={setCreateAssigneeIds}
+                    emptyLabel="Ingen tildelt ennå"
+                  />
+                </div>
+              </div>
+            ) : null}
           </DialogBody>
-          <DialogFooter>
+          <DialogFooter className="max-sm:gap-2.5">
             <Button
               type="button"
               variant="outline"
-              className="min-h-11 touch-manipulation sm:min-h-9"
+              className="min-h-11 touch-manipulation sm:min-h-9 max-sm:w-full"
               onClick={() => setCreateOpen(false)}
             >
               Avbryt
             </Button>
             <Button
               type="button"
-              className="min-h-11 touch-manipulation sm:min-h-9"
-              disabled={busy || !createTitle.trim() || !createAssessmentId}
+              className="min-h-12 touch-manipulation text-base sm:min-h-9 sm:text-sm max-sm:w-full"
+              disabled={busy || !createTitle.trim()}
               onClick={() => void submitCreate()}
             >
               Opprett
@@ -3529,13 +3888,12 @@ export function IssuesProjectBoard({
                           onChange={(v) =>
                             setEditColumnId(v as Id<"pulsBoardColumns"> | "")
                           }
-                        >
-                          {columns.map((c) => (
-                            <option key={c._id} value={c._id}>
-                              {c.name}
-                            </option>
-                          ))}
-                        </CompactSelect>
+                          allowClear={false}
+                          options={columns.map((c) => ({
+                            value: c._id,
+                            label: c.name,
+                          }))}
+                        />
                       </MetaRow>
                       <MetaRow label="Datoer" hint="Valgfritt">
                         <div className="grid max-w-sm grid-cols-1 gap-2 sm:grid-cols-2">
@@ -3578,17 +3936,11 @@ export function IssuesProjectBoard({
                           value={editIssueType}
                           disabled={!selected.canEdit}
                           onChange={setEditIssueType}
-                        >
-                          <option value="">Ingen</option>
-                          {optionsWithCurrent(
+                          options={optionsWithCurrent(
                             ISSUE_TYPE_OPTIONS,
                             editIssueType,
-                          ).map((opt) => (
-                            <option key={opt} value={opt}>
-                              {opt}
-                            </option>
-                          ))}
-                        </CompactSelect>
+                          ).map((opt) => ({ value: opt, label: opt }))}
+                        />
                       </MetaRow>
                       <MetaRow label="Prioritet">
                         <CompactSelect
@@ -3597,17 +3949,11 @@ export function IssuesProjectBoard({
                           value={editPriorityLabel}
                           disabled={!selected.canEdit}
                           onChange={setEditPriorityLabel}
-                        >
-                          <option value="">Ingen</option>
-                          {optionsWithCurrent(
+                          options={optionsWithCurrent(
                             PRIORITY_LABEL_OPTIONS,
                             editPriorityLabel,
-                          ).map((opt) => (
-                            <option key={opt} value={opt}>
-                              {opt}
-                            </option>
-                          ))}
-                        </CompactSelect>
+                          ).map((opt) => ({ value: opt, label: opt }))}
+                        />
                       </MetaRow>
                       <MetaRow label="Størrelse">
                         <CompactSelect
@@ -3616,16 +3962,11 @@ export function IssuesProjectBoard({
                           value={editSize}
                           disabled={!selected.canEdit}
                           onChange={setEditSize}
-                        >
-                          <option value="">Ingen</option>
-                          {optionsWithCurrent(SIZE_OPTIONS, editSize).map(
-                            (opt) => (
-                              <option key={opt} value={opt}>
-                                {opt}
-                              </option>
-                            ),
-                          )}
-                        </CompactSelect>
+                          options={optionsWithCurrent(
+                            SIZE_OPTIONS,
+                            editSize,
+                          ).map((opt) => ({ value: opt, label: opt }))}
+                        />
                       </MetaRow>
                       <MetaRow label="Estimat">
                         <CompactSelect
@@ -3634,17 +3975,11 @@ export function IssuesProjectBoard({
                           value={editEstimate}
                           disabled={!selected.canEdit}
                           onChange={setEditEstimate}
-                        >
-                          <option value="">Ingen</option>
-                          {optionsWithCurrent(
+                          options={optionsWithCurrent(
                             ESTIMATE_OPTIONS,
                             editEstimate,
-                          ).map((opt) => (
-                            <option key={opt} value={opt}>
-                              {opt}
-                            </option>
-                          ))}
-                        </CompactSelect>
+                          ).map((opt) => ({ value: opt, label: opt }))}
+                        />
                       </MetaRow>
                       <MetaRow label="Milepæl">
                         <Input
@@ -3682,14 +4017,30 @@ export function IssuesProjectBoard({
                   <div className="min-w-0 space-y-3">
                     <LinkSection
                       icon={<ListTree className="size-3.5" aria-hidden />}
-                      title="Vurdering"
+                      title={
+                        selected.linkKind === "process"
+                          ? "Prosess"
+                          : selected.linkKind === "ros"
+                            ? "ROS"
+                            : selected.linkKind === "pdd"
+                              ? "PDD"
+                              : selected.linkKind === "form"
+                                ? "Skjema"
+                                : "Vurdering"
+                      }
                     >
-                      <Link
-                        href={`/w/${workspaceId}/a/${selected.assessmentId}`}
-                        className="text-foreground hover:text-foreground/80 block min-w-0 truncate text-sm font-medium underline-offset-2 touch-manipulation hover:underline"
-                      >
-                        {selected.assessmentTitle} →
-                      </Link>
+                      {selected.linkHref ? (
+                        <Link
+                          href={selected.linkHref}
+                          className="text-foreground hover:text-foreground/80 block min-w-0 truncate text-sm font-medium underline-offset-2 touch-manipulation hover:underline"
+                        >
+                          {selected.linkLabel || selected.assessmentTitle} →
+                        </Link>
+                      ) : (
+                        <p className="text-muted-foreground text-sm">
+                          {selected.linkLabel || "Ingen kobling"}
+                        </p>
+                      )}
                     </LinkSection>
 
                     <LinkSection
@@ -3716,32 +4067,33 @@ export function IssuesProjectBoard({
                         </p>
                       )}
                       {selected.canEdit &&
+                      selected.assessmentId &&
                       availableProcessesToLink.length > 0 ? (
                         <div className="grid min-w-0 gap-2">
-                          <select
-                            className="border-input bg-background h-10 w-full min-w-0 max-w-full rounded-lg border px-2 text-sm"
+                          <SearchableSelect
+                            aria-label="Koble prosess"
                             value={linkCandidateId}
-                            onChange={(e) =>
-                              setLinkCandidateId(
-                                e.target.value as Id<"candidates"> | "",
-                              )
+                            onChange={(v) =>
+                              setLinkCandidateId(v as Id<"candidates"> | "")
                             }
-                          >
-                            <option value="">Koble prosess …</option>
-                            {availableProcessesToLink.map((p) => (
-                              <option key={p._id} value={p._id}>
-                                {p.code ? `${p.code} — ` : ""}
-                                {p.name}
-                              </option>
-                            ))}
-                          </select>
+                            placeholder="Koble prosess …"
+                            clearLabel="Koble prosess …"
+                            options={availableProcessesToLink.map((p) => ({
+                              value: p._id,
+                              label: p.code
+                                ? `${p.code} — ${p.name}`
+                                : p.name,
+                            }))}
+                            triggerClassName="min-h-10 rounded-lg"
+                          />
                           <Button
                             type="button"
                             size="sm"
                             className="h-10 w-full touch-manipulation"
                             disabled={busy || !linkCandidateId}
                             onClick={() => {
-                              if (!linkCandidateId) return;
+                              if (!linkCandidateId || !selected.assessmentId)
+                                return;
                               void linkProcess({
                                 candidateId: linkCandidateId,
                                 assessmentId: selected.assessmentId,
@@ -3794,31 +4146,31 @@ export function IssuesProjectBoard({
                           Ingen ROS koblet til vurderingen ennå.
                         </p>
                       )}
-                      {selected.canEdit && availableRosToLink.length > 0 ? (
+                      {selected.canEdit &&
+                      selected.assessmentId &&
+                      availableRosToLink.length > 0 ? (
                         <div className="grid min-w-0 gap-2">
-                          <select
-                            className="border-input bg-background h-10 w-full min-w-0 max-w-full rounded-lg border px-2 text-sm"
+                          <SearchableSelect
+                            aria-label="Koble ROS"
                             value={linkRosId}
-                            onChange={(e) =>
-                              setLinkRosId(
-                                e.target.value as Id<"rosAnalyses"> | "",
-                              )
+                            onChange={(v) =>
+                              setLinkRosId(v as Id<"rosAnalyses"> | "")
                             }
-                          >
-                            <option value="">Koble ROS …</option>
-                            {availableRosToLink.map((r) => (
-                              <option key={r.id} value={r.id}>
-                                {r.title}
-                              </option>
-                            ))}
-                          </select>
+                            placeholder="Koble ROS …"
+                            clearLabel="Koble ROS …"
+                            options={availableRosToLink.map((r) => ({
+                              value: r.id,
+                              label: r.title,
+                            }))}
+                            triggerClassName="min-h-10 rounded-lg"
+                          />
                           <Button
                             type="button"
                             size="sm"
                             className="h-10 w-full touch-manipulation"
                             disabled={busy || !linkRosId}
                             onClick={() => {
-                              if (!linkRosId) return;
+                              if (!linkRosId || !selected.assessmentId) return;
                               void linkRos({
                                 analysisId: linkRosId,
                                 assessmentId: selected.assessmentId,
@@ -3849,23 +4201,23 @@ export function IssuesProjectBoard({
                       <p className="text-muted-foreground text-xs leading-relaxed">
                         {pulsBoardCopy.parentHint}
                       </p>
-                      <select
-                        className="border-input bg-background h-10 w-full min-w-0 max-w-full rounded-lg border px-2 text-sm"
+                      <SearchableSelect
+                        aria-label={pulsBoardCopy.parentLabel}
                         value={editParentId}
-                        onChange={(e) =>
-                          setEditParentId(
-                            e.target.value as Id<"assessmentTasks"> | "",
-                          )
+                        onChange={(v) =>
+                          setEditParentId(v as Id<"assessmentTasks"> | "")
                         }
                         disabled={!selected.canEdit}
-                      >
-                        <option value="">{pulsBoardCopy.parentNone}</option>
-                        {linkParentOptions.map((p) => (
-                          <option key={p._id} value={p._id}>
-                            {pulsBoardCopy.parentUnder(parentOptionLabel(p))}
-                          </option>
-                        ))}
-                      </select>
+                        placeholder={pulsBoardCopy.parentNone}
+                        clearLabel={pulsBoardCopy.parentNone}
+                        options={linkParentOptions.map((p) => ({
+                          value: p._id,
+                          label: pulsBoardCopy.parentUnder(
+                            parentOptionLabel(p),
+                          ),
+                        }))}
+                        triggerClassName="min-h-10 rounded-lg"
+                      />
                       {selected.parentTaskId || editParentId ? (
                         <Button
                           type="button"
@@ -4003,24 +4355,22 @@ export function IssuesProjectBoard({
                           Kortet og delkort flyttes til valgt tavle. Kobling til
                           vurdering beholdes.
                         </p>
-                        <select
-                          className="border-input bg-background h-10 w-full min-w-0 max-w-full rounded-lg border px-2 text-sm"
+                        <SearchableSelect
+                          aria-label="Flytt til annen tavle"
                           value={moveBoardId}
-                          onChange={(e) =>
-                            setMoveBoardId(
-                              e.target.value as Id<"pulsBoards"> | "",
-                            )
+                          onChange={(v) =>
+                            setMoveBoardId(v as Id<"pulsBoards"> | "")
                           }
-                        >
-                          <option value="">Velg tavle …</option>
-                          {(otherBoards?.boards ?? [])
+                          placeholder="Velg tavle …"
+                          clearLabel="Velg tavle …"
+                          options={(otherBoards?.boards ?? [])
                             .filter((b) => b._id !== boardId)
-                            .map((b) => (
-                              <option key={b._id} value={b._id}>
-                                {b.name}
-                              </option>
-                            ))}
-                        </select>
+                            .map((b) => ({
+                              value: b._id,
+                              label: b.name,
+                            }))}
+                          triggerClassName="min-h-10 rounded-lg"
+                        />
                         <Button
                           type="button"
                           size="sm"
