@@ -22,7 +22,6 @@ import type { AssessmentPayload } from "@/lib/assessment-types";
 import {
   INTAKE_FORM_TEMPLATE_CATALOG,
   INTAKE_MAPPING_TARGET_LABELS,
-  defaultIntakeQuestions,
   detectTechnicalTerms,
 } from "@/lib/intake-form";
 import {
@@ -900,6 +899,10 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
   const [isCreatingNewForm, setIsCreatingNewForm] = useState(false);
   const selectedFormIdBeforeCreateRef = useRef<Id<"intakeForms"> | null>(null);
   const [editorOpen, setEditorOpen] = useState(false);
+  /** Steg i redigeringsdialogen — unngår å vise alt på én gang. */
+  const [editorSection, setEditorSection] = useState<
+    "basics" | "questions" | "settings"
+  >("basics");
   const [previewOpen, setPreviewOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [reviewOpen, setReviewOpen] = useState(false);
@@ -1135,8 +1138,6 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
     >
   >({});
   const [pageTab, setPageTab] = useState<"skjemaer" | "forslag">("skjemaer");
-  const [formWorkspacePanelExpanded, setFormWorkspacePanelExpanded] =
-    useState(false);
   const [formMoreOpen, setFormMoreOpen] = useState(false);
   const formMoreBtnRef = useRef<HTMLButtonElement | null>(null);
   const [formMoreMenuPos, setFormMoreMenuPos] = useState<{
@@ -1313,14 +1314,6 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
     );
   }
 
-  function openAllQuestions() {
-    setExpandedQuestionIds(questions.map((question) => question.id));
-  }
-
-  function closeAllQuestions() {
-    setExpandedQuestionIds([]);
-  }
-
   function toggleMappingSectionOpen(questionId: string) {
     setMappingSectionOpenIds((prev) =>
       prev.includes(questionId)
@@ -1419,9 +1412,12 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
   ) {
     const nextQuestions = buildQuestions() as EditableQuestion[];
     setQuestions(nextQuestions);
-    setExpandedQuestionIds(nextQuestions.map((question) => question.id));
-    setMappingSectionOpenIds(questionIdsWithMappingSectionInitiallyOpen(nextQuestions));
+    // Kun første spørsmål åpent — mindre støy
+    const firstId = nextQuestions[0]?.id;
+    setExpandedQuestionIds(firstId ? [firstId] : []);
+    setMappingSectionOpenIds([]);
     setIntakeTemplatePickerOpen(false);
+    setEditorSection("questions");
     toast.success("Mal er lastet inn — husk å lagre skjemaet.");
   }
 
@@ -1440,17 +1436,17 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
     setPageTab("skjemaer");
     setIsCreatingNewForm(true);
     setSelectedFormId(null);
-    setTitle("Nytt skjema");
+    setTitle("");
     setDescription("");
     setLayoutMode("one_per_screen");
     setQuestionsPerPage(1);
     setStatus("draft");
     setConfirmationMode("none");
-    const nextQuestions = defaultIntakeQuestions();
-    setQuestions(nextQuestions);
-    const firstId = nextQuestions[0]?.id;
-    setExpandedQuestionIds(firstId ? [firstId] : []);
-    setMappingSectionOpenIds(questionIdsWithMappingSectionInitiallyOpen(nextQuestions));
+    const nextQuestion = emptyQuestion();
+    setQuestions([nextQuestion]);
+    setExpandedQuestionIds([nextQuestion.id]);
+    setMappingSectionOpenIds([]);
+    setEditorSection("basics");
     setEditorOpen(true);
   }
 
@@ -1460,7 +1456,6 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
     selectedFormIdBeforeCreateRef.current = null;
     setSelectedFormId(formId);
     setEditorOpen(false);
-    setFormWorkspacePanelExpanded(false);
     setFormMoreOpen(false);
   }
 
@@ -2051,7 +2046,7 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
         </div>
         <Button
           type="button"
-          className="h-11 shrink-0 gap-2 rounded-full bg-foreground px-5 text-sm font-semibold text-background transition-opacity hover:opacity-90"
+          className="h-11 shrink-0 gap-2 rounded-xl px-5 text-sm font-medium"
           onClick={handleCreateForm}
         >
           <Plus className="size-4" />
@@ -2157,7 +2152,7 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
                 </p>
               ) : null
             ) : (
-              <div className="flex flex-col gap-1">
+              <div className="flex flex-col gap-2">
                 {formsForSidebarDisplay.map((form) => {
                   const statusLabel =
                     form.status === "published"
@@ -2165,40 +2160,54 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
                       : form.status === "archived"
                         ? "Arkivert"
                         : "Utkast";
+                  const selected = form._id === selectedForm?._id;
                   return (
                     <button
                       key={form._id}
                       type="button"
                       onClick={() => selectWorkspaceForm(form._id)}
-                      className="rounded-2xl border border-border/50 px-3 py-2.5 text-left transition hover:border-border hover:bg-muted/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                      className={cn(
+                        "rounded-2xl border px-3.5 py-3 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+                        selected
+                          ? "border-foreground/20 bg-muted/30 shadow-sm"
+                          : "border-border/50 hover:border-border hover:bg-muted/15",
+                      )}
                     >
                       <div className="flex min-h-10 items-center gap-3">
-                        <FileText
-                          className="text-muted-foreground size-4 shrink-0"
-                          aria-hidden
-                        />
                         <div className="min-w-0 flex-1">
                           <div className="flex min-w-0 items-center gap-2">
-                            <p className="truncate font-medium leading-tight">{form.title}</p>
+                            <p className="truncate font-medium leading-tight">
+                              {form.title}
+                            </p>
                             {form.isTemplate ? (
-                              <Badge variant="outline" className="hidden shrink-0 sm:inline-flex">
+                              <Badge
+                                variant="outline"
+                                className="hidden shrink-0 sm:inline-flex"
+                              >
                                 Mal
                               </Badge>
                             ) : null}
                           </div>
                           <p className="text-muted-foreground mt-0.5 truncate text-xs tabular-nums">
-                            {form.questionCount} spørsmål · {form.responseCount} svar
+                            {form.questionCount} spørsmål · {form.responseCount}{" "}
+                            svar
                             {form.orgUnitId
                               ? ` · ${orgUnitNameById.get(form.orgUnitId) ?? "Org."}`
                               : ""}
                           </p>
                         </div>
                         <Badge
-                          variant={form.status === "published" ? "secondary" : "outline"}
+                          variant={
+                            form.status === "published" ? "secondary" : "outline"
+                          }
                           className="shrink-0 text-[10px]"
                         >
                           {statusLabel}
                         </Badge>
+                        <ChevronRight
+                          className="text-muted-foreground size-4 shrink-0 opacity-50"
+                          aria-hidden
+                        />
                       </div>
                     </button>
                   );
@@ -2207,215 +2216,177 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
             )}
 
             {selectedForm ? (
-              <div className="relative z-10 rounded-2xl border border-border/60 bg-card shadow-sm">
-                <button
-                  type="button"
-                  className="hover:bg-muted/30 flex w-full items-start gap-3 px-3 py-3.5 text-left transition-colors sm:px-4 sm:py-4"
-                  onClick={() => setFormWorkspacePanelExpanded((v) => !v)}
-                  aria-expanded={formWorkspacePanelExpanded}
-                  aria-label={
-                    formWorkspacePanelExpanded
-                      ? "Skjul skjemadetaljer"
-                      : "Vis skjemadetaljer"
-                  }
-                >
-                  <div className="min-w-0 flex-1 space-y-1">
-                    <div className="flex min-w-0 flex-wrap items-center gap-2">
-                      <p className="truncate font-heading text-base font-semibold sm:text-lg">
-                        {selectedForm.title}
+              <div className="relative z-10 overflow-hidden rounded-2xl border border-border/60 bg-card">
+                <div className="space-y-3 px-4 py-4 sm:px-5 sm:py-5">
+                  <div className="flex min-w-0 items-start justify-between gap-3">
+                    <div className="min-w-0 space-y-1.5">
+                      <div className="flex min-w-0 flex-wrap items-center gap-2">
+                        <p className="truncate font-heading text-lg font-semibold tracking-tight">
+                          {selectedForm.title}
+                        </p>
+                        <Badge
+                          variant={
+                            selectedForm.status === "published"
+                              ? "secondary"
+                              : "outline"
+                          }
+                          className="shrink-0"
+                        >
+                          {selectedForm.status === "published"
+                            ? "Publisert"
+                            : selectedForm.status === "archived"
+                              ? "Arkivert"
+                              : "Utkast"}
+                        </Badge>
+                      </div>
+                      <p className="text-muted-foreground text-sm tabular-nums">
+                        {selectedForm.questionCount} spørsmål ·{" "}
+                        <button
+                          type="button"
+                          className="text-foreground font-medium underline-offset-2 hover:underline"
+                          onClick={() => openForslagForForm(selectedForm._id)}
+                        >
+                          {activeFormResponseRows.length} svar
+                        </button>
+                        {links.length > 0 ? ` · ${links.length} lenker` : ""}
                       </p>
-                      <Badge
-                        variant={selectedForm.status === "published" ? "secondary" : "outline"}
-                        className="shrink-0"
-                      >
-                        {selectedForm.status === "published"
-                          ? "Publisert"
-                          : selectedForm.status === "archived"
-                            ? "Arkivert"
-                            : "Utkast"}
-                      </Badge>
+                      {selectedForm.orgUnitId ? (
+                        <p className="text-muted-foreground truncate text-xs">
+                          {orgUnitNameById.get(selectedForm.orgUnitId) ??
+                            "Organisasjonsenhet"}
+                        </p>
+                      ) : null}
                     </div>
-                    <p className="text-muted-foreground text-xs tabular-nums sm:text-sm">
-                      {selectedForm.questionCount} spørsmål ·{" "}
-                      <span
-                        role="link"
-                        tabIndex={0}
-                        className="text-foreground underline-offset-2 hover:underline"
+                    <div className="relative z-20 shrink-0">
+                      <Button
+                        ref={formMoreBtnRef}
+                        type="button"
+                        variant="ghost"
+                        size="icon-sm"
+                        className="rounded-xl"
+                        aria-label="Flere handlinger"
+                        aria-expanded={formMoreOpen}
+                        aria-haspopup="menu"
                         onClick={(e) => {
                           e.stopPropagation();
-                          openForslagForForm(selectedForm._id);
-                        }}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter" || e.key === " ") {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            openForslagForForm(selectedForm._id);
-                          }
+                          setFormMoreOpen((v) => !v);
                         }}
                       >
-                        {activeFormResponseRows.length} svar
-                      </span>
-                      {links.length > 0 ? ` · ${links.length} lenker` : ""}
-                    </p>
-                  </div>
-                  {formWorkspacePanelExpanded ? (
-                    <ChevronUp className="text-muted-foreground mt-0.5 size-5 shrink-0" aria-hidden />
-                  ) : (
-                    <ChevronDown className="text-muted-foreground mt-0.5 size-5 shrink-0" aria-hidden />
-                  )}
-                </button>
-
-                {formWorkspacePanelExpanded ? (
-                  <div className="border-border/50 space-y-2 border-t px-3 py-3 sm:px-4">
-                    <p className="text-muted-foreground text-xs leading-relaxed">
-                      {selectedForm.orgUnitId
-                        ? `Organisasjon: ${orgUnitNameById.get(selectedForm.orgUnitId) ?? "—"}`
-                        : "Ingen organisasjonsenhet satt."}
-                      {selectedForm.isTemplate
-                        ? " · Delt som mal."
-                        : selectedForm.sourceTemplateFormId
-                          ? " · Aktivert fra mal."
-                          : ""}
-                    </p>
-                    <div className="flex flex-wrap gap-2">
-                      <Button
-                        type="button"
-                        variant="secondary"
-                        size="sm"
-                        className="rounded-xl"
-                        onClick={() => openForslagForForm(selectedForm._id)}
-                      >
-                        Se {activeFormResponseRows.length} forslag
+                        <MoreHorizontal className="size-4" />
                       </Button>
+                      {formMoreOpen && formMoreMenuPos
+                        ? createPortal(
+                            <>
+                              <button
+                                type="button"
+                                className="fixed inset-0 z-[220] cursor-default"
+                                aria-label="Lukk meny"
+                                onClick={() => setFormMoreOpen(false)}
+                              />
+                              <div
+                                role="menu"
+                                className="bg-popover fixed z-[230] min-w-[12.5rem] -translate-y-full rounded-xl border border-border/60 p-1 shadow-2xl"
+                                style={{
+                                  top: formMoreMenuPos.top,
+                                  right: formMoreMenuPos.right,
+                                }}
+                              >
+                                {selectedForm.status === "published" ? (
+                                  <button
+                                    type="button"
+                                    role="menuitem"
+                                    className="hover:bg-muted flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-sm"
+                                    onClick={() => {
+                                      setFormMoreOpen(false);
+                                      void handleSetFormStatus("draft");
+                                    }}
+                                  >
+                                    Avpubliser
+                                  </button>
+                                ) : selectedForm.status === "draft" ? (
+                                  <button
+                                    type="button"
+                                    role="menuitem"
+                                    className="hover:bg-muted flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-sm"
+                                    disabled={selectedForm.questionCount === 0}
+                                    onClick={() => {
+                                      setFormMoreOpen(false);
+                                      void handleSetFormStatus("published");
+                                    }}
+                                  >
+                                    Publiser
+                                  </button>
+                                ) : null}
+                                <button
+                                  type="button"
+                                  role="menuitem"
+                                  className="hover:bg-muted flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-sm"
+                                  onClick={() => {
+                                    setFormMoreOpen(false);
+                                    setSettingsOpen(true);
+                                  }}
+                                >
+                                  <Settings2
+                                    className="size-3.5 opacity-70"
+                                    aria-hidden
+                                  />
+                                  Innstillinger og lenker
+                                </button>
+                                <button
+                                  type="button"
+                                  role="menuitem"
+                                  className="hover:bg-muted flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-sm"
+                                  onClick={() => {
+                                    setFormMoreOpen(false);
+                                    openForslagForForm(selectedForm._id);
+                                  }}
+                                >
+                                  Se forslag
+                                </button>
+                                <button
+                                  type="button"
+                                  role="menuitem"
+                                  className="hover:bg-muted flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-sm text-destructive"
+                                  onClick={() => {
+                                    setFormMoreOpen(false);
+                                    void handleArchiveForm();
+                                  }}
+                                >
+                                  <Trash2 className="size-3.5" aria-hidden />
+                                  Arkiver
+                                </button>
+                              </div>
+                            </>,
+                            document.body,
+                          )
+                        : null}
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      className="rounded-xl"
+                      disabled={!editorData}
+                      onClick={() => {
+                        primeEditorState(editorData);
+                        setEditorSection("questions");
+                        setEditorOpen(true);
+                      }}
+                    >
+                      Rediger skjema
+                    </Button>
+                    {activeFormResponseRows.length > 0 ? (
                       <Button
                         type="button"
                         variant="outline"
                         size="sm"
                         className="rounded-xl"
-                        onClick={() => setSettingsOpen(true)}
+                        onClick={() => openForslagForForm(selectedForm._id)}
                       >
-                        Delbare lenker
+                        Se svar
                       </Button>
-                    </div>
-                  </div>
-                ) : null}
-
-                <div className="border-border/50 relative flex flex-wrap items-center gap-2 border-t px-3 py-3 sm:px-4">
-                  {selectedForm.status === "published" ? (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="rounded-xl"
-                      onClick={() => handleSetFormStatus("draft")}
-                    >
-                      Avpubliser
-                    </Button>
-                  ) : selectedForm.status === "draft" ? (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="rounded-xl"
-                      disabled={selectedForm.questionCount === 0}
-                      title={
-                        selectedForm.questionCount === 0
-                          ? "Legg til minst ett spørsmål før du publiserer."
-                          : undefined
-                      }
-                      onClick={() => handleSetFormStatus("published")}
-                    >
-                      Publiser
-                    </Button>
-                  ) : null}
-                  <Button
-                    type="button"
-                    size="sm"
-                    className="rounded-xl"
-                    disabled={!editorData}
-                    onClick={() => {
-                      primeEditorState(editorData);
-                      setEditorOpen(true);
-                    }}
-                  >
-                    Rediger
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="rounded-xl"
-                    aria-label="Innstillinger"
-                    onClick={() => {
-                      setFormMoreOpen(false);
-                      setSettingsOpen(true);
-                    }}
-                  >
-                    <Settings2 className="size-4" />
-                    <span className="hidden sm:inline">Innstillinger</span>
-                  </Button>
-                  <div className="relative z-20 ml-auto">
-                    <Button
-                      ref={formMoreBtnRef}
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="rounded-xl"
-                      aria-expanded={formMoreOpen}
-                      aria-haspopup="menu"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setFormMoreOpen((v) => !v);
-                      }}
-                    >
-                      <MoreHorizontal className="size-4" />
-                      Mer
-                    </Button>
-                    {formMoreOpen && formMoreMenuPos
-                      ? createPortal(
-                          <>
-                            <button
-                              type="button"
-                              className="fixed inset-0 z-[220] cursor-default"
-                              aria-label="Lukk meny"
-                              onClick={() => setFormMoreOpen(false)}
-                            />
-                            <div
-                              role="menu"
-                              className="bg-popover fixed z-[230] min-w-[12rem] -translate-y-full rounded-xl border border-border/60 p-1 shadow-2xl"
-                              style={{
-                                top: formMoreMenuPos.top,
-                                right: formMoreMenuPos.right,
-                              }}
-                            >
-                              <button
-                                type="button"
-                                role="menuitem"
-                                className="hover:bg-muted flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-sm"
-                                onClick={() => {
-                                  setFormMoreOpen(false);
-                                  setFormWorkspacePanelExpanded(true);
-                                }}
-                              >
-                                Vis detaljer
-                              </button>
-                              <button
-                                type="button"
-                                role="menuitem"
-                                className="hover:bg-muted flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-sm text-destructive"
-                                onClick={() => {
-                                  setFormMoreOpen(false);
-                                  void handleArchiveForm();
-                                }}
-                              >
-                                <Trash2 className="size-3.5" aria-hidden />
-                                Arkiver
-                              </button>
-                            </div>
-                          </>,
-                          document.body,
-                        )
-                      : null}
+                    ) : null}
                   </div>
                 </div>
               </div>
@@ -2423,8 +2394,8 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
               <div className="border-border/60 bg-muted/15 mt-3 rounded-2xl border border-dashed p-5 text-center sm:text-left">
                 <p className="text-sm font-medium">Du oppretter et nytt skjema</p>
                 <p className="text-muted-foreground mt-1 text-sm leading-snug">
-                  Ingenting lagres i listen før du trykker «Opprett skjema» i vinduet. Lukk for å
-                  avbryte.
+                  Fullfør stegene i vinduet. Ingenting lagres før du trykker «Opprett
+                  skjema».
                 </p>
               </div>
             ) : null}
@@ -2630,191 +2601,201 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
               id="intake-editor-title"
               className="font-heading text-xl font-semibold tracking-tight sm:text-2xl"
             >
-              {isCreatingNewForm ? "Opprett skjema" : "Rediger skjema"}
+              {isCreatingNewForm ? "Nytt skjema" : "Rediger skjema"}
             </p>
-            <p className="text-muted-foreground max-w-3xl text-sm leading-relaxed sm:text-base">
-              Spørsmål, layout og koblinger til vurdering / ROS / PVV.
-              {isCreatingNewForm ? (
-                <>
-                  {" "}
-                  Skjemaet opprettes i listen først når du trykker «Opprett skjema».
-                </>
-              ) : null}
+            <p className="text-muted-foreground text-sm leading-relaxed">
+              {editorSection === "basics"
+                ? "Gi skjemaet et navn. Du kan legge til spørsmål etterpå."
+                : editorSection === "questions"
+                  ? "Bygg spørsmålene. Avanserte valg ligger under Innstillinger."
+                  : "Hvordan skjemaet vises for den som svarer."}
             </p>
+            <div
+              role="tablist"
+              aria-label="Skjemaredigering"
+              className="bg-muted/40 mt-3 inline-flex max-w-full flex-wrap gap-1 rounded-full border border-border/50 p-1"
+            >
+              {(
+                [
+                  ["basics", "1. Navn"],
+                  ["questions", "2. Spørsmål"],
+                  ["settings", "3. Innstillinger"],
+                ] as const
+              ).map(([id, label]) => (
+                <button
+                  key={id}
+                  type="button"
+                  role="tab"
+                  aria-selected={editorSection === id}
+                  onClick={() => setEditorSection(id)}
+                  className={cn(
+                    "h-9 rounded-full px-3.5 text-sm font-medium transition-colors touch-manipulation",
+                    editorSection === id
+                      ? "bg-background text-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
           </DialogHeader>
-          <DialogBody className="space-y-6">
-            <div className="rounded-[28px] border border-border/60 bg-muted/20 p-5 sm:p-7">
-              <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                <div className="space-y-1">
-                  <div className="inline-flex items-center gap-2 rounded-full border border-border/60 bg-background px-3 py-1 text-xs font-medium text-muted-foreground">
-                    <Settings2 className="size-3.5" />
-                    Skjemaoppsett
+          <DialogBody className="space-y-5">
+            {editorSection === "basics" ? (
+              <div className="mx-auto max-w-xl space-y-5">
+                <div className="space-y-2">
+                  <Label htmlFor="intake-form-title" className="text-sm font-medium">
+                    Navn
+                  </Label>
+                  <Input
+                    id="intake-form-title"
+                    value={title}
+                    onChange={(event) => setTitle(event.target.value)}
+                    placeholder="F.eks. Innmelding av ny prosess"
+                    className="h-12 rounded-xl text-base"
+                    autoFocus
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label
+                    htmlFor="intake-form-description"
+                    className="text-sm font-medium"
+                  >
+                    Beskrivelse{" "}
+                    <span className="text-muted-foreground font-normal">
+                      (valgfritt)
+                    </span>
+                  </Label>
+                  <Textarea
+                    id="intake-form-description"
+                    value={description}
+                    onChange={(event) => setDescription(event.target.value)}
+                    placeholder="Kort hjelpetekst til dem som fyller ut."
+                    className="min-h-[6rem] resize-y rounded-xl text-base"
+                  />
+                </div>
+                <div className="bg-muted/30 rounded-2xl border border-border/50 p-4">
+                  <p className="text-sm font-medium">Vil du starte fra en mal?</p>
+                  <p className="text-muted-foreground mt-1 text-xs leading-relaxed">
+                    Ellers legger du til spørsmål selv i neste steg.
+                  </p>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="mt-3 rounded-xl"
+                    onClick={() => setIntakeTemplatePickerOpen(true)}
+                  >
+                    <Sparkles className="size-3.5" />
+                    Velg eksempelmal
+                  </Button>
+                </div>
+              </div>
+            ) : null}
+
+            {editorSection === "settings" ? (
+              <div className="mx-auto max-w-lg space-y-5">
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium">Layout</Label>
+                  <select
+                    className="border-input bg-background h-11 w-full rounded-xl border px-3 text-sm"
+                    value={layoutMode}
+                    onChange={(event) =>
+                      setLayoutMode(
+                        event.target.value as "one_per_screen" | "grouped",
+                      )
+                    }
+                  >
+                    <option value="one_per_screen">
+                      Steg for steg (flere spørsmål per side)
+                    </option>
+                    <option value="grouped">Alt på én side</option>
+                  </select>
+                </div>
+                {layoutMode === "one_per_screen" ? (
+                  <div className="space-y-2">
+                    <Label
+                      className="text-sm font-medium"
+                      htmlFor="intake-questions-per-page"
+                    >
+                      Spørsmål per side
+                    </Label>
+                    <Input
+                      id="intake-questions-per-page"
+                      type="number"
+                      min={1}
+                      max={25}
+                      className="h-11 rounded-xl"
+                      value={questionsPerPage}
+                      onChange={(event) => {
+                        const parsed = Number.parseInt(event.target.value, 10);
+                        if (!Number.isFinite(parsed)) return;
+                        setQuestionsPerPage(Math.min(25, Math.max(1, parsed)));
+                      }}
+                    />
                   </div>
-                  <h3 className="font-heading text-xl font-semibold sm:text-2xl">
-                    Navn og visning
-                  </h3>
-                  <p className="text-muted-foreground max-w-2xl text-sm leading-relaxed sm:text-base">
-                    Tittel, beskrivelse og hvordan spørsmålene vises.
+                ) : null}
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium">
+                    Bekreftelse til svarer
+                  </Label>
+                  <select
+                    className="border-input bg-background h-11 w-full rounded-xl border px-3 text-sm"
+                    value={confirmationMode}
+                    onChange={(event) =>
+                      setConfirmationMode(
+                        event.target.value as "none" | "email_copy",
+                      )
+                    }
+                  >
+                    <option value="none">Ingen bekreftelse</option>
+                    <option value="email_copy">
+                      Send kopi av svarene til oppgitt e-post
+                    </option>
+                  </select>
+                </div>
+              </div>
+            ) : null}
+
+            {editorSection === "questions" ? (
+            <div className="space-y-3">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="font-medium">Spørsmål</p>
+                  <p className="text-muted-foreground text-sm">
+                    {questions.length} i skjemaet · hold dem korte og konkrete
                   </p>
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  <Badge variant="outline">{questions.length} spørsmål</Badge>
-                  <Badge variant="outline">
-                    {questions.filter((question) => question.visibilityRule).length} oppfølginger
-                  </Badge>
-                  <Badge variant="outline">
-                    {confirmationMode === "email_copy"
-                      ? "E-postbekreftelse aktiv"
-                      : "Ingen e-postbekreftelse"}
-                  </Badge>
-                </div>
-              </div>
-              <div className="mt-6 grid gap-5 lg:grid-cols-[1.35fr_0.85fr] lg:gap-8">
-                <div className="space-y-4 rounded-2xl border border-border/60 bg-background p-5 sm:p-6">
-                  <div className="space-y-2">
-                    <Label className="text-sm font-medium sm:text-base">Navn</Label>
-                    <Input
-                      value={title}
-                      onChange={(event) => setTitle(event.target.value)}
-                      placeholder="F.eks. Innmelding av ny prosess"
-                      className="h-11 rounded-xl text-base sm:h-12"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="text-sm font-medium sm:text-base">Beskrivelse</Label>
-                    <Textarea
-                      value={description}
-                      onChange={(event) => setDescription(event.target.value)}
-                      placeholder="Kort hjelpetekst som forklarer hvorfor skjemaet fylles ut."
-                      className="min-h-[7.5rem] resize-y rounded-xl text-base sm:min-h-[8.5rem]"
-                    />
-                  </div>
-                </div>
-                <div className="space-y-5 rounded-2xl border border-border/60 bg-background p-5 sm:p-6">
-                  <div className="space-y-2">
-                    <Label className="text-sm font-medium sm:text-base">Layout</Label>
-                    <select
-                      className="h-11 w-full rounded-xl border border-input bg-background px-3 text-sm sm:h-12 sm:text-base"
-                      value={layoutMode}
-                      onChange={(event) =>
-                        setLayoutMode(
-                          event.target.value as "one_per_screen" | "grouped",
-                        )
-                      }
-                    >
-                      <option value="one_per_screen">Steg for steg (flere spørsmål per side)</option>
-                      <option value="grouped">Gruppert skjema</option>
-                    </select>
-                  </div>
-                  {layoutMode === "one_per_screen" ? (
-                    <div className="space-y-2">
-                      <Label
-                        className="text-sm font-medium sm:text-base"
-                        htmlFor="intake-questions-per-page"
-                      >
-                        Spørsmål per side
-                      </Label>
-                      <Input
-                        id="intake-questions-per-page"
-                        type="number"
-                        min={1}
-                        max={25}
-                        className="h-11 rounded-xl sm:h-12"
-                        value={questionsPerPage}
-                        onChange={(event) => {
-                          const parsed = Number.parseInt(event.target.value, 10);
-                          if (!Number.isFinite(parsed)) {
-                            return;
-                          }
-                          setQuestionsPerPage(Math.min(25, Math.max(1, parsed)));
-                        }}
-                      />
-                      <p className="text-xs text-muted-foreground">
-                        Hvor mange synlige spørsmål som vises før «Neste» i den offentlige
-                        flyten (1–25).
-                      </p>
-                    </div>
-                  ) : null}
-                  <div className="space-y-2">
-                    <Label className="text-sm font-medium sm:text-base">
-                      Bekreftelse til svarer
-                    </Label>
-                    <select
-                      className="h-11 w-full rounded-xl border border-input bg-background px-3 text-sm sm:h-12 sm:text-base"
-                      value={confirmationMode}
-                      onChange={(event) =>
-                        setConfirmationMode(
-                          event.target.value as "none" | "email_copy",
-                        )
-                      }
-                    >
-                      <option value="none">Ingen bekreftelse</option>
-                      <option value="email_copy">
-                        Send kopi av svarene til oppgitt e-post
-                      </option>
-                    </select>
-                    <p className="text-xs text-muted-foreground">
-                      Når e-postbekreftelse er aktiv, må den som svarer oppgi e-post på
-                      slutten av skjemaet.
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </div>
-            <div className="space-y-3">
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <p className="font-medium">Spørsmål</p>
-                  <p className="text-sm text-muted-foreground">
-                    Hold dem korte og konkrete. Unngå fagord.
-                  </p>
-                </div>
-                <div className="flex flex-col items-stretch gap-2 sm:items-end">
                   <Button
                     type="button"
+                    variant="outline"
+                    size="sm"
+                    className="rounded-xl"
+                    onClick={() => setIntakeTemplatePickerOpen(true)}
+                  >
+                    <Sparkles className="size-3.5" />
+                    Mal
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
                     className="rounded-xl"
                     onClick={() => {
                       const nextQuestion = emptyQuestion();
                       updateQuestions((prev) => [...prev, nextQuestion]);
-                      setExpandedQuestionIds((prev) => [...prev, nextQuestion.id]);
+                      setExpandedQuestionIds((prev) => [
+                        ...prev,
+                        nextQuestion.id,
+                      ]);
                     }}
                   >
                     <Plus className="size-4" />
                     Nytt spørsmål
                   </Button>
-                  <div className="flex flex-wrap justify-end gap-1.5">
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="rounded-xl"
-                      onClick={() => setIntakeTemplatePickerOpen(true)}
-                    >
-                      <Sparkles className="size-3.5" />
-                      Eksempelmal
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="rounded-xl"
-                      onClick={openAllQuestions}
-                    >
-                      Vis alle
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="rounded-xl"
-                      onClick={closeAllQuestions}
-                    >
-                      Skjul alle
-                    </Button>
-                  </div>
                 </div>
               </div>
-              <div className="space-y-4">
+              <div className="space-y-3">
                 {questions.map((question, index) => {
                   const warning = plainLanguageWarnings.find((item) => item.id === question.id);
                   const availableParentQuestions = questions
@@ -3319,28 +3300,21 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
                 })}
               </div>
             </div>
+            ) : null}
           </DialogBody>
           <DialogFooter className="flex flex-wrap justify-between gap-3 sm:gap-4">
             <div className="flex flex-wrap gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                className="h-11 rounded-xl px-5 sm:h-12"
-                onClick={() => setPreviewOpen(true)}
-              >
-                <Eye className="size-4" />
-                Forhåndsvis
-              </Button>
-              {isCreatingNewForm ? null : (
+              {editorSection === "questions" ? (
                 <Button
                   type="button"
-                  variant="ghost"
-                  className="h-11 rounded-xl px-5 text-destructive hover:bg-destructive/10 hover:text-destructive sm:h-12"
-                  onClick={() => void handleArchiveForm()}
+                  variant="outline"
+                  className="h-11 rounded-xl px-5 sm:h-12"
+                  onClick={() => setPreviewOpen(true)}
                 >
-                  Arkiver
+                  <Eye className="size-4" />
+                  Forhåndsvis
                 </Button>
-              )}
+              ) : null}
             </div>
             <div className="flex flex-wrap gap-2 sm:gap-3">
               <Button
@@ -3349,15 +3323,46 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
                 className="h-11 min-w-[5.5rem] rounded-xl px-5 sm:h-12"
                 onClick={() => setEditorOpen(false)}
               >
-                Lukk
+                Avbryt
               </Button>
-              <Button
-                type="button"
-                className="h-11 min-w-[10rem] rounded-xl px-6 text-base font-medium sm:h-12"
-                onClick={() => void handleSaveForm()}
-              >
-                {isCreatingNewForm ? "Opprett skjema" : "Lagre skjema"}
-              </Button>
+              {editorSection === "basics" ? (
+                <Button
+                  type="button"
+                  className="h-11 min-w-[10rem] rounded-xl px-6 text-base font-medium sm:h-12"
+                  disabled={!title.trim()}
+                  onClick={() => setEditorSection("questions")}
+                >
+                  Neste: Spørsmål
+                </Button>
+              ) : editorSection === "questions" && isCreatingNewForm ? (
+                <>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="h-11 rounded-xl px-5 sm:h-12"
+                    onClick={() => setEditorSection("settings")}
+                  >
+                    Innstillinger
+                  </Button>
+                  <Button
+                    type="button"
+                    className="h-11 min-w-[10rem] rounded-xl px-6 text-base font-medium sm:h-12"
+                    disabled={!title.trim()}
+                    onClick={() => void handleSaveForm()}
+                  >
+                    Opprett skjema
+                  </Button>
+                </>
+              ) : (
+                <Button
+                  type="button"
+                  className="h-11 min-w-[10rem] rounded-xl px-6 text-base font-medium sm:h-12"
+                  disabled={!title.trim()}
+                  onClick={() => void handleSaveForm()}
+                >
+                  {isCreatingNewForm ? "Opprett skjema" : "Lagre"}
+                </Button>
+              )}
             </div>
           </DialogFooter>
         </DialogContent>
