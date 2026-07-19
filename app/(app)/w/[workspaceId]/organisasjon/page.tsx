@@ -9,13 +9,14 @@ export default function WorkspaceOrganisasjonPage() {
   const workspaceId = params.workspaceId as Id<"workspaces">;
 
   return (
-    <div className="mx-auto max-w-5xl space-y-8 pb-12">
+    <div className="mx-auto max-w-3xl space-y-6 pb-12 sm:max-w-4xl sm:space-y-8">
       <header className="space-y-1">
         <h1 className="font-heading text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
           Organisasjon
         </h1>
-        <p className="text-sm text-muted-foreground">
-          Struktur for prosesser, vurderinger og ROS.
+        <p className="text-muted-foreground max-w-xl text-sm leading-relaxed">
+          Jobb ut fra enhet: se hva som mangler vurdering eller ROS, og ta neste
+          steg. Strukturen ligger under når du trenger den.
         </p>
       </header>
       <OrgChartPanel workspaceId={workspaceId} />

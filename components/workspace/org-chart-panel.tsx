@@ -17,14 +17,12 @@ import type { Doc, Id } from "@/convex/_generated/dataModel";
 import { ORG_UNIT_KIND_LABELS } from "@/lib/helsesector-labels";
 import { OrgUnitRosKpiStrip, type OrgRosRollup } from "@/components/workspace/org-unit-ros-kpi-strip";
 import { OrgUnitTreeOverviewStrip } from "@/components/workspace/org-unit-tree-overview-strip";
-import { ProcessCoverageOverview } from "@/components/workspace/process-coverage-overview";
+import { OrgUnitWorkPanel } from "@/components/workspace/org-unit-work-panel";
 import { toast } from "@/lib/app-toast";
 import { formatUserFacingError } from "@/lib/user-facing-error";
 import { cn } from "@/lib/utils";
 import { useMutation, useQuery } from "convex/react";
-import Link from "next/link";
 import {
-  AlertTriangle,
   ArrowRightLeft,
   Building2,
   ChevronDown,
@@ -57,6 +55,12 @@ type OrgChartInteraction = {
   onCardSurfaceActivate: (id: Id<"orgUnits">) => void;
   /** Under ~55 % zoom: kompakte noder (unngår uleselig «full»-kort). */
   overviewMode: boolean;
+  /**
+   * Motskalering av tekst i oversiktsnoder: fonten settes større jo lenger ut
+   * man zoomer, slik at navnet holder ~lesbar størrelse PÅ SKJERMEN uansett zoom.
+   * Kvantisert i trinn så ikke hele treet re-rendres for hver zoom-frame.
+   */
+  overviewLabelScale: number;
 };
 
 const OrgChartInteractionContext = createContext<OrgChartInteraction | null>(
@@ -652,6 +656,7 @@ function OrgBranch({
 
   const orgChartCtx = useContext(OrgChartInteractionContext);
   const overviewMode = orgChartCtx?.overviewMode ?? false;
+  const labelScale = orgChartCtx?.overviewLabelScale ?? 1;
 
   const cardShellRef = useCallback(
     (node: HTMLElement | null) => {
@@ -770,24 +775,34 @@ function OrgBranch({
           ref={cardShellRef}
           data-org-chart-card
           className={cn(
-            "flex w-full flex-col gap-0.5 rounded-xl border border-border/50 bg-card px-3 py-2.5 text-left shadow-sm transition-[box-shadow,border-color] hover:border-border hover:shadow-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary dark:border-white/[0.08]",
+            "flex w-full flex-col items-center gap-1 rounded-xl border border-border/70 bg-card px-3 py-3 text-center shadow-sm transition-[box-shadow,border-color] hover:border-border hover:shadow-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary dark:border-white/[0.1]",
             orgChartCtx?.highlightedUnitId === unit._id &&
               "ring-1 ring-primary/60 ring-offset-2 ring-offset-background",
           )}
           onClick={() => orgChartCtx?.onCardSurfaceActivate(unit._id)}
         >
-          {unit.localCode?.trim() ? (
-            <span className="text-muted-foreground font-mono text-[10px] font-medium tabular-nums">
-              {unit.localCode.trim()}
-            </span>
-          ) : null}
-          <span className="text-foreground line-clamp-2 text-sm font-semibold leading-snug">
+          {/* Motskalert tekst: lesbar på skjermen uansett zoomnivå */}
+          <span
+            className="text-foreground line-clamp-2 w-full font-semibold leading-snug"
+            style={{ fontSize: `calc(0.875rem * ${labelScale})` }}
+          >
             {unit.name}
           </span>
-          <span className="text-muted-foreground truncate text-[10px]">
+          <span
+            className="text-muted-foreground w-full truncate"
+            style={{ fontSize: `calc(0.66rem * ${labelScale})` }}
+          >
+            {unit.localCode?.trim() ? `${unit.localCode.trim()} · ` : ""}
             {ORG_UNIT_KIND_LABELS[unit.kind]}
-            {kids.length > 0 ? ` · ${kids.length}` : ""}
           </span>
+          {kids.length > 0 ? (
+            <span
+              className="bg-primary/10 text-primary mt-0.5 inline-flex items-center rounded-full px-2 py-px font-semibold tabular-nums"
+              style={{ fontSize: `calc(0.66rem * ${labelScale})` }}
+            >
+              {kids.length} under
+            </span>
+          ) : null}
         </button>
         {kids.length > 0 ? (
           <>
@@ -2316,6 +2331,16 @@ export function OrgChartPanel({
 
   const overviewMode = chartZoom < ORG_CHART_OVERVIEW_ZOOM;
 
+  /**
+   * Skjermlesbar tekst i oversiktsnoder: mål ≈ 11px på skjermen.
+   * 0.8/zoom, avrundet til 0.05-trinn (unngår re-render per frame), tak 2.6.
+   */
+  const overviewLabelScale = useMemo(() => {
+    if (!overviewMode) return 1;
+    const raw = Math.min(2.6, Math.max(1, 0.8 / Math.max(chartZoom, ORG_CHART_ZOOM_MIN)));
+    return Math.round(raw * 20) / 20;
+  }, [overviewMode, chartZoom]);
+
   const onCardSurfaceActivate = useCallback((id: Id<"orgUnits">) => {
     setActiveOrgUnitId(id);
     setHighlightedUnitId(id);
@@ -2342,6 +2367,7 @@ export function OrgChartPanel({
       highlightedUnitId,
       onCardSurfaceActivate,
       overviewMode,
+      overviewLabelScale,
     }),
     [
       registerCardRef,
@@ -2349,6 +2375,7 @@ export function OrgChartPanel({
       highlightedUnitId,
       onCardSurfaceActivate,
       overviewMode,
+      overviewLabelScale,
     ],
   );
 
@@ -2417,95 +2444,18 @@ export function OrgChartPanel({
         />
       ) : null}
 
-      {rosRollup &&
-      (rosRollup.unassigned.candidateCount > 0 ||
-        rosRollup.unassigned.analysisCount > 0 ||
-        (rosRollup.unassigned.assessmentCount ?? 0) > 0 ||
-        (rosRollup.unassigned.intakeSubmissionCount ?? 0) > 0 ||
-        (rosRollup.unassigned.intakeFormCount ?? 0) > 0) ? (
-        <div className="flex items-center gap-3 rounded-xl border border-amber-500/20 bg-amber-500/[0.06] px-3 py-2.5">
-          <AlertTriangle className="text-amber-600 dark:text-amber-400 size-4 shrink-0" aria-hidden />
-          <p className="text-muted-foreground min-w-0 text-xs">
-            {(() => {
-              const u = rosRollup.unassigned;
-              const bits: string[] = [];
-              if (u.candidateCount > 0) bits.push(`${u.candidateCount} prosess${u.candidateCount === 1 ? "" : "er"}`);
-              if (u.analysisCount > 0) bits.push(`${u.analysisCount} ROS`);
-              const ac = u.assessmentCount ?? 0;
-              if (ac > 0) bits.push(`${ac} vurdering${ac === 1 ? "" : "er"}`);
-              const fc = u.intakeFormCount ?? 0;
-              if (fc > 0) bits.push(`${fc} skjema`);
-              return <><span className="text-foreground font-medium">{bits.join(", ")}</span> mangler plassering i organisasjonskartet</>;
-            })()}
-          </p>
-        </div>
-      ) : null}
-
       {rows.length > 0 ? (
-        <section className="space-y-3" aria-label="Enhetshub">
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <select
-              className="border-input bg-background h-11 w-full rounded-full border border-border/50 px-4 text-sm sm:w-[22rem]"
-              value={activeOrgUnitId === "" ? rows[0]!._id : activeOrgUnitId}
-              onChange={(e) => {
-                const next = e.target.value as Id<"orgUnits">;
-                setActiveOrgUnitId(next);
-                onCardSurfaceActivate(next);
-              }}
-              aria-label="Velg organisasjonsenhet"
-            >
-              {rows.map((u) => (
-                <option key={u._id} value={u._id}>
-                  {ORG_UNIT_KIND_LABELS[u.kind]} · {u.name}
-                </option>
-              ))}
-            </select>
-            {activeOrgUnit ? (
-              <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
-                <Link
-                  href={`/w/${workspaceId}/vurderinger?fane=prosesser&orgUnit=${activeOrgUnit._id}`}
-                  className="font-medium text-muted-foreground underline-offset-4 transition-colors hover:text-foreground hover:underline"
-                >
-                  Prosesser
-                </Link>
-                <Link
-                  href={`/w/${workspaceId}/vurderinger?orgUnit=${activeOrgUnit._id}`}
-                  className="font-medium text-muted-foreground underline-offset-4 transition-colors hover:text-foreground hover:underline"
-                >
-                  Vurderinger
-                </Link>
-                <Link
-                  href={`/w/${workspaceId}/ros?fane=analyser&orgUnit=${activeOrgUnit._id}`}
-                  className="font-medium text-muted-foreground underline-offset-4 transition-colors hover:text-foreground hover:underline"
-                >
-                  ROS
-                </Link>
-              </div>
-            ) : null}
-          </div>
-          {activeOrgUnit && activeRollup ? (
-            <dl className="flex flex-wrap gap-x-8 gap-y-2 border-y border-border/50 py-3.5 text-sm">
-              <div className="flex items-baseline gap-2">
-                <dt className="text-muted-foreground">Prosesser</dt>
-                <dd className="font-semibold tabular-nums text-foreground">
-                  {activeRollup.candidateCount}
-                </dd>
-              </div>
-              <div className="flex items-baseline gap-2">
-                <dt className="text-muted-foreground">Vurderinger</dt>
-                <dd className="font-semibold tabular-nums text-foreground">
-                  {activeRollup.assessmentCount ?? 0}
-                </dd>
-              </div>
-              <div className="flex items-baseline gap-2">
-                <dt className="text-muted-foreground">ROS</dt>
-                <dd className="font-semibold tabular-nums text-foreground">
-                  {activeRollup.analysisCount}
-                </dd>
-              </div>
-            </dl>
-          ) : null}
-        </section>
+        <OrgUnitWorkPanel
+          workspaceId={workspaceId}
+          orgUnits={rows}
+          activeOrgUnitId={activeOrgUnitId}
+          onSelectOrgUnit={(id) => {
+            setActiveOrgUnitId(id);
+            onCardSurfaceActivate(id);
+          }}
+          activeRollup={activeRollup}
+          unassignedCount={rosRollup?.unassigned.candidateCount ?? 0}
+        />
       ) : null}
 
       {roots.length === 0 ? (
@@ -2521,6 +2471,22 @@ export function OrgChartPanel({
           </p>
         </div>
       ) : (
+        <details className="group/structure rounded-2xl border border-border/50 bg-card/40 open:bg-card/60 open:shadow-sm">
+          <summary className="flex cursor-pointer list-none items-center gap-3 px-4 py-3.5 text-left sm:px-5 [&::-webkit-details-marker]:hidden">
+            <Building2 className="text-muted-foreground size-5 shrink-0" aria-hidden />
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-semibold text-foreground">
+                {canEdit ? "Struktur" : "Organisasjonskart"}
+              </p>
+              <p className="text-muted-foreground text-xs leading-snug">
+                {canEdit
+                  ? "Se og rediger enheter, kontakter og hierarki"
+                  : "Se enheter og hvordan arbeidet er plassert"}
+              </p>
+            </div>
+            <ChevronRight className="text-muted-foreground size-5 shrink-0 transition-transform group-open/structure:rotate-90" />
+          </summary>
+          <div className="border-t border-border/40 px-2 pb-3 pt-2 sm:px-3 sm:pb-4">
         <OrgChartInteractionContext.Provider value={interactionValue}>
         <div
           ref={chartHostRef}
@@ -2767,22 +2733,9 @@ export function OrgChartPanel({
           </div>
         </div>
         </OrgChartInteractionContext.Provider>
+          </div>
+        </details>
       )}
-
-      <section className="space-y-3 rounded-2xl border border-border/50 bg-card/70 p-4 shadow-sm sm:p-5">
-        <div className="space-y-1">
-          <h2 className="text-lg font-semibold tracking-tight text-foreground">
-            Dokumentasjon i organisasjonen
-          </h2>
-          <p className="text-sm text-muted-foreground">
-            Finn prosesser og deres PVV, risiko og PDD fra samme sted, også når du starter i organisasjonsvisningen.
-          </p>
-        </div>
-        <ProcessCoverageOverview
-          workspaceId={workspaceId}
-          title="Prosesser og tilknyttet dokumentasjon"
-        />
-      </section>
     </div>
   );
 }
