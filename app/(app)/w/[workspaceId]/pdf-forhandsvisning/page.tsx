@@ -20,15 +20,17 @@ import { buildRosPdfInputForPreview } from "@/lib/ros-pdf-input-from-server";
 import { buildRosAnalysisPdfBlob, downloadRosAnalysisPdf } from "@/lib/ros-pdf";
 import { cn } from "@/lib/utils";
 import { useQuery } from "convex/react";
+import { ProductEmptyState } from "@/components/product";
 import {
   ExternalLink,
   FileDown,
+  FileText,
   Loader2,
   Search,
-  Check,
   ArrowUpDown,
   X,
 } from "lucide-react";
+import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
@@ -108,6 +110,8 @@ export default function PdfForhandsvisningPage() {
 
   const [listFilter, setListFilter] = useState("");
   const [listSort, setListSort] = useState<ListSort>("updated_desc");
+  /** Rad-ID for ett-klikks nedlasting fra listen: velg → generer → last ned automatisk. */
+  const [autoDownloadId, setAutoDownloadId] = useState<string | null>(null);
 
   const draftBundle = useQuery(
     api.assessments.getDraft,
@@ -139,6 +143,8 @@ export default function PdfForhandsvisningPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const pdfUrlRef = useRef<string | null>(null);
+  /** På mobil/nettbrett: rull forhåndsvisningen inn i bildet når et dokument velges. */
+  const previewRef = useRef<HTMLElement | null>(null);
 
   const revokeCurrent = useCallback(() => {
     if (pdfUrlRef.current) {
@@ -308,6 +314,28 @@ export default function PdfForhandsvisningPage() {
     pddAssessmentId,
   ]);
 
+  const selectedIdForTab =
+    tab === "ros"
+      ? String(analysisId)
+      : tab === "pdd"
+        ? String(pddAssessmentId)
+        : String(assessmentId);
+
+  // Ett-klikks nedlasting: når PDF-en for den valgte raden er klar, last ned og nullstill.
+  useEffect(() => {
+    if (!autoDownloadId) return;
+    if (error) {
+      setAutoDownloadId(null);
+      return;
+    }
+    if (!pdfUrl || busy) return;
+    if (autoDownloadId !== selectedIdForTab) return;
+    setAutoDownloadId(null);
+    void handleDownload();
+    // handleDownload leser samme data som genererte pdfUrl — trygt her.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoDownloadId, pdfUrl, busy, error, selectedIdForTab]);
+
   const downloadLabel = useMemo(() => {
     if (tab === "vurdering" && draftBundle)
       return safePdfFilename(draftBundle.assessment.title, "PVV");
@@ -390,6 +418,7 @@ export default function PdfForhandsvisningPage() {
 
   useEffect(() => {
     setListFilter("");
+    setAutoDownloadId(null);
   }, [tab]);
 
   if (
@@ -398,8 +427,19 @@ export default function PdfForhandsvisningPage() {
     analyses === undefined
   ) {
     return (
-      <div className="flex min-h-[40vh] items-center justify-center">
-        <div className="size-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+      <div className="mx-auto max-w-6xl space-y-6 pb-10" aria-busy="true">
+        <div className="space-y-2">
+          <div className="bg-muted/40 h-8 w-44 animate-pulse rounded-lg" />
+          <div className="bg-muted/30 h-4 w-72 max-w-full animate-pulse rounded-md" />
+        </div>
+        <div className="bg-muted/30 h-10 w-64 max-w-full animate-pulse rounded-full" />
+        <div className="grid gap-6 lg:grid-cols-[minmax(0,20rem)_minmax(0,1fr)]">
+          <div className="space-y-2">
+            <div className="bg-muted/30 h-11 animate-pulse rounded-full" />
+            <div className="bg-muted/25 h-64 animate-pulse rounded-2xl" />
+          </div>
+          <div className="bg-muted/25 hidden h-[28rem] animate-pulse rounded-2xl lg:block" />
+        </div>
       </div>
     );
   }
@@ -436,16 +476,27 @@ export default function PdfForhandsvisningPage() {
       : tab === "pdd"
         ? String(pddAssessmentId)
         : String(assessmentId);
-  const selectActiveRow = (id: string) => {
+  const selectActiveRow = (id: string, opts?: { scroll?: boolean }) => {
     if (tab === "ros") {
       setAnalysisId(id as Id<"rosAnalyses">);
-      return;
-    }
-    if (tab === "pdd") {
+    } else if (tab === "pdd") {
       setPddAssessmentId(id as Id<"assessments">);
-      return;
+    } else {
+      setAssessmentId(id as Id<"assessments">);
     }
-    setAssessmentId(id as Id<"assessments">);
+    // Under lg ligger forhåndsvisningen nedenfor listen — vis at valget virket.
+    if (
+      opts?.scroll !== false &&
+      typeof window !== "undefined" &&
+      !window.matchMedia("(min-width: 1024px)").matches
+    ) {
+      window.setTimeout(() => {
+        previewRef.current?.scrollIntoView({
+          behavior: "smooth",
+          block: "start",
+        });
+      }, 80);
+    }
   };
 
   const previewTitle =
@@ -464,7 +515,7 @@ export default function PdfForhandsvisningPage() {
     "h-[min(56rem,calc(100dvh-14rem))] min-h-[24rem]";
 
   return (
-    <div className="mx-auto max-w-6xl space-y-6 pb-10">
+    <div className="mx-auto max-w-6xl space-y-6 pb-28 lg:pb-10">
       <header className="space-y-1">
         <h1 className="font-heading text-2xl font-semibold tracking-tight sm:text-3xl">
           PDF-eksport
@@ -481,6 +532,8 @@ export default function PdfForhandsvisningPage() {
       >
         {TAB_CONFIG.map(({ id, label }) => {
           const active = tab === id;
+          const count =
+            id === "ros" ? analysisList.length : assessmentList.length;
           return (
             <button
               key={id}
@@ -489,13 +542,21 @@ export default function PdfForhandsvisningPage() {
               aria-selected={active}
               onClick={() => setTab(id)}
               className={cn(
-                "rounded-full px-4 py-1.5 text-sm font-medium transition-colors",
+                "inline-flex min-h-9 items-center gap-1.5 rounded-full px-4 py-1.5 text-sm font-medium transition-colors",
                 active
-                  ? "bg-foreground text-background"
+                  ? "bg-primary text-primary-foreground shadow-[0_0_14px_-3px_color-mix(in_oklab,var(--primary)_60%,transparent)]"
                   : "text-muted-foreground hover:text-foreground",
               )}
             >
               {label}
+              <span
+                className={cn(
+                  "text-[11px] tabular-nums",
+                  active ? "opacity-80" : "opacity-60",
+                )}
+              >
+                {count}
+              </span>
             </button>
           );
         })}
@@ -505,16 +566,29 @@ export default function PdfForhandsvisningPage() {
         {/* Venstre: dokumentliste */}
         <aside className="min-w-0 space-y-3">
           {emptyForTab ? (
-            <div className="rounded-2xl border border-dashed border-border/60 px-5 py-10 text-center">
-              <p className="text-sm font-medium text-foreground">
-                {tab === "ros" ? "Ingen ROS-analyser" : "Ingen vurderinger ennå"}
-              </p>
-              <p className="mt-1 text-sm text-muted-foreground">
-                {tab === "ros"
-                  ? "Opprett en analyse under Risiko (ROS)."
-                  : "Opprett en vurdering først."}
-              </p>
-            </div>
+            <ProductEmptyState
+              icon={FileText}
+              title={
+                tab === "ros" ? "Ingen ROS-analyser" : "Ingen vurderinger ennå"
+              }
+              description={
+                tab === "ros"
+                  ? "Opprett en analyse under Risiko (ROS), så kan den eksporteres her."
+                  : "Opprett en vurdering først, så kan den eksporteres her."
+              }
+              action={
+                <Link
+                  href={
+                    tab === "ros"
+                      ? `/w/${String(workspaceId)}/ros`
+                      : `/w/${String(workspaceId)}/vurderinger`
+                  }
+                  className="border-border/60 text-muted-foreground hover:border-border hover:text-foreground inline-flex h-9 items-center gap-1.5 rounded-xl border px-3.5 text-sm font-medium transition-colors"
+                >
+                  {tab === "ros" ? "Til Risiko (ROS)" : "Til vurderinger"}
+                </Link>
+              }
+            />
           ) : (
             <>
               {canFilterList ? (
@@ -574,31 +648,74 @@ export default function PdfForhandsvisningPage() {
               <ul className="divide-y divide-border/40 overflow-hidden rounded-2xl border border-border/50 bg-card">
                 {activeRows.map((row) => {
                   const selected = activeSelectedId === String(row._id);
+                  const downloading = autoDownloadId === String(row._id);
                   return (
-                    <li key={String(row._id)}>
+                    <li key={String(row._id)} className="relative">
                       <button
                         type="button"
                         onClick={() => selectActiveRow(String(row._id))}
                         className={cn(
-                          "flex w-full items-center gap-3 px-4 py-3 text-left transition-colors",
-                          selected ? "bg-muted/50" : "hover:bg-muted/25",
+                          "relative flex min-h-14 w-full items-center gap-3 py-3 pl-4 pr-14 text-left transition-colors touch-manipulation",
+                          selected
+                            ? "bg-primary/10"
+                            : "hover:bg-muted/25 active:bg-muted/40",
                         )}
                         aria-pressed={selected}
+                        aria-label={`Forhåndsvis «${row.title}»`}
                       >
+                        {selected ? (
+                          <span
+                            className="bg-primary absolute inset-y-3 left-0 w-0.5 rounded-full"
+                            aria-hidden
+                          />
+                        ) : null}
+                        <FileText
+                          className={cn(
+                            "size-4 shrink-0",
+                            selected
+                              ? "text-primary"
+                              : "text-muted-foreground/60",
+                          )}
+                          aria-hidden
+                        />
                         <div className="min-w-0 flex-1">
                           <p className="truncate text-sm font-medium text-foreground">
                             {row.title}
                           </p>
-                          {row.updatedAt ? (
-                            <p className="mt-0.5 text-xs text-muted-foreground">
-                              {formatRelativeUpdatedAt(row.updatedAt)}
-                            </p>
-                          ) : null}
+                          <p className="mt-0.5 text-xs text-muted-foreground">
+                            {selected
+                              ? "Vises i forhåndsvisningen"
+                              : row.updatedAt
+                                ? formatRelativeUpdatedAt(row.updatedAt)
+                                : " "}
+                          </p>
                         </div>
-                        {selected ? (
-                          <Check className="size-4 shrink-0 text-foreground" aria-hidden />
-                        ) : null}
                       </button>
+                      {/* Ett klikk: last ned dette dokumentet direkte fra listen */}
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className={cn(
+                          "hover:text-primary absolute right-2 top-1/2 size-10 -translate-y-1/2 rounded-lg",
+                          downloading
+                            ? "text-primary"
+                            : "text-muted-foreground",
+                        )}
+                        aria-label={`Last ned «${row.title}» som PDF`}
+                        title="Last ned PDF"
+                        disabled={downloading}
+                        onClick={() => {
+                          selectActiveRow(String(row._id), { scroll: false });
+                          setAutoDownloadId(String(row._id));
+                        }}
+                      >
+                        {downloading ? (
+                          <Loader2 className="size-4 animate-spin" aria-hidden />
+                        ) : (
+                          <FileDown className="size-4" aria-hidden />
+                        )}
+                      </Button>
                     </li>
                   );
                 })}
@@ -609,8 +726,9 @@ export default function PdfForhandsvisningPage() {
 
         {/* Høyre: forhåndsvisning med verktøylinje */}
         <section
+          ref={previewRef}
           aria-label="PDF-forhåndsvisning"
-          className="min-w-0 space-y-3"
+          className="min-w-0 scroll-mt-[calc(var(--app-header-height,3.5rem)+0.75rem)] space-y-3"
         >
           <div className="flex items-center justify-between gap-3">
             <div className="min-w-0">
@@ -623,7 +741,8 @@ export default function PdfForhandsvisningPage() {
                 </p>
               ) : null}
             </div>
-            <div className="flex shrink-0 items-center gap-2">
+            {/* Desktop-handlinger — på mobil ligger de i bunnlinjen i tommelhøyde */}
+            <div className="hidden shrink-0 items-center gap-2 lg:flex">
               <Button
                 type="button"
                 variant="ghost"
@@ -638,7 +757,7 @@ export default function PdfForhandsvisningPage() {
               </Button>
               <Button
                 type="button"
-                className="h-10 gap-2 rounded-full bg-foreground px-5 text-sm font-semibold text-background transition-opacity hover:opacity-90"
+                className="h-10 gap-2 rounded-full px-5 text-sm font-semibold"
                 disabled={!pdfUrl || !!error || busy}
                 onClick={() => void handleDownload()}
               >
@@ -689,6 +808,34 @@ export default function PdfForhandsvisningPage() {
           </div>
         </section>
       </div>
+
+      {/* Mobil/nettbrett: handlingslinje nederst — alltid i tommelrekkevidde */}
+      {!emptyForTab ? (
+        <div className="border-border/60 bg-background/90 fixed inset-x-0 bottom-0 z-30 border-t backdrop-blur-xl lg:hidden">
+          <div className="mx-auto flex max-w-6xl items-center gap-2 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              className="size-11 shrink-0 rounded-xl"
+              aria-label="Åpne i ny fane"
+              disabled={!pdfUrl || !!error || busy}
+              onClick={openPdfInNewTab}
+            >
+              <ExternalLink className="size-4" aria-hidden />
+            </Button>
+            <Button
+              type="button"
+              className="h-11 min-h-11 flex-1 gap-2 rounded-xl text-sm font-semibold"
+              disabled={!pdfUrl || !!error || busy}
+              onClick={() => void handleDownload()}
+            >
+              <FileDown className="size-4 shrink-0" aria-hidden />
+              {busy ? "Genererer …" : "Last ned PDF"}
+            </Button>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

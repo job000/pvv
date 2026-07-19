@@ -24,11 +24,11 @@ export function ProductEmptyState({
       role="status"
     >
       {Icon ? (
-        <div className="mb-4 flex size-12 items-center justify-center rounded-2xl bg-muted/60 text-muted-foreground">
+        <div className="bg-primary/8 text-primary ring-primary/10 mb-4 flex size-12 items-center justify-center rounded-2xl ring-1">
           <Icon className="size-6" aria-hidden />
         </div>
       ) : null}
-      <p className="font-medium text-foreground">{title}</p>
+      <p className="font-semibold tracking-tight text-foreground">{title}</p>
       {description ? (
         <div className="mt-2 max-w-md text-sm leading-relaxed text-muted-foreground">
           {description}
