@@ -1,6 +1,12 @@
 "use client";
 
-import { type ComponentType, useEffect, useMemo, useState } from "react";
+import {
+  type ComponentType,
+  type CSSProperties,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import { useMutation, useQuery } from "convex/react";
@@ -59,6 +65,8 @@ function FocusActionCard({
   detail,
   href,
   cta,
+  icon: Icon,
+  tone = "default",
 }: {
   eyebrow: string;
   title: string;
@@ -69,25 +77,51 @@ function FocusActionCard({
   tone?: "default" | "warning" | "action";
   navigationTarget: PrimaryFocusNavigation;
 }) {
+  const warning = tone === "warning";
   return (
     <Link
       href={href}
-      className="group flex flex-col gap-3 rounded-2xl border border-border/50 bg-card px-4 py-4 transition-colors hover:bg-muted/25 sm:flex-row sm:items-center sm:justify-between sm:px-5"
+      className="group flex flex-col gap-3 rounded-2xl border border-border/60 bg-card px-4 py-4 shadow-[var(--shadow-card)] transition-all duration-200 hover:-translate-y-0.5 hover:border-border hover:shadow-[var(--shadow-elevated)] sm:flex-row sm:items-center sm:justify-between sm:px-5 [background-image:linear-gradient(to_bottom,color-mix(in_oklab,var(--primary)_4%,transparent),transparent_55%)]"
     >
-      <div className="min-w-0">
-        <p className="text-xs font-medium text-muted-foreground">{eyebrow}</p>
-        <p className="mt-1 truncate text-base font-semibold tracking-tight text-foreground sm:text-lg">
-          {title}
-        </p>
-        {detail ? (
-          <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">
-            {detail}
+      <div className="flex min-w-0 items-start gap-3.5 sm:items-center">
+        <span
+          className={cn(
+            "mt-0.5 grid size-10 shrink-0 place-items-center rounded-xl sm:mt-0",
+            warning
+              ? "bg-amber-500/15 text-amber-600 dark:text-amber-400"
+              : "bg-primary/10 text-primary",
+          )}
+          aria-hidden
+        >
+          <Icon className="size-5" />
+        </span>
+        <div className="min-w-0">
+          <p
+            className={cn(
+              "text-xs font-semibold",
+              warning
+                ? "text-amber-600 dark:text-amber-400"
+                : "text-primary",
+            )}
+          >
+            {eyebrow}
           </p>
-        ) : null}
+          <p className="mt-1 truncate text-base font-semibold tracking-tight text-foreground sm:text-lg">
+            {title}
+          </p>
+          {detail ? (
+            <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">
+              {detail}
+            </p>
+          ) : null}
+        </div>
       </div>
-      <span className="inline-flex h-11 shrink-0 items-center justify-center gap-1.5 rounded-full bg-foreground px-4 text-sm font-semibold text-background transition-opacity group-hover:opacity-90 sm:h-10">
+      <span className="product-cta-glow inline-flex h-11 shrink-0 items-center justify-center gap-1.5 rounded-full bg-primary px-5 text-sm font-semibold text-primary-foreground transition-opacity group-hover:opacity-95 sm:h-10">
         {cta}
-        <ArrowRight className="size-3.5" aria-hidden />
+        <ArrowRight
+          className="size-3.5 transition-transform group-hover:translate-x-0.5"
+          aria-hidden
+        />
       </span>
     </Link>
   );
@@ -438,7 +472,7 @@ export function WorkspaceOperationalDashboard({
   return (
     <div className="mx-auto max-w-2xl space-y-5">
       <section
-        className="space-y-2"
+        className="product-rise space-y-2"
         aria-labelledby="home-flow-heading"
       >
         <div className="flex items-center justify-between gap-2">
@@ -467,10 +501,13 @@ export function WorkspaceOperationalDashboard({
             <li key={stage.id} className="shrink-0">
               <span
                 className={cn(
-                  "inline-flex whitespace-nowrap rounded-lg px-2 py-1 text-[11px] font-medium",
+                  "inline-flex items-center whitespace-nowrap rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors",
                   highlightedFlowStage === stage.index
-                    ? "bg-foreground text-background"
-                    : "bg-muted/50 text-muted-foreground",
+                    ? "bg-primary text-primary-foreground shadow-[0_0_14px_-3px_color-mix(in_oklab,var(--primary)_65%,transparent)]"
+                    : highlightedFlowStage != null &&
+                        stage.index < highlightedFlowStage
+                      ? "bg-primary/10 text-primary"
+                      : "bg-muted/50 text-muted-foreground",
                 )}
                 title={stage.summary}
               >
@@ -489,7 +526,11 @@ export function WorkspaceOperationalDashboard({
       ) : null}
 
       {showFocus ? (
-        <section className="space-y-3" aria-labelledby="workspace-focus-heading">
+        <section
+          className="product-rise space-y-3"
+          style={{ "--rise-delay": "0.06s" } as CSSProperties}
+          aria-labelledby="workspace-focus-heading"
+        >
           <h2 id="workspace-focus-heading" className="sr-only">
             Anbefalt handling
           </h2>
@@ -510,10 +551,10 @@ export function WorkspaceOperationalDashboard({
                 key={s.label}
                 href={s.href}
                 className={cn(
-                  "inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors",
+                  "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors",
                   s.emphasize
-                    ? "bg-muted text-foreground"
-                    : "text-muted-foreground hover:bg-muted/50 hover:text-foreground",
+                    ? "border-primary/20 bg-primary/10 text-primary hover:bg-primary/15"
+                    : "border-border/60 text-muted-foreground hover:border-border hover:text-foreground",
                 )}
               >
                 <span className="tabular-nums font-semibold">{s.value}</span>
@@ -525,7 +566,11 @@ export function WorkspaceOperationalDashboard({
       ) : null}
 
       {showActions && actionItems.length > 0 ? (
-        <section className="space-y-3" aria-labelledby="home-actions-heading">
+        <section
+          className="product-rise space-y-3"
+          style={{ "--rise-delay": "0.12s" } as CSSProperties}
+          aria-labelledby="home-actions-heading"
+        >
           <div className="flex items-center justify-between gap-3">
             <h2
               id="home-actions-heading"
@@ -549,9 +594,13 @@ export function WorkspaceOperationalDashboard({
                 <li key={item.key} className="min-w-0">
                   <Link
                     href={item.href}
-                    className="hover:bg-muted/25 flex h-full flex-col gap-2 rounded-xl border border-border/50 bg-card p-3.5 transition-colors"
+                    className="group relative flex h-full flex-col gap-2 rounded-xl border border-border/50 bg-card p-3.5 transition-all duration-200 hover:-translate-y-0.5 hover:border-border hover:bg-muted/25 hover:shadow-[var(--shadow-card)]"
                   >
-                    <p className="line-clamp-2 text-sm font-semibold">
+                    <ArrowRight
+                      className="text-muted-foreground absolute right-3 top-3.5 size-3.5 -translate-x-1 opacity-0 transition-all group-hover:translate-x-0 group-hover:opacity-60"
+                      aria-hidden
+                    />
+                    <p className="line-clamp-2 pr-5 text-sm font-semibold">
                       {item.title}
                     </p>
                     <p className="text-muted-foreground text-xs">
@@ -600,7 +649,7 @@ export function WorkspaceOperationalDashboard({
                 <li key={item.key}>
                   <Link
                     href={item.href}
-                    className="hover:bg-muted/25 flex min-h-12 items-center gap-3 px-3.5 py-2.5 transition-colors"
+                    className="group hover:bg-muted/25 flex min-h-12 items-center gap-3 px-3.5 py-2.5 transition-colors"
                   >
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-medium">
@@ -612,7 +661,7 @@ export function WorkspaceOperationalDashboard({
                       </p>
                     </div>
                     <ArrowRight
-                      className="text-muted-foreground size-4 shrink-0 opacity-40"
+                      className="text-muted-foreground size-4 shrink-0 opacity-40 transition-all group-hover:translate-x-0.5 group-hover:opacity-100"
                       aria-hidden
                     />
                   </Link>
