@@ -84,24 +84,24 @@ function FocusActionCard({
   return (
     <Link
       href={href}
-      className="group flex flex-col gap-3 rounded-2xl border border-border/60 bg-card px-4 py-4 shadow-[var(--shadow-card)] transition-all duration-200 hover:-translate-y-0.5 hover:border-border hover:shadow-[var(--shadow-elevated)] sm:flex-row sm:items-center sm:justify-between sm:px-5 [background-image:linear-gradient(to_bottom,color-mix(in_oklab,var(--primary)_4%,transparent),transparent_55%)]"
+      className="group flex flex-col gap-3 rounded-2xl border border-border/60 bg-card px-4 py-4 shadow-[var(--shadow-card)] transition-all duration-200 hover:-translate-y-0.5 hover:border-border hover:shadow-[var(--shadow-elevated)] sm:flex-row sm:items-center sm:justify-between sm:gap-4 sm:px-6 sm:py-5 lg:px-7 lg:py-6 [background-image:linear-gradient(to_bottom,color-mix(in_oklab,var(--primary)_4%,transparent),transparent_55%)]"
     >
-      <div className="flex min-w-0 items-start gap-3.5 sm:items-center">
+      <div className="flex min-w-0 items-start gap-3.5 sm:items-center sm:gap-4">
         <span
           className={cn(
-            "mt-0.5 grid size-10 shrink-0 place-items-center rounded-xl sm:mt-0",
+            "mt-0.5 grid size-10 shrink-0 place-items-center rounded-xl sm:mt-0 sm:size-11 lg:size-12",
             warning
               ? "bg-amber-500/15 text-amber-600 dark:text-amber-400"
               : "bg-primary/10 text-primary",
           )}
           aria-hidden
         >
-          <Icon className="size-5" />
+          <Icon className="size-5 lg:size-6" />
         </span>
         <div className="min-w-0">
           <p
             className={cn(
-              "text-xs font-semibold",
+              "text-xs font-semibold sm:text-sm",
               warning
                 ? "text-amber-600 dark:text-amber-400"
                 : "text-primary",
@@ -109,17 +109,17 @@ function FocusActionCard({
           >
             {eyebrow}
           </p>
-          <p className="mt-1 truncate text-base font-semibold tracking-tight text-foreground sm:text-lg">
+          <p className="mt-1 truncate text-base font-semibold tracking-tight text-foreground sm:text-lg lg:text-xl">
             {title}
           </p>
           {detail ? (
-            <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">
+            <p className="mt-1 line-clamp-2 text-sm text-muted-foreground sm:text-[15px] lg:text-base">
               {detail}
             </p>
           ) : null}
         </div>
       </div>
-      <span className="product-cta-glow inline-flex h-11 shrink-0 items-center justify-center gap-1.5 rounded-full bg-primary px-5 text-sm font-semibold text-primary-foreground transition-opacity group-hover:opacity-95 sm:h-10">
+      <span className="product-cta-glow inline-flex h-11 shrink-0 items-center justify-center gap-1.5 rounded-full bg-primary px-5 text-sm font-semibold text-primary-foreground transition-opacity group-hover:opacity-95 sm:h-11 sm:px-6 lg:h-12 lg:text-[15px]">
         {cta}
         <ArrowRight
           className="size-3.5 transition-transform group-hover:translate-x-0.5"
@@ -518,9 +518,9 @@ export function WorkspaceOperationalDashboard({
             : null;
 
   return (
-    <div className="mx-auto max-w-2xl space-y-5">
+    <div className="mx-auto max-w-2xl space-y-5 sm:max-w-3xl sm:space-y-6 lg:max-w-5xl lg:space-y-7">
       <section
-        className="product-rise space-y-2"
+        className="product-rise space-y-2 sm:space-y-2.5"
         aria-labelledby="home-flow-heading"
       >
         <div className="flex items-center justify-between gap-2">
@@ -544,12 +544,12 @@ export function WorkspaceOperationalDashboard({
             {lifecycleHidden ? "Guide" : "Skjul guide"}
           </button>
         </div>
-        <ol className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        <ol className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-0.5 sm:gap-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           {RPA_LIFECYCLE_STAGES.map((stage) => (
             <li key={stage.id} className="shrink-0">
               <span
                 className={cn(
-                  "inline-flex items-center whitespace-nowrap rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors",
+                  "inline-flex items-center whitespace-nowrap rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors sm:px-3 sm:py-1.5 sm:text-xs",
                   highlightedFlowStage === stage.index
                     ? "bg-primary text-primary-foreground shadow-[0_0_14px_-3px_color-mix(in_oklab,var(--primary)_65%,transparent)]"
                     : highlightedFlowStage != null &&
@@ -599,7 +599,7 @@ export function WorkspaceOperationalDashboard({
                 key={s.label}
                 href={s.href}
                 className={cn(
-                  "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors",
+                  "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors sm:px-3.5 sm:py-2 sm:text-sm",
                   s.emphasize
                     ? "border-primary/20 bg-primary/10 text-primary hover:bg-primary/15"
                     : "border-border/60 text-muted-foreground hover:border-border hover:text-foreground",
@@ -622,7 +622,7 @@ export function WorkspaceOperationalDashboard({
           <div className="flex flex-wrap items-center justify-between gap-2">
             <h2
               id="home-actions-heading"
-              className="text-sm font-semibold tracking-tight text-foreground"
+              className="text-sm font-semibold tracking-tight text-foreground sm:text-base"
             >
               Deretter
             </h2>
@@ -677,21 +677,21 @@ export function WorkspaceOperationalDashboard({
 
           {actionItems.length > 0 ? (
             viewMode === "cards" ? (
-              <ul className="grid gap-2 sm:grid-cols-2">
+              <ul className="grid gap-2 sm:grid-cols-2 sm:gap-3 lg:grid-cols-3">
                 {actionItems.map((item) => (
                   <li key={item.key} className="min-w-0">
                     <Link
                       href={item.href}
-                      className="group relative flex h-full flex-col gap-2 rounded-xl border border-border/50 bg-card p-3.5 transition-all duration-200 hover:-translate-y-0.5 hover:border-border hover:bg-muted/25 hover:shadow-[var(--shadow-card)]"
+                      className="group relative flex h-full flex-col gap-2 rounded-xl border border-border/50 bg-card p-3.5 transition-all duration-200 hover:-translate-y-0.5 hover:border-border hover:bg-muted/25 hover:shadow-[var(--shadow-card)] sm:p-4"
                     >
                       <ArrowRight
                         className="text-muted-foreground absolute right-3 top-3.5 size-3.5 -translate-x-1 opacity-0 transition-all group-hover:translate-x-0 group-hover:opacity-60"
                         aria-hidden
                       />
-                      <p className="line-clamp-2 pr-5 text-sm font-semibold">
+                      <p className="line-clamp-2 pr-5 text-sm font-semibold sm:text-[15px]">
                         {item.title}
                       </p>
-                      <p className="text-muted-foreground text-xs">
+                      <p className="text-muted-foreground text-xs sm:text-sm">
                         {item.reason}
                         {item.meta ? ` · ${item.meta}` : null}
                       </p>

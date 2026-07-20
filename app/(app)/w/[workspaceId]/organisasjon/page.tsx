@@ -9,7 +9,7 @@ export default function WorkspaceOrganisasjonPage() {
   const workspaceId = params.workspaceId as Id<"workspaces">;
 
   return (
-    <div className="mx-auto max-w-3xl space-y-6 pb-12 sm:max-w-4xl sm:space-y-8">
+    <div className="mx-auto max-w-3xl space-y-6 pb-12 sm:max-w-5xl sm:space-y-8 lg:max-w-6xl">
       <header className="space-y-1">
         <h1 className="font-heading text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
           Organisasjon
