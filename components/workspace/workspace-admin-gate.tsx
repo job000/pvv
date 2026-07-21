@@ -39,7 +39,7 @@ export function WorkspaceAdminGate({
           href={`/w/${workspaceId}`}
           className="text-foreground mt-4 inline-flex text-sm font-medium underline-offset-2 hover:underline"
         >
-          Tilbake til Hjem
+          Tilbake til Oversikt
         </Link>
       </div>
     );

@@ -2,7 +2,6 @@
 
 import {
   ProductLoadingBlock,
-  ProductPageHeader,
   ProductStack,
 } from "@/components/product";
 import { WorkspaceOperationalDashboard } from "@/components/workspace/workspace-operational-dashboard";
@@ -11,8 +10,6 @@ import { WorkspaceOverviewViewSettings } from "@/components/workspace/workspace-
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import { useQuery } from "convex/react";
-import { ArrowUpRight } from "lucide-react";
-import Link from "next/link";
 import { useParams } from "next/navigation";
 import { Suspense, useMemo } from "react";
 
@@ -72,35 +69,37 @@ export default function WorkspaceOverviewPage() {
     );
   }
 
+  const placeNote = workspace.notes?.trim();
+
   return (
-    <ProductStack className="pb-4">
+    <ProductStack className="relative pb-8">
+      <div
+        className="pointer-events-none absolute inset-x-0 -top-2 h-44 rounded-[2rem] bg-gradient-to-b from-muted/50 via-muted/20 to-transparent sm:h-52"
+        aria-hidden
+      />
       <Suspense fallback={null}>
         <WorkspaceRosLinkDialogHost workspaceId={workspaceId} />
       </Suspense>
-      <ProductPageHeader
-        className="sm:items-center"
-        title={workspace.name}
-        description={
-          workspace.notes?.trim()
-            ? workspace.notes
-            : "Neste steg i arbeidsområdet."
-        }
-        actions={
-          <div className="flex flex-wrap items-center gap-2">
-            <WorkspaceOverviewViewSettings
-              workspaceId={workspaceId}
-              compactTrigger
-            />
-            <Link
-              href={`/w/${workspaceId}/vurderinger`}
-              className="text-muted-foreground hover:text-foreground inline-flex h-10 items-center justify-center gap-1.5 rounded-xl border border-border/50 px-3.5 text-sm font-medium transition-colors"
-            >
-              Vurderinger
-              <ArrowUpRight className="size-3.5" aria-hidden />
-            </Link>
-          </div>
-        }
-      />
+
+      <header className="relative flex items-start justify-between gap-4 pt-1 sm:pt-2">
+        <div className="min-w-0 space-y-1.5">
+          <p className="text-muted-foreground text-[11px] font-semibold tracking-[0.14em] uppercase">
+            Oversikt
+          </p>
+          <h1 className="font-heading text-[1.35rem] font-medium tracking-[-0.035em] text-foreground sm:text-[1.65rem]">
+            {workspace.name}
+          </h1>
+          {placeNote ? (
+            <p className="text-muted-foreground max-w-xl text-sm leading-relaxed">
+              {placeNote}
+            </p>
+          ) : null}
+        </div>
+        <WorkspaceOverviewViewSettings
+          workspaceId={workspaceId}
+          compactTrigger
+        />
+      </header>
 
       <WorkspaceOperationalDashboard
         workspaceId={workspaceId}

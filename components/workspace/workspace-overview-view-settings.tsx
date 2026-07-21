@@ -224,9 +224,9 @@ export function WorkspaceOverviewViewSettings({
                     className="mt-0.5"
                   />
                   <span>
-                    <span className="text-sm font-medium">Nøkkeltall</span>
+                    <span className="text-sm font-medium">Anbefalt neste steg</span>
                     <span className="text-muted-foreground block text-xs leading-snug">
-                      Fokuskort og tre kompakte oversikter
+                      Primærhandling og status i området
                     </span>
                   </span>
                 </label>
@@ -237,9 +237,9 @@ export function WorkspaceOverviewViewSettings({
                     className="mt-0.5"
                   />
                   <span>
-                    <span className="text-sm font-medium">Høyeste prioritet</span>
+                    <span className="text-sm font-medium">Også aktuelt</span>
                     <span className="text-muted-foreground block text-xs leading-snug">
-                      Liste over saker sortert etter prioritet
+                      Kort pek til noen få saker under neste steg
                     </span>
                   </span>
                 </label>
@@ -250,9 +250,9 @@ export function WorkspaceOverviewViewSettings({
                     className="mt-0.5"
                   />
                   <span>
-                    <span className="text-sm font-medium">Sist oppdatert</span>
+                    <span className="text-sm font-medium">Sist i arbeid</span>
                     <span className="text-muted-foreground block text-xs leading-snug">
-                      Siste aktivitet på vurderinger
+                      Noen få vurderinger du nylig var innom
                     </span>
                   </span>
                 </label>

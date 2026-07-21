@@ -10,7 +10,6 @@ import {
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import { useMutation, useQuery } from "convex/react";
-import { ListViewModeToggle } from "@/components/ui/list-view-mode-toggle";
 import { RpaLifecycleGuide } from "@/components/workspace/rpa-lifecycle-guide";
 import { formatRelativeUpdatedAt } from "@/lib/assessment-ui-helpers";
 import {
@@ -22,7 +21,6 @@ import {
   sortByHomeUrgency,
 } from "@/lib/home-next-action";
 import type { ListViewMode } from "@/lib/list-view-mode";
-import { RPA_LIFECYCLE_STAGES } from "@/lib/rpa-lifecycle";
 import { useStickyState } from "@/lib/use-sticky-state";
 import { cn } from "@/lib/utils";
 import {
@@ -35,6 +33,8 @@ import {
 import Link from "next/link";
 
 type HomeListPageSize = 6 | 10 | 20;
+/** Oversikt er sted — kort pek, ikke full arbeidskø. */
+const OVERVIEW_PEEK = 3;
 
 export type WorkspaceHomeListPrefs = {
   viewMode: ListViewMode;
@@ -84,45 +84,58 @@ function FocusActionCard({
   return (
     <Link
       href={href}
-      className="group flex flex-col gap-3 rounded-2xl border border-border/60 bg-card px-4 py-4 shadow-[var(--shadow-card)] transition-all duration-200 hover:-translate-y-0.5 hover:border-border hover:shadow-[var(--shadow-elevated)] sm:flex-row sm:items-center sm:justify-between sm:gap-4 sm:px-6 sm:py-5 lg:px-7 lg:py-6 [background-image:linear-gradient(to_bottom,color-mix(in_oklab,var(--primary)_4%,transparent),transparent_55%)]"
+      className={cn(
+        "group relative flex flex-col gap-5 overflow-hidden rounded-[1.75rem] border px-5 py-5 transition-[border-color,box-shadow,transform] sm:flex-row sm:items-center sm:justify-between sm:gap-8 sm:px-7 sm:py-7",
+        "hover:-translate-y-0.5 hover:shadow-[var(--shadow-elevated)]",
+        warning
+          ? "border-amber-500/25 bg-gradient-to-br from-amber-500/[0.08] via-card to-card"
+          : "border-border/50 bg-gradient-to-br from-primary/[0.06] via-card to-card",
+      )}
     >
-      <div className="flex min-w-0 items-start gap-3.5 sm:items-center sm:gap-4">
+      <div className="relative flex min-w-0 flex-1 items-start gap-4 sm:items-center">
         <span
           className={cn(
-            "mt-0.5 grid size-10 shrink-0 place-items-center rounded-xl sm:mt-0 sm:size-11 lg:size-12",
+            "mt-0.5 grid size-12 shrink-0 place-items-center rounded-2xl shadow-sm ring-1 ring-black/[0.04] sm:mt-0 dark:ring-white/[0.06]",
             warning
-              ? "bg-amber-500/15 text-amber-600 dark:text-amber-400"
-              : "bg-primary/10 text-primary",
+              ? "bg-amber-500/15 text-amber-700 dark:text-amber-400"
+              : "bg-background/90 text-foreground",
           )}
           aria-hidden
         >
-          <Icon className="size-5 lg:size-6" />
+          <Icon className="size-5 sm:size-[1.35rem]" />
         </span>
-        <div className="min-w-0">
+        <div className="min-w-0 space-y-1.5">
           <p
             className={cn(
-              "text-xs font-semibold sm:text-sm",
+              "text-[11px] font-semibold tracking-[0.08em] uppercase",
               warning
-                ? "text-amber-600 dark:text-amber-400"
-                : "text-primary",
+                ? "text-amber-700 dark:text-amber-400"
+                : "text-muted-foreground",
             )}
           >
             {eyebrow}
           </p>
-          <p className="mt-1 truncate text-base font-semibold tracking-tight text-foreground sm:text-lg lg:text-xl">
+          <p className="line-clamp-2 text-xl font-semibold tracking-[-0.02em] text-foreground sm:text-2xl">
             {title}
           </p>
           {detail ? (
-            <p className="mt-1 line-clamp-2 text-sm text-muted-foreground sm:text-[15px] lg:text-base">
+            <p className="line-clamp-2 max-w-xl text-sm leading-relaxed text-muted-foreground">
               {detail}
             </p>
           ) : null}
         </div>
       </div>
-      <span className="product-cta-glow inline-flex h-11 shrink-0 items-center justify-center gap-1.5 rounded-full bg-primary px-5 text-sm font-semibold text-primary-foreground transition-opacity group-hover:opacity-95 sm:h-11 sm:px-6 lg:h-12 lg:text-[15px]">
+      <span
+        className={cn(
+          "relative inline-flex h-12 w-full shrink-0 items-center justify-center gap-2 rounded-2xl px-6 text-sm font-semibold transition-opacity sm:w-auto sm:rounded-full",
+          warning
+            ? "bg-amber-600 text-white group-hover:opacity-95 dark:bg-amber-500"
+            : "bg-foreground text-background group-hover:opacity-90",
+        )}
+      >
         {cta}
         <ArrowRight
-          className="size-3.5 transition-transform group-hover:translate-x-0.5"
+          className="size-4 transition-transform group-hover:translate-x-0.5"
           aria-hidden
         />
       </span>
@@ -205,7 +218,6 @@ export function WorkspaceOperationalDashboard({
   const showFocus = sectionVisibility?.showMetrics !== false;
   const showPriority = sectionVisibility?.showPrioritySection !== false;
   const showRecent = sectionVisibility?.showRecentSection !== false;
-  const showActions = showPriority || showRecent;
 
   const pendingIntake = useMemo(
     () =>
@@ -444,7 +456,7 @@ export function WorkspaceOperationalDashboard({
   }
   let skippedPrimary = false;
   for (const { row, action } of rankedActions) {
-    if (actionItems.length >= pageSize) break;
+    if (actionItems.length >= OVERVIEW_PEEK) break;
     if (
       primaryAssessmentId != null &&
       row.assessmentId === primaryAssessmentId
@@ -467,15 +479,17 @@ export function WorkspaceOperationalDashboard({
       actionItems.filter((i) => i.key !== "intake-queue").length,
   );
 
-  const FLOW_SHORT: Record<number, string> = {
-    1: "Identifisering",
-    2: "Vurdering",
-    3: "Design",
-    4: "Utvikling",
-    5: "Testing",
-    6: "Produksjon",
-    7: "Drift",
-  };
+  const actionKeys = new Set(actionItems.map((i) => i.key));
+  const recentPeek = scopedRecent
+    .filter((r) => r.assessmentId !== primaryAssessmentId)
+    .filter((r) => !actionKeys.has(String(r.assessmentId)))
+    .slice(0, OVERVIEW_PEEK)
+    .map((r) => ({
+      key: String(r.assessmentId),
+      title: r.title,
+      href: `/w/${wid}/a/${r.assessmentId}`,
+      meta: formatRelativeUpdatedAt(r.updatedAt),
+    }));
 
   const overviewStats = [
     {
@@ -506,82 +520,63 @@ export function WorkspaceOperationalDashboard({
     },
   ] as const;
 
-  const highlightedFlowStage =
-    primarySpec.key === "intake"
-      ? 1
-      : primarySpec.key === "assess" || primarySpec.key === "prioritize"
-        ? 2
-        : primarySpec.key === "ros" || primarySpec.key === "ros-list"
-          ? 3
-          : primarySpec.key === "hold"
-            ? 2
-            : null;
+  const destinations = [
+    { label: "Vurderinger", href: `/w/${wid}/vurderinger`, hint: "Saker og status" },
+    { label: "Oppgaver", href: `/w/${wid}/oppgaver`, hint: "Det du skal gjøre" },
+    { label: "Organisasjon", href: `/w/${wid}/organisasjon`, hint: "Enheter og struktur" },
+    { label: "Risiko", href: `/w/${wid}/ros`, hint: "ROS og analyser" },
+  ] as const;
 
   return (
-    <div className="mx-auto max-w-2xl space-y-5 sm:max-w-3xl sm:space-y-6 lg:max-w-5xl lg:space-y-7">
-      <section
-        className="product-rise space-y-2 sm:space-y-2.5"
-        aria-labelledby="home-flow-heading"
-      >
-        <div className="flex items-center justify-between gap-2">
-          <h2
-            id="home-flow-heading"
-            className="text-muted-foreground text-xs font-medium"
-          >
-            Flyt
-            {highlightedFlowStage != null ? (
-              <span className="text-foreground">
-                {" "}
-                · steg {highlightedFlowStage}
-              </span>
-            ) : null}
-          </h2>
-          <button
-            type="button"
-            onClick={() => setLifecycleHidden(!lifecycleHidden)}
-            className="text-muted-foreground hover:text-foreground shrink-0 text-xs font-medium underline-offset-2 hover:underline"
-          >
-            {lifecycleHidden ? "Guide" : "Skjul guide"}
-          </button>
-        </div>
-        <ol className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-0.5 sm:gap-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-          {RPA_LIFECYCLE_STAGES.map((stage) => (
-            <li key={stage.id} className="shrink-0">
-              <span
-                className={cn(
-                  "inline-flex items-center whitespace-nowrap rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors sm:px-3 sm:py-1.5 sm:text-xs",
-                  highlightedFlowStage === stage.index
-                    ? "bg-primary text-primary-foreground shadow-[0_0_14px_-3px_color-mix(in_oklab,var(--primary)_65%,transparent)]"
-                    : highlightedFlowStage != null &&
-                        stage.index < highlightedFlowStage
-                      ? "bg-primary/10 text-primary"
-                      : "bg-muted/50 text-muted-foreground",
-                )}
-                title={stage.summary}
-              >
-                {stage.index}. {FLOW_SHORT[stage.index] ?? stage.title}
-              </span>
-            </li>
-          ))}
-        </ol>
-      </section>
-
-      {!lifecycleHidden ? (
-        <RpaLifecycleGuide
-          workspaceId={workspaceId}
-          onHide={() => setLifecycleHidden(true)}
-        />
-      ) : null}
-
+    <div className="relative mx-auto max-w-2xl space-y-8 sm:max-w-3xl sm:space-y-10 lg:max-w-4xl">
       {showFocus ? (
         <section
-          className="product-rise space-y-3"
-          style={{ "--rise-delay": "0.06s" } as CSSProperties}
+          className="product-rise space-y-4"
+          style={{ "--rise-delay": "0.05s" } as CSSProperties}
           aria-labelledby="workspace-focus-heading"
         >
-          <h2 id="workspace-focus-heading" className="sr-only">
-            Anbefalt handling
-          </h2>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h2
+              id="workspace-focus-heading"
+              className="text-[11px] font-semibold tracking-[0.12em] text-muted-foreground uppercase"
+            >
+              Neste steg
+            </h2>
+            <div
+              role="group"
+              aria-label="Visning"
+              className="bg-muted/70 inline-flex rounded-full p-0.5 ring-1 ring-border/40"
+            >
+              {(
+                [
+                  ["mine", "Mine"],
+                  ["all", "Hele området"],
+                ] as const
+              ).map(([id, label]) => (
+                <button
+                  key={id}
+                  type="button"
+                  aria-pressed={queueScope === id}
+                  onClick={() =>
+                    persistHomeList({
+                      viewMode,
+                      pageSize,
+                      queueScope: id,
+                    })
+                  }
+                  className={cn(
+                    "min-h-8 rounded-full px-3 text-xs font-medium transition-colors touch-manipulation",
+                    queueScope === id
+                      ? "bg-background text-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+
           <FocusActionCard
             eyebrow={primarySpec.eyebrow}
             title={primarySpec.title}
@@ -593,216 +588,170 @@ export function WorkspaceOperationalDashboard({
             navigationTarget={primarySpec.navigationTarget}
           />
 
-          <div className="flex flex-wrap gap-2">
+          <div className="grid grid-cols-3 gap-2 sm:gap-3">
             {overviewStats.map((s) => (
               <Link
                 key={s.label}
                 href={s.href}
                 className={cn(
-                  "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors sm:px-3.5 sm:py-2 sm:text-sm",
+                  "rounded-2xl border px-3 py-3 transition-colors sm:px-4 sm:py-3.5",
                   s.emphasize
-                    ? "border-primary/20 bg-primary/10 text-primary hover:bg-primary/15"
-                    : "border-border/60 text-muted-foreground hover:border-border hover:text-foreground",
+                    ? "border-primary/20 bg-primary/[0.06] hover:bg-primary/[0.1]"
+                    : "border-border/40 bg-muted/30 hover:bg-muted/50",
                 )}
               >
-                <span className="tabular-nums font-semibold">{s.value}</span>
-                {s.label}
+                <p className="text-muted-foreground text-[11px] font-medium tracking-wide">
+                  {s.label}
+                </p>
+                <p
+                  className={cn(
+                    "mt-1 text-2xl font-semibold tracking-tight tabular-nums",
+                    s.emphasize ? "text-foreground" : "text-foreground/85",
+                  )}
+                >
+                  {s.value}
+                </p>
               </Link>
             ))}
           </div>
         </section>
       ) : null}
 
-      {showActions ? (
+      {showPriority && actionItems.length > 0 ? (
         <section
           className="product-rise space-y-3"
-          style={{ "--rise-delay": "0.12s" } as CSSProperties}
-          aria-labelledby="home-actions-heading"
+          style={{ "--rise-delay": "0.1s" } as CSSProperties}
+          aria-labelledby="overview-also-heading"
         >
-          <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-baseline justify-between gap-3">
             <h2
-              id="home-actions-heading"
-              className="text-sm font-semibold tracking-tight text-foreground sm:text-base"
+              id="overview-also-heading"
+              className="text-[11px] font-semibold tracking-[0.12em] text-muted-foreground uppercase"
             >
-              Deretter
+              Også aktuelt
             </h2>
-            <div className="flex flex-wrap items-center gap-2">
-              <div
-                role="group"
-                aria-label="Køomfang"
-                className="bg-muted/40 inline-flex rounded-full border border-border/50 p-0.5"
+            {remainingAfterCap > 0 ? (
+              <Link
+                href={`/w/${wid}/vurderinger`}
+                className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 text-xs font-medium"
               >
-                {(
-                  [
-                    ["mine", "Mine"],
-                    ["all", "Hele området"],
-                  ] as const
-                ).map(([id, label]) => (
-                  <button
-                    key={id}
-                    type="button"
-                    aria-pressed={queueScope === id}
-                    onClick={() =>
-                      persistHomeList({
-                        viewMode,
-                        pageSize,
-                        queueScope: id,
-                      })
-                    }
-                    className={cn(
-                      "h-8 rounded-full px-2.5 text-xs font-medium transition-colors touch-manipulation",
-                      queueScope === id
-                        ? "bg-background text-foreground shadow-sm"
-                        : "text-muted-foreground hover:text-foreground",
-                    )}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-              <ListViewModeToggle
-                value={viewMode}
-                onChange={(next) =>
-                  persistHomeList({
-                    viewMode: next,
-                    pageSize,
-                    queueScope,
-                  })
-                }
-                showSelect={false}
-                showIcons
-              />
-            </div>
+                Alle
+                <ArrowRight className="size-3" aria-hidden />
+              </Link>
+            ) : null}
           </div>
-
-          {actionItems.length > 0 ? (
-            viewMode === "cards" ? (
-              <ul className="grid gap-2 sm:grid-cols-2 sm:gap-3 lg:grid-cols-3">
-                {actionItems.map((item) => (
-                  <li key={item.key} className="min-w-0">
-                    <Link
-                      href={item.href}
-                      className="group relative flex h-full flex-col gap-2 rounded-xl border border-border/50 bg-card p-3.5 transition-all duration-200 hover:-translate-y-0.5 hover:border-border hover:bg-muted/25 hover:shadow-[var(--shadow-card)] sm:p-4"
-                    >
-                      <ArrowRight
-                        className="text-muted-foreground absolute right-3 top-3.5 size-3.5 -translate-x-1 opacity-0 transition-all group-hover:translate-x-0 group-hover:opacity-60"
-                        aria-hidden
-                      />
-                      <p className="line-clamp-2 pr-5 text-sm font-semibold sm:text-[15px]">
-                        {item.title}
-                      </p>
-                      <p className="text-muted-foreground text-xs sm:text-sm">
-                        {item.reason}
-                        {item.meta ? ` · ${item.meta}` : null}
-                      </p>
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            ) : viewMode === "table" ? (
-              <div className="-mx-1 overflow-x-auto px-1">
-                <table className="w-full min-w-[26rem] border-collapse text-left text-sm">
-                  <thead>
-                    <tr className="border-b border-border/50 text-xs text-muted-foreground">
-                      <th className="px-3 py-2 font-medium">Sak</th>
-                      <th className="px-3 py-2 font-medium">Neste</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {actionItems.map((item) => (
-                      <tr
-                        key={item.key}
-                        className="border-b border-border/30 last:border-0"
-                      >
-                        <td className="px-3 py-2.5">
-                          <Link
-                            href={item.href}
-                            className="font-medium text-foreground underline-offset-2 hover:underline"
-                          >
-                            {item.title}
-                          </Link>
-                        </td>
-                        <td className="text-muted-foreground px-3 py-2.5 text-xs">
-                          {item.reason}
-                          {item.meta ? ` · ${item.meta}` : null}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            ) : (
-              <ul className="divide-y divide-border/40 overflow-hidden rounded-xl border border-border/50 bg-card">
-                {actionItems.map((item) => (
-                  <li key={item.key}>
-                    <Link
-                      href={item.href}
-                      className="group hover:bg-muted/25 flex min-h-12 items-center gap-3 px-3.5 py-2.5 transition-colors"
-                    >
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-medium">
-                          {item.title}
-                        </p>
-                        <p className="text-muted-foreground truncate text-xs">
-                          {item.reason}
-                          {item.meta ? ` · ${item.meta}` : null}
-                        </p>
-                      </div>
-                      <ArrowRight
-                        className="text-muted-foreground size-4 shrink-0 opacity-40 transition-all group-hover:translate-x-0.5 group-hover:opacity-100"
-                        aria-hidden
-                      />
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            )
-          ) : showFocus ? (
-            <p className="text-muted-foreground text-sm">
-              {queueScope === "mine"
-                ? "Ingen egne vurderinger i kø. "
-                : "Ingen flere i kø. "}
-              <Link
-                href={`/w/${wid}/vurderinger`}
-                className="text-foreground font-medium underline-offset-2 hover:underline"
+          <ul className="overflow-hidden rounded-2xl border border-border/40 bg-card/60">
+            {actionItems.map((item, i) => (
+              <li
+                key={item.key}
+                className={cn(i > 0 && "border-t border-border/30")}
               >
-                Se alle vurderinger
-              </Link>
-              {queueScope === "mine" ? (
-                <>
-                  {" "}
-                  eller bytt til{" "}
-                  <button
-                    type="button"
-                    className="text-foreground font-medium underline-offset-2 hover:underline"
-                    onClick={() =>
-                      persistHomeList({
-                        viewMode,
-                        pageSize,
-                        queueScope: "all",
-                      })
-                    }
-                  >
-                    hele området
-                  </button>
-                  .
-                </>
-              ) : null}
-            </p>
-          ) : null}
-
-          {remainingAfterCap > 0 ? (
-            <div className="flex justify-end">
-              <Link
-                href={`/w/${wid}/vurderinger`}
-                className="text-muted-foreground hover:text-foreground text-xs font-medium underline-offset-2 hover:underline"
-              >
-                Se alle ({totalScopedActions})
-              </Link>
-            </div>
-          ) : null}
+                <Link
+                  href={item.href}
+                  className="group flex min-h-14 items-center gap-3 px-4 py-3.5 transition-colors hover:bg-muted/40"
+                >
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium text-foreground">
+                      {item.title}
+                    </p>
+                    <p className="text-muted-foreground mt-0.5 truncate text-xs">
+                      {item.reason}
+                      {item.meta ? ` · ${item.meta}` : null}
+                    </p>
+                  </div>
+                  <ArrowRight
+                    className="text-muted-foreground size-4 shrink-0 opacity-25 transition-all group-hover:translate-x-0.5 group-hover:opacity-70"
+                    aria-hidden
+                  />
+                </Link>
+              </li>
+            ))}
+          </ul>
         </section>
       ) : null}
+
+      {showRecent && recentPeek.length > 0 ? (
+        <section
+          className="product-rise space-y-3"
+          style={{ "--rise-delay": "0.14s" } as CSSProperties}
+          aria-labelledby="overview-recent-heading"
+        >
+          <h2
+            id="overview-recent-heading"
+            className="text-[11px] font-semibold tracking-[0.12em] text-muted-foreground uppercase"
+          >
+            Sist i arbeid
+          </h2>
+          <ul className="flex flex-wrap gap-2">
+            {recentPeek.map((item) => (
+              <li key={item.key}>
+                <Link
+                  href={item.href}
+                  className="hover:border-border hover:bg-card inline-flex max-w-full items-center gap-2 rounded-full border border-border/40 bg-muted/25 py-1.5 pr-3 pl-3 text-sm transition-colors"
+                >
+                  <span className="truncate font-medium text-foreground">
+                    {item.title}
+                  </span>
+                  {item.meta ? (
+                    <span className="text-muted-foreground shrink-0 text-[11px]">
+                      {item.meta}
+                    </span>
+                  ) : null}
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+
+      <nav
+        className="product-rise"
+        style={{ "--rise-delay": "0.16s" } as CSSProperties}
+        aria-label="Gå videre i området"
+      >
+        <h2 className="text-[11px] font-semibold tracking-[0.12em] text-muted-foreground uppercase">
+          Utforsk
+        </h2>
+        <ul className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+          {destinations.map((d) => (
+            <li key={d.href}>
+              <Link
+                href={d.href}
+                className="group flex h-full flex-col justify-between rounded-2xl border border-border/40 bg-card/50 px-3.5 py-3 transition-colors hover:border-border hover:bg-card"
+              >
+                <span className="text-sm font-medium text-foreground">
+                  {d.label}
+                </span>
+                <span className="text-muted-foreground mt-1 text-[11px] leading-snug">
+                  {d.hint}
+                </span>
+              </Link>
+            </li>
+          ))}
+        </ul>
+      </nav>
+
+      {!lifecycleHidden ? (
+        <div
+          className="product-rise"
+          style={{ "--rise-delay": "0.18s" } as CSSProperties}
+        >
+          <RpaLifecycleGuide
+            workspaceId={workspaceId}
+            onHide={() => setLifecycleHidden(true)}
+          />
+        </div>
+      ) : (
+        <p className="product-rise text-center">
+          <button
+            type="button"
+            onClick={() => setLifecycleHidden(false)}
+            className="text-muted-foreground/70 hover:text-muted-foreground text-[11px] underline-offset-2 touch-manipulation hover:underline"
+          >
+            Slik fungerer RPA-flyten
+          </button>
+        </p>
+      )}
     </div>
   );
 }

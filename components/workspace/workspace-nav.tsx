@@ -12,7 +12,6 @@ import {
   Eye,
   FileText,
   Kanban,
-  LayoutDashboard,
   ListTodo,
   ScrollText,
   Settings2,
@@ -44,8 +43,8 @@ function navSections(wid: string): { heading: string | null; items: NavItem[] }[
       items: [
         {
           href: `/w/${wid}`,
-          label: "Hjem",
-          icon: LayoutDashboard,
+          label: "Oversikt",
+          icon: Eye,
           exact: true,
           kind: "default",
         },

@@ -115,7 +115,7 @@ export function CommandPalette() {
         keywords?: string;
         adminOnly?: boolean;
       }> = [
-        { label: "Hjem", path: "", icon: LayoutDashboard, keywords: "oversikt hjem" },
+        { label: "Oversikt", path: "", icon: LayoutDashboard, keywords: "oversikt hjem" },
         { label: "Oppgaver", path: "/oppgaver", icon: ListTodo, keywords: "tasks todo" },
         { label: "Skjemaer", path: "/skjemaer", icon: FileText, keywords: "forslag intake skjema" },
         { label: "Prosesser", path: "/vurderinger?fane=prosesser", icon: Users, keywords: "prosessregister" },

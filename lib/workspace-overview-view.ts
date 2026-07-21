@@ -46,7 +46,7 @@ export function buildWorkspaceOverviewShortcuts(
       id: "oversikt",
       href: `/w/${w}`,
       title: "Oversikt",
-      desc: "Neste steg og arbeidskø",
+      desc: "Inngang til arbeidsområdet",
       icon: FolderKanban,
     },
     {
