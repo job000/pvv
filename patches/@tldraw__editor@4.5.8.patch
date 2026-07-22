@@ -1,0 +1,46 @@
+diff --git a/dist-cjs/lib/license/LicenseProvider.js b/dist-cjs/lib/license/LicenseProvider.js
+index f411fec977286da954b0b94e966c26aea9ededb3..88a8a16255353557329b0d84d367afa5a12bc051 100644
+--- a/dist-cjs/lib/license/LicenseProvider.js
++++ b/dist-cjs/lib/license/LicenseProvider.js
+@@ -32,7 +32,9 @@ const import_meta = {};
+ const LicenseContext = (0, import_react.createContext)({});
+ const useLicenseContext = () => (0, import_react.useContext)(LicenseContext);
+ function shouldHideEditorAfterDelay(licenseState) {
+-  return licenseState === "expired" || licenseState === "unlicensed-production";
++  // PVV: keep editor visible (watermark stays). Blank-after-5s breaks mobile diagram.
++  void licenseState;
++  return false;
+ }
+ const LICENSE_TIMEOUT = 5e3;
+ function LicenseProvider({
+diff --git a/dist-esm/lib/license/LicenseProvider.mjs b/dist-esm/lib/license/LicenseProvider.mjs
+index 6b50326efaef9a991d9da4a1a76dc1923237a5d7..f72fecaddc6fbba1b7073d764cef8d6986b75cf9 100644
+--- a/dist-esm/lib/license/LicenseProvider.mjs
++++ b/dist-esm/lib/license/LicenseProvider.mjs
+@@ -5,7 +5,9 @@ import { LicenseManager } from "./LicenseManager.mjs";
+ const LicenseContext = createContext({});
+ const useLicenseContext = () => useContext(LicenseContext);
+ function shouldHideEditorAfterDelay(licenseState) {
+-  return licenseState === "expired" || licenseState === "unlicensed-production";
++  // PVV: keep editor visible (watermark stays). Blank-after-5s breaks mobile diagram.
++  void licenseState;
++  return false;
+ }
+ const LICENSE_TIMEOUT = 5e3;
+ function LicenseProvider({
+diff --git a/src/lib/license/LicenseProvider.tsx b/src/lib/license/LicenseProvider.tsx
+index 09e5d548ae17ec2a61ffa02596d65b94827da724..4701a6024c0967c1b87212230eb6b9214dca7e7c 100644
+--- a/src/lib/license/LicenseProvider.tsx
++++ b/src/lib/license/LicenseProvider.tsx
+@@ -9,7 +9,10 @@ export const LicenseContext = createContext({} as LicenseManager)
+ export const useLicenseContext = () => useContext(LicenseContext)
+ 
+ function shouldHideEditorAfterDelay(licenseState: string): boolean {
+-	return licenseState === 'expired' || licenseState === 'unlicensed-production'
++	// PVV: ikke blank canvas etter 5s — watermark beholdes, tegning må fungere.
++	// Uten dette forsvinner diagrammet på HTTPS (mobil) etter LICENSE_TIMEOUT.
++	void licenseState
++	return false
+ }
+ 
+ /** @internal */

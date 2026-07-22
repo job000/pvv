@@ -28,6 +28,7 @@
     "@tiptap/pm": "^3.28.0",
     "@tiptap/react": "^3.28.0",
     "@tiptap/starter-kit": "^3.28.0",
+    "@tldraw/editor": "4.5.8",
     "@tldraw/tldraw": "^4.5.8",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
@@ -55,6 +56,10 @@
   "pnpm": {
     "overrides": {
       "pdfjs-dist": "5.3.93"
+    },
+    "patchedDependencies": {
+      "tldraw@4.5.8": "patches/tldraw@4.5.8.patch",
+      "@tldraw/editor@4.5.8": "patches/@tldraw__editor@4.5.8.patch"
     }
   },
   "devDependencies": {

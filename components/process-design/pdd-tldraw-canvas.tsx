@@ -589,7 +589,8 @@ export function PddTldrawCanvas({
     );
   }, []);
 
-  const showLicenseFallback = requiresProductionLicense && !licenseKey;
+  /** Soft banner — blank canvas etter 5s er patcha bort; tegning skal fungere med watermark. */
+  const showLicenseHint = requiresProductionLicense && !licenseKey;
 
   const trapScrollKeys = useCallback((e: ReactKeyboardEvent) => {
     const scrollKeys = new Set([
@@ -618,31 +619,6 @@ export function PddTldrawCanvas({
     e.stopPropagation();
   }, []);
 
-  if (showLicenseFallback) {
-    return (
-      <div
-        className={cn(
-          "relative w-full overflow-hidden rounded-2xl border border-border/60 bg-muted/10 p-4 shadow-sm",
-          heightClass,
-          className,
-        )}
-      >
-        <div className="flex h-full items-center justify-center">
-          <Alert className="max-w-xl border-amber-500/30 bg-amber-500/[0.06]">
-            <AlertTitle>
-              Diagrammet er ikke tilgjengelig i produksjon ennå
-            </AlertTitle>
-            <AlertDescription>
-              `tldraw` krever en gyldig produksjonslisens. Legg inn
-              ` NEXT_PUBLIC_TLDRAW_LICENSE_KEY ` i Vercel og redeploy, ellers
-              vises ikke diagrammet riktig.
-            </AlertDescription>
-          </Alert>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div
       ref={containerRef}
@@ -653,6 +629,18 @@ export function PddTldrawCanvas({
         className,
       )}
     >
+      {showLicenseHint ? (
+        <div className="pointer-events-none absolute inset-x-0 top-0 z-20 p-2 sm:p-3">
+          <Alert className="pointer-events-auto border-amber-500/30 bg-amber-500/[0.08] py-2 shadow-sm">
+            <AlertTitle className="text-sm">tldraw-lisens mangler</AlertTitle>
+            <AlertDescription className="text-xs leading-5">
+              Sett <code className="text-[0.7rem]">NEXT_PUBLIC_TLDRAW_LICENSE_KEY</code>{" "}
+              for produksjon (HTTPS). Uten nøkkel vises watermark — tegning skal
+              likevel fungere.
+            </AlertDescription>
+          </Alert>
+        </div>
+      ) : null}
       <Tldraw
         licenseKey={licenseKey}
         store={store}

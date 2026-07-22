@@ -8,6 +8,9 @@ overrides:
   pdfjs-dist: 5.3.93
 
 patchedDependencies:
+  '@tldraw/editor@4.5.8':
+    hash: 005db97ae075342a5e5e06c8af901a2a250fa00d13fa6c9b7359e07272204ca7
+    path: patches/@tldraw__editor@4.5.8.patch
   tldraw@4.5.8:
     hash: 4e21db4f83f6d406fdf1f9e2d1a65370e57d8e9b1b7b973aaf23aba2241d3a23
     path: patches/tldraw@4.5.8.patch
@@ -61,6 +64,9 @@ importers:
       '@tiptap/starter-kit':
         specifier: ^3.28.0
         version: 3.28.0
+      '@tldraw/editor':
+        specifier: 4.5.8
+        version: 4.5.8(patch_hash=005db97ae075342a5e5e06c8af901a2a250fa00d13fa6c9b7359e07272204ca7)(@floating-ui/dom@1.7.6)(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
       '@tldraw/tldraw':
         specifier: ^4.5.8
         version: 4.5.8(@floating-ui/dom@1.7.6)(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
@@ -7315,7 +7321,7 @@ snapshots:
       '@tiptap/extensions': 3.28.0(@tiptap/core@3.28.0(@tiptap/pm@3.28.0))(@tiptap/pm@3.28.0)
       '@tiptap/pm': 3.28.0
 
-  '@tldraw/editor@4.5.8(@floating-ui/dom@1.7.6)(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)':
+  '@tldraw/editor@4.5.8(patch_hash=005db97ae075342a5e5e06c8af901a2a250fa00d13fa6c9b7359e07272204ca7)(@floating-ui/dom@1.7.6)(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)':
     dependencies:
       '@tiptap/core': 3.28.0(@tiptap/pm@3.28.0)
       '@tiptap/pm': 3.28.0
@@ -10862,7 +10868,7 @@ snapshots:
       '@tiptap/pm': 3.28.0
       '@tiptap/react': 3.28.0(@floating-ui/dom@1.7.6)(@tiptap/core@3.28.0(@tiptap/pm@3.28.0))(@tiptap/pm@3.28.0)(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
       '@tiptap/starter-kit': 3.28.0
-      '@tldraw/editor': 4.5.8(@floating-ui/dom@1.7.6)(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
+      '@tldraw/editor': 4.5.8(patch_hash=005db97ae075342a5e5e06c8af901a2a250fa00d13fa6c9b7359e07272204ca7)(@floating-ui/dom@1.7.6)(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
       '@tldraw/store': 4.5.8(react@19.2.4)
       classnames: 2.5.1
       hotkeys-js: 3.13.15
