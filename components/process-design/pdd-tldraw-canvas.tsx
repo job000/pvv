@@ -100,7 +100,11 @@ function clearAllShapesOnPage(editor: Editor) {
  * Freehand: trykkfølsom blyant, palm rejection, lengre streker.
  * Verktøybytte (blyant/viskelær) skjer via tldraw sin egen toolbar.
  */
-function configurePddFreehandDrawing(editor: Editor, readOnly: boolean) {
+function configurePddFreehandDrawing(
+  editor: Editor,
+  readOnly: boolean,
+  opts?: { lockTouchScroll?: boolean },
+) {
   const drawUtil = editor.getShapeUtil("draw") as DrawShapeUtil | undefined;
   if (drawUtil?.options) {
     Object.assign(drawUtil.options, {
@@ -119,6 +123,7 @@ function configurePddFreehandDrawing(editor: Editor, readOnly: boolean) {
 
   let strokeActive = false;
   let toolBeforeEraserTip: string | null = null;
+  const lockTouchScroll = opts?.lockTouchScroll ?? false;
 
   const isEventOnCanvas = (target: EventTarget | null) => {
     if (!(target instanceof Node)) return false;
@@ -136,7 +141,7 @@ function configurePddFreehandDrawing(editor: Editor, readOnly: boolean) {
   };
 
   const blockPageScroll = (event: TouchEvent | WheelEvent) => {
-    if (!strokeActive) return;
+    if (!lockTouchScroll && !strokeActive) return;
     event.preventDefault();
   };
 
@@ -237,6 +242,8 @@ export function PddTldrawCanvas({
   className?: string;
 }) {
   const suppressFlushRef = useRef(false);
+  const onSnapshotChangeRef = useRef(onSnapshotChange);
+  onSnapshotChangeRef.current = onSnapshotChange;
 
   const store = useMemo(() => {
     const source = diagramKind
@@ -306,7 +313,7 @@ export function PddTldrawCanvas({
 
     writeLiveCache("");
     lastSentRef.current = "";
-    onSnapshotChange?.("");
+    onSnapshotChangeRef.current?.("");
 
     suppressFlushRef.current = false;
     if (diagramKind) {
@@ -315,7 +322,7 @@ export function PddTldrawCanvas({
         endPddDiagramClear(instanceKey, diagramKind);
       }, 100);
     }
-  }, [diagramKind, instanceKey, onSnapshotChange, writeLiveCache]);
+  }, [diagramKind, instanceKey, writeLiveCache]);
 
   useEffect(() => {
     onClearNowReady?.(clearNow);
@@ -323,7 +330,8 @@ export function PddTldrawCanvas({
   }, [clearNow, onClearNowReady]);
 
   const flushToParent = useCallback(() => {
-    if (!onSnapshotChange || readOnly) return;
+    const onChange = onSnapshotChangeRef.current;
+    if (!onChange || readOnly) return;
     if (suppressFlushRef.current) return;
     if (
       diagramKind != null &&
@@ -336,17 +344,11 @@ export function PddTldrawCanvas({
     writeLiveCache(json);
     if (json === lastSentRef.current) return;
     lastSentRef.current = json;
-    onSnapshotChange(json);
-  }, [
-    onSnapshotChange,
-    readOnly,
-    writeLiveCache,
-    diagramKind,
-    instanceKey,
-  ]);
+    onChange(json);
+  }, [readOnly, writeLiveCache, diagramKind, instanceKey]);
 
   useLayoutEffect(() => {
-    if (readOnly || !onSnapshotChange) return;
+    if (readOnly || !onSnapshotChangeRef.current) return;
     const unsub = store.listen(
       () => {
         if (suppressFlushRef.current) return;
@@ -388,14 +390,13 @@ export function PddTldrawCanvas({
         writeLiveCache(json);
         if (json !== lastSentRef.current) {
           lastSentRef.current = json;
-          onSnapshotChange(json);
+          onSnapshotChangeRef.current?.(json);
         }
       }
     };
   }, [
     store,
     readOnly,
-    onSnapshotChange,
     flushToParent,
     writeLiveCache,
     diagramKind,
@@ -423,6 +424,8 @@ export function PddTldrawCanvas({
 
     let pointerDown = false;
     let syncTimer: number | undefined;
+    let frozenHeight = "";
+    let frozenWidth = "";
 
     const refresh = () => {
       const editor = editorRef.current;
@@ -439,16 +442,47 @@ export function PddTldrawCanvas({
       syncTimer = window.setTimeout(refresh, 120);
     };
 
+    const freezeShellSize = () => {
+      const rect = shell.getBoundingClientRect();
+      if (rect.width < 8 || rect.height < 8) return;
+      frozenWidth = shell.style.width;
+      frozenHeight = shell.style.height;
+      shell.style.right = "auto";
+      shell.style.bottom = "auto";
+      shell.style.top = "0";
+      shell.style.left = "0";
+      shell.style.width = `${Math.round(rect.width)}px`;
+      shell.style.height = `${Math.round(rect.height)}px`;
+    };
+
+    const unfreezeShellSize = () => {
+      shell.style.width = frozenWidth;
+      shell.style.height = frozenHeight;
+      shell.style.top = "";
+      shell.style.left = "";
+      shell.style.right = "";
+      shell.style.bottom = "";
+      frozenWidth = "";
+      frozenHeight = "";
+    };
+
     const onPointerDown = () => {
       pointerDown = true;
+      if (layoutVariant === "fullscreen") {
+        freezeShellSize();
+      }
     };
     const onPointerUp = () => {
       pointerDown = false;
+      if (layoutVariant === "fullscreen") {
+        unfreezeShellSize();
+      }
       scheduleRefresh();
     };
 
     refresh();
     const ro = new ResizeObserver(() => {
+      if (pointerDown) return;
       requestAnimationFrame(refresh);
     });
     ro.observe(shell);
@@ -471,6 +505,7 @@ export function PddTldrawCanvas({
       shell.removeEventListener("pointerdown", onPointerDown);
       window.removeEventListener("pointerup", onPointerUp);
       window.removeEventListener("pointercancel", onPointerUp);
+      unfreezeShellSize();
     };
   }, [layoutVariant, store]);
 
@@ -541,7 +576,7 @@ export function PddTldrawCanvas({
 
   const heightClass =
     layoutVariant === "fullscreen"
-      ? "absolute inset-0 h-full min-h-[50dvh] w-full"
+      ? "absolute inset-0 h-full w-full"
       : "h-[clamp(22rem,68svh,34rem)] min-h-[22rem] sm:h-[min(34rem,70vh)] sm:min-h-[24rem]";
 
   const requiresProductionLicense = useMemo(() => {
@@ -629,6 +664,7 @@ export function PddTldrawCanvas({
           const cleanupFreehand = configurePddFreehandDrawing(
             editor,
             readOnly,
+            { lockTouchScroll: layoutVariant === "fullscreen" },
           );
           requestAnimationFrame(() => {
             syncEditorViewport(editor);

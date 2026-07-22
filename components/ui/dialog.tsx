@@ -58,6 +58,9 @@ export function DialogContent({
   const { open, onOpenChange } = ctx;
   /** Må følge fullskjerm — portaler til `body` havner under nettleserens fullskjerm-topplag. */
   const [portalRoot, setPortalRoot] = React.useState<Element | null>(null);
+  const shellRef = React.useRef<HTMLDivElement>(null);
+  const panelRef = React.useRef<HTMLDivElement>(null);
+  const pointerDownRef = React.useRef(false);
 
   React.useLayoutEffect(() => {
     const sync = () => {
@@ -84,13 +87,118 @@ export function DialogContent({
         fs.style.overflow = prevFs;
       };
     }
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
+
+    if (!fillViewport) {
+      const prev = document.body.style.overflow;
+      document.body.style.overflow = "hidden";
+      return () => {
+        document.removeEventListener("keydown", onKey);
+        document.body.style.overflow = prev;
+      };
+    }
+
+    /* Hard scroll-lås — overflow:hidden alene stopper ikke iOS rubber-band under tegning. */
+    const body = document.body;
+    const html = document.documentElement;
+    const scrollY = window.scrollY;
+    const prev = {
+      bodyOverflow: body.style.overflow,
+      bodyPosition: body.style.position,
+      bodyTop: body.style.top,
+      bodyLeft: body.style.left,
+      bodyRight: body.style.right,
+      bodyWidth: body.style.width,
+      htmlOverflow: html.style.overflow,
+      htmlOverscroll: html.style.overscrollBehavior,
+    };
+    body.style.overflow = "hidden";
+    body.style.position = "fixed";
+    body.style.top = `-${scrollY}px`;
+    body.style.left = "0";
+    body.style.right = "0";
+    body.style.width = "100%";
+    html.style.overflow = "hidden";
+    html.style.overscrollBehavior = "none";
+
     return () => {
       document.removeEventListener("keydown", onKey);
-      document.body.style.overflow = prev;
+      body.style.overflow = prev.bodyOverflow;
+      body.style.position = prev.bodyPosition;
+      body.style.top = prev.bodyTop;
+      body.style.left = prev.bodyLeft;
+      body.style.right = prev.bodyRight;
+      body.style.width = prev.bodyWidth;
+      html.style.overflow = prev.htmlOverflow;
+      html.style.overscrollBehavior = prev.htmlOverscroll;
+      window.scrollTo(0, scrollY);
     };
-  }, [open, onOpenChange]);
+  }, [fillViewport, open, onOpenChange]);
+
+  /* Lås fillViewport til visualViewport i piksler — 100dvh kollapser/hopper på iOS midt i streken. */
+  React.useLayoutEffect(() => {
+    if (!open || !fillViewport) return;
+    const shell = shellRef.current;
+    const panel = panelRef.current;
+    if (!shell || !panel) return;
+
+    const apply = () => {
+      if (pointerDownRef.current) return;
+      const vv = window.visualViewport;
+      const width = Math.round(vv?.width ?? window.innerWidth);
+      const height = Math.round(vv?.height ?? window.innerHeight);
+      const top = Math.round(vv?.offsetTop ?? 0);
+      const left = Math.round(vv?.offsetLeft ?? 0);
+      if (width < 8 || height < 8) return;
+
+      shell.style.top = `${top}px`;
+      shell.style.left = `${left}px`;
+      shell.style.width = `${width}px`;
+      shell.style.height = `${height}px`;
+      shell.style.right = "auto";
+      shell.style.bottom = "auto";
+
+      panel.style.width = `${width}px`;
+      panel.style.height = `${height}px`;
+      panel.style.maxHeight = `${height}px`;
+    };
+
+    const onPointerDown = () => {
+      pointerDownRef.current = true;
+    };
+    const onPointerUp = () => {
+      pointerDownRef.current = false;
+      apply();
+    };
+
+    apply();
+    const vv = window.visualViewport;
+    vv?.addEventListener("resize", apply);
+    vv?.addEventListener("scroll", apply);
+    window.addEventListener("resize", apply);
+    window.addEventListener("orientationchange", apply);
+    window.addEventListener("pointerdown", onPointerDown, true);
+    window.addEventListener("pointerup", onPointerUp, true);
+    window.addEventListener("pointercancel", onPointerUp, true);
+
+    return () => {
+      vv?.removeEventListener("resize", apply);
+      vv?.removeEventListener("scroll", apply);
+      window.removeEventListener("resize", apply);
+      window.removeEventListener("orientationchange", apply);
+      window.removeEventListener("pointerdown", onPointerDown, true);
+      window.removeEventListener("pointerup", onPointerUp, true);
+      window.removeEventListener("pointercancel", onPointerUp, true);
+      shell.style.top = "";
+      shell.style.left = "";
+      shell.style.width = "";
+      shell.style.height = "";
+      shell.style.right = "";
+      shell.style.bottom = "";
+      panel.style.width = "";
+      panel.style.height = "";
+      panel.style.maxHeight = "";
+    };
+  }, [fillViewport, open]);
 
   if (!open || portalRoot == null) {
     return null;
@@ -111,17 +219,23 @@ export function DialogContent({
 
   return createPortal(
     <div
+      ref={shellRef}
       className={cn(
-        "fixed inset-0 z-[200] flex",
+        "fixed z-[200] flex",
         fillViewport
-          ? "items-stretch justify-stretch p-0"
+          ? "touch-none items-stretch justify-stretch overscroll-none p-0"
           : [
-              "items-end justify-center sm:items-center",
+              "inset-0 items-end justify-center sm:items-center",
               // Safe area + padding — dialog max-height må trekke fra dette
               "px-3 pt-[max(0.75rem,env(safe-area-inset-top))] pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:p-6",
             ].join(" "),
         portalClassName,
       )}
+      style={
+        fillViewport
+          ? { top: 0, left: 0, width: "100%", height: "100%" }
+          : undefined
+      }
     >
       {!fillViewport ? (
         <button
@@ -132,6 +246,7 @@ export function DialogContent({
         />
       ) : null}
       <div
+        ref={panelRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
@@ -139,8 +254,7 @@ export function DialogContent({
         className={cn(
           "bg-background relative z-10 flex w-full min-h-0 flex-col overflow-hidden border shadow-2xl",
           fillViewport
-            ? // Én høydeenhet — unngå min-h 100svh + max-h 100dvh (kan kollapse på iOS ved tegning)
-              "h-[100dvh] max-h-[100dvh] w-[100vw] max-w-none rounded-none border-border/60 shadow-none sm:rounded-none"
+            ? "h-full max-h-none w-full max-w-none rounded-none border-border/60 shadow-none sm:rounded-none"
             : cn(
                 // 100dvh minus overlay-padding + safe areas — unngår at toppen klippes på mobil
                 "border-border/80 max-h-[calc(100dvh-1.5rem-env(safe-area-inset-top,0px)-env(safe-area-inset-bottom,0px))] rounded-t-2xl rounded-b-2xl sm:max-h-[min(92vh,56rem)] sm:rounded-3xl",

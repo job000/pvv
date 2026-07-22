@@ -358,6 +358,15 @@ html[data-ui-density="compact"] {
   -webkit-touch-callout: none;
 }
 
+/* tldraw må fylle parent — ellers kollapser canvas midt i tegning på iOS */
+.pdd-tldraw-canvas .tl-container {
+  position: absolute !important;
+  inset: 0;
+  width: 100% !important;
+  height: 100% !important;
+  max-height: none !important;
+}
+
 /* TipTap rich text (PDD m.m.) */
 .ProseMirror p.is-editor-empty:first-child::before {
   color: var(--muted-foreground);

@@ -717,9 +717,9 @@ function ProcessTextDiagramBlock({
             </DialogHeader>
             <DialogBody
               className={cn(
-                "flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden",
+                "flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden overscroll-none",
                 isMobileViewport || diagramFullscreen
-                  ? "p-0 pb-[env(safe-area-inset-bottom)] sm:p-0"
+                  ? "h-0 p-0 pb-[env(safe-area-inset-bottom)] sm:p-0"
                   : "p-3 sm:p-4",
               )}
             >
@@ -727,7 +727,7 @@ function ProcessTextDiagramBlock({
                 className={cn(
                   "relative min-h-0 min-w-0 flex-1",
                   isMobileViewport || diagramFullscreen
-                    ? "min-h-[50dvh]"
+                    ? "h-0"
                     : undefined,
                 )}
               >
