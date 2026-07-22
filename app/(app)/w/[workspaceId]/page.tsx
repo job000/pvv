@@ -72,7 +72,7 @@ export default function WorkspaceOverviewPage() {
   const placeNote = workspace.notes?.trim();
 
   return (
-    <ProductStack className="relative pb-8">
+    <ProductStack className="relative px-1 pb-10 sm:px-2 lg:px-3">
       <div
         className="pointer-events-none absolute inset-x-0 -top-2 h-44 rounded-[2rem] bg-gradient-to-b from-muted/50 via-muted/20 to-transparent sm:h-52"
         aria-hidden
@@ -81,7 +81,7 @@ export default function WorkspaceOverviewPage() {
         <WorkspaceRosLinkDialogHost workspaceId={workspaceId} />
       </Suspense>
 
-      <header className="relative flex items-start justify-between gap-4 pt-1 sm:pt-2">
+      <header className="relative flex items-start justify-between gap-4 pt-2 sm:pt-3">
         <div className="min-w-0 space-y-1.5">
           <p className="text-muted-foreground text-[11px] font-semibold tracking-[0.14em] uppercase">
             Oversikt
