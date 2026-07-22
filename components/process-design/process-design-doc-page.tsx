@@ -371,6 +371,16 @@ function SectionTrigger({
 /* ------------------------------------------------------------------ */
 
 const stickyTabChoices = new Map<string, "beskrivelse" | "diagram">();
+const diagramTabListeners = new Map<
+  string,
+  (mode: "beskrivelse" | "diagram") => void
+>();
+
+function preferDiagramTab(instanceKey: string, sectionLabel: string) {
+  const tabKey = `${instanceKey}:${sectionLabel}`;
+  stickyTabChoices.set(tabKey, "diagram");
+  diagramTabListeners.get(tabKey)?.("diagram");
+}
 
 function ProcessTextDiagramBlock({
   sectionLabel,
@@ -408,6 +418,14 @@ function ProcessTextDiagramBlock({
     },
     [tabKey],
   );
+  useEffect(() => {
+    diagramTabListeners.set(tabKey, setMode);
+    return () => {
+      if (diagramTabListeners.get(tabKey) === setMode) {
+        diagramTabListeners.delete(tabKey);
+      }
+    };
+  }, [setMode, tabKey]);
   const [diagramFullscreen, setDiagramFullscreen] = useState(false);
   const [clearConfirmOpen, setClearConfirmOpen] = useState(false);
   const clearNowRef = useRef<(() => void) | null>(null);
@@ -705,22 +723,31 @@ function ProcessTextDiagramBlock({
                   : "p-3 sm:p-4",
               )}
             >
-              <PddTldrawCanvas
-                key={`fs-${instanceKey}`}
-                snapshotJson={diagramValue}
-                onSnapshotChange={onDiagramJson}
-                readOnly={!canEdit}
-                instanceKey={instanceKey}
-                diagramKind={diagramKind}
-                onClearNowReady={registerClearNow}
-                layoutVariant="fullscreen"
+              <div
                 className={cn(
-                  "min-h-0 min-w-0 flex-1",
+                  "relative min-h-0 min-w-0 flex-1",
                   isMobileViewport || diagramFullscreen
-                    ? "rounded-none border-0 shadow-none"
-                    : "rounded-[1.25rem] sm:rounded-[1.5rem]",
+                    ? "min-h-[50dvh]"
+                    : undefined,
                 )}
-              />
+              >
+                <PddTldrawCanvas
+                  key={`fs-${instanceKey}`}
+                  snapshotJson={diagramValue}
+                  onSnapshotChange={onDiagramJson}
+                  readOnly={!canEdit}
+                  instanceKey={instanceKey}
+                  diagramKind={diagramKind}
+                  onClearNowReady={registerClearNow}
+                  layoutVariant="fullscreen"
+                  className={cn(
+                    "min-h-0 min-w-0",
+                    isMobileViewport || diagramFullscreen
+                      ? "rounded-none border-0 shadow-none"
+                      : "rounded-[1.25rem] sm:rounded-[1.5rem]",
+                  )}
+                />
+              </div>
             </DialogBody>
           </div>
         </DialogContent>
@@ -1368,9 +1395,10 @@ export function ProcessDesignDocPage({
   const hasDoc = docState !== undefined && docState !== null && docState.document !== null;
   hasDocRef.current = hasDoc;
   const versionCount = docState?.versions?.length ?? 0;
+  /* Stabil nøkkel — ikke inkluder revision (autosave remounter ellers canvas midt i tegning). */
   const diagramInstanceKey = useMemo(
-    () => `${String(assessmentId)}-${revision}`,
-    [assessmentId, revision],
+    () => String(assessmentId),
+    [assessmentId],
   );
 
   const setStr = (key: keyof ProcessDesignDocumentPayload, v: string) => {
@@ -1710,11 +1738,14 @@ export function ProcessDesignDocPage({
       ),
       asis: Boolean(
         !isEmptyRichText(payload.asIsShortDescription) ||
+          !isEmptyRichText(payload.asIsProcessMap) ||
+          Boolean(payload.asIsDiagramSnapshot?.trim()) ||
           (payload.asIsApplications?.length ?? 0) > 0,
       ),
       tobe: Boolean(
         !isEmptyRichText(payload.toBeSteps) ||
-          !isEmptyRichText(payload.toBeMap),
+          !isEmptyRichText(payload.toBeMap) ||
+          Boolean(payload.toBeDiagramSnapshot?.trim()),
       ),
       huki: Boolean((payload.hukiRows?.length ?? 0) > 0),
       risk: Boolean(
@@ -1740,6 +1771,10 @@ export function ProcessDesignDocPage({
       ) ?? null
     );
   }, [sectionCompletion]);
+  const hasDiagram = Boolean(
+    payload.asIsDiagramSnapshot?.trim() ||
+      payload.toBeDiagramSnapshot?.trim(),
+  );
 
   useEffect(() => {
     if (
@@ -2065,10 +2100,15 @@ export function ProcessDesignDocPage({
             completedCount={completedSectionCount}
             totalCount={PDD_SECTION_SHORTCUTS.length}
             nextSectionLabel={nextIncompleteSection?.label ?? null}
+            hasDiagram={hasDiagram}
             onGoToNext={() => {
               if (nextIncompleteSection) {
                 goToSection(nextIncompleteSection.value);
               }
+            }}
+            onOpenDiagram={() => {
+              preferDiagramTab(diagramInstanceKey, "As-Is prosesskart");
+              goToSection("asis");
             }}
             onAutofill={applyAutofill}
             onOpenTutorial={() => {

@@ -110,7 +110,9 @@ export function PddGettingStartedCard({
   completedCount,
   totalCount,
   nextSectionLabel,
+  hasDiagram,
   onGoToNext,
+  onOpenDiagram,
   onAutofill,
   onOpenTutorial,
   canAutofill,
@@ -119,14 +121,25 @@ export function PddGettingStartedCard({
   completedCount: number;
   totalCount: number;
   nextSectionLabel: string | null;
+  hasDiagram: boolean;
   onGoToNext: () => void;
+  onOpenDiagram: () => void;
   onAutofill: () => void;
   onOpenTutorial: () => void;
   canAutofill: boolean;
   canEdit: boolean;
 }) {
   const [collapsed, setCollapsed] = usePddGuideCollapsed();
-  const allDone = completedCount >= totalCount;
+  const sectionsDone = completedCount >= totalCount;
+  const guideDone = sectionsDone && hasDiagram;
+  const writeTitle = nextSectionLabel
+    ? `Skriv i «${nextSectionLabel}»`
+    : "Skriv i seksjonene";
+  const primaryAction = nextSectionLabel
+    ? { label: `Fortsett: ${nextSectionLabel}`, onClick: onGoToNext }
+    : !hasDiagram
+      ? { label: "Tegn flyt i Diagram", onClick: onOpenDiagram }
+      : null;
 
   return (
     <section
@@ -149,9 +162,11 @@ export function PddGettingStartedCard({
             </button>
           </div>
           <p className="text-sm leading-6 text-muted-foreground">
-            {allDone
-              ? "Alle seksjoner har innhold. Finpuss tekst, tegn diagram og lagre PDF når du er klar."
-              : `Fyll én seksjon om gangen. ${completedCount} av ${totalCount} er i gang.`}
+            {guideDone
+              ? "Seksjoner og diagram er på plass. Finpuss og lagre PDF når du er klar."
+              : sectionsDone
+                ? "Seksjonene har innhold. Neste steg er å tegne flyten i Diagram."
+                : `Fyll én seksjon om gangen. ${completedCount} av ${totalCount} har innhold.`}
           </p>
         </div>
       </div>
@@ -165,29 +180,25 @@ export function PddGettingStartedCard({
               body="Henter forslag fra vurdering, register og ROS inn i tomme felt."
             />
             <GuideStep
-              done={completedCount >= 1}
-              title={
-                nextSectionLabel
-                  ? `Skriv i «${nextSectionLabel}»`
-                  : "Gå gjennom seksjonene"
-              }
+              done={sectionsDone}
+              title={writeTitle}
               body="Start med tittel og kort beskrivelse, deretter As-Is og To-Be."
             />
             <GuideStep
-              done={allDone}
+              done={hasDiagram}
               title="Tegn flyt i Diagram"
               body="Bruk Blyant for freehand, Pil for koblinger mellom bokser. Fullskjerm på iPad."
             />
           </ol>
 
           <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
-            {nextSectionLabel ? (
+            {primaryAction ? (
               <Button
                 type="button"
                 className="h-10 rounded-lg"
-                onClick={onGoToNext}
+                onClick={primaryAction.onClick}
               >
-                Fortsett: {nextSectionLabel}
+                {primaryAction.label}
               </Button>
             ) : null}
             {canEdit ? (

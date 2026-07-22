@@ -59,6 +59,9 @@ function prefersPenFirstSurface(): boolean {
 
 function syncEditorViewport(editor: Editor) {
   const container = editor.getContainer();
+  const rect = container.getBoundingClientRect();
+  /* Unngå å synce inn i 0×0 (iOS kollaps midt i streken). */
+  if (rect.width < 8 || rect.height < 8) return;
   const canvas = container.querySelector(".tl-canvas") as HTMLElement | null;
   editor.updateViewportScreenBounds(canvas ?? container);
 }
@@ -114,7 +117,7 @@ function configurePddFreehandDrawing(editor: Editor, readOnly: boolean) {
   const container = editor.getContainer();
   container.classList.add("pdd-tldraw-pen-ready");
 
-  let penStrokeActive = false;
+  let strokeActive = false;
   let toolBeforeEraserTip: string | null = null;
 
   const isEventOnCanvas = (target: EventTarget | null) => {
@@ -133,7 +136,7 @@ function configurePddFreehandDrawing(editor: Editor, readOnly: boolean) {
   };
 
   const blockPageScroll = (event: TouchEvent | WheelEvent) => {
-    if (!penStrokeActive) return;
+    if (!strokeActive) return;
     event.preventDefault();
   };
 
@@ -143,10 +146,14 @@ function configurePddFreehandDrawing(editor: Editor, readOnly: boolean) {
 
   const onPointerDownCapture = (event: PointerEvent) => {
     if (readOnly) return;
-    if (event.pointerType !== "pen") return;
     if (!isEventOnCanvas(event.target)) return;
 
-    penStrokeActive = true;
+    /* Finger + penn: lås scroll mens man tegner (ellers «forsvinner» diagrammet på iOS). */
+    if (event.pointerType === "pen" || event.pointerType === "touch") {
+      strokeActive = true;
+    }
+
+    if (event.pointerType !== "pen") return;
 
     if (!editor.getInstanceState().isPenMode) {
       editor.updateInstanceState({ isPenMode: true });
@@ -172,7 +179,7 @@ function configurePddFreehandDrawing(editor: Editor, readOnly: boolean) {
     if (event.pointerType !== "pen" && event.pointerType !== "touch") {
       return;
     }
-    penStrokeActive = false;
+    strokeActive = false;
     if (readOnly) return;
 
     // Etter visking: fjern halvtransparent «skygge» og tving canvas-oppdatering
@@ -199,7 +206,7 @@ function configurePddFreehandDrawing(editor: Editor, readOnly: boolean) {
   container.addEventListener("wheel", blockPageScroll, { passive: false });
 
   return () => {
-    penStrokeActive = false;
+    strokeActive = false;
     container.classList.remove("pdd-tldraw-pen-ready");
     document.removeEventListener("pointerdown", onPointerDownCapture, true);
     document.removeEventListener("pointerup", onPointerUpCapture, true);
@@ -414,10 +421,30 @@ export function PddTldrawCanvas({
     const shell = containerRef.current;
     if (!shell) return;
 
+    let pointerDown = false;
+    let syncTimer: number | undefined;
+
     const refresh = () => {
       const editor = editorRef.current;
       if (!editor) return;
+      /* Ikke re-mål midt i streken — visualViewport hopper på mobil. */
+      if (pointerDown) return;
+      const rect = shell.getBoundingClientRect();
+      if (rect.width < 8 || rect.height < 8) return;
       syncEditorViewport(editor);
+    };
+
+    const scheduleRefresh = () => {
+      window.clearTimeout(syncTimer);
+      syncTimer = window.setTimeout(refresh, 120);
+    };
+
+    const onPointerDown = () => {
+      pointerDown = true;
+    };
+    const onPointerUp = () => {
+      pointerDown = false;
+      scheduleRefresh();
     };
 
     refresh();
@@ -425,18 +452,25 @@ export function PddTldrawCanvas({
       requestAnimationFrame(refresh);
     });
     ro.observe(shell);
-    window.addEventListener("orientationchange", refresh);
-    window.addEventListener("resize", refresh);
+    window.addEventListener("orientationchange", scheduleRefresh);
+    window.addEventListener("resize", scheduleRefresh);
     const vv = window.visualViewport;
-    vv?.addEventListener("resize", refresh);
-    vv?.addEventListener("scroll", refresh);
+    vv?.addEventListener("resize", scheduleRefresh);
+    vv?.addEventListener("scroll", scheduleRefresh);
+    shell.addEventListener("pointerdown", onPointerDown);
+    window.addEventListener("pointerup", onPointerUp);
+    window.addEventListener("pointercancel", onPointerUp);
 
     return () => {
+      window.clearTimeout(syncTimer);
       ro.disconnect();
-      window.removeEventListener("orientationchange", refresh);
-      window.removeEventListener("resize", refresh);
-      vv?.removeEventListener("resize", refresh);
-      vv?.removeEventListener("scroll", refresh);
+      window.removeEventListener("orientationchange", scheduleRefresh);
+      window.removeEventListener("resize", scheduleRefresh);
+      vv?.removeEventListener("resize", scheduleRefresh);
+      vv?.removeEventListener("scroll", scheduleRefresh);
+      shell.removeEventListener("pointerdown", onPointerDown);
+      window.removeEventListener("pointerup", onPointerUp);
+      window.removeEventListener("pointercancel", onPointerUp);
     };
   }, [layoutVariant, store]);
 
@@ -507,7 +541,7 @@ export function PddTldrawCanvas({
 
   const heightClass =
     layoutVariant === "fullscreen"
-      ? "h-full min-h-0 w-full flex-1"
+      ? "absolute inset-0 h-full min-h-[50dvh] w-full"
       : "h-[clamp(22rem,68svh,34rem)] min-h-[22rem] sm:h-[min(34rem,70vh)] sm:min-h-[24rem]";
 
   const requiresProductionLicense = useMemo(() => {
