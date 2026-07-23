@@ -49,6 +49,7 @@ import type * as lib_payloadSnapshot from "../lib/payloadSnapshot.js";
 import type * as lib_resendEnv from "../lib/resendEnv.js";
 import type * as lib_rosIntakePlacement from "../lib/rosIntakePlacement.js";
 import type * as lib_rpaScoring from "../lib/rpaScoring.js";
+import type * as lib_seedRpaDeliveryTasks from "../lib/seedRpaDeliveryTasks.js";
 import type * as lib_taskAssignment from "../lib/taskAssignment.js";
 import type * as lib_userSearch from "../lib/userSearch.js";
 import type * as notificationEmailInternal from "../notificationEmailInternal.js";
@@ -124,6 +125,7 @@ declare const fullApi: ApiFromModules<{
   "lib/resendEnv": typeof lib_resendEnv;
   "lib/rosIntakePlacement": typeof lib_rosIntakePlacement;
   "lib/rpaScoring": typeof lib_rpaScoring;
+  "lib/seedRpaDeliveryTasks": typeof lib_seedRpaDeliveryTasks;
   "lib/taskAssignment": typeof lib_taskAssignment;
   "lib/userSearch": typeof lib_userSearch;
   notificationEmailInternal: typeof notificationEmailInternal;

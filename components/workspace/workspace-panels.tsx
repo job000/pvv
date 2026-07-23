@@ -302,10 +302,18 @@ export function WorkspaceSettingsPanel({
   const [calcPresetId, setCalcPresetId] = useState<CalcSectorPresetId | null>(
     null,
   );
+  /** Standard på når felt mangler (undefined). */
+  const [autoSeedDelivery, setAutoSeedDelivery] = useState(true);
+  const [autoSeedSaving, setAutoSeedSaving] = useState(false);
+  const [deliveryBoardId, setDeliveryBoardId] = useState<string>("");
 
   const isAdmin =
     membership?.role === "owner" || membership?.role === "admin";
   const isOwner = membership?.role === "owner";
+  const boardsList = useQuery(
+    api.pulsBoards.listMineInWorkspace,
+    isAdmin ? { workspaceId } : "skip",
+  );
 
   /* Synkroniser serverdata inn i kontrollerte skjemafelt ved navigasjon/oppdatering. */
   /* eslint-disable react-hooks/set-state-in-effect -- bevisst reset av lokalt skjema når `workspace` endres */
@@ -325,6 +333,10 @@ export function WorkspaceSettingsPanel({
       setCalcRun(calc.annualRunCost);
       const preset = getCalcSectorPreset(workspace.calcSectorPresetId);
       setCalcPresetId(preset?.id ?? null);
+      setAutoSeedDelivery(
+        workspace.autoSeedRpaDeliveryTasksOnDevelopment !== false,
+      );
+      setDeliveryBoardId(workspace.rpaDeliveryBoardId ?? "");
     }
   }, [workspace]);
   /* eslint-enable react-hooks/set-state-in-effect */
@@ -424,6 +436,118 @@ export function WorkspaceSettingsPanel({
           Lagre
         </Button>
       </div>
+    </section>
+
+    <section className="space-y-4 rounded-2xl border border-border/50 bg-card p-4 sm:p-5">
+      <div className="space-y-1">
+        <h2 className="text-base font-semibold tracking-tight text-foreground">
+          Automatikk
+        </h2>
+        <p className="text-sm text-muted-foreground">
+          Reduser manuelt arbeid når vurderinger går videre i pipeline.
+        </p>
+      </div>
+      <label
+        htmlFor="auto-seed-delivery"
+        className="border-border/50 bg-muted/20 flex cursor-pointer items-start gap-3 rounded-xl border px-4 py-3.5"
+      >
+        <input
+          id="auto-seed-delivery"
+          type="checkbox"
+          className="border-input text-primary mt-0.5 size-4 shrink-0 rounded border shadow-sm"
+          checked={autoSeedDelivery}
+          disabled={autoSeedSaving}
+          onChange={(e) => {
+            const next = e.target.checked;
+            setAutoSeedDelivery(next);
+            setAutoSeedSaving(true);
+            void updateWorkspace({
+              workspaceId,
+              autoSeedRpaDeliveryTasksOnDevelopment: next,
+            })
+              .then(() => {
+                toast.success(
+                  next
+                    ? "Auto-leveranseoppgaver er på."
+                    : "Auto-leveranseoppgaver er av.",
+                );
+              })
+              .catch((err) => {
+                setAutoSeedDelivery(!next);
+                toast.error(
+                  err instanceof Error
+                    ? err.message
+                    : "Kunne ikke lagre innstilling.",
+                );
+              })
+              .finally(() => setAutoSeedSaving(false));
+          }}
+        />
+        <span className="min-w-0 space-y-1">
+          <span className="text-foreground block text-sm font-medium">
+            Opprett leveranseoppgaver ved «Prioritert»
+          </span>
+          <span className="text-muted-foreground block text-xs leading-relaxed">
+            Når en vurdering settes til Prioritert (eller hopper rett til
+            Utvikling), lages hovedkort og delkort på tavlen — ROS, PDD og
+            tilganger før koding, pluss utvikling og prodsetting. Utførende
+            tildeles som utvikler/coutvikler.
+          </span>
+        </span>
+      </label>
+
+      {autoSeedDelivery ? (
+        <div className="space-y-2">
+          <Label htmlFor="rpa-delivery-board">Tavle for leveranseoppgaver</Label>
+          <select
+            id="rpa-delivery-board"
+            className="border-input bg-background h-10 w-full max-w-md rounded-lg border px-3 text-sm shadow-xs outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            value={deliveryBoardId}
+            disabled={autoSeedSaving || boardsList === undefined}
+            onChange={(e) => {
+              const next = e.target.value;
+              const prev = deliveryBoardId;
+              setDeliveryBoardId(next);
+              setAutoSeedSaving(true);
+              void updateWorkspace({
+                workspaceId,
+                rpaDeliveryBoardId: next
+                  ? (next as Id<"pulsBoards">)
+                  : null,
+              })
+                .then(() => {
+                  toast.success(
+                    next
+                      ? "Leveransetavle lagret."
+                      : "Bruker standardtavle (første/hovedtavle).",
+                  );
+                })
+                .catch((err) => {
+                  setDeliveryBoardId(prev);
+                  toast.error(
+                    err instanceof Error
+                      ? err.message
+                      : "Kunne ikke lagre tavle.",
+                  );
+                })
+                .finally(() => setAutoSeedSaving(false));
+            }}
+          >
+            <option value="">
+              Standard — første tavle / «Hovedtavle»
+            </option>
+            {(boardsList?.boards ?? []).map((b) => (
+              <option key={b._id} value={b._id}>
+                {b.name}
+              </option>
+            ))}
+          </select>
+          <p className="text-muted-foreground text-xs leading-relaxed">
+            Én primærtavle unngår duplikater. Trenger flere team oversikt, speil
+            manuelt eller del tavlen — ikke opprett samme pakke flere steder.
+          </p>
+        </div>
+      ) : null}
     </section>
 
     <section className="space-y-4 rounded-2xl border border-border/50 bg-card p-4 sm:p-5">

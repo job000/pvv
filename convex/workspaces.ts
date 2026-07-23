@@ -366,6 +366,10 @@ export const update = mutation({
     githubAutoRegisterProcessOnCreate: v.optional(
       v.union(v.boolean(), v.null()),
     ),
+    autoSeedRpaDeliveryTasksOnDevelopment: v.optional(
+      v.union(v.boolean(), v.null()),
+    ),
+    rpaDeliveryBoardId: v.optional(v.union(v.id("pulsBoards"), v.null())),
     githubAutoRegisterProcessStatusOptionId: v.optional(
       v.union(v.string(), v.null()),
     ),
@@ -400,6 +404,8 @@ export const update = mutation({
       githubDefaultRepoFullNames?: string[];
       githubProjectNodeId?: string;
       githubAutoRegisterProcessOnCreate?: boolean;
+      autoSeedRpaDeliveryTasksOnDevelopment?: boolean;
+      rpaDeliveryBoardId?: Id<"pulsBoards"> | undefined;
       githubAutoRegisterProcessStatusOptionId?: string;
       githubProjectSingleSelectFieldId?: string;
       githubProjectStatusFieldCacheAt?: undefined;
@@ -476,6 +482,23 @@ export const update = mutation({
         args.githubAutoRegisterProcessOnCreate === null
           ? undefined
           : args.githubAutoRegisterProcessOnCreate;
+    }
+    if (args.autoSeedRpaDeliveryTasksOnDevelopment !== undefined) {
+      patch.autoSeedRpaDeliveryTasksOnDevelopment =
+        args.autoSeedRpaDeliveryTasksOnDevelopment === null
+          ? undefined
+          : args.autoSeedRpaDeliveryTasksOnDevelopment;
+    }
+    if (args.rpaDeliveryBoardId !== undefined) {
+      if (args.rpaDeliveryBoardId === null) {
+        patch.rpaDeliveryBoardId = undefined;
+      } else {
+        const board = await ctx.db.get(args.rpaDeliveryBoardId);
+        if (!board || board.workspaceId !== args.workspaceId) {
+          throw new Error("Valgt tavle finnes ikke i dette arbeidsområdet.");
+        }
+        patch.rpaDeliveryBoardId = args.rpaDeliveryBoardId;
+      }
     }
     if (args.githubAutoRegisterProcessStatusOptionId !== undefined) {
       const raw = args.githubAutoRegisterProcessStatusOptionId;

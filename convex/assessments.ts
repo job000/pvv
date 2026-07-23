@@ -43,6 +43,7 @@ import { sanitizeAssessmentProcessTextFields } from "../lib/assessment-process-p
 import { payloadToSnapshot } from "./lib/payloadSnapshot";
 import { computeAllResults } from "./lib/rpaScoring";
 import { queryUsersForInviteSuggest } from "./lib/userSearch";
+import { seedRpaDeliveryTasksIfNeeded } from "./lib/seedRpaDeliveryTasks";
 
 async function refreshCachedPriority(
   ctx: MutationCtx,
@@ -715,8 +716,16 @@ export const setPipelineStatus = mutation({
     assessmentId: v.id("assessments"),
     status: pipelineStatusValidator,
   },
+  returns: v.object({
+    ok: v.literal(true),
+    deliveryTasksCreated: v.boolean(),
+  }),
   handler: async (ctx, args) => {
-    const { assessment } = await requireAssessmentEdit(ctx, args.assessmentId);
+    const { assessment, userId } = await requireAssessmentEdit(
+      ctx,
+      args.assessmentId,
+    );
+    const previousStatus = normalizePipelineStatus(assessment.pipelineStatus);
     const status = args.status as PipelineStatus;
     const rank = await nextAssessmentKanbanRank(
       ctx,
@@ -728,6 +737,13 @@ export const setPipelineStatus = mutation({
       kanbanRank: rank,
       updatedAt: Date.now(),
     });
+    const seeded = await seedRpaDeliveryTasksIfNeeded(ctx, {
+      assessment,
+      previousStatus,
+      nextStatus: status,
+      actorUserId: userId,
+    });
+    return { ok: true as const, deliveryTasksCreated: seeded.created };
   },
 });
 

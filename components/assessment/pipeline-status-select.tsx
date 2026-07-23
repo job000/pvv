@@ -56,8 +56,14 @@ export function PipelineStatusSelect({
         const next = e.target.value as PipelineStatus;
         if (next === value) return;
         try {
-          await setStatus({ assessmentId, status: next });
-          toast.success("Status oppdatert.");
+          const res = await setStatus({ assessmentId, status: next });
+          if (res.deliveryTasksCreated) {
+            toast.success(
+              "Leveranseoppgaver opprettet på tavlen (ROS, PDD, tilganger …).",
+            );
+          } else {
+            toast.success("Status oppdatert.");
+          }
         } catch (err) {
           toast.error(
             err instanceof Error ? err.message : "Kunne ikke oppdatere status.",

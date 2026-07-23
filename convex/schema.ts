@@ -609,6 +609,14 @@ export default defineSchema({
     githubProjectNodeId: v.optional(v.string()),
     /** Når true: nye prosesser i registeret kan automatisk legges inn som utkast i prosjektet */
     githubAutoRegisterProcessOnCreate: v.optional(v.boolean()),
+    /**
+     * Når true (eller mangler/undefined = på): opprett leveranseoppgaver på Puls-tavle
+     * når vurdering settes til «Prioritert» (eller hopper rett til «Utvikling»).
+     * Feltnavnet beholdes av historiske årsaker.
+     */
+    autoSeedRpaDeliveryTasksOnDevelopment: v.optional(v.boolean()),
+    /** Primær Puls-tavle for auto-leveranseoppgaver (fallback: første/hovedtavle). */
+    rpaDeliveryBoardId: v.optional(v.id("pulsBoards")),
     /** Single-select option-id for Status (må matche prosjektets felt) */
     githubAutoRegisterProcessStatusOptionId: v.optional(v.string()),
     /**

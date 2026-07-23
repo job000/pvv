@@ -13,6 +13,7 @@ import {
   PIPELINE_KANBAN_ORDER,
   type PipelineStatus,
 } from "../lib/assessment-pipeline";
+import { seedRpaDeliveryTasksIfNeeded } from "./lib/seedRpaDeliveryTasks";
 
 /**
  * Lavthengende frukt: høy gjennomførbarhet, ikke nødvendigvis høyest prioritet-score.
@@ -201,9 +202,16 @@ export const moveOnBoard = mutation({
     toStatus: pipelineStatusValidator,
     beforeAssessmentId: v.union(v.id("assessments"), v.null()),
   },
-  returns: v.object({ ok: v.literal(true) }),
+  returns: v.object({
+    ok: v.literal(true),
+    deliveryTasksCreated: v.boolean(),
+  }),
   handler: async (ctx, args) => {
-    const { assessment } = await requireAssessmentEdit(ctx, args.assessmentId);
+    const { assessment, userId } = await requireAssessmentEdit(
+      ctx,
+      args.assessmentId,
+    );
+    const previousStatus = normalizePipelineStatus(assessment.pipelineStatus);
     const toStatus = args.toStatus as PipelineStatus;
     const now = Date.now();
 
@@ -258,7 +266,17 @@ export const moveOnBoard = mutation({
       rank += 1;
     }
 
-    return { ok: true as const };
+    const seeded = await seedRpaDeliveryTasksIfNeeded(ctx, {
+      assessment,
+      previousStatus,
+      nextStatus: toStatus,
+      actorUserId: userId,
+    });
+
+    return {
+      ok: true as const,
+      deliveryTasksCreated: seeded.created,
+    };
   },
 });
 

@@ -433,11 +433,16 @@ export function PortfolioPriorityBoard({
     beforeAssessmentId: Id<"assessments"> | null,
   ) => {
     try {
-      await moveOnBoard({
+      const res = await moveOnBoard({
         assessmentId,
         toStatus,
         beforeAssessmentId,
       });
+      if (res.deliveryTasksCreated) {
+        toast.success(
+          "Leveranseoppgaver opprettet på tavlen (ROS, PDD, tilganger …).",
+        );
+      }
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Kunne ikke flytte kort");
       setLocalColumns(serverColumns);
