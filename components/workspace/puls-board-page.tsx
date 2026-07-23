@@ -65,12 +65,12 @@ export function PulsBoardPage({
   }
 
   return (
-    <div className="flex min-h-0 min-w-0 flex-col gap-4">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+    <div className="flex min-h-0 min-w-0 flex-col gap-3">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
           <Link
             href={`/w/${workspaceId}/tavler`}
-            className="text-muted-foreground hover:text-foreground mb-1 inline-flex min-h-9 items-center gap-1 text-xs font-medium"
+            className="text-muted-foreground hover:text-foreground mb-0.5 inline-flex min-h-8 items-center gap-1 text-xs font-medium"
           >
             <ArrowLeft className="size-3.5" aria-hidden />
             Alle tavler

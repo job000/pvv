@@ -79,6 +79,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -1045,6 +1046,7 @@ function BoardColumn({
   onRemove,
   canManage,
   showCardDescription = false,
+  columnHeightPx,
 }: {
   column: BoardColumnDoc;
   cards: BoardCard[];
@@ -1053,6 +1055,7 @@ function BoardColumn({
   onRemove?: () => void;
   canManage?: boolean;
   showCardDescription?: boolean;
+  columnHeightPx?: number;
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(column.name);
@@ -1087,13 +1090,20 @@ function BoardColumn({
   return (
     <div
       ref={setNodeRef}
+      style={
+        columnHeightPx
+          ? { height: columnHeightPx, maxHeight: columnHeightPx }
+          : undefined
+      }
       className={cn(
         "flex w-[280px] shrink-0 flex-col rounded-xl border border-border/50 bg-muted/20 sm:w-[300px]",
+        !columnHeightPx &&
+          "h-[min(calc(100dvh-var(--app-header-height,3.5rem)-5.5rem),56rem)]",
         column.isDone && "bg-muted/30",
         isOver && "border-sky-500/50 bg-sky-500/8 ring-1 ring-sky-500/20",
       )}
     >
-      <div className="sticky top-0 z-[1] flex items-start justify-between gap-2 rounded-t-xl border-b border-border/40 bg-muted/40 px-3 py-2.5 backdrop-blur-sm">
+      <div className="z-[1] flex shrink-0 items-start justify-between gap-2 rounded-t-xl border-b border-border/40 bg-muted/40 px-3 py-2.5 backdrop-blur-sm">
         <div className="min-w-0 flex-1">
           {editing ? (
             <input
@@ -1153,7 +1163,7 @@ function BoardColumn({
       </div>
       <div
         data-column-cards
-        className="max-h-[min(70vh,36rem)] min-h-[160px] flex-1 touch-pan-y space-y-2 overflow-y-auto overscroll-contain p-2.5"
+        className="min-h-0 flex-1 touch-pan-y space-y-2 overflow-y-auto overscroll-contain p-2.5 [scrollbar-width:thin]"
       >
         {shown.map((card) => (
           <DraggableIssueCard
@@ -1333,6 +1343,7 @@ export function IssuesProjectBoard({
   const [boardCanScroll, setBoardCanScroll] = useState(false);
   const [boardScrollAtStart, setBoardScrollAtStart] = useState(true);
   const [boardScrollAtEnd, setBoardScrollAtEnd] = useState(false);
+  const [columnHeightPx, setColumnHeightPx] = useState<number | undefined>();
   const persistTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const viewFilterTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const uiPrefsRef = useRef({
@@ -1777,6 +1788,46 @@ export function IssuesProjectBoard({
     if (!el) return;
     el.scrollBy({ left: delta, behavior: "smooth" });
   };
+
+  useLayoutEffect(() => {
+    if (viewLayout !== "board") {
+      setColumnHeightPx(undefined);
+      return;
+    }
+    const el = boardScrollRef.current;
+    if (!el) return;
+
+    let raf = 0;
+    const update = () => {
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => {
+        const top = el.getBoundingClientRect().top;
+        const bottomPad = 12;
+        const remaining = Math.floor(window.innerHeight - top - bottomPad);
+        const preferred = Math.min(
+          Math.floor(window.innerHeight - 56 - 88),
+          56 * 16,
+        );
+        // Grow into empty space below; never shorter than the preferred tall column.
+        const next = Math.max(280, remaining, preferred);
+        setColumnHeightPx((prev) => (prev === next ? prev : next));
+      });
+    };
+
+    update();
+    window.addEventListener("resize", update);
+    const scrollRoot = el.closest("[data-workspace-scroll]");
+    scrollRoot?.addEventListener("scroll", update, { passive: true });
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+
+    return () => {
+      cancelAnimationFrame(raf);
+      window.removeEventListener("resize", update);
+      scrollRoot?.removeEventListener("scroll", update);
+      ro.disconnect();
+    };
+  }, [viewLayout, columnsRaw?.length, filtered.length]);
 
   useEffect(() => {
     const el = boardScrollRef.current;
@@ -3174,6 +3225,7 @@ export function IssuesProjectBoard({
                     onOpenCard={openDetail}
                     canManage={canManageColumns}
                     showCardDescription={showCardDescription}
+                    columnHeightPx={columnHeightPx}
                     onRename={async (nextName) => {
                       try {
                         await renameColumn({
