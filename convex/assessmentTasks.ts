@@ -25,6 +25,7 @@ import {
 } from "./pulsBoardColumns";
 import { ensureDefaultPulsBoard } from "./pulsBoards";
 import { insertUserInAppNotification } from "./userInAppNotifications";
+import { maybeAdvancePipelineWhenPrepDone } from "./lib/advancePipelineWhenPrepDone";
 
 async function requireTaskWriteAccess(
   ctx: MutationCtx,
@@ -1503,18 +1504,29 @@ export const setStatus = mutation({
      */
     completeSubIssues: v.optional(v.boolean()),
   },
-  returns: v.object({ ok: v.literal(true) }),
+  returns: v.object({
+    ok: v.literal(true),
+    pipelineAdvancedToDevelopment: v.boolean(),
+  }),
   handler: async (ctx, args) => {
     const row = await ctx.db.get(args.taskId);
     if (!row) {
       throw new Error("Fant ikke oppgaven.");
     }
-    await requireTaskWriteAccess(ctx, row);
+    const userId = await requireTaskWriteAccess(ctx, row);
     await ctx.db.patch(args.taskId, { status: args.status });
     if (args.status === "done" && args.completeSubIssues === true) {
       await markSubtreeDone(ctx, args.taskId);
     }
-    return { ok: true as const };
+    let pipelineAdvancedToDevelopment = false;
+    if (args.status === "done") {
+      const advanced = await maybeAdvancePipelineWhenPrepDone(ctx, {
+        task: { ...row, status: "done" },
+        actorUserId: userId,
+      });
+      pipelineAdvancedToDevelopment = advanced.advanced;
+    }
+    return { ok: true as const, pipelineAdvancedToDevelopment };
   },
 });
 
@@ -1547,13 +1559,16 @@ export const moveTask = mutation({
     /** Ved flytting til ferdig: også fullfør hele subtreet */
     completeSubIssues: v.optional(v.boolean()),
   },
-  returns: v.object({ ok: v.literal(true) }),
+  returns: v.object({
+    ok: v.literal(true),
+    pipelineAdvancedToDevelopment: v.boolean(),
+  }),
   handler: async (ctx, args) => {
     const row = await ctx.db.get(args.taskId);
     if (!row) {
       throw new Error("Fant ikke oppgaven.");
     }
-    await requireTaskWriteAccess(ctx, row);
+    const userId = await requireTaskWriteAccess(ctx, row);
     // Behold dashboardRank ved status/kolonne-endring, så gjenåpning
     // havner på samme plass i «Tavler på tvers» (ikke nederst).
     const patch: {
@@ -1600,13 +1615,20 @@ export const moveTask = mutation({
     }
 
     await ctx.db.patch(args.taskId, patch);
-    const becameDone =
-      (patch.status === "done" || args.status === "done") &&
-      args.completeSubIssues === true;
-    if (becameDone) {
+    const statusBecameDone =
+      patch.status === "done" && row.status !== "done";
+    if (statusBecameDone && args.completeSubIssues === true) {
       await markSubtreeDone(ctx, args.taskId);
     }
-    return { ok: true as const };
+    let pipelineAdvancedToDevelopment = false;
+    if (statusBecameDone) {
+      const advanced = await maybeAdvancePipelineWhenPrepDone(ctx, {
+        task: { ...row, status: "done", ...patch },
+        actorUserId: userId,
+      });
+      pipelineAdvancedToDevelopment = advanced.advanced;
+    }
+    return { ok: true as const, pipelineAdvancedToDevelopment };
   },
 });
 
@@ -1619,7 +1641,10 @@ export const completeTask = mutation({
     comment: v.optional(v.string()),
     completeSubIssues: v.optional(v.boolean()),
   },
-  returns: v.object({ ok: v.literal(true) }),
+  returns: v.object({
+    ok: v.literal(true),
+    pipelineAdvancedToDevelopment: v.boolean(),
+  }),
   handler: async (ctx, args) => {
     const row = await ctx.db.get(args.taskId);
     if (!row) throw new Error("Fant ikke oppgaven.");
@@ -1693,7 +1718,19 @@ export const completeTask = mutation({
       });
     }
 
-    return { ok: true as const };
+    const advanced = await maybeAdvancePipelineWhenPrepDone(ctx, {
+      task: {
+        ...row,
+        status: "done",
+        columnId: doneColumnId ?? row.columnId,
+      },
+      actorUserId: userId,
+    });
+
+    return {
+      ok: true as const,
+      pipelineAdvancedToDevelopment: advanced.advanced,
+    };
   },
 });
 

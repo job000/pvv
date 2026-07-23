@@ -2151,16 +2151,22 @@ export function IssuesProjectBoard({
   ) => {
     setBusy(true);
     try {
-      await completeTask({
+      const res = await completeTask({
         taskId: card._id,
         completeSubIssues,
         comment: completeComment.trim() || undefined,
       });
-      toast.success(
-        completeSubIssues
-          ? pulsBoardCopy.completedTree
-          : pulsBoardCopy.completed,
-      );
+      if (res.pipelineAdvancedToDevelopment) {
+        toast.success(
+          "Forberedelse ferdig — vurderingen er flyttet til Utvikling.",
+        );
+      } else {
+        toast.success(
+          completeSubIssues
+            ? pulsBoardCopy.completedTree
+            : pulsBoardCopy.completed,
+        );
+      }
       setCompletePrompt(null);
       setCompleteComment("");
       if (selected?._id === card._id) setSelected(null);
@@ -2328,13 +2334,23 @@ export function IssuesProjectBoard({
           setCompletePrompt(card);
           return;
         }
-        await completeTask({ taskId: card._id });
+        const res = await completeTask({ taskId: card._id });
+        if (res.pipelineAdvancedToDevelopment) {
+          toast.success(
+            "Forberedelse ferdig — vurderingen er flyttet til Utvikling.",
+          );
+        }
         return;
       }
-      await moveTask({
+      const moved = await moveTask({
         taskId: card._id,
         columnId,
       });
+      if (moved.pipelineAdvancedToDevelopment) {
+        toast.success(
+          "Forberedelse ferdig — vurderingen er flyttet til Utvikling.",
+        );
+      }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Kunne ikke flytte");
     }

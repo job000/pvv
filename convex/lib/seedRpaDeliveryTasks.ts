@@ -6,10 +6,15 @@ import {
   buildRpaDeliverySubtaskDescription,
   type RpaDeliveryContext,
 } from "../../lib/rpa-delivery-task-template";
+import type { AssessmentPayload } from "../../lib/assessment-types";
 import { ensureDefaultColumns } from "../pulsBoardColumns";
 import { ensureDefaultPulsBoard } from "../pulsBoards";
 import { buildAssigneeStates } from "./taskAssignment";
 import { insertUserInAppNotification } from "../userInAppNotifications";
+import {
+  ensurePddForDelivery,
+  ensureRosForDelivery,
+} from "./ensureRpaDeliveryArtifacts";
 
 /** Label som markerer auto-opprettet leveransepakke (unngår duplikater). */
 export const AUTO_LEVERANSE_LABEL = "auto-leveranse";
@@ -17,6 +22,8 @@ export const AUTO_LEVERANSE_LABEL = "auto-leveranse";
 type SeedResult = {
   created: boolean;
   parentTaskId: Id<"assessmentTasks"> | null;
+  rosCreated: boolean;
+  pddCreated: boolean;
 };
 
 async function userDisplayName(
@@ -29,6 +36,22 @@ async function userDisplayName(
   if (name) return name;
   const email = user.email?.trim();
   return email || null;
+}
+
+async function collectRoleAssignees(
+  ctx: MutationCtx,
+  candidateId: Id<"candidates"> | undefined,
+  role: "utforende" | "vurdering" | "ros" | "pdd",
+): Promise<Id<"users">[]> {
+  if (!candidateId) return [];
+  const rows = await ctx.db
+    .query("candidateAssignees")
+    .withIndex("by_candidate_and_role", (q) =>
+      q.eq("candidateId", candidateId).eq("role", role),
+    )
+    .collect();
+  rows.sort((a, b) => a.assignedAt - b.assignedAt);
+  return rows.map((r) => r.userId);
 }
 
 async function insertTask(
@@ -50,6 +73,8 @@ async function insertTask(
     actorUserId: Id<"users">;
     now: number;
     priority?: number;
+    /** false = kun opprett; pakkevarsel sendes samlet etterpå */
+    notifyAssignees?: boolean;
   },
 ): Promise<Id<"assessmentTasks">> {
   const uniqueIds = [...new Set(args.assigneeUserIds)];
@@ -85,15 +110,17 @@ async function insertTask(
     createdAt: args.now,
   });
 
-  const pulsHref = `/w/${args.workspaceId}/tavler/${args.boardId}?task=${taskId}`;
-  for (const uid of uniqueIds) {
-    if (uid !== args.actorUserId) {
-      await insertUserInAppNotification(ctx, {
-        userId: uid,
-        title: `Du er tildelt «${args.title}»`,
-        body: "Auto-opprettet leveranse for vurderingen. Åpne kortet under Tavler.",
-        href: pulsHref,
-      });
+  if (args.notifyAssignees !== false) {
+    const pulsHref = `/w/${args.workspaceId}/tavler/${args.boardId}?task=${taskId}`;
+    for (const uid of uniqueIds) {
+      if (uid !== args.actorUserId) {
+        await insertUserInAppNotification(ctx, {
+          userId: uid,
+          title: `Du er tildelt «${args.title}»`,
+          body: "Auto-opprettet leveranse for vurderingen. Åpne kortet under Tavler.",
+          href: pulsHref,
+        });
+      }
     }
   }
 
@@ -108,7 +135,7 @@ const SEED_TRIGGER_STATUSES: ReadonlySet<PipelineStatus> = new Set([
 
 /**
  * Når pipeline går inn i «Prioritert» (eller rett til «Utvikling»):
- * opprett leveransepakke på Puls-tavle før koding — ROS, PDD, tilganger osv.
+ * opprett ROS/PDD ved behov, leveransepakke på Puls, og varsle involverte.
  */
 export async function seedRpaDeliveryTasksIfNeeded(
   ctx: MutationCtx,
@@ -119,12 +146,19 @@ export async function seedRpaDeliveryTasksIfNeeded(
     actorUserId: Id<"users">;
   },
 ): Promise<SeedResult> {
+  const empty: SeedResult = {
+    created: false,
+    parentTaskId: null,
+    rosCreated: false,
+    pddCreated: false,
+  };
+
   if (!SEED_TRIGGER_STATUSES.has(args.nextStatus)) {
-    return { created: false, parentTaskId: null };
+    return empty;
   }
   /* Allerede i leveranseløpet — ikke opprett på nytt ved hopp Prioritert → Utvikling. */
   if (SEED_TRIGGER_STATUSES.has(args.previousStatus)) {
-    return { created: false, parentTaskId: null };
+    return empty;
   }
 
   const assessmentId = args.assessment._id;
@@ -133,7 +167,7 @@ export async function seedRpaDeliveryTasksIfNeeded(
   const workspace = await ctx.db.get(workspaceId);
   /* Mangler/undefined = på (standard). Eksplisitt false = av. */
   if (workspace?.autoSeedRpaDeliveryTasksOnDevelopment === false) {
-    return { created: false, parentTaskId: null };
+    return empty;
   }
 
   const existingTasks = await ctx.db
@@ -147,7 +181,7 @@ export async function seedRpaDeliveryTasksIfNeeded(
       t.status === "open",
   );
   if (alreadySeeded) {
-    return { created: false, parentTaskId: null };
+    return empty;
   }
 
   const link = await ctx.db
@@ -156,25 +190,19 @@ export async function seedRpaDeliveryTasksIfNeeded(
     .first();
   const candidateId = link?.candidateId;
 
-  let developerId: Id<"users"> | undefined;
-  let coDeveloperId: Id<"users"> | undefined;
-  if (candidateId) {
-    const assignees = await ctx.db
-      .query("candidateAssignees")
-      .withIndex("by_candidate_and_role", (q) =>
-        q.eq("candidateId", candidateId).eq("role", "utforende"),
-      )
-      .collect();
-    assignees.sort((a, b) => a.assignedAt - b.assignedAt);
-    developerId = assignees[0]?.userId;
-    coDeveloperId = assignees[1]?.userId;
-  }
+  const utforende = await collectRoleAssignees(ctx, candidateId, "utforende");
+  const vurderingIds = await collectRoleAssignees(ctx, candidateId, "vurdering");
+  const rosRoleIds = await collectRoleAssignees(ctx, candidateId, "ros");
+  const pddRoleIds = await collectRoleAssignees(ctx, candidateId, "pdd");
+
+  const developerId = utforende[0];
+  const coDeveloperId = utforende[1];
 
   const draft = await ctx.db
     .query("assessmentDrafts")
     .withIndex("by_assessment", (q) => q.eq("assessmentId", assessmentId))
     .unique();
-  const payload = draft?.payload;
+  const payload = draft?.payload as AssessmentPayload | undefined;
 
   const intake = await ctx.db
     .query("intakeSubmissions")
@@ -185,31 +213,23 @@ export async function seedRpaDeliveryTasksIfNeeded(
     .first();
   const intakeForm = intake ? await ctx.db.get(intake.formId) : null;
 
-  const rosLink = candidateId
-    ? await ctx.db
-        .query("candidateRosAnalysisLinks")
-        .withIndex("by_candidate", (q) => q.eq("candidateId", candidateId))
-        .first()
-    : null;
-  let ros =
-    intake?.approvedRosAnalysisId
-      ? await ctx.db.get(intake.approvedRosAnalysisId)
-      : null;
-  if (!ros && rosLink) {
-    ros = await ctx.db.get(rosLink.rosAnalysisId);
-  }
-  if (!ros) {
-    ros = await ctx.db
-      .query("rosAnalyses")
-      .withIndex("by_assessment", (q) => q.eq("assessmentId", assessmentId))
-      .first();
-  }
+  const { ros, created: rosCreated } = await ensureRosForDelivery(ctx, {
+    assessment: args.assessment,
+    actorUserId: args.actorUserId,
+    candidateId,
+    intake,
+    draftPayload: payload,
+  });
 
-  const pdd = await ctx.db
-    .query("processDesignDocuments")
-    .withIndex("by_assessment", (q) => q.eq("assessmentId", assessmentId))
-    .first();
-  const pddPayload = pdd?.payload;
+  const { pdd, created: pddCreated } = await ensurePddForDelivery(ctx, {
+    assessment: args.assessment,
+    actorUserId: args.actorUserId,
+    draftPayload: payload,
+    intake,
+    rosTitle: ros.title,
+  });
+
+  const pddPayload = pdd.payload;
   const applicationNames = (pddPayload?.asIsApplications ?? [])
     .map((a) => a.name.trim())
     .filter(Boolean);
@@ -249,9 +269,9 @@ export async function seedRpaDeliveryTasksIfNeeded(
     intakeRiskLines,
     intakePersonData: intake?.personDataSignal === true,
     intakePvvFlags: intake?.generatedPvvFlags ?? [],
-    rosTitle: ros?.title ?? null,
+    rosTitle: ros.title,
     rosStatus: args.assessment.rosStatus ?? null,
-    pddExists: Boolean(pdd),
+    pddExists: true,
     pddProcessTitle:
       (typeof pddPayload?.processTitle === "string" &&
         pddPayload.processTitle.trim()) ||
@@ -296,23 +316,34 @@ export async function seedRpaDeliveryTasksIfNeeded(
     ...(coDeveloperName ? [`coutvikler:${coDeveloperName}`] : []),
   ];
 
+  const parentAssignees = [
+    ...teamAssignees,
+    ...vurderingIds,
+  ];
+
   const parentTaskId = await insertTask(ctx, {
     workspaceId,
     boardId,
     columnId,
     assessmentId,
     candidateId,
-    rosAnalysisId: ros?._id,
-    processDesignDocumentId: pdd?._id,
+    rosAnalysisId: ros._id,
+    processDesignDocumentId: pdd._id,
     intakeFormId: intake?.formId,
     title: `Leveranse: ${args.assessment.title}`,
     description: buildRpaDeliveryDescription(deliveryCtx),
     labels,
-    assigneeUserIds: teamAssignees,
+    assigneeUserIds: parentAssignees,
     actorUserId: args.actorUserId,
     now,
     priority: 1,
+    notifyAssignees: false,
   });
+
+  const rosAssignees =
+    rosRoleIds.length > 0 ? rosRoleIds : teamAssignees;
+  const pddAssignees =
+    pddRoleIds.length > 0 ? pddRoleIds : teamAssignees;
 
   const subtasks: Array<{
     kind: "ros" | "pdd" | "tilganger" | "utvikling" | "prodsetting";
@@ -323,13 +354,13 @@ export async function seedRpaDeliveryTasksIfNeeded(
     {
       kind: "ros",
       title: `ROS: ${args.assessment.title}`,
-      assignees: teamAssignees,
+      assignees: rosAssignees,
       priority: 1,
     },
     {
       kind: "pdd",
       title: `PDD: ${args.assessment.title}`,
-      assignees: teamAssignees,
+      assignees: pddAssignees,
       priority: 1,
     },
     {
@@ -360,8 +391,8 @@ export async function seedRpaDeliveryTasksIfNeeded(
       columnId,
       assessmentId,
       candidateId,
-      rosAnalysisId: ros?._id,
-      processDesignDocumentId: pdd?._id,
+      rosAnalysisId: ros._id,
+      processDesignDocumentId: pdd._id,
       intakeFormId: intake?.formId,
       parentTaskId,
       title: sub.title,
@@ -371,9 +402,43 @@ export async function seedRpaDeliveryTasksIfNeeded(
       actorUserId: args.actorUserId,
       now: now + offset,
       priority: sub.priority,
+      notifyAssignees: false,
     });
     offset += 1;
   }
 
-  return { created: true, parentTaskId };
+  /* Én samlet pakkevarsel til utvikler, coutvikler, vurdering, ROS og PDD. */
+  const packNotifyIds = new Set<Id<"users">>([
+    ...teamAssignees,
+    ...vurderingIds,
+    ...rosRoleIds,
+    ...pddRoleIds,
+  ]);
+  const artifactBits = [
+    rosCreated ? "ROS opprettet" : "ROS koblet",
+    pddCreated ? "PDD opprettet" : "PDD koblet",
+    "Puls-leveransepakke klar",
+  ].join(" · ");
+  const pulsHref = `/w/${workspaceId}/tavler/${boardId}?task=${parentTaskId}`;
+  for (const uid of packNotifyIds) {
+    if (uid === args.actorUserId) continue;
+    const isOwner = vurderingIds.includes(uid);
+    await insertUserInAppNotification(ctx, {
+      userId: uid,
+      title: isOwner
+        ? `Prosess prioritert: «${args.assessment.title}»`
+        : `Leveranse startet: «${args.assessment.title}»`,
+      body: isOwner
+        ? `${artifactBits}. Du er knyttet som vurdering/prosesseier — følg leveranseforberedelsen.`
+        : `${artifactBits}. Åpne leveransekortet under Tavler.`,
+      href: pulsHref,
+    });
+  }
+
+  return {
+    created: true,
+    parentTaskId,
+    rosCreated,
+    pddCreated,
+  };
 }

@@ -59,7 +59,7 @@ export function PipelineStatusSelect({
           const res = await setStatus({ assessmentId, status: next });
           if (res.deliveryTasksCreated) {
             toast.success(
-              "Leveranseoppgaver opprettet på tavlen (ROS, PDD, tilganger …).",
+              "Leveranse klar: ROS/PDD opprettet ved behov, oppgaver på tavlen, involverte varslet.",
             );
           } else {
             toast.success("Status oppdatert.");

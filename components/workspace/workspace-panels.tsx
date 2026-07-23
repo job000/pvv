@@ -488,10 +488,11 @@ export function WorkspaceSettingsPanel({
             Opprett leveranseoppgaver ved «Prioritert»
           </span>
           <span className="text-muted-foreground block text-xs leading-relaxed">
-            Når en vurdering settes til Prioritert (eller hopper rett til
-            Utvikling), lages hovedkort og delkort på tavlen — ROS, PDD og
-            tilganger før koding, pluss utvikling og prodsetting. Utførende
-            tildeles som utvikler/coutvikler.
+            Ved Prioritert (eller hopp rett til Utvikling): oppretter ROS og PDD
+            hvis de mangler (fylt fra vurdering/inntak), lager leveransekort på
+            tavlen, og varsler utvikler, coutvikler og vurdering/prosesseier.
+            Når ROS-, PDD- og tilgangs-delkort er ferdige, flyttes vurderingen
+            automatisk til Utvikling.
           </span>
         </span>
       </label>

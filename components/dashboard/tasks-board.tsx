@@ -466,8 +466,14 @@ export function TasksBoard() {
   ) {
     setStatusBusy(true);
     try {
-      await moveTask({ taskId, status });
-      toast.success(status === "done" ? "Merket som ferdig." : "Gjenåpnet.");
+      const res = await moveTask({ taskId, status });
+      if (res.pipelineAdvancedToDevelopment) {
+        toast.success(
+          "Forberedelse ferdig — vurderingen er flyttet til Utvikling.",
+        );
+      } else {
+        toast.success(status === "done" ? "Merket som ferdig." : "Gjenåpnet.");
+      }
       if (editTask?._id === taskId) {
         setEditTask(null);
       }
@@ -500,11 +506,15 @@ export function TasksBoard() {
     if (!over) return;
     if (over.id === "done-drop") {
       try {
-        await moveTask({
+        const res = await moveTask({
           taskId: active.id as Id<"assessmentTasks">,
           status: "done",
         });
-        toast.success("Merket som ferdig.");
+        toast.success(
+          res.pipelineAdvancedToDevelopment
+            ? "Forberedelse ferdig — vurderingen er flyttet til Utvikling."
+            : "Merket som ferdig.",
+        );
       } catch (e) {
         toast.error(
           e instanceof Error ? e.message : "Kunne ikke merke som ferdig.",

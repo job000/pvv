@@ -440,7 +440,7 @@ export function PortfolioPriorityBoard({
       });
       if (res.deliveryTasksCreated) {
         toast.success(
-          "Leveranseoppgaver opprettet på tavlen (ROS, PDD, tilganger …).",
+          "Leveranse klar: ROS/PDD opprettet ved behov, oppgaver på tavlen, involverte varslet.",
         );
       }
     } catch (e) {
