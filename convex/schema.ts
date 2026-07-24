@@ -1376,7 +1376,9 @@ export default defineSchema({
     formId: v.id("intakeForms"),
     workspaceId: v.id("workspaces"),
     token: v.string(),
-    expiresAt: v.number(),
+    /** Uten verdi = ingen utløp (åpen til pauset/slettet). */
+    expiresAt: v.optional(v.number()),
+    /** Uten verdi = ubegrenset antall svar. */
     maxResponses: v.optional(v.number()),
     responseCount: v.number(),
     restrictedAccessMode: intakeLinkAccessModeValidator,

@@ -2,6 +2,7 @@
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogBody,
@@ -152,6 +153,7 @@ type LinkRow = {
   _id: Id<"intakeFormLinks">;
   token: string;
   responseCount: number;
+  expiresAt?: number;
   maxResponses?: number;
   pausedAt?: number;
   status: "active" | "paused" | "expired" | "max_responses" | "revoked";
@@ -999,7 +1001,9 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
   const [expiresAt, setExpiresAt] = useState(() =>
     formatDateTimeLocal(Date.now() + 1000 * 60 * 60 * 24 * 7),
   );
+  const [noExpiry, setNoExpiry] = useState(false);
   const [maxResponses, setMaxResponses] = useState("25");
+  const [unlimitedResponses, setUnlimitedResponses] = useState(false);
   const [accessMode, setAccessMode] = useState<"anonymous" | "email_required">(
     "anonymous",
   );
@@ -1706,11 +1710,29 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
   async function handleCreateLink() {
     if (!activeFormId) return;
     try {
-      const expires = new Date(expiresAt).getTime();
+      let expires: number | undefined;
+      if (!noExpiry) {
+        expires = new Date(expiresAt).getTime();
+        if (!Number.isFinite(expires)) {
+          toast.error("Velg en gyldig utløpsdato, eller huk av «Ingen utløp».");
+          return;
+        }
+      }
+      let max: number | undefined;
+      if (!unlimitedResponses) {
+        const parsed = Number(maxResponses.trim());
+        if (!Number.isInteger(parsed) || parsed < 1) {
+          toast.error(
+            "Oppgi maks antall svar, eller huk av «Ubegrenset».",
+          );
+          return;
+        }
+        max = parsed;
+      }
       const result = await createLink({
         formId: activeFormId,
         expiresAt: expires,
-        maxResponses: maxResponses.trim() ? Number(maxResponses) : undefined,
+        maxResponses: max,
         restrictedAccessMode: accessMode,
       });
       await navigator.clipboard.writeText(
@@ -2028,13 +2050,13 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
   }
 
   return (
-    <div className="mx-auto max-w-5xl space-y-8 pb-6">
+    <div className="mx-auto w-full max-w-none space-y-6 pb-6 sm:space-y-8">
       <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div className="min-w-0 space-y-1">
           <h1 className="font-heading text-2xl font-semibold tracking-tight sm:text-3xl">
             Skjemaer
           </h1>
-          <p className="text-sm text-muted-foreground">
+          <p className="text-muted-foreground max-w-2xl text-sm">
             Samle inn forslag og gjør dem om til prosesser.
           </p>
           <p className="text-muted-foreground text-xs">
@@ -2115,18 +2137,18 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
       </nav>
 
       {pageTab === "skjemaer" ? (
-        <section className="space-y-3">
-          <div className="space-y-3">
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <section className="grid gap-4 lg:grid-cols-[minmax(17rem,24rem)_minmax(0,1fr)] lg:items-start lg:gap-8 xl:grid-cols-[minmax(18rem,28rem)_minmax(0,1fr)]">
+          <div className="min-w-0 space-y-3">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between lg:flex-col lg:items-stretch xl:flex-row xl:items-center">
               <SearchInput
                 value={formSearch}
                 onChange={(e) => setFormSearch(e.target.value)}
                 placeholder="Søk skjema eller enhet …"
-                className="h-9 w-full rounded-full sm:max-w-xs"
+                className="h-9 w-full rounded-full sm:max-w-xs lg:max-w-none"
                 aria-label="Søk i skjemaer"
               />
               <select
-                className="border-input bg-background h-9 rounded-full border px-3 text-xs sm:w-44"
+                className="border-input bg-background h-9 rounded-full border px-3 text-xs sm:w-44 lg:w-full xl:w-44"
                 value={formStatusFilter}
                 onChange={(e) =>
                   setFormStatusFilter(
@@ -2208,7 +2230,7 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
                           {statusLabel}
                         </Badge>
                         <ChevronRight
-                          className="text-muted-foreground size-4 shrink-0 opacity-50"
+                          className="text-muted-foreground size-4 shrink-0 opacity-50 lg:hidden"
                           aria-hidden
                         />
                       </div>
@@ -2217,7 +2239,9 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
                 })}
               </div>
             )}
+          </div>
 
+          <div className="min-w-0 space-y-3 lg:sticky lg:top-2">
             {selectedForm ? (
               <div className="relative z-10 overflow-hidden rounded-2xl border border-border/60 bg-card">
                 <div className="space-y-3 px-4 py-4 sm:px-5 sm:py-5">
@@ -2398,11 +2422,19 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
                 </div>
               </div>
             ) : isCreatingNewForm ? (
-              <div className="border-border/60 bg-muted/15 mt-3 rounded-2xl border border-dashed p-5 text-center sm:text-left">
+              <div className="border-border/60 bg-muted/15 rounded-2xl border border-dashed p-5 text-center sm:text-left">
                 <p className="text-sm font-medium">Du oppretter et nytt skjema</p>
                 <p className="text-muted-foreground mt-1 text-sm leading-snug">
                   Fullfør stegene i vinduet. Ingenting lagres før du trykker «Opprett
                   skjema».
+                </p>
+              </div>
+            ) : forms.length > 0 ? (
+              <div className="border-border/60 bg-muted/10 hidden rounded-2xl border border-dashed p-8 text-center lg:block">
+                <FileText className="text-muted-foreground mx-auto mb-2 size-6" />
+                <p className="font-medium">Velg et skjema</p>
+                <p className="text-muted-foreground mt-1 text-sm">
+                  Velg i listen for å se detaljer, lenker og svar.
                 </p>
               </div>
             ) : null}
@@ -2416,10 +2448,10 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
                 value={submissionSearch}
                 onChange={(e) => setSubmissionSearch(e.target.value)}
                 placeholder="Søk i forslag …"
-                className="h-9 w-full rounded-full sm:max-w-xs"
+                className="h-9 w-full rounded-full sm:max-w-md"
                 aria-label="Søk i forslag"
               />
-              <span className="text-xs tabular-nums text-muted-foreground">
+              <span className="text-muted-foreground text-xs tabular-nums">
                 {submissionsForQueue.length} i kø
               </span>
             </div>
@@ -2538,48 +2570,58 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
                 </p>
               </div>
             ) : (
-              submissionsForQueue.map((submission) => (
-                <div
-                  key={submission._id}
-                  className="flex items-start gap-2 rounded-2xl border border-transparent p-1"
-                >
-                  <label className="mt-3 flex shrink-0 cursor-pointer items-center px-1">
-                    <input
-                      type="checkbox"
-                      checked={selectedQueueSubmissionIds.includes(submission._id)}
-                      onChange={() => toggleQueueSubmission(submission._id)}
-                      className="size-4 rounded border-border text-primary focus:ring-ring"
-                      aria-label={`Velg forslag ${submission.generatedAssessmentDraft.title}`}
-                    />
-                  </label>
-                  <div className="min-w-0 flex-1">
-                    <IntakeSubmissionQueueCard
-                      submission={submission}
-                      subtitle={`${submission.formTitle} · ${new Date(submission.submittedAt).toLocaleString("nb-NO")}`}
-                      onOpenReview={() => void openSubmissionForReview(submission)}
-                      onDelete={() => handleRemoveSubmission(submission)}
-                      canDelete={canDeleteIntakeSubmissions}
-                      extraBadges={
-                        <>
-                          {submission.personDataSignal ? (
-                            <Badge variant="outline">Persondata</Badge>
-                          ) : null}
-                          {submission.generatedRosSuggestion.shouldCreateRos ? (
-                            <Badge variant="outline">ROS-forslag</Badge>
-                          ) : null}
-                          {submission.generatedRosSuggestion.shouldCreateRos &&
-                          submission.generatedRosSuggestion.risks.length > 0 ? (
-                            <Badge variant="outline">
-                              {submission.generatedRosSuggestion.risks.length} risikoer
-                            </Badge>
-                          ) : null}
-                        </>
-                      }
-                      githubSlot={renderSubmissionGithubStrip(submission)}
-                    />
+              <div className="grid gap-2 lg:grid-cols-2 lg:gap-3">
+                {submissionsForQueue.map((submission) => (
+                  <div
+                    key={submission._id}
+                    className="flex items-start gap-2 rounded-2xl border border-transparent p-1"
+                  >
+                    <label className="mt-3 flex shrink-0 cursor-pointer items-center px-1">
+                      <input
+                        type="checkbox"
+                        checked={selectedQueueSubmissionIds.includes(
+                          submission._id,
+                        )}
+                        onChange={() => toggleQueueSubmission(submission._id)}
+                        className="size-4 rounded border-border text-primary focus:ring-ring"
+                        aria-label={`Velg forslag ${submission.generatedAssessmentDraft.title}`}
+                      />
+                    </label>
+                    <div className="min-w-0 flex-1">
+                      <IntakeSubmissionQueueCard
+                        submission={submission}
+                        subtitle={`${submission.formTitle} · ${new Date(submission.submittedAt).toLocaleString("nb-NO")}`}
+                        onOpenReview={() =>
+                          void openSubmissionForReview(submission)
+                        }
+                        onDelete={() => handleRemoveSubmission(submission)}
+                        canDelete={canDeleteIntakeSubmissions}
+                        extraBadges={
+                          <>
+                            {submission.personDataSignal ? (
+                              <Badge variant="outline">Persondata</Badge>
+                            ) : null}
+                            {submission.generatedRosSuggestion.shouldCreateRos ? (
+                              <Badge variant="outline">ROS-forslag</Badge>
+                            ) : null}
+                            {submission.generatedRosSuggestion.shouldCreateRos &&
+                            submission.generatedRosSuggestion.risks.length >
+                              0 ? (
+                              <Badge variant="outline">
+                                {
+                                  submission.generatedRosSuggestion.risks.length
+                                }{" "}
+                                risikoer
+                              </Badge>
+                            ) : null}
+                          </>
+                        }
+                        githubSlot={renderSubmissionGithubStrip(submission)}
+                      />
+                    </div>
                   </div>
-                </div>
-              ))
+                ))}
+              </div>
             )}
           </div>
         </section>
@@ -3829,34 +3871,61 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
                   <div className="space-y-0.5">
                     <h3 className="text-sm font-semibold leading-tight">Delbare lenker</h3>
                     <p className="text-muted-foreground text-xs leading-snug">
-                      Utløp, maks svar, åpen eller e-post.
+                      Utløp, maks svar, åpen eller e-post. Kan være ubegrenset.
                     </p>
                   </div>
                   <Separator className="my-4" />
                   <div className="space-y-3">
                     <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2">
                       <div className="min-w-0 space-y-2 sm:col-span-2">
-                        <Label className="text-sm" htmlFor="settings-link-expires">
-                          Utløper
-                        </Label>
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <Label className="text-sm" htmlFor="settings-link-expires">
+                            Utløper
+                          </Label>
+                          <label className="text-muted-foreground flex min-h-9 cursor-pointer items-center gap-2 text-xs">
+                            <Checkbox
+                              checked={noExpiry}
+                              onCheckedChange={(checked) =>
+                                setNoExpiry(checked === true)
+                              }
+                              aria-label="Ingen utløp"
+                            />
+                            Ingen utløp
+                          </label>
+                        </div>
                         <Input
                           id="settings-link-expires"
                           type="datetime-local"
                           value={expiresAt}
                           onChange={(event) => setExpiresAt(event.target.value)}
-                          className="min-w-0 max-w-full"
+                          disabled={noExpiry}
+                          className="min-w-0 max-w-full disabled:opacity-50"
                         />
                       </div>
                       <div className="min-w-0 space-y-2">
-                        <Label className="text-sm" htmlFor="settings-link-max">
-                          Maks svar
-                        </Label>
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <Label className="text-sm" htmlFor="settings-link-max">
+                            Maks svar
+                          </Label>
+                          <label className="text-muted-foreground flex min-h-9 cursor-pointer items-center gap-2 text-xs">
+                            <Checkbox
+                              checked={unlimitedResponses}
+                              onCheckedChange={(checked) =>
+                                setUnlimitedResponses(checked === true)
+                              }
+                              aria-label="Ubegrenset antall svar"
+                            />
+                            Ubegrenset
+                          </label>
+                        </div>
                         <Input
                           id="settings-link-max"
                           inputMode="numeric"
                           value={maxResponses}
                           onChange={(event) => setMaxResponses(event.target.value)}
-                          className="min-w-0 max-w-full"
+                          disabled={unlimitedResponses}
+                          placeholder="F.eks. 25"
+                          className="min-w-0 max-w-full disabled:opacity-50"
                         />
                       </div>
                       <div className="min-w-0 space-y-2">
@@ -3904,7 +3973,15 @@ export function IntakeWorkspacePage({ workspaceId }: { workspaceId: Id<"workspac
                               </Badge>
                               <span className="text-muted-foreground text-xs sm:text-sm">
                                 {link.responseCount}
-                                {link.maxResponses ? ` / ${link.maxResponses}` : ""} svar
+                                {link.maxResponses !== undefined
+                                  ? ` / ${link.maxResponses}`
+                                  : " · ubegrenset"}{" "}
+                                svar
+                              </span>
+                              <span className="text-muted-foreground text-xs sm:text-sm">
+                                {link.expiresAt !== undefined
+                                  ? `Utløper ${new Date(link.expiresAt).toLocaleString("nb-NO")}`
+                                  : "Ingen utløp"}
                               </span>
                             </div>
                             <p className="text-muted-foreground break-all font-mono text-[11px] leading-relaxed [overflow-wrap:anywhere]">

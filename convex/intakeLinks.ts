@@ -15,7 +15,7 @@ function linkStatus(
   row: {
     pausedAt?: number;
     revokedAt?: number;
-    expiresAt: number;
+    expiresAt?: number;
     maxResponses?: number;
     responseCount: number;
   },
@@ -27,7 +27,7 @@ function linkStatus(
   if (row.pausedAt) {
     return "paused";
   }
-  if (row.expiresAt <= now) {
+  if (row.expiresAt !== undefined && row.expiresAt <= now) {
     return "expired";
   }
   if (row.maxResponses !== undefined && row.responseCount >= row.maxResponses) {
@@ -73,7 +73,11 @@ export const getPublicForm = query({
       .query("intakeFormLinks")
       .withIndex("by_token", (q) => q.eq("token", token))
       .unique();
-    if (!link || link.revokedAt || link.expiresAt <= Date.now()) {
+    if (
+      !link ||
+      link.revokedAt ||
+      (link.expiresAt !== undefined && link.expiresAt <= Date.now())
+    ) {
       return null;
     }
     const status = linkStatus(link, Date.now());
@@ -130,7 +134,9 @@ export const getPublicForm = query({
 export const create = mutation({
   args: {
     formId: v.id("intakeForms"),
-    expiresAt: v.number(),
+    /** Utelat eller undefined = ingen utløp. */
+    expiresAt: v.optional(v.number()),
+    /** Utelat eller undefined = ubegrenset antall svar. */
     maxResponses: v.optional(v.number()),
     restrictedAccessMode: intakeLinkAccessModeValidator,
   },
@@ -142,7 +148,7 @@ export const create = mutation({
     }
     await requireWorkspaceMember(ctx, form.workspaceId, userId, "member");
     const now = Date.now();
-    if (args.expiresAt <= now) {
+    if (args.expiresAt !== undefined && args.expiresAt <= now) {
       throw new Error("Utløpsdato må være frem i tid.");
     }
     if (

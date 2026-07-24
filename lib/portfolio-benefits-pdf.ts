@@ -7,7 +7,7 @@ import { REALIZATION_LABELS } from "@/lib/portfolio-benefit-copy";
 function moneyNb(n: number): string {
   if (!Number.isFinite(n) || n === 0) return "0 kr";
   if (Math.abs(n) >= 1_000_000) {
-    return `${(n / 1_000_000).toFixed(1).replace(".", ",")} MNOK`;
+    return `${(n / 1_000_000).toFixed(1).replace(".", ",")} mill. kr`;
   }
   return `${Math.round(n).toLocaleString("nb-NO")} kr`;
 }

@@ -72,10 +72,7 @@ function formatHours(n: number): string {
 function formatMoney(n: number): string {
   if (!Number.isFinite(n) || n === 0) return "0 kr";
   if (Math.abs(n) >= 1_000_000) {
-    return `${(n / 1_000_000).toFixed(1).replace(".", ",")} MNOK`;
-  }
-  if (Math.abs(n) >= 1000) {
-    return `${Math.round(n / 1000).toLocaleString("nb-NO")} kkr`;
+    return `${(n / 1_000_000).toFixed(1).replace(".", ",")} mill. kr`;
   }
   return `${Math.round(n).toLocaleString("nb-NO")} kr`;
 }
@@ -312,7 +309,7 @@ export function PortfolioBenefitsPage({
   }
 
   return (
-    <div className="mx-auto min-w-0 max-w-3xl space-y-5 overflow-x-clip pb-[max(2.5rem,env(safe-area-inset-bottom))] sm:space-y-6 lg:max-w-4xl">
+    <div className="mx-auto min-w-0 w-full max-w-none space-y-5 overflow-x-clip pb-[max(2.5rem,env(safe-area-inset-bottom))] sm:space-y-6">
       <header className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between sm:gap-4">
         <div className="min-w-0 space-y-1">
           <h1 className="font-heading text-2xl font-semibold tracking-tight sm:text-3xl">

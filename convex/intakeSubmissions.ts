@@ -426,7 +426,11 @@ export const submitPublic = mutation({
       .query("intakeFormLinks")
       .withIndex("by_token", (q) => q.eq("token", token))
       .unique();
-    if (!link || link.revokedAt || link.expiresAt <= Date.now()) {
+    if (
+      !link ||
+      link.revokedAt ||
+      (link.expiresAt !== undefined && link.expiresAt <= Date.now())
+    ) {
       throw new Error("Lenken er utløpt eller ikke tilgjengelig.");
     }
     if (link.pausedAt) {
