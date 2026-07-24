@@ -590,6 +590,15 @@ export const restoreVersion = mutation({
       throw new Error("Fant ikke denne versjonen.");
     }
     const now = Date.now();
+    // Behold dagens dokument før overskriving.
+    await insertDocumentVersion(ctx, {
+      workspaceId: assessment.workspaceId,
+      documentId: doc._id,
+      assessmentId: args.assessmentId,
+      userId,
+      payload: doc.payload as ProcessDesignDocumentPayload,
+      note: `Før gjenoppretting til v${args.version}`,
+    });
     const newRev = serverRev + 1;
     await ctx.db.patch(doc._id, {
       payload: snap.payload as ProcessDesignDocumentPayload,

@@ -614,6 +614,29 @@ export const restoreDraftFromVersion = mutation({
         q.eq("assessmentId", args.assessmentId),
       )
       .unique();
+    // Lagre dagens utkast før overskriving.
+    if (existing) {
+      const payload = existing.payload as Record<string, unknown>;
+      const snapshot = payloadToSnapshot(payload);
+      const computed = computeAllResults(snapshot);
+      const last = await ctx.db
+        .query("assessmentVersions")
+        .withIndex("by_assessment", (q) =>
+          q.eq("assessmentId", args.assessmentId),
+        )
+        .order("desc")
+        .first();
+      const nextVersion = (last?.version ?? 0) + 1;
+      await ctx.db.insert("assessmentVersions", {
+        assessmentId: args.assessmentId,
+        version: nextVersion,
+        note: `Før gjenoppretting til v${args.version}`,
+        payload: existing.payload,
+        computed,
+        createdByUserId: userId,
+        createdAt: now,
+      });
+    }
     const restoredPayload = syncWorkloadDerivedFields(
       sanitizeAssessmentProcessTextFields(
         ver.payload as unknown as Record<string, unknown>,

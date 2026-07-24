@@ -27,8 +27,9 @@ type Props = {
   versions: VersionRow[] | undefined;
   /** Når utkastet sist ble lagret (auto) — skilles fra navngitte milepæler */
   draftUpdatedAt?: number | null;
-  onOpenTeamAndVersions: () => void;
-  /** Åpner forhåndsvisning av en lagret milepæl (fører til Samarbeid og dialog). */
+  /** Åpner versjonsdialog (gjenopprett / lagre milepæl). */
+  onOpenVersions: () => void;
+  /** Åpner forhåndsvisning av en lagret milepæl i versjonsdialogen. */
   onPickVersionPreview: (version: number) => void;
 };
 
@@ -36,7 +37,7 @@ export function AssessmentWizardMeta({
   collaborators,
   versions,
   draftUpdatedAt,
-  onOpenTeamAndVersions,
+  onOpenVersions,
   onPickVersionPreview,
 }: Props) {
   const list = collaborators ?? [];
@@ -127,7 +128,7 @@ export function AssessmentWizardMeta({
           </p>
         ) : (
             <p className="text-muted-foreground text-[11px] leading-snug">
-              Milepæler er valgfrie — under Samarbeid.
+              Milepæler er valgfrie — åpne Versjoner for å lagre eller gjenopprette.
             </p>
           )}
         </div>
@@ -180,10 +181,16 @@ export function AssessmentWizardMeta({
           variant="secondary"
           size="sm"
           className="shrink-0 gap-1.5"
-          onClick={onOpenTeamAndVersions}
+          title="Se og gjenopprett milepæler"
+          onClick={onOpenVersions}
         >
-          <Users className="size-3.5" aria-hidden />
-          Team, milepæler, deling
+          <History className="size-3.5" aria-hidden />
+          Versjoner
+          {versionCount > 0 ? (
+            <span className="text-muted-foreground tabular-nums">
+              {versionCount}
+            </span>
+          ) : null}
         </Button>
       </div>
     </div>

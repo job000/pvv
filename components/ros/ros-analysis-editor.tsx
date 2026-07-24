@@ -1,7 +1,7 @@
 "use client";
 
 import { RosJournalPanel } from "@/components/ros/ros-journal-panel";
-import { RosVersionsPanel } from "@/components/ros/ros-versions-panel";
+import { RosAnalysisVersionsQuickDialog } from "@/components/ros/ros-analysis-versions-quick-dialog";
 import { RosLifecycleCompliancePanel } from "@/components/ros/ros-lifecycle-compliance-panel";
 import { RosMatrix } from "@/components/ros/ros-matrix";
 import { RosScaleReference } from "@/components/ros/ros-scale-reference";
@@ -91,6 +91,7 @@ import {
   ChevronRight,
   CircleHelp,
   FileDown,
+  History,
   Link2,
   ListTodo,
   Loader2,
@@ -393,10 +394,6 @@ function RiskSummaryBar({
 
 const ROS_MATRISE_SECTION_INDEX = 0;
 
-const ROS_INNSTILLINGER_SECTION_INDEX = ROS_EDITOR_SECTIONS.findIndex(
-  (s) => s.id === "innstillinger",
-);
-
 function RosPvvLinkFields({
   linkId,
   flags,
@@ -536,6 +533,7 @@ export function RosAnalysisEditor({
   const members = useQuery(api.workspaces.listMembers, { workspaceId });
   const rosTemplates = useQuery(api.ros.listTemplates, { workspaceId });
   const orgUnits = useQuery(api.orgUnits.listByWorkspace, { workspaceId });
+  const [versionsDialogOpen, setVersionsDialogOpen] = useState(false);
 
   const updateAnalysis = useMutation(api.ros.updateAnalysis);
   const removeAnalysis = useMutation(api.ros.removeAnalysis);
@@ -702,19 +700,12 @@ export function RosAnalysisEditor({
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [rosSection]);
 
-  /** Liste-lenke «Versjoner» (#versjoner) → steget Innstillinger + scroll til panel. */
+  /** Liste-lenke «Versjoner» (#versjoner) → åpne versjonsdialog. */
   useEffect(() => {
     if (typeof window === "undefined") return;
     const go = () => {
       if (window.location.hash !== "#versjoner") return;
-      if (ROS_INNSTILLINGER_SECTION_INDEX < 0) return;
-      setRosSection(ROS_INNSTILLINGER_SECTION_INDEX);
-      requestAnimationFrame(() => {
-        document.getElementById("ros-versjoner")?.scrollIntoView({
-          behavior: "smooth",
-          block: "start",
-        });
-      });
+      setVersionsDialogOpen(true);
     };
     go();
     window.addEventListener("hashchange", go);
@@ -2620,7 +2611,23 @@ export function RosAnalysisEditor({
               disabled={saving}
               className="h-9 gap-1.5 rounded-full bg-foreground px-4 text-sm font-semibold text-background transition-opacity hover:opacity-90"
             >
-              {saving ? "Lagrer …" : dirty ? "Lagre" : "Versjon"}
+              {saving ? "Lagrer …" : dirty ? "Lagre" : "Lagret"}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-9 gap-1.5 rounded-full px-3"
+              title="Se og gjenopprett gamle versjoner"
+              onClick={() => setVersionsDialogOpen(true)}
+            >
+              <History className="size-3.5" aria-hidden />
+              <span className="hidden sm:inline">Versjoner</span>
+              {versions && versions.length > 0 ? (
+                <span className="text-muted-foreground tabular-nums">
+                  {versions.length}
+                </span>
+              ) : null}
             </Button>
             <Button
               type="button"
@@ -4706,30 +4713,33 @@ export function RosAnalysisEditor({
           </div>
         </details>
 
-        {/* Avansert: versjoner */}
-        <details className="group/sec bg-card ring-border/40 rounded-2xl shadow-sm ring-1">
-          <summary className="hover:bg-muted/30 flex cursor-pointer list-none items-center justify-between gap-2 rounded-2xl px-4 py-3 text-sm font-semibold transition-colors [&::-webkit-details-marker]:hidden sm:px-5">
-            <span className="flex items-center gap-2">
-              <span>Versjoner</span>
-              {versions && versions.length > 0 && (
+        {/* Versjoner — åpnes fra knappen i toppen */}
+        <div className="bg-card ring-border/40 flex flex-col gap-3 rounded-2xl p-4 shadow-sm ring-1 sm:flex-row sm:items-center sm:justify-between sm:px-5">
+          <div className="min-w-0">
+            <p className="flex items-center gap-2 text-sm font-semibold">
+              <History className="size-4 shrink-0" aria-hidden />
+              Versjoner
+              {versions && versions.length > 0 ? (
                 <span className="text-muted-foreground text-[11px] font-normal">
                   · {versions.length} lagret
                 </span>
-              )}
-            </span>
-            <ChevronRight
-              className="text-muted-foreground size-4 transition-transform group-open/sec:rotate-90"
-              aria-hidden
-            />
-          </summary>
-          <div className="border-border/30 border-t px-4 py-4 sm:px-5">
-            <RosVersionsPanel
-              analysisId={analysisId}
-              versions={versions}
-              onRestored={() => setDirty(false)}
-            />
+              ) : null}
+            </p>
+            <p className="text-muted-foreground mt-0.5 text-xs leading-relaxed">
+              Gjenopprett gamle øyeblikksbilder, eller lagre en ny versjon før
+              større endringer.
+            </p>
           </div>
-        </details>
+          <Button
+            type="button"
+            variant="outline"
+            className="h-10 shrink-0 gap-1.5 rounded-xl"
+            onClick={() => setVersionsDialogOpen(true)}
+          >
+            <History className="size-3.5" aria-hidden />
+            Åpne versjoner
+          </Button>
+        </div>
 
         {/* Avansert: journal */}
         <details className="group/sec bg-card ring-border/40 rounded-2xl shadow-sm ring-1">
@@ -5097,6 +5107,15 @@ export function RosAnalysisEditor({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <RosAnalysisVersionsQuickDialog
+        open={versionsDialogOpen}
+        onOpenChange={setVersionsDialogOpen}
+        workspaceId={workspaceId}
+        analysisId={analysisId}
+        analysisTitle={data.title}
+        onRestored={() => setDirty(false)}
+      />
     </div>
   );
 }

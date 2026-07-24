@@ -41,6 +41,8 @@ type Props = {
   assessmentId: Id<"assessments">;
   versions: VersionRow[] | undefined;
   canEdit: boolean;
+  /** Uten egen topptekst (f.eks. inne i dialog). */
+  embedded?: boolean;
   /** Ekstern forespørsel (f.eks. metarad): åpne forhåndsvisning av denne versjonen. */
   previewRequestVersion?: number | null;
   onPreviewRequestConsumed?: () => void;
@@ -54,6 +56,7 @@ export function AssessmentVersionsBlock({
   assessmentId,
   versions,
   canEdit,
+  embedded = false,
   previewRequestVersion,
   onPreviewRequestConsumed,
   onDraftRestored,
@@ -179,24 +182,40 @@ export function AssessmentVersionsBlock({
   }, [previewRequestVersion, onPreviewRequestConsumed]);
 
   return (
-    <div id="versjoner" className="scroll-mt-28 space-y-4">
-      <div className="flex flex-wrap items-start gap-3">
-        <div className="flex items-start gap-2">
-          <History className="text-primary mt-0.5 size-5 shrink-0" aria-hidden />
-          <div>
-            <h3 className="font-heading text-base font-semibold">
-              Milepæler (navngitte versjoner)
-            </h3>
-            <p className="text-muted-foreground mt-0.5 max-w-prose text-sm leading-snug">
-              Her fryser du <strong className="text-foreground">valgfrie</strong>{" "}
-              øyeblikk av hele vurderingen (skjema + beregning). Det du skriver
-              ellers lagres automatisk som <strong className="text-foreground">utkast</strong>{" "}
-              og teller ikke her — bruk «Lagre versjon» når du trenger sporbarhet
-              (revisjon, milepæl, før/etter).
-            </p>
+    <div
+      id={embedded ? undefined : "versjoner"}
+      className={embedded ? "space-y-4" : "scroll-mt-28 space-y-4"}
+    >
+      {embedded ? (
+        <p className="text-muted-foreground text-sm leading-snug">
+          Frys valgfrie milepæler av hele vurderingen. Utkast lagres automatisk —
+          bruk «Lagre versjon» for sporbarhet. Gjenoppretting lagrer dagens
+          stand først.
+        </p>
+      ) : (
+        <div className="flex flex-wrap items-start gap-3">
+          <div className="flex items-start gap-2">
+            <History
+              className="text-primary mt-0.5 size-5 shrink-0"
+              aria-hidden
+            />
+            <div>
+              <h3 className="font-heading text-base font-semibold">
+                Milepæler (navngitte versjoner)
+              </h3>
+              <p className="text-muted-foreground mt-0.5 max-w-prose text-sm leading-snug">
+                Her fryser du{" "}
+                <strong className="text-foreground">valgfrie</strong> øyeblikk
+                av hele vurderingen (skjema + beregning). Det du skriver ellers
+                lagres automatisk som{" "}
+                <strong className="text-foreground">utkast</strong> og teller
+                ikke her — bruk «Lagre versjon» når du trenger sporbarhet
+                (revisjon, milepæl, før/etter).
+              </p>
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
       {versionOptions.length > 0 ? (
         <div className="rounded-2xl border border-primary/20 bg-gradient-to-br from-primary/[0.05] to-muted/25 p-4 shadow-sm ring-1 ring-primary/10">
@@ -367,7 +386,7 @@ export function AssessmentVersionsBlock({
                       if (
                         typeof window !== "undefined" &&
                         window.confirm(
-                          `Gjenopprette aktivt utkast fra v${ver.version}? Ulagrede endringer i skjemaet erstattes.`,
+                          `Gjenopprette aktivt utkast fra v${ver.version}? Dagens utkast lagres først automatisk, deretter overskrives det aktive utkastet.`,
                         )
                       ) {
                         void runRestore(ver.version);
@@ -375,7 +394,7 @@ export function AssessmentVersionsBlock({
                     }}
                   >
                     <RotateCcw className="size-3.5" aria-hidden />
-                    Bruk som utkast
+                    Gjenopprett
                   </Button>
                   <Button
                     type="button"
@@ -539,7 +558,7 @@ export function AssessmentVersionsBlock({
                       if (
                         typeof window !== "undefined" &&
                         !window.confirm(
-                          `Gjenopprette aktivt utkast fra v${previewVersion}? Ulagrede endringer i skjemaet erstattes.`,
+                          `Gjenopprette aktivt utkast fra v${previewVersion}? Dagens utkast lagres først automatisk.`,
                         )
                       ) {
                         return;
@@ -548,7 +567,7 @@ export function AssessmentVersionsBlock({
                     }}
                   >
                     <RotateCcw className="size-3.5" aria-hidden />
-                    Bruk som aktivt utkast
+                    Gjenopprett som aktivt utkast
                   </Button>
                   <Button
                     type="button"

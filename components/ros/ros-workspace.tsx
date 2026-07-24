@@ -1120,11 +1120,14 @@ export function RosWorkspace({ workspaceId }: { workspaceId: Id<"workspaces"> })
                             title: a.title,
                           });
                         }}
-                        className="text-muted-foreground hover:bg-background hover:text-foreground hidden shrink-0 items-center gap-1 rounded-full px-2 py-1 text-[11px] transition-colors sm:inline-flex"
-                        title={`${versionCount} versjon${versionCount === 1 ? "" : "er"}`}
+                        className="text-muted-foreground hover:bg-background hover:text-foreground hidden shrink-0 items-center gap-1 rounded-full px-2 py-1 text-[11px] font-medium transition-colors sm:inline-flex"
+                        title="Se og gjenopprett versjoner"
                       >
                         <History className="size-3" aria-hidden />
-                        <span className="tabular-nums">{versionCount}</span>
+                        <span>Versjoner</span>
+                        <span className="tabular-nums opacity-70">
+                          {versionCount}
+                        </span>
                       </button>
                       <Button
                         type="button"

@@ -16,6 +16,7 @@ import { AssessmentResultStep } from "@/components/assessment-wizard/assessment-
 import { AssessmentValueImpactStep } from "@/components/assessment-wizard/assessment-value-impact-step";
 import { AssessmentWizardSchemaHelp } from "@/components/assessment-wizard/assessment-wizard-schema-help";
 import { AssessmentWizardMeta } from "@/components/assessment-wizard/assessment-wizard-meta";
+import { AssessmentVersionsQuickDialog } from "@/components/assessment-wizard/assessment-versions-quick-dialog";
 import { LikertField } from "@/components/rpa-assessment/likert-field";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -59,7 +60,7 @@ import { ASSESSMENT_COLLAB_ROLE_LABEL_NB } from "@/lib/role-labels-nb";
 import { clampLikert5, computeAllResults } from "@/lib/rpa-assessment/scoring";
 import { useMutation, useQuery } from "convex/react";
 import useEmblaCarousel from "embla-carousel-react";
-import { ChevronLeft, ChevronRight, Trash2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, History, Trash2 } from "lucide-react";
 import { useParams, usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useStickyState } from "@/lib/use-sticky-state";
@@ -499,6 +500,7 @@ export function AssessmentWizard({ assessmentId }: Props) {
   const [versionPreviewRequest, setVersionPreviewRequest] = useState<
     number | null
   >(null);
+  const [versionsDialogOpen, setVersionsDialogOpen] = useState(false);
 
   useEffect(() => {
     setPayload(null);
@@ -774,22 +776,24 @@ export function AssessmentWizard({ assessmentId }: Props) {
     };
   }, [persist]);
 
-  const openTeamAndVersions = useCallback(() => {
-    emblaApi?.scrollTo(detailsSlideIndex);
-    requestAnimationFrame(() => {
-      document.getElementById("versjoner")?.scrollIntoView({
-        behavior: "smooth",
-        block: "start",
-      });
-    });
-  }, [emblaApi, detailsSlideIndex]);
+  const openVersionsDialog = useCallback(() => {
+    setVersionsDialogOpen(true);
+  }, []);
 
-  const onPickVersionPreview = useCallback(
-    (v: number) => {
-      setVersionPreviewRequest(v);
-      openTeamAndVersions();
+  const onPickVersionPreview = useCallback((v: number) => {
+    setVersionPreviewRequest(v);
+    setVersionsDialogOpen(true);
+  }, []);
+
+  const applyDraftRestored = useCallback(
+    (p: AssessmentPayload, meta?: { revision: number }) => {
+      setPayload(normalizeDraftPayload(p));
+      if (meta?.revision !== undefined) {
+        draftRevisionRef.current = meta.revision;
+        setDraftRevision(meta.revision);
+      }
     },
-    [openTeamAndVersions],
+    [],
   );
 
   const onVersionPreviewRequestConsumed = useCallback(() => {
@@ -854,14 +858,14 @@ export function AssessmentWizard({ assessmentId }: Props) {
       }
       await flushTitleBeforeLeave();
       setLeaveWizardOpen(false);
-      openTeamAndVersions();
+      openVersionsDialog();
     } finally {
       setLeavingBusy(false);
     }
   }, [
     canEdit,
     flushTitleBeforeLeave,
-    openTeamAndVersions,
+    openVersionsDialog,
     persist,
   ]);
 
@@ -918,20 +922,22 @@ export function AssessmentWizard({ assessmentId }: Props) {
   const pulsIssuePreset = pulsIssueTypeFromQuery(searchParams.get("puls"));
 
   useEffect(() => {
+    if (typeof window === "undefined") return;
+    const go = () => {
+      if (window.location.hash === "#versjoner") {
+        setVersionsDialogOpen(true);
+      }
+    };
+    go();
+    window.addEventListener("hashchange", go);
+    return () => window.removeEventListener("hashchange", go);
+  }, []);
+
+  useEffect(() => {
     if (!emblaApi) return;
     const go = () => {
       if (typeof window === "undefined") return;
       const hash = window.location.hash;
-      if (hash === "#versjoner") {
-        emblaApi.scrollTo(detailsSlideIndex);
-        requestAnimationFrame(() => {
-          document.getElementById("versjoner")?.scrollIntoView({
-            behavior: "smooth",
-            block: "start",
-          });
-        });
-        return;
-      }
       if (hash === "#puls-kort" || searchParams.get("puls")) {
         emblaApi.scrollTo(detailsSlideIndex);
         requestAnimationFrame(() => {
@@ -1066,37 +1072,57 @@ export function AssessmentWizard({ assessmentId }: Props) {
 
       {/* Flat header: tittel + én stille meta-linje — ingen hero-kort. */}
       <header className="space-y-1.5">
-        {canEdit ? (
-          <Input
-            id="assessment-display-title"
-            aria-label="Tittel på vurderingen"
-            value={titleDraft}
-            onChange={(e) => setTitleDraft(e.target.value)}
-            placeholder="F.eks. Fakturamottak — leverandør"
-            autoComplete="off"
-            title="Skilles fra prosessnavn under «Prosess»."
-            className="font-heading h-auto border-0 bg-transparent px-0 py-0 text-2xl font-semibold tracking-tight shadow-none focus-visible:ring-0 sm:text-3xl"
-          />
-        ) : (
-          <h1 className="font-heading text-2xl font-semibold tracking-tight sm:text-3xl">
-            {assessment.title}
-          </h1>
-        )}
-        <p
-          className="text-sm text-muted-foreground"
-          title="Endringer lagres automatisk."
-        >
-          {[
-            canEdit ? "Lagrer automatisk" : "Kun visning",
-            access?.shareWithWorkspace ? "Delt med arbeidsområdet" : null,
-            access?.collaboratorRole
-              ? (ASSESSMENT_COLLAB_ROLE_LABEL_NB[access.collaboratorRole] ??
-                access.collaboratorRole)
-              : null,
-          ]
-            .filter(Boolean)
-            .join(" · ")}
-        </p>
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0 flex-1">
+            {canEdit ? (
+              <Input
+                id="assessment-display-title"
+                aria-label="Tittel på vurderingen"
+                value={titleDraft}
+                onChange={(e) => setTitleDraft(e.target.value)}
+                placeholder="F.eks. Fakturamottak — leverandør"
+                autoComplete="off"
+                title="Skilles fra prosessnavn under «Prosess»."
+                className="font-heading h-auto border-0 bg-transparent px-0 py-0 text-2xl font-semibold tracking-tight shadow-none focus-visible:ring-0 sm:text-3xl"
+              />
+            ) : (
+              <h1 className="font-heading text-2xl font-semibold tracking-tight sm:text-3xl">
+                {assessment.title}
+              </h1>
+            )}
+            <p
+              className="text-sm text-muted-foreground"
+              title="Endringer lagres automatisk."
+            >
+              {[
+                canEdit ? "Lagrer automatisk" : "Kun visning",
+                access?.shareWithWorkspace ? "Delt med arbeidsområdet" : null,
+                access?.collaboratorRole
+                  ? (ASSESSMENT_COLLAB_ROLE_LABEL_NB[access.collaboratorRole] ??
+                    access.collaboratorRole)
+                  : null,
+              ]
+                .filter(Boolean)
+                .join(" · ")}
+            </p>
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="mt-1 h-9 shrink-0 gap-1.5 rounded-full px-3"
+            title="Se og gjenopprett milepæler"
+            onClick={openVersionsDialog}
+          >
+            <History className="size-3.5" aria-hidden />
+            <span className="hidden sm:inline">Versjoner</span>
+            {milestoneCount > 0 ? (
+              <span className="text-muted-foreground tabular-nums">
+                {milestoneCount}
+              </span>
+            ) : null}
+          </Button>
+        </div>
       </header>
 
       {rosContext !== undefined ? (
@@ -1157,7 +1183,7 @@ export function AssessmentWizard({ assessmentId }: Props) {
             collaborators={collaborators}
             versions={versions}
             draftUpdatedAt={data?.draft?.updatedAt}
-            onOpenTeamAndVersions={openTeamAndVersions}
+            onOpenVersions={openVersionsDialog}
             onPickVersionPreview={onPickVersionPreview}
           />
           <AssessmentExportPanel
@@ -1906,31 +1932,40 @@ export function AssessmentWizard({ assessmentId }: Props) {
                 </Accordion>
 
                 <div className="space-y-6 rounded-2xl bg-muted/10 p-4 ring-1 ring-black/[0.04] dark:ring-white/[0.06]">
-                  <div className="space-y-1">
-                    <h3 className="text-base font-semibold text-foreground">
-                      Samarbeid og milepæler
-                    </h3>
-                    <p className="text-muted-foreground text-sm">
-                      Invitasjoner, notater, oppfølging og navngitte versjoner — valgfritt.
-                    </p>
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div className="space-y-1">
+                      <h3 className="text-base font-semibold text-foreground">
+                        Samarbeid og milepæler
+                      </h3>
+                      <p className="text-muted-foreground text-sm">
+                        Invitasjoner, notater, oppfølging og navngitte versjoner —
+                        valgfritt.
+                      </p>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-9 shrink-0 gap-1.5"
+                      onClick={openVersionsDialog}
+                    >
+                      <History className="size-3.5" aria-hidden />
+                      Åpne versjoner
+                    </Button>
                   </div>
                   <AssessmentCollaborationPanel
                     assessmentId={assessmentId}
                     workspaceId={assessment.workspaceId}
                     canEdit={canEdit}
-                    versionPreviewRequest={versionPreviewRequest}
+                    versionPreviewRequest={
+                      versionsDialogOpen ? null : versionPreviewRequest
+                    }
                     onVersionPreviewRequestConsumed={
                       onVersionPreviewRequestConsumed
                     }
                     defaultPulsIssueType={pulsIssuePreset}
                     showOpsChangeHint={isProdOrMonitoring(pipelineStatusNorm)}
-                    onDraftRestored={(p, meta) => {
-                      setPayload(normalizeDraftPayload(p));
-                      if (meta?.revision !== undefined) {
-                        draftRevisionRef.current = meta.revision;
-                        setDraftRevision(meta.revision);
-                      }
-                    }}
+                    onDraftRestored={applyDraftRestored}
                   />
                 </div>
               </div>
@@ -1938,6 +1973,17 @@ export function AssessmentWizard({ assessmentId }: Props) {
           </div>
         </div>
       </section>
+
+      <AssessmentVersionsQuickDialog
+        open={versionsDialogOpen}
+        onOpenChange={setVersionsDialogOpen}
+        assessmentId={assessmentId}
+        assessmentTitle={assessment.title}
+        canEdit={canEdit}
+        previewRequestVersion={versionPreviewRequest}
+        onPreviewRequestConsumed={onVersionPreviewRequestConsumed}
+        onDraftRestored={applyDraftRestored}
+      />
 
       <Dialog
         open={draftConflict !== null}
@@ -2028,8 +2074,8 @@ export function AssessmentWizard({ assessmentId }: Props) {
           </DialogHeader>
           <DialogBody>
             <p className="text-muted-foreground text-sm leading-relaxed">
-              Alt er lagret. Navngitte milepæler er valgfrie — du finner dem under
-              Samarbeid.
+              Alt er lagret. Navngitte milepæler er valgfrie — åpne Versjoner når
+              du vil fryse et øyeblikk.
             </p>
           </DialogBody>
           <DialogFooter className="flex-wrap sm:justify-between">
@@ -2039,7 +2085,7 @@ export function AssessmentWizard({ assessmentId }: Props) {
               disabled={leavingBusy}
               onClick={() => void saveDraftAndGoToMilestones()}
             >
-              Gå til milepæler først
+              Åpne versjoner først
             </Button>
             <Button
               type="button"

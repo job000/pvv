@@ -1,5 +1,6 @@
 "use client";
 
+import { AssessmentVersionsBlock } from "@/components/assessment-wizard/assessment-versions-block";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -7,45 +8,43 @@ import {
   DialogContent,
   DialogHeader,
 } from "@/components/ui/dialog";
-import { RosVersionsPanel } from "@/components/ros/ros-versions-panel";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
+import type { AssessmentPayload } from "@/lib/assessment-types";
 import { useQuery } from "convex/react";
 import { History, X } from "lucide-react";
 
 type Props = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  workspaceId: Id<"workspaces">;
-  analysisId: Id<"rosAnalyses"> | null;
-  analysisTitle: string;
-  /** Kalles etter vellykket gjenoppretting (f.eks. nullstill dirty i editor). */
-  onRestored?: () => void;
+  assessmentId: Id<"assessments">;
+  assessmentTitle: string;
+  canEdit: boolean;
+  previewRequestVersion?: number | null;
+  onPreviewRequestConsumed?: () => void;
+  onDraftRestored?: (
+    payload: AssessmentPayload,
+    meta?: { revision: number },
+  ) => void;
 };
 
-export function RosAnalysisVersionsQuickDialog({
+export function AssessmentVersionsQuickDialog({
   open,
   onOpenChange,
-  workspaceId,
-  analysisId,
-  analysisTitle,
-  onRestored,
+  assessmentId,
+  assessmentTitle,
+  canEdit,
+  previewRequestVersion,
+  onPreviewRequestConsumed,
+  onDraftRestored,
 }: Props) {
   const versions = useQuery(
-    api.ros.listVersions,
-    open && analysisId ? { analysisId } : "skip",
+    api.assessments.listVersions,
+    open ? { assessmentId } : "skip",
   );
-  const membership = useQuery(
-    api.workspaces.getMyMembership,
-    open ? { workspaceId } : "skip",
-  );
-  const canEdit =
-    membership?.role === "owner" ||
-    membership?.role === "admin" ||
-    membership?.role === "member";
 
-  const titleId = "ros-quick-versions-title";
-  const descId = "ros-quick-versions-desc";
+  const titleId = "assessment-quick-versions-title";
+  const descId = "assessment-quick-versions-desc";
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -67,10 +66,10 @@ export function RosAnalysisVersionsQuickDialog({
               </p>
               <p id={descId} className="text-muted-foreground mt-1 text-sm">
                 <span className="text-foreground font-medium">
-                  {analysisTitle || "ROS-analyse"}
+                  {assessmentTitle || "Vurdering"}
                 </span>
                 {" · "}
-                Se, gjenopprett eller lagre øyeblikksbilder.
+                Se, gjenopprett eller lagre milepæler.
               </p>
             </div>
             <Button
@@ -86,19 +85,15 @@ export function RosAnalysisVersionsQuickDialog({
           </div>
         </DialogHeader>
         <DialogBody className="min-h-0 space-y-3 overflow-y-auto overscroll-contain pb-2">
-          {analysisId ? (
-            <RosVersionsPanel
-              analysisId={analysisId}
-              versions={versions}
-              canEdit={canEdit}
-              embedded
-              onRestored={() => {
-                onRestored?.();
-              }}
-            />
-          ) : (
-            <p className="text-muted-foreground text-sm">Velg en analyse.</p>
-          )}
+          <AssessmentVersionsBlock
+            assessmentId={assessmentId}
+            versions={versions}
+            canEdit={canEdit}
+            embedded
+            previewRequestVersion={previewRequestVersion}
+            onPreviewRequestConsumed={onPreviewRequestConsumed}
+            onDraftRestored={onDraftRestored}
+          />
         </DialogBody>
       </DialogContent>
     </Dialog>

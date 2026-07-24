@@ -2352,8 +2352,18 @@ export const restoreVersion = mutation({
     }
     const now = Date.now();
     const current = await ctx.db.get(args.analysisId);
+    if (!current) {
+      throw new Error("ROS-analyse finnes ikke.");
+    }
+    // Behold dagens stand før overskriving (kan gjenopprettes senere).
+    await insertRosAnalysisVersionSnapshot(
+      ctx,
+      current,
+      userId,
+      `Før gjenoppretting til v${args.version}`,
+    );
     const pseudo = {
-      ...current!,
+      ...current,
       rowAxisTitle: ver.rowAxisTitle,
       colAxisTitle: ver.colAxisTitle,
       rowLabels: ver.rowLabels,
@@ -2383,7 +2393,7 @@ export const restoreVersion = mutation({
       ver.cellNotesAfter,
       ver.cellItemsAfter as RosCellItemMatrix | undefined,
     );
-    const prevRev = current?.revision ?? 0;
+    const prevRev = current.revision ?? 0;
     await ctx.db.patch(args.analysisId, {
       rowAxisTitle: ver.rowAxisTitle,
       colAxisTitle: ver.colAxisTitle,
@@ -2418,6 +2428,13 @@ export const restoreVersion = mutation({
         : undefined,
       requirementRefs: ver.requirementRefs
         ? ver.requirementRefs.map((r) => ({ ...r }))
+        : undefined,
+      rosSectorPackId: ver.rosSectorPackId,
+      riskPoolBefore: ver.riskPoolBefore
+        ? ver.riskPoolBefore.map((x) => ({ ...x }))
+        : undefined,
+      riskPoolAfter: ver.riskPoolAfter
+        ? ver.riskPoolAfter.map((x) => ({ ...x }))
         : undefined,
       updatedAt: now,
       revision: prevRev + 1,

@@ -1349,6 +1349,18 @@ export function ProcessDesignDocPage({
     leavePromptOpenRef.current = leavePromptOpen;
   }, [leavePromptOpen]);
 
+  /** Liste-lenke «Versjoner» (#versjoner) → åpne historikk. */
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const go = () => {
+      if (window.location.hash !== "#versjoner") return;
+      setHistoryOpen(true);
+    };
+    go();
+    window.addEventListener("hashchange", go);
+    return () => window.removeEventListener("hashchange", go);
+  }, []);
+
   const lastSyncedKeyRef = useRef<string | null>(null);
 
   const syncFromServer = useCallback(() => {
@@ -1705,7 +1717,7 @@ export function ProcessDesignDocPage({
     if (!canEdit || !docState?.document) return;
     if (
       !confirm(
-        `Erstatte utkastet med versjon ${version}? Ulagrede endringer går tapt.`,
+        `Gjenopprette versjon ${version}? Dagens dokument lagres først automatisk, deretter erstattes utkastet.`,
       )
     )
       return;
@@ -2182,6 +2194,22 @@ export function ProcessDesignDocPage({
                   <Eye className="size-3.5" aria-hidden />
                 )}
                 PDF
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-9 gap-1.5 rounded-lg"
+                title="Se og gjenopprett gamle versjoner"
+                onClick={() => setHistoryOpen(true)}
+              >
+                <History className="size-3.5" aria-hidden />
+                <span className="hidden sm:inline">Versjoner</span>
+                {versionCount > 0 ? (
+                  <span className="text-muted-foreground tabular-nums">
+                    {versionCount}
+                  </span>
+                ) : null}
               </Button>
               <SecondaryActionsMenu
                 onAutofill={applyAutofill}
@@ -3079,8 +3107,8 @@ export function ProcessDesignDocPage({
                         )}
                       </div>
                       <p className="mt-2 text-[11px] leading-5 text-muted-foreground">
-                        Gjenoppretting erstatter gjeldende utkast med denne versjonen. Dette sletter
-                        ikke selve historikkraden.
+                        Gjenoppretting lagrer dagens stand først, deretter erstattes
+                        utkastet. Historikkraden beholdes.
                       </p>
                     </li>
                   ))}

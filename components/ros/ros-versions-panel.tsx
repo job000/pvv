@@ -43,6 +43,10 @@ type VersionRow = {
 type Props = {
   analysisId: Id<"rosAnalyses">;
   versions: VersionRow[] | undefined;
+  /** Workspace member+ / redigeringsrett — kreves for lagre, gjenopprett, slett. */
+  canEdit?: boolean;
+  /** Uten Card-ramme (f.eks. inne i dialog). */
+  embedded?: boolean;
   onRestored?: () => void;
 };
 
@@ -60,6 +64,8 @@ function formatTs(ms: number) {
 export function RosVersionsPanel({
   analysisId,
   versions,
+  canEdit = false,
+  embedded = false,
   onRestored,
 }: Props) {
   const createVersion = useMutation(api.ros.createVersion);
@@ -149,21 +155,8 @@ export function RosVersionsPanel({
     }
   }
 
-  return (
-    <Card id="ros-versjoner" className="scroll-mt-24">
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-base">
-          <History className="size-4" aria-hidden />
-          Versjonskontroll
-        </CardTitle>
-        <CardDescription>
-          Lagre øyeblikksbilder av matrisen (før/etter). «Lagre endringer» i
-          toppen oppretter også en ny versjon; automatisk lagring gjør ikke
-          det. Bytt visning, åpne forhåndsvisning, gjenopprett eller slett
-          enkeltversjoner.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
+  const body = (
+    <div className="space-y-4">
         {actionError ? (
           <p className="text-destructive text-sm">{actionError}</p>
         ) : null}
@@ -206,25 +199,34 @@ export function RosVersionsPanel({
           </div>
         ) : null}
 
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
-          <div className="min-w-0 flex-1 space-y-1.5">
-            <Label htmlFor="ros-snap-note">Notat til ny versjon (valgfritt)</Label>
-            <Input
-              id="ros-snap-note"
-              value={versionNote}
-              onChange={(e) => setVersionNote(e.target.value)}
-              placeholder="F.eks. Før endring av akser"
-            />
+        {canEdit ? (
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+            <div className="min-w-0 flex-1 space-y-1.5">
+              <Label htmlFor="ros-snap-note">
+                Notat til ny versjon (valgfritt)
+              </Label>
+              <Input
+                id="ros-snap-note"
+                value={versionNote}
+                onChange={(e) => setVersionNote(e.target.value)}
+                placeholder="F.eks. Før endring av akser"
+              />
+            </div>
+            <Button
+              type="button"
+              disabled={snapshotBusy}
+              className="w-full shrink-0 sm:w-auto"
+              onClick={() => void onSnapshot()}
+            >
+              {snapshotBusy ? "Lagrer …" : "Lagre versjon"}
+            </Button>
           </div>
-          <Button
-            type="button"
-            disabled={snapshotBusy}
-            className="w-full shrink-0 sm:w-auto"
-            onClick={() => void onSnapshot()}
-          >
-            {snapshotBusy ? "Lagrer …" : "Lagre versjon"}
-          </Button>
-        </div>
+        ) : (
+          <p className="text-muted-foreground text-xs">
+            Du kan se versjoner. Kun medlemmer med redigeringsrett kan lagre
+            eller gjenopprette.
+          </p>
+        )}
 
         <Separator />
 
@@ -271,46 +273,50 @@ export function RosVersionsPanel({
                     <Eye className="size-3.5" aria-hidden />
                     Vis
                   </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    className="h-9 gap-1.5"
-                    onClick={() => {
-                      if (
-                        typeof window !== "undefined" &&
-                        !window.confirm(
-                          `Gjenopprette versjon ${v.version}? Nåværende matrise og notat overskrives (lagre ny versjon først om du vil beholde dagens stand).`,
-                        )
-                      ) {
-                        return;
-                      }
-                      void runRestore(v.version);
-                    }}
-                  >
-                    <RotateCcw className="size-3.5" aria-hidden />
-                    Bruk som aktiv
-                  </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    className="text-destructive hover:bg-destructive/10 border-destructive/30 hover:text-destructive h-9 gap-1.5"
-                    onClick={() => {
-                      if (
-                        typeof window !== "undefined" &&
-                        !window.confirm(
-                          `Slette v${v.version} permanent? Kan ikke angres.`,
-                        )
-                      ) {
-                        return;
-                      }
-                      void runDelete(v.version);
-                    }}
-                  >
-                    <Trash2 className="size-3.5" aria-hidden />
-                    Slett
-                  </Button>
+                  {canEdit ? (
+                    <>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="h-9 gap-1.5"
+                        onClick={() => {
+                          if (
+                            typeof window !== "undefined" &&
+                            !window.confirm(
+                              `Gjenopprette versjon ${v.version}? Dagens stand lagres først automatisk, deretter overskrives aktiv analyse.`,
+                            )
+                          ) {
+                            return;
+                          }
+                          void runRestore(v.version);
+                        }}
+                      >
+                        <RotateCcw className="size-3.5" aria-hidden />
+                        Gjenopprett
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="text-destructive hover:bg-destructive/10 border-destructive/30 hover:text-destructive h-9 gap-1.5"
+                        onClick={() => {
+                          if (
+                            typeof window !== "undefined" &&
+                            !window.confirm(
+                              `Slette v${v.version} permanent? Kan ikke angres.`,
+                            )
+                          ) {
+                            return;
+                          }
+                          void runDelete(v.version);
+                        }}
+                      >
+                        <Trash2 className="size-3.5" aria-hidden />
+                        Slett
+                      </Button>
+                    </>
+                  ) : null}
                 </div>
               </li>
             ))}
@@ -416,7 +422,7 @@ export function RosVersionsPanel({
             </DialogBody>
             <DialogFooter className="flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-2">
               <div className="flex w-full flex-wrap gap-2 sm:w-auto">
-                {previewVersion !== null ? (
+                {previewVersion !== null && canEdit ? (
                   <>
                     <Button
                       type="button"
@@ -427,7 +433,7 @@ export function RosVersionsPanel({
                         if (
                           typeof window !== "undefined" &&
                           !window.confirm(
-                            `Gjenopprette versjon ${previewVersion}? Nåværende matrise og notat overskrives.`,
+                            `Gjenopprette versjon ${previewVersion}? Dagens stand lagres først automatisk.`,
                           )
                         ) {
                           return;
@@ -436,7 +442,7 @@ export function RosVersionsPanel({
                       }}
                     >
                       <RotateCcw className="size-3.5" aria-hidden />
-                      Bruk som aktiv analyse
+                      Gjenopprett som aktiv
                     </Button>
                     <Button
                       type="button"
@@ -480,7 +486,32 @@ export function RosVersionsPanel({
             </DialogFooter>
           </DialogContent>
         </Dialog>
-      </CardContent>
+    </div>
+  );
+
+  if (embedded) {
+    return (
+      <div id="ros-versjoner" className="scroll-mt-24">
+        {body}
+      </div>
+    );
+  }
+
+  return (
+    <Card id="ros-versjoner" className="scroll-mt-24">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-base">
+          <History className="size-4" aria-hidden />
+          Versjonskontroll
+        </CardTitle>
+        <CardDescription>
+          Lagre øyeblikksbilder av matrisen (før/etter). «Lagre endringer» i
+          toppen oppretter også en ny versjon; automatisk lagring gjør ikke
+          det. Gjenoppretting lagrer først dagens stand automatisk, så du kan
+          angre.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>{body}</CardContent>
     </Card>
   );
 }
