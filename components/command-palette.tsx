@@ -12,6 +12,7 @@ import {
   FileText,
   Kanban,
   LayoutDashboard,
+  ListChecks,
   ListTodo,
   Monitor,
   Moon,
@@ -51,11 +52,23 @@ function normalize(s: string): string {
   return s.toLocaleLowerCase("nb-NO").trim();
 }
 
+const CONTENT_KIND_ICON: Record<
+  string,
+  ComponentType<{ className?: string }>
+> = {
+  assessment: ClipboardList,
+  candidate: Users,
+  ros: Shield,
+  pdd: ScrollText,
+  form: FileText,
+  board: Kanban,
+  orgUnit: Building2,
+  task: ListChecks,
+};
+
 /**
  * Global kommandopalett (⌘K / Ctrl+K):
- * navigasjon i arbeidsområdet, bytte av arbeidsområde og temavalg —
- * uten å flytte hendene fra tastaturet. Kun presentasjon/navigasjon;
- * ingen data endres herfra (unntatt lagret temapreferanse).
+ * søk i arbeidsområdets innhold, navigasjon, bytte av område og tema.
  */
 export function CommandPalette() {
   const [open, setOpen] = useState(false);
@@ -80,6 +93,17 @@ export function CommandPalette() {
   );
   const isWorkspaceAdmin =
     membership?.role === "owner" || membership?.role === "admin";
+
+  const contentQuery = normalize(query);
+  const contentHits = useQuery(
+    api.workspaceSearch.searchInWorkspace,
+    open && wid && contentQuery.length >= 2
+      ? {
+          workspaceId: wid as Id<"workspaces">,
+          query: contentQuery,
+        }
+      : "skip",
+  );
 
   const close = useCallback(() => {
     setOpen(false);
@@ -214,13 +238,31 @@ export function CommandPalette() {
     return list;
   }, [wid, workspaces, go, setThemeAndPersist, isWorkspaceAdmin]);
 
+  const contentCommands = useMemo<Command[]>(() => {
+    if (!contentHits?.length) return [];
+    return contentHits.map((hit) => ({
+      id: hit.id,
+      group: hit.group,
+      label: hit.label,
+      hint: hit.hint,
+      icon: CONTENT_KIND_ICON[hit.kind] ?? Search,
+      run: () => go(hit.href),
+    }));
+  }, [contentHits, go]);
+
   const filtered = useMemo(() => {
     const q = normalize(query);
-    if (!q) return commands;
-    return commands.filter((c) =>
-      normalize(`${c.label} ${c.group} ${c.keywords ?? ""}`).includes(q),
-    );
-  }, [commands, query]);
+    const navFiltered = !q
+      ? commands
+      : commands.filter((c) =>
+          normalize(`${c.label} ${c.group} ${c.keywords ?? ""}`).includes(q),
+        );
+    // Innhold først når brukeren søker — deretter navigasjon/kommandoer.
+    if (q.length >= 2) {
+      return [...contentCommands, ...navFiltered];
+    }
+    return navFiltered;
+  }, [commands, contentCommands, query]);
 
   /** Grupperekkefølge følger første forekomst — flat indeks styrer tastaturvalg. */
   const groups = useMemo(() => {
@@ -325,9 +367,13 @@ export function CommandPalette() {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={onInputKeyDown}
-            placeholder="Gå til side, bytt arbeidsområde, endre tema …"
+            placeholder={
+              wid
+                ? "Søk vurderinger, ROS, oppgaver, tavler …"
+                : "Gå til side, bytt arbeidsområde, endre tema …"
+            }
             className="placeholder:text-muted-foreground/70 h-13 w-full min-w-0 bg-transparent py-4 text-sm outline-none"
-            aria-label="Søk i kommandoer"
+            aria-label="Søk i arbeidsområdet"
             autoComplete="off"
             spellCheck={false}
           />
@@ -342,7 +388,9 @@ export function CommandPalette() {
         >
           {filtered.length === 0 ? (
             <p className="text-muted-foreground px-3 py-8 text-center text-sm">
-              Ingen treff for «{query}»
+              {wid && contentQuery.length >= 2 && contentHits === undefined
+                ? "Søker …"
+                : `Ingen treff for «${query}»`}
             </p>
           ) : (
             groups.map((group) => (
