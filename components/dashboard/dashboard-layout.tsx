@@ -111,7 +111,7 @@ export function DashboardLayout({
                 <BrandMark size={22} decorative />
                 <div className="min-w-0">
                   <p className="font-heading truncate text-sm font-semibold tracking-tight">
-                    Puls
+                    {PRODUCT_NAME}
                   </p>
                   <p className="text-muted-foreground truncate text-[11px]">
                     Meny
@@ -169,7 +169,7 @@ function DashboardNavPanel({
       <div className="flex min-h-0 flex-1 flex-col px-3 pt-4 pb-3 md:pt-5 md:pb-4">
         <div className="hidden px-2 pb-4 md:block">
           <p className="font-heading text-sm font-semibold tracking-tight text-foreground">
-            Puls
+            {PRODUCT_NAME}
           </p>
           <p className="text-muted-foreground mt-0.5 text-xs leading-snug">
             Oversikt og arbeidsområder

@@ -86,14 +86,14 @@ export default function WorkspaceOverviewPage() {
           <p className="text-muted-foreground text-[11px] font-semibold tracking-[0.14em] uppercase">
             Oversikt
           </p>
-          <h1 className="font-heading text-[1.35rem] font-medium tracking-[-0.035em] text-foreground sm:text-[1.65rem]">
+          <h1 className="font-heading text-[1.75rem] font-semibold tracking-[-0.04em] text-foreground sm:text-[2.1rem]">
             {workspace.name}
           </h1>
-          {placeNote ? (
-            <p className="text-muted-foreground max-w-xl text-sm leading-relaxed">
-              {placeNote}
-            </p>
-          ) : null}
+          <p className="text-muted-foreground max-w-2xl text-sm leading-relaxed">
+            {placeNote?.trim()
+              ? placeNote
+              : "Status, neste steg og snarveier — fortsett der det haster mest."}
+          </p>
         </div>
         <WorkspaceOverviewViewSettings
           workspaceId={workspaceId}
