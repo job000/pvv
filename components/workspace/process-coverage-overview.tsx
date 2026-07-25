@@ -1,6 +1,9 @@
 "use client";
 
-import { PipelineStatusSelect } from "@/components/assessment/pipeline-status-select";
+import {
+  PipelineStatusBadge,
+  PipelineStatusSelect,
+} from "@/components/assessment/pipeline-status-select";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { buttonVariants } from "@/components/ui/button-variants";
@@ -510,15 +513,13 @@ function ProcessCoverageDetailDialog({
                               className="w-fit shrink-0"
                             />
                           ) : (
-                            <Badge variant="outline" className="w-fit shrink-0">
-                              {
-                                PIPELINE_STATUS_LABELS[
-                                  normalizePipelineStatus(
-                                    a.pipelineStatus as PipelineStatus,
-                                  )
-                                ]
-                              }
-                            </Badge>
+                            <PipelineStatusBadge
+                              value={normalizePipelineStatus(
+                                a.pipelineStatus as PipelineStatus,
+                              )}
+                              compact
+                              className="w-fit shrink-0"
+                            />
                           )}
                         </div>
                       </li>

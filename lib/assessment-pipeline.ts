@@ -29,6 +29,53 @@ export const PIPELINE_STATUS_LABELS: Record<PipelineStatus, string> = {
   on_hold: "På vent",
 };
 
+/** Visuell tone for status-piller (liste, header, velger). */
+export type PipelineStatusTone = {
+  /** Fargeprikk */
+  dot: string;
+  /** Lukket pill / badge */
+  pill: string;
+};
+
+export const PIPELINE_STATUS_TONES: Record<PipelineStatus, PipelineStatusTone> = {
+  not_assessed: {
+    dot: "bg-zinc-400",
+    pill: "bg-zinc-500/15 text-zinc-800 ring-zinc-500/20 dark:text-zinc-100",
+  },
+  assessed: {
+    dot: "bg-sky-500",
+    pill: "bg-sky-500/15 text-sky-950 ring-sky-500/25 dark:text-sky-100",
+  },
+  prioritized: {
+    dot: "bg-amber-500",
+    pill: "bg-amber-500/15 text-amber-950 ring-amber-500/25 dark:text-amber-100",
+  },
+  development: {
+    dot: "bg-blue-500",
+    pill: "bg-blue-500/15 text-blue-950 ring-blue-500/25 dark:text-blue-100",
+  },
+  uat: {
+    dot: "bg-violet-500",
+    pill: "bg-violet-500/15 text-violet-950 ring-violet-500/25 dark:text-violet-100",
+  },
+  production: {
+    dot: "bg-emerald-500",
+    pill: "bg-emerald-500/15 text-emerald-950 ring-emerald-500/25 dark:text-emerald-100",
+  },
+  monitoring: {
+    dot: "bg-teal-500",
+    pill: "bg-teal-500/15 text-teal-950 ring-teal-500/25 dark:text-teal-100",
+  },
+  done: {
+    dot: "bg-green-600",
+    pill: "bg-green-500/15 text-green-950 ring-green-500/25 dark:text-green-100",
+  },
+  on_hold: {
+    dot: "bg-rose-400",
+    pill: "bg-rose-500/12 text-rose-950 ring-rose-500/20 dark:text-rose-100",
+  },
+};
+
 /** Rekkefølge i Kanban (venstre → høyre, typisk flyt) */
 export const PIPELINE_KANBAN_ORDER: PipelineStatus[] = [
   "not_assessed",

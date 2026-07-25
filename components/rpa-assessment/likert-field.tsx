@@ -85,18 +85,18 @@ export function LikertField({
   );
 
   return (
-    <div className={cn("space-y-4", className)}>
-      <div className="space-y-1.5">
+    <div className={cn("w-full min-w-0 max-w-full space-y-4", className)}>
+      <div className="min-w-0 space-y-1.5">
         <p
           id={`${id}-label`}
-          className="text-foreground text-base font-semibold leading-snug sm:text-lg"
+          className="text-foreground text-base font-semibold leading-snug text-pretty sm:text-lg"
         >
           {label}
         </p>
         {hint ? (
           <p
             id={hintId}
-            className="text-muted-foreground max-w-prose text-sm leading-relaxed"
+            className="text-muted-foreground text-sm leading-relaxed text-pretty"
           >
             {hint}
           </p>
@@ -104,22 +104,22 @@ export function LikertField({
       </div>
 
       <div
-        className="rounded-2xl bg-muted/15 p-4 sm:p-5"
+        className="w-full min-w-0 max-w-full overflow-hidden rounded-2xl bg-muted/15 p-3 sm:p-5"
         role="radiogroup"
         aria-labelledby={`${id}-label`}
         aria-describedby={hintId}
       >
-        <div className="text-muted-foreground mb-3 flex justify-between text-xs font-medium">
-          <span>{left}</span>
-          <span>{right}</span>
+        <div className="text-muted-foreground mb-3 flex min-w-0 justify-between gap-2 text-[11px] font-medium sm:text-xs">
+          <span className="min-w-0 flex-1 truncate">{left}</span>
+          <span className="min-w-0 flex-1 truncate text-right">{right}</span>
         </div>
 
-        {/** To rader (knapper / etiketter): unngå at én kolonne med lang tekst strekker hele kortet vertikalt. */}
+        {/** To rader (knapper / etiketter): hold innen viewport — ingen scale som sprenger bredde. */}
         <div
-          className="touch-manipulation space-y-1.5"
+          className="w-full min-w-0 touch-manipulation space-y-1.5"
           style={{ WebkitTapHighlightColor: "transparent" }}
         >
-          <div className="flex gap-2 sm:gap-3">
+          <div className="grid w-full min-w-0 grid-cols-5 gap-1 sm:gap-2.5">
             {SCALE.map((n) => {
               const selected = value === n;
               const scaleLabel = scaleLabels?.[n - 1];
@@ -138,14 +138,14 @@ export function LikertField({
                   onClick={() => onChange(clampLikert5(n))}
                   onKeyDown={(e) => handleRadioKeyDown(n, e)}
                   className={cn(
-                    "focus-visible:ring-ring relative flex min-h-[52px] min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-xl text-lg font-bold tabular-nums transition-all duration-150 outline-none focus-visible:ring-2 sm:min-h-12 sm:rounded-xl",
+                    "focus-visible:ring-ring relative flex min-h-11 w-full min-w-0 flex-col items-center justify-center rounded-lg text-base font-bold tabular-nums transition-colors duration-150 outline-none focus-visible:ring-2 sm:min-h-12 sm:rounded-xl sm:text-lg",
                     selected
                       ? cn(
-                          "text-white shadow-lg ring-2 scale-[1.05]",
+                          "text-white shadow-md ring-2",
                           SCALE_BG[n],
                           SCALE_RING[n],
                         )
-                      : "bg-card text-foreground shadow-sm ring-1 ring-black/[0.06] hover:shadow-md hover:scale-[1.02] active:scale-[0.98] dark:ring-white/[0.08]",
+                      : "bg-card text-foreground shadow-sm ring-1 ring-black/[0.06] hover:bg-muted/40 active:bg-muted/60 dark:ring-white/[0.08]",
                     disabled && "pointer-events-none opacity-50",
                   )}
                 >
@@ -155,20 +155,22 @@ export function LikertField({
             })}
           </div>
           {scaleLabels ? (
-            <div className="flex gap-2 sm:gap-3">
+            <div className="grid w-full min-w-0 grid-cols-5 gap-1 sm:gap-2.5">
               {SCALE.map((n) => {
                 const selected = value === n;
                 const scaleLabel = scaleLabels[n - 1];
                 return (
                   <div
                     key={n}
-                    className="flex min-w-0 flex-1 justify-center"
+                    className="flex min-w-0 justify-center px-0.5"
                     aria-hidden
                   >
                     <span
                       className={cn(
-                        "hyphens-auto line-clamp-2 max-w-full text-center text-[10px] leading-snug break-words sm:text-[11px]",
-                        selected ? "text-foreground font-medium" : "text-muted-foreground",
+                        "line-clamp-2 max-w-full text-center text-[9px] leading-tight break-words hyphens-auto sm:text-[11px] sm:leading-snug",
+                        selected
+                          ? "text-foreground font-medium"
+                          : "text-muted-foreground",
                       )}
                     >
                       {scaleLabel}

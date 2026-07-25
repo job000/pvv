@@ -1,10 +1,12 @@
 "use client";
 
-import { PipelineStatusSelect } from "@/components/assessment/pipeline-status-select";
+import {
+  PipelineStatusBadge,
+  PipelineStatusSelect,
+} from "@/components/assessment/pipeline-status-select";
 import type { Id } from "@/convex/_generated/dataModel";
 import {
   nextStepHint,
-  PIPELINE_STATUS_LABELS,
   type PipelineStatus,
 } from "@/lib/assessment-pipeline";
 import { isProdOrMonitoring } from "@/lib/puls-issue-types";
@@ -102,9 +104,7 @@ export function AssessmentObjectHeader({
             value={pipelineStatus}
           />
         ) : (
-          <span className="font-medium text-foreground">
-            {PIPELINE_STATUS_LABELS[pipelineStatus]}
-          </span>
+          <PipelineStatusBadge value={pipelineStatus} />
         )}
         <span
           className={cn(

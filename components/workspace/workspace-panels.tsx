@@ -37,7 +37,10 @@ import { isEmptyRichText } from "@/lib/rich-text";
 import { useStickyState } from "@/lib/use-sticky-state";
 
 import { InviteEmailSuggestInput } from "@/components/user/invite-email-suggest-input";
-import { PipelineStatusSelect } from "@/components/assessment/pipeline-status-select";
+import {
+  PipelineStatusBadge,
+  PipelineStatusSelect,
+} from "@/components/assessment/pipeline-status-select";
 import {
   annualCostFromHourlyRate,
   CALC_DEFAULTS,
@@ -5176,12 +5179,7 @@ export function WorkspaceAssessmentsPanel({
                           compact
                         />
                       ) : (
-                        <Badge
-                          variant="secondary"
-                          className="rounded-full text-[10px] font-medium"
-                        >
-                          {PIPELINE_STATUS_LABELS[pipeline]}
-                        </Badge>
+                        <PipelineStatusBadge value={pipeline} compact />
                       )}
                       <div className="flex items-center gap-1">
                         {utenRosFilter ? (
@@ -5290,9 +5288,7 @@ export function WorkspaceAssessmentsPanel({
                               compact
                             />
                           ) : (
-                            <span className="text-muted-foreground">
-                              {PIPELINE_STATUS_LABELS[pipeline]}
-                            </span>
+                            <PipelineStatusBadge value={pipeline} compact />
                           )}
                         </td>
                         <td className="px-4 py-3 tabular-nums text-muted-foreground">
@@ -5368,33 +5364,39 @@ export function WorkspaceAssessmentsPanel({
               secondaryBits.push(formatRelativeUpdatedAt(a.updatedAt));
               return (
                 <li key={a._id} className="group/card relative">
-                  <div className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2 px-4 py-4 transition-colors hover:bg-muted/25 sm:flex-nowrap sm:px-5">
+                  <div className="flex min-w-0 flex-col gap-3 px-3 py-3.5 transition-colors hover:bg-muted/25 sm:flex-row sm:items-center sm:gap-4 sm:px-5 sm:py-4">
                     <Link
                       href={`/w/${workspaceId}/a/${a._id}`}
                       className="absolute inset-0 z-0"
                       aria-label={`Åpne vurdering: ${a.title}`}
                     />
-                    <span
-                      className={cn(
-                        "pointer-events-none relative z-10 flex size-10 shrink-0 items-center justify-center rounded-xl text-sm font-semibold tabular-nums",
-                        prio >= 70
-                          ? "bg-foreground text-background"
-                          : "bg-muted text-foreground",
-                      )}
-                      title={`Prioritet ${prio.toFixed(0)} av 100`}
-                      aria-hidden
-                    >
-                      {prio.toFixed(0)}
-                    </span>
-                    <div className="pointer-events-none relative z-10 min-w-0 flex-1">
-                      <p className="truncate text-[15px] font-medium tracking-tight text-foreground">
-                        {a.title}
-                      </p>
-                      <p className="mt-0.5 truncate text-xs text-muted-foreground">
-                        {secondaryBits.join(" · ")}
-                      </p>
+                    <div className="pointer-events-none relative z-10 flex min-w-0 items-start gap-3 sm:flex-1 sm:items-center">
+                      <span
+                        className={cn(
+                          "flex size-10 shrink-0 items-center justify-center rounded-xl text-sm font-semibold tabular-nums",
+                          prio >= 70
+                            ? "bg-foreground text-background"
+                            : "bg-muted text-foreground",
+                        )}
+                        title={`Prioritet ${prio.toFixed(0)} av 100`}
+                        aria-hidden
+                      >
+                        {prio.toFixed(0)}
+                      </span>
+                      <div className="min-w-0 flex-1 pr-6 sm:pr-0">
+                        <p className="line-clamp-2 text-[15px] font-medium tracking-tight text-foreground sm:truncate sm:leading-normal">
+                          {a.title}
+                        </p>
+                        <p className="text-muted-foreground mt-0.5 truncate text-xs">
+                          {secondaryBits.join(" · ")}
+                        </p>
+                      </div>
+                      <ChevronRight
+                        className="absolute top-4 right-3 size-4 text-muted-foreground/40 sm:hidden"
+                        aria-hidden
+                      />
                     </div>
-                    <div className="pointer-events-auto relative z-10 flex shrink-0 items-center gap-1.5">
+                    <div className="pointer-events-auto relative z-10 flex min-w-0 items-center gap-1.5 sm:shrink-0">
                       {canEditPipeline ? (
                         <PipelineStatusSelect
                           assessmentId={a._id}
@@ -5402,65 +5404,64 @@ export function WorkspaceAssessmentsPanel({
                           compact
                         />
                       ) : (
-                        <Badge
-                          variant="secondary"
-                          className="rounded-full text-[10px] font-medium"
-                        >
-                          {PIPELINE_STATUS_LABELS[pipeline]}
-                        </Badge>
+                        <PipelineStatusBadge value={pipeline} compact />
                       )}
-                      {utenRosFilter ? (
-                        <Link
-                          href={`/w/${workspaceId}/a/${a._id}?kobleRos=1`}
-                          className="inline-flex h-9 items-center rounded-full bg-foreground px-3 text-xs font-semibold text-background hover:opacity-90"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          Koble ROS
-                        </Link>
-                      ) : null}
-                      {isProdOrMonitoring(pipeline) ? (
-                        <Link
-                          href={`/w/${workspaceId}/a/${a._id}?puls=endring#puls-kort`}
-                          className="text-muted-foreground hover:text-foreground inline-flex h-9 items-center rounded-full border border-border/50 bg-background px-3 text-xs font-semibold touch-manipulation hover:bg-muted"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          Endring
-                        </Link>
-                      ) : null}
-                      <button
-                        type="button"
-                        className="flex size-9 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
-                        title="Slett vurdering"
-                        aria-label={`Slett vurdering ${a.title}`}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          if (
-                            !window.confirm(
-                              `Slette «${a.title}»?\n\nAlle data fjernes permanent.`,
-                            )
-                          ) {
-                            return;
-                          }
-                          void (async () => {
-                            try {
-                              await deleteAssessment({ assessmentId: a._id });
-                              toast.success("Vurdering slettet.");
-                            } catch (err) {
-                              toast.error(
-                                err instanceof Error
-                                  ? err.message
-                                  : "Kunne ikke slette vurderingen.",
-                              );
+                      <div className="ml-auto flex items-center gap-1 sm:ml-0">
+                        {utenRosFilter ? (
+                          <Link
+                            href={`/w/${workspaceId}/a/${a._id}?kobleRos=1`}
+                            className="inline-flex h-9 items-center rounded-full bg-foreground px-3 text-xs font-semibold text-background hover:opacity-90"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            Koble ROS
+                          </Link>
+                        ) : null}
+                        {isProdOrMonitoring(pipeline) ? (
+                          <Link
+                            href={`/w/${workspaceId}/a/${a._id}?puls=endring#puls-kort`}
+                            className="text-muted-foreground hover:text-foreground inline-flex h-9 items-center rounded-full border border-border/50 bg-background px-3 text-xs font-semibold touch-manipulation hover:bg-muted"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            Endring
+                          </Link>
+                        ) : null}
+                        <button
+                          type="button"
+                          className="flex size-9 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+                          title="Slett vurdering"
+                          aria-label={`Slett vurdering ${a.title}`}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (
+                              !window.confirm(
+                                `Slette «${a.title}»?\n\nAlle data fjernes permanent.`,
+                              )
+                            ) {
+                              return;
                             }
-                          })();
-                        }}
-                      >
-                        <Trash2 className="size-3.5" aria-hidden />
-                      </button>
-                      <ChevronRight
-                        className="pointer-events-none size-4 text-muted-foreground/30 transition-transform group-hover/card:translate-x-0.5 group-hover/card:text-foreground"
-                        aria-hidden
-                      />
+                            void (async () => {
+                              try {
+                                await deleteAssessment({
+                                  assessmentId: a._id,
+                                });
+                                toast.success("Vurdering slettet.");
+                              } catch (err) {
+                                toast.error(
+                                  err instanceof Error
+                                    ? err.message
+                                    : "Kunne ikke slette vurderingen.",
+                                );
+                              }
+                            })();
+                          }}
+                        >
+                          <Trash2 className="size-3.5" aria-hidden />
+                        </button>
+                        <ChevronRight
+                          className="pointer-events-none hidden size-4 text-muted-foreground/30 transition-transform group-hover/card:translate-x-0.5 group-hover/card:text-foreground sm:block"
+                          aria-hidden
+                        />
+                      </div>
                     </div>
                   </div>
                 </li>

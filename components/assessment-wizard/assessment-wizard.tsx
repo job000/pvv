@@ -70,6 +70,7 @@ import {
 import { useParams, usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useStickyState } from "@/lib/use-sticky-state";
+import { useWorkspaceChromeOptional } from "@/components/workspace/workspace-chrome-context";
 
 /** Én kilde til utkast-form — brukes ved første lasting og etter gjenoppretting fra versjon. */
 function normalizeDraftPayload(raw: AssessmentPayload): AssessmentPayload {
@@ -394,6 +395,10 @@ export function AssessmentWizard({ assessmentId }: Props) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const workspaceChrome = useWorkspaceChromeOptional();
+  const desktopSidebarOpen =
+    workspaceChrome?.hasWorkspace === true &&
+    workspaceChrome.sidebarCollapsed === false;
   const workspaceIdParam = params.workspaceId as Id<"workspaces"> | undefined;
   const data = useQuery(api.assessments.getDraft, { assessmentId });
   const access = useQuery(api.assessments.getMyAccess, { assessmentId });
@@ -491,11 +496,17 @@ export function AssessmentWizard({ assessmentId }: Props) {
   const prevSlideForSaveRef = useRef<number | null>(null);
   if (payload) payloadRef.current = payload;
   const [emblaRef, emblaApi] = useEmblaCarousel({
-    align: "center",
+    align: "start",
     loop: false,
     containScroll: "trimSnaps",
     dragFree: false,
-    watchDrag: true,
+    /** Mus på PC: Neste/Forrige — unngå «dra sidelengs». Touch beholder sveip. */
+    watchDrag: (_api, event) => {
+      if ("pointerType" in event && event.pointerType === "mouse") {
+        return false;
+      }
+      return true;
+    },
     /** Høyere = roligere animasjon ved stegbytte (standard 25 er veldig kvikk). */
     duration: 68,
     /** Mer horisontal bevegelse før klikk undertrykkes etter drag (mindre uhell). */
@@ -1045,7 +1056,7 @@ export function AssessmentWizard({ assessmentId }: Props) {
     draftConflict.updatedByUserId === access.userId;
 
   return (
-    <div className="space-y-2.5 pb-[calc(5.5rem+env(safe-area-inset-bottom))] sm:space-y-4 sm:pb-[7.5rem]">
+    <div className="w-full min-w-0 space-y-2.5 overflow-x-clip pb-[calc(5.5rem+env(safe-area-inset-bottom))] sm:space-y-4 sm:pb-[7.5rem]">
       {isBehindServer ? (
         <Alert className="border-amber-500/35 bg-amber-500/[0.06]">
           <AlertTitle className="text-amber-950 dark:text-amber-100">
@@ -1228,12 +1239,12 @@ export function AssessmentWizard({ assessmentId }: Props) {
       </details>
 
       <p id="wizard-gesture-hint" className="sr-only">
-        Sveip horisontalt med finger, eller dra med mus på steget, for å gå til
-        neste eller forrige hovedsteg.
+        Bruk Neste og Forrige, eller sveip horisontalt med finger på berøringsskjerm,
+        for å bytte hovedsteg.
       </p>
 
       <section
-        className="overflow-x-clip rounded-2xl bg-card shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.06]"
+        className="min-w-0 overflow-hidden rounded-2xl bg-card shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.06]"
         aria-labelledby="wizard-step-heading"
       >
         <header className="border-border/40 bg-card/60 border-b px-3 py-2 backdrop-blur-sm sm:px-4 sm:py-3">
@@ -1289,10 +1300,10 @@ export function AssessmentWizard({ assessmentId }: Props) {
             </label>
           </div>
 
-          {/* Desktop: alle steg synlige */}
-          <div className="hidden items-center gap-2 sm:flex">
+          {/* Desktop: 5 like kolonner — ingen klipping / horisontal scroll */}
+          <div className="hidden min-w-0 items-start gap-2 sm:flex">
             <nav
-              className="flex flex-1 flex-wrap gap-1.5"
+              className="grid min-w-0 flex-1 grid-cols-5 gap-1.5"
               aria-label="Hovedsteg i vurderingen"
             >
               {stepLabels.map((label, i) => (
@@ -1303,13 +1314,13 @@ export function AssessmentWizard({ assessmentId }: Props) {
                   aria-current={slide === i ? "step" : undefined}
                   onClick={() => emblaApi?.scrollTo(i)}
                   className={cn(
-                    "flex min-w-0 flex-1 basis-0 items-center gap-1.5 rounded-full px-2.5 py-1.5 text-left transition-colors",
+                    "flex min-w-0 items-center gap-1.5 rounded-full px-2 py-1.5 text-left transition-colors lg:px-2.5",
                     i === slide ? "bg-foreground" : "hover:bg-muted/60",
                   )}
                 >
                   <span
                     className={cn(
-                      "flex size-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold tabular-nums",
+                      "flex size-6 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold tabular-nums lg:size-7 lg:text-xs",
                       i === slide
                         ? "bg-background/20 text-background"
                         : i < slide
@@ -1321,16 +1332,17 @@ export function AssessmentWizard({ assessmentId }: Props) {
                   </span>
                   <span
                     className={cn(
-                      "min-w-0 truncate text-xs font-medium leading-snug",
+                      "min-w-0 truncate text-[11px] font-medium leading-snug lg:text-xs",
                       i === slide ? "text-background" : "text-foreground",
                     )}
                   >
-                    {label}
+                    <span className="lg:hidden">{compactStepLabel(label)}</span>
+                    <span className="hidden lg:inline">{label}</span>
                   </span>
                 </button>
               ))}
             </nav>
-            <div className="shrink-0">
+            <div className="hidden shrink-0 md:block">
               <AssessmentWizardSchemaHelp />
             </div>
           </div>
@@ -1338,11 +1350,11 @@ export function AssessmentWizard({ assessmentId }: Props) {
 
         <div
           ref={emblaRef}
-          className="cursor-grab touch-manipulation active:cursor-grabbing"
+          className="w-full min-w-0 max-w-full overflow-hidden touch-manipulation"
           aria-describedby="wizard-gesture-hint"
         >
           {/** items-start: unngå at korteste steg får lik høyde som det lengste (tomt rom). */}
-          <div className="flex items-start">
+          <div className="flex w-full touch-pan-y">
             <Slide>
               <div className="space-y-1">
                 <h2 className="text-foreground text-lg font-semibold sm:text-2xl">
@@ -2142,8 +2154,13 @@ export function AssessmentWizard({ assessmentId }: Props) {
         </DialogContent>
       </Dialog>
 
-      <div className="fixed right-0 bottom-0 left-0 z-30 border-t border-border/40 bg-background/95 pb-[env(safe-area-inset-bottom)] backdrop-blur supports-[backdrop-filter]:bg-background/80">
-        <div className="mx-auto flex max-w-3xl items-center justify-between gap-3 px-3 py-2.5 sm:gap-4 sm:px-5 sm:py-3">
+      <div
+        className={cn(
+          "fixed right-0 bottom-0 left-0 z-30 border-t border-border/40 bg-background/95 pb-[env(safe-area-inset-bottom)] backdrop-blur supports-[backdrop-filter]:bg-background/80",
+          desktopSidebarOpen && "md:left-64",
+        )}
+      >
+        <div className="mx-auto flex w-full max-w-5xl items-center justify-between gap-3 px-3 py-2.5 sm:gap-4 sm:px-5 sm:py-3">
           <Button
             type="button"
             variant="ghost"
@@ -2192,11 +2209,11 @@ function Slide({
   bare?: boolean;
 }) {
   return (
-    <div className="min-w-0 shrink-0 grow-0 basis-[100%] self-start px-1 pb-6 sm:px-4 sm:pb-10">
+    <div className="w-full min-w-0 max-w-full shrink-0 grow-0 basis-[100%] self-start px-1 pb-6 sm:px-5 sm:pb-10 lg:px-6">
       {bare ? (
         children
       ) : (
-        <div className="mx-auto max-w-3xl space-y-4 py-3 sm:space-y-6 sm:py-6">
+        <div className="mx-auto w-full min-w-0 max-w-5xl space-y-4 overflow-x-clip py-3 sm:space-y-6 sm:py-6">
           {children}
         </div>
       )}

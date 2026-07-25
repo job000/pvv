@@ -28,12 +28,12 @@ export function AssessmentProcessSimpleStep({
   updateMany: (patch: Partial<AssessmentPayload>) => void;
 }) {
   return (
-    <div className="space-y-8">
-      <div className="space-y-1">
-        <h2 className="text-foreground text-xl font-semibold sm:text-2xl">
+    <div className="w-full min-w-0 max-w-full space-y-6 sm:space-y-8">
+      <div className="min-w-0 space-y-1">
+        <h2 className="text-foreground text-lg font-semibold text-pretty sm:text-2xl">
           Prosess og systemer
         </h2>
-        <p className="text-muted-foreground text-sm">
+        <p className="text-muted-foreground text-sm text-pretty">
           Vanlige RPA-spørsmål — i vanlig språk. Bare velg det som passer best.
         </p>
       </div>
