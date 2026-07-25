@@ -1,74 +1,40 @@
 "use client";
 
-import { api } from "@/convex/_generated/api";
-import type { Id } from "@/convex/_generated/dataModel";
+import { useWorkspaceCommandSearch } from "@/components/use-workspace-command-search";
+import {
+  COMMAND_PALETTE_EVENT,
+  type CommandPaletteOpenDetail,
+} from "@/lib/command-palette-events";
 import { cn } from "@/lib/utils";
-import { useMutation, useQuery } from "convex/react";
+import { Search, X } from "lucide-react";
 import {
-  Building2,
-  ChartColumn,
-  ClipboardList,
-  Eye,
-  FileText,
-  Kanban,
-  LayoutDashboard,
-  ListChecks,
-  ListTodo,
-  Monitor,
-  Moon,
-  ScrollText,
-  Search,
-  Settings2,
-  Share2,
-  Shield,
-  Sun,
-  Users,
-} from "lucide-react";
-import { useTheme } from "next-themes";
-import { usePathname, useRouter } from "next/navigation";
-import {
-  type ComponentType,
   useCallback,
   useEffect,
-  useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
 } from "react";
 
-/** Åpne paletten programmatisk (f.eks. fra søkeknappen i toppfeltet). */
-export const COMMAND_PALETTE_EVENT = "pvv:command-palette";
+export {
+  COMMAND_PALETTE_EVENT,
+  openCommandPalette,
+  type CommandPaletteOpenDetail,
+} from "@/lib/command-palette-events";
 
-type Command = {
-  id: string;
-  group: string;
-  label: string;
-  hint?: string;
-  keywords?: string;
-  icon: ComponentType<{ className?: string }>;
-  run: () => void;
-};
-
-function normalize(s: string): string {
-  return s.toLocaleLowerCase("nb-NO").trim();
+function subscribeIsApple(onChange: () => void) {
+  void onChange;
+  return () => {};
 }
 
-const CONTENT_KIND_ICON: Record<
-  string,
-  ComponentType<{ className?: string }>
-> = {
-  assessment: ClipboardList,
-  candidate: Users,
-  ros: Shield,
-  pdd: ScrollText,
-  form: FileText,
-  board: Kanban,
-  orgUnit: Building2,
-  task: ListChecks,
-};
+function getIsAppleShortcut() {
+  if (typeof navigator === "undefined") return true;
+  return /Mac|iPhone|iPad|iPod/i.test(navigator.platform || navigator.userAgent);
+}
 
 /**
- * Global kommandopalett (⌘K / Ctrl+K):
- * søk i arbeidsområdets innhold, navigasjon, bytte av område og tema.
+ * Kompakt søkedialog (⌘K / Ctrl+K) — samme stil som originalt,
+ * litt romsligere på desktop, trykkvennlig på mobil/nettbrett.
+ * Vanlig skriving skjer i toppfeltets dropdown.
  */
 export function CommandPalette() {
   const [open, setOpen] = useState(false);
@@ -76,34 +42,12 @@ export function CommandPalette() {
   const [activeIndex, setActiveIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
-  const router = useRouter();
-  const pathname = usePathname();
-  const { setTheme } = useTheme();
-  const patchUserSettings = useMutation(api.users.patchMyUserSettings);
-  const workspaces = useQuery(api.workspaces.listMine);
-
-  const wid = useMemo(() => {
-    const m = /^\/w\/([^/]+)/.exec(pathname ?? "");
-    return m?.[1] ?? null;
-  }, [pathname]);
-
-  const membership = useQuery(
-    api.workspaces.getMyMembership,
-    wid ? { workspaceId: wid as Id<"workspaces"> } : "skip",
+  const isApple = useSyncExternalStore(
+    subscribeIsApple,
+    getIsAppleShortcut,
+    () => true,
   );
-  const isWorkspaceAdmin =
-    membership?.role === "owner" || membership?.role === "admin";
-
-  const contentQuery = normalize(query);
-  const contentHits = useQuery(
-    api.workspaceSearch.searchInWorkspace,
-    open && wid && contentQuery.length >= 2
-      ? {
-          workspaceId: wid as Id<"workspaces">,
-          query: contentQuery,
-        }
-      : "skip",
-  );
+  const shortcutLabel = isApple ? "⌘K" : "Ctrl+K";
 
   const close = useCallback(() => {
     setOpen(false);
@@ -111,174 +55,13 @@ export function CommandPalette() {
     setActiveIndex(0);
   }, []);
 
-  const go = useCallback(
-    (href: string) => {
-      close();
-      router.push(href);
-    },
-    [close, router],
-  );
-
-  const setThemeAndPersist = useCallback(
-    (value: "light" | "dark" | "system") => {
-      close();
-      setTheme(value);
-      void patchUserSettings({ themePreference: value });
-    },
-    [close, setTheme, patchUserSettings],
-  );
-
-  const commands = useMemo<Command[]>(() => {
-    const list: Command[] = [];
-
-    if (wid) {
-      const inWorkspace: Array<{
-        label: string;
-        path: string;
-        icon: ComponentType<{ className?: string }>;
-        keywords?: string;
-        adminOnly?: boolean;
-      }> = [
-        { label: "Oversikt", path: "", icon: LayoutDashboard, keywords: "oversikt hjem" },
-        { label: "Oppgaver", path: "/oppgaver", icon: ListTodo, keywords: "tasks todo" },
-        { label: "Skjemaer", path: "/skjemaer", icon: FileText, keywords: "forslag intake skjema" },
-        { label: "Prosesser", path: "/vurderinger?fane=prosesser", icon: Users, keywords: "prosessregister" },
-        { label: "Vurderinger", path: "/vurderinger", icon: ClipboardList, keywords: "assessment kandidat" },
-        { label: "Tavler", path: "/tavler", icon: Kanban, keywords: "puls tavle board kanban" },
-        { label: "Prosessdesign", path: "/prosessdesign", icon: ScrollText, keywords: "pdd diagram" },
-        { label: "Risiko (ROS)", path: "/ros", icon: Shield, keywords: "risiko analyse" },
-        { label: "Gevinster", path: "/gevinster", icon: ChartColumn, keywords: "benefits verdi" },
-        { label: "PDF-eksport", path: "/pdf-forhandsvisning", icon: Eye, keywords: "rapport eksport" },
-        { label: "Organisasjon", path: "/organisasjon", icon: Building2, keywords: "orgkart enheter" },
-        {
-          label: "Team",
-          path: "/delinger",
-          icon: Share2,
-          keywords: "deling medlemmer invitasjon",
-          adminOnly: true,
-        },
-        {
-          label: "Innstillinger",
-          path: "/innstillinger",
-          icon: Settings2,
-          keywords: "workspace innstillinger",
-          adminOnly: true,
-        },
-      ];
-      for (const item of inWorkspace) {
-        if (item.adminOnly && !isWorkspaceAdmin) continue;
-        list.push({
-          id: `nav:${item.path || "home"}`,
-          group: "Gå til",
-          label: item.label,
-          keywords: item.keywords,
-          icon: item.icon,
-          run: () => go(`/w/${wid}${item.path}`),
-        });
-      }
-    }
-
-    list.push({
-      id: "global:dashboard",
-      group: "Generelt",
-      label: "Oversikt (alle arbeidsområder)",
-      keywords: "dashboard hjem start",
-      icon: LayoutDashboard,
-      run: () => go("/dashboard?oversikt=1"),
-    });
-    list.push({
-      id: "global:settings",
-      group: "Generelt",
-      label: "Brukerinnstillinger",
-      keywords: "profil konto preferanser",
-      icon: Settings2,
-      run: () => go("/bruker/innstillinger"),
+  const { filtered, groups, contentLoading, placeholder } =
+    useWorkspaceCommandSearch({
+      query,
+      searchEnabled: open,
+      onAfterRun: close,
     });
 
-    for (const row of workspaces ?? []) {
-      const id = String(row.workspace._id);
-      if (id === wid) continue;
-      list.push({
-        id: `ws:${id}`,
-        group: "Bytt arbeidsområde",
-        label: row.workspace.name,
-        keywords: "workspace arbeidsområde bytt",
-        icon: Building2,
-        run: () => go(`/w/${id}`),
-      });
-    }
-
-    list.push(
-      {
-        id: "theme:light",
-        group: "Tema",
-        label: "Lyst tema",
-        keywords: "light lys utseende",
-        icon: Sun,
-        run: () => setThemeAndPersist("light"),
-      },
-      {
-        id: "theme:dark",
-        group: "Tema",
-        label: "Mørkt tema",
-        keywords: "dark mørk utseende",
-        icon: Moon,
-        run: () => setThemeAndPersist("dark"),
-      },
-      {
-        id: "theme:system",
-        group: "Tema",
-        label: "Følg systemet",
-        keywords: "system auto utseende",
-        icon: Monitor,
-        run: () => setThemeAndPersist("system"),
-      },
-    );
-
-    return list;
-  }, [wid, workspaces, go, setThemeAndPersist, isWorkspaceAdmin]);
-
-  const contentCommands = useMemo<Command[]>(() => {
-    if (!contentHits?.length) return [];
-    return contentHits.map((hit) => ({
-      id: hit.id,
-      group: hit.group,
-      label: hit.label,
-      hint: hit.hint,
-      icon: CONTENT_KIND_ICON[hit.kind] ?? Search,
-      run: () => go(hit.href),
-    }));
-  }, [contentHits, go]);
-
-  const filtered = useMemo(() => {
-    const q = normalize(query);
-    const navFiltered = !q
-      ? commands
-      : commands.filter((c) =>
-          normalize(`${c.label} ${c.group} ${c.keywords ?? ""}`).includes(q),
-        );
-    // Innhold først når brukeren søker — deretter navigasjon/kommandoer.
-    if (q.length >= 2) {
-      return [...contentCommands, ...navFiltered];
-    }
-    return navFiltered;
-  }, [commands, contentCommands, query]);
-
-  /** Grupperekkefølge følger første forekomst — flat indeks styrer tastaturvalg. */
-  const groups = useMemo(() => {
-    const order: string[] = [];
-    const byGroup = new Map<string, { command: Command; flatIndex: number }[]>();
-    filtered.forEach((command, flatIndex) => {
-      if (!byGroup.has(command.group)) {
-        byGroup.set(command.group, []);
-        order.push(command.group);
-      }
-      byGroup.get(command.group)!.push({ command, flatIndex });
-    });
-    return order.map((name) => ({ name, items: byGroup.get(name)! }));
-  }, [filtered]);
-
-  // Åpne/lukk: ⌘K / Ctrl+K + egendefinert hendelse fra søkeknappen.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
@@ -287,12 +70,20 @@ export function CommandPalette() {
           if (prev) {
             setQuery("");
             setActiveIndex(0);
+            return false;
           }
-          return !prev;
+          return true;
         });
       }
     };
-    const onOpenEvent = () => setOpen(true);
+    const onOpenEvent = (e: Event) => {
+      const detail = (e as CustomEvent<CommandPaletteOpenDetail>).detail;
+      if (typeof detail?.query === "string") {
+        setQuery(detail.query);
+      }
+      setActiveIndex(0);
+      setOpen(true);
+    };
     window.addEventListener("keydown", onKey);
     window.addEventListener(COMMAND_PALETTE_EVENT, onOpenEvent);
     return () => {
@@ -301,7 +92,6 @@ export function CommandPalette() {
     };
   }, []);
 
-  // Lås bakgrunnsscroll og fokuser input når paletten er åpen.
   useEffect(() => {
     if (!open) return;
     const prev = document.body.style.overflow;
@@ -317,7 +107,6 @@ export function CommandPalette() {
     setActiveIndex(0);
   }, [query]);
 
-  // Hold aktivt element synlig ved piltast-navigasjon.
   useEffect(() => {
     const el = listRef.current?.querySelector<HTMLElement>(
       `[data-flat-index="${activeIndex}"]`,
@@ -330,7 +119,7 @@ export function CommandPalette() {
   const onInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "ArrowDown") {
       e.preventDefault();
-      setActiveIndex((i) => Math.min(i + 1, filtered.length - 1));
+      setActiveIndex((i) => Math.min(i + 1, Math.max(filtered.length - 1, 0)));
     } else if (e.key === "ArrowUp") {
       e.preventDefault();
       setActiveIndex((i) => Math.max(i - 1, 0));
@@ -343,9 +132,15 @@ export function CommandPalette() {
     }
   };
 
+  const emptyLabel = contentLoading
+    ? "Søker …"
+    : query.trim()
+      ? `Ingen treff for «${query}»`
+      : "Begynn å skrive for å søke";
+
   return (
     <div
-      className="fixed inset-0 z-[220] flex items-start justify-center px-4 pt-[max(3.5rem,14vh)] pb-6"
+      className="fixed inset-0 z-[220] flex items-start justify-center px-3 pt-[max(0.75rem,env(safe-area-inset-top),8vh)] pb-[max(1rem,env(safe-area-inset-bottom))] sm:px-4 sm:pt-[max(3.5rem,12vh)]"
       role="presentation"
     >
       <button
@@ -357,45 +152,65 @@ export function CommandPalette() {
       <div
         role="dialog"
         aria-modal="true"
-        aria-label="Kommandopalett"
-        className="product-rise bg-popover text-popover-foreground relative z-10 flex w-full max-w-xl flex-col overflow-hidden rounded-2xl border border-border/70 shadow-[var(--shadow-elevated)]"
+        aria-label="Søk"
+        className="product-rise bg-popover text-popover-foreground relative z-10 flex w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-border/70 shadow-[var(--shadow-elevated)] sm:max-w-xl md:max-w-2xl"
       >
-        <div className="flex items-center gap-3 border-b border-border/60 px-4">
-          <Search className="text-muted-foreground size-4 shrink-0" aria-hidden />
+        <div className="flex items-center gap-2 border-b border-border/60 px-3 sm:gap-3 sm:px-4">
+          <Search
+            className="text-muted-foreground size-4 shrink-0"
+            aria-hidden
+          />
           <input
             ref={inputRef}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={onInputKeyDown}
-            placeholder={
-              wid
-                ? "Søk vurderinger, ROS, oppgaver, tavler …"
-                : "Gå til side, bytt arbeidsområde, endre tema …"
-            }
-            className="placeholder:text-muted-foreground/70 h-13 w-full min-w-0 bg-transparent py-4 text-sm outline-none"
+            placeholder={placeholder}
+            className="placeholder:text-muted-foreground/70 h-12 w-full min-w-0 bg-transparent text-base outline-none sm:h-13 sm:py-4 sm:text-sm"
             aria-label="Søk i arbeidsområdet"
             autoComplete="off"
             spellCheck={false}
+            enterKeyHint="search"
+            inputMode="search"
           />
-          <kbd className="text-muted-foreground border-border/60 bg-muted/40 hidden shrink-0 rounded-md border px-1.5 py-0.5 text-[10px] font-medium sm:block">
-            esc
-          </kbd>
+          {query ? (
+            <button
+              type="button"
+              className="text-muted-foreground hover:text-foreground grid size-10 shrink-0 place-items-center rounded-full touch-manipulation sm:size-9"
+              aria-label="Tøm søk"
+              onClick={() => {
+                setQuery("");
+                inputRef.current?.focus();
+              }}
+            >
+              <X className="size-4" aria-hidden />
+            </button>
+          ) : (
+            <kbd className="text-muted-foreground border-border/60 bg-muted/40 hidden shrink-0 rounded-md border px-1.5 py-0.5 text-[10px] font-medium sm:block">
+              esc
+            </kbd>
+          )}
+          <button
+            type="button"
+            onClick={close}
+            className="text-foreground min-h-10 shrink-0 px-1 text-sm font-semibold touch-manipulation sm:hidden"
+          >
+            Lukk
+          </button>
         </div>
 
         <div
           ref={listRef}
-          className="max-h-[min(24rem,50vh)] overflow-y-auto overscroll-contain p-2"
+          className="max-h-[min(22rem,55dvh)] overflow-y-auto overscroll-contain p-1.5 sm:max-h-[min(28rem,55vh)] sm:p-2"
         >
           {filtered.length === 0 ? (
             <p className="text-muted-foreground px-3 py-8 text-center text-sm">
-              {wid && contentQuery.length >= 2 && contentHits === undefined
-                ? "Søker …"
-                : `Ingen treff for «${query}»`}
+              {emptyLabel}
             </p>
           ) : (
             groups.map((group) => (
               <div key={group.name} role="group" aria-label={group.name}>
-                <p className="text-muted-foreground/80 px-3 pb-1 pt-3 text-[11px] font-semibold uppercase tracking-wider">
+                <p className="text-muted-foreground/80 px-3 pb-1 pt-2.5 text-[11px] font-semibold tracking-wider uppercase">
                   {group.name}
                 </p>
                 {group.items.map(({ command, flatIndex }) => {
@@ -409,10 +224,11 @@ export function CommandPalette() {
                       onClick={() => command.run()}
                       onMouseMove={() => setActiveIndex(flatIndex)}
                       className={cn(
-                        "flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm transition-colors",
+                        "flex w-full items-center gap-3 rounded-xl px-3 text-left text-sm transition-colors touch-manipulation",
+                        "min-h-11 py-2.5 sm:min-h-0 sm:py-2.5",
                         active
                           ? "bg-primary/10 text-foreground"
-                          : "text-muted-foreground",
+                          : "text-muted-foreground active:bg-muted/50",
                       )}
                     >
                       <Icon
@@ -422,11 +238,11 @@ export function CommandPalette() {
                         )}
                         aria-hidden
                       />
-                      <span className="min-w-0 flex-1 truncate">
+                      <span className="min-w-0 flex-1 truncate font-medium">
                         {command.label}
                       </span>
                       {command.hint ? (
-                        <span className="text-muted-foreground/70 shrink-0 text-xs">
+                        <span className="text-muted-foreground/70 max-w-[40%] shrink-0 truncate text-xs">
                           {command.hint}
                         </span>
                       ) : null}
@@ -438,10 +254,10 @@ export function CommandPalette() {
           )}
         </div>
 
-        <div className="text-muted-foreground/80 flex items-center gap-4 border-t border-border/60 px-4 py-2.5 text-[11px]">
+        <div className="text-muted-foreground/80 hidden items-center gap-4 border-t border-border/60 px-4 py-2.5 text-[11px] sm:flex">
           <span>↑↓ naviger</span>
           <span>↵ åpne</span>
-          <span className="ml-auto">⌘K når som helst</span>
+          <span className="ml-auto">{shortcutLabel} når som helst</span>
         </div>
       </div>
     </div>

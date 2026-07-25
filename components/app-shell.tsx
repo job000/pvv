@@ -1,10 +1,8 @@
 "use client";
 
 import { BrandMark } from "@/components/brand-mark";
-import {
-  COMMAND_PALETTE_EVENT,
-  CommandPalette,
-} from "@/components/command-palette";
+import { CommandPalette } from "@/components/command-palette";
+import { HeaderSearchField } from "@/components/header-search";
 import { ThemeModeToggle } from "@/components/theme-mode-toggle";
 import { Button } from "@/components/ui/button";
 import { InAppNotificationMenu } from "@/components/user/in-app-notification-menu";
@@ -13,6 +11,7 @@ import { useWorkspaceChromeOptional } from "@/components/workspace/workspace-chr
 import { WorkspaceSwitcher } from "@/components/workspace/workspace-switcher";
 import { api } from "@/convex/_generated/api";
 import { PRODUCT_NAME } from "@/lib/brand";
+import { openCommandPalette } from "@/lib/command-palette-events";
 import { cn } from "@/lib/utils";
 import { useAuthActions } from "@convex-dev/auth/react";
 import { useConvexAuth, useMutation } from "convex/react";
@@ -160,32 +159,14 @@ export function AppShell({
 
             {/* Right: keep lean on mobile */}
             <div className="flex shrink-0 items-center gap-0.5">
-              {/* Søk / kommandopalett (⌘K) */}
-              <button
-                type="button"
-                onClick={() =>
-                  window.dispatchEvent(new CustomEvent(COMMAND_PALETTE_EVENT))
-                }
-                className="text-muted-foreground hover:border-border hover:text-foreground border-border/60 bg-muted/30 mr-1 hidden h-9 w-56 items-center gap-2.5 rounded-xl border px-3 text-sm transition-colors md:inline-flex"
-                aria-label="Søk og kommandoer (⌘K)"
-              >
-                <Search className="size-3.5 shrink-0" aria-hidden />
-                <span className="min-w-0 flex-1 truncate text-left font-normal">
-                  Søk …
-                </span>
-                <kbd className="border-border/60 bg-background text-muted-foreground shrink-0 rounded-md border px-1.5 py-0.5 text-[10px] font-medium">
-                  ⌘K
-                </kbd>
-              </button>
+              <HeaderSearchField />
               <Button
                 type="button"
                 variant="ghost"
                 size="icon"
                 className="text-muted-foreground hover:text-foreground size-10 rounded-xl md:hidden"
-                aria-label="Søk og kommandoer"
-                onClick={() =>
-                  window.dispatchEvent(new CustomEvent(COMMAND_PALETTE_EVENT))
-                }
+                aria-label="Søk i arbeidsområdet"
+                onClick={() => openCommandPalette()}
               >
                 <Search className="size-5" aria-hidden />
               </Button>
