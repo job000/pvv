@@ -90,9 +90,12 @@ export function AssessmentObjectHeader({
   return (
     <section
       aria-label="Vurderingens kontekst"
-      className={cn("space-y-2 border-y border-border/50 py-3", className)}
+      className={cn(
+        "space-y-1.5 border-y border-border/50 py-2 sm:space-y-2 sm:py-3",
+        className,
+      )}
     >
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-sm sm:gap-x-4 sm:gap-y-2">
         {canEditPipeline && assessmentId ? (
           <PipelineStatusSelect
             assessmentId={assessmentId}
@@ -114,7 +117,12 @@ export function AssessmentObjectHeader({
           ) : (
             <AlertCircle className="size-3.5" aria-hidden />
           )}
-          {hasRosAnalysisLink ? "ROS koblet" : "ROS mangler"}
+          <span className="sm:hidden">
+            {hasRosAnalysisLink ? "ROS" : "Mangler ROS"}
+          </span>
+          <span className="hidden sm:inline">
+            {hasRosAnalysisLink ? "ROS koblet" : "ROS mangler"}
+          </span>
         </span>
         {evaluationContext?.kind === "candidate" && githubIssueHref ? (
           <a
@@ -130,7 +138,34 @@ export function AssessmentObjectHeader({
           </a>
         ) : null}
 
-        <div className="ml-auto flex flex-wrap items-center gap-x-3 gap-y-2">
+        {/* Mobil: kun kritisk ROS-handling. Tavler/PDD ligger i workspace-nav. */}
+        <div className="ml-auto flex items-center gap-2 sm:hidden">
+          {hasRosAnalysisLink ? (
+            <Link
+              href={rosHref}
+              className="text-foreground text-xs font-semibold underline-offset-4 hover:underline"
+            >
+              Åpne ROS
+            </Link>
+          ) : onLinkRos ? (
+            <button
+              type="button"
+              onClick={onLinkRos}
+              className="inline-flex h-8 items-center rounded-full bg-foreground px-3 text-xs font-semibold text-background touch-manipulation hover:opacity-90"
+            >
+              Koble ROS
+            </button>
+          ) : (
+            <Link
+              href={rosHref}
+              className="text-foreground text-xs font-semibold underline-offset-4 hover:underline"
+            >
+              Gå til ROS
+            </Link>
+          )}
+        </div>
+
+        <div className="ml-auto hidden flex-wrap items-center gap-x-3 gap-y-2 sm:flex">
           <Link
             href={pulsHref}
             className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 font-medium underline-offset-4 transition-colors hover:underline"
@@ -183,13 +218,13 @@ export function AssessmentObjectHeader({
         </p>
       ) : evaluationContext?.kind === "draft_only" ? (
         <p
-          className="text-foreground truncate text-[13px] leading-snug"
+          className="text-foreground hidden truncate text-[13px] leading-snug sm:block"
           title="Koble til prosess fra registeret under steget «Prosess» (valgfritt)."
         >
           <span className="font-medium">{evaluationContext.processName}</span>
         </p>
       ) : evaluationContext?.kind === "unset" ? (
-        <p className="text-muted-foreground text-xs">
+        <p className="text-muted-foreground hidden text-xs sm:block">
           Ingen prosess valgt — velg under steget «Prosess».
         </p>
       ) : null}

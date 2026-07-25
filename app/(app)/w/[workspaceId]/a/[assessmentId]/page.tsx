@@ -12,12 +12,13 @@ function AssessmentPageBody() {
   const assessmentId = params.assessmentId as Id<"assessments">;
 
   return (
-    <div className="mx-auto max-w-5xl space-y-4 px-0">
+    <div className="mx-auto max-w-5xl space-y-2 px-0 sm:space-y-4">
       <Link
         href={`/w/${workspaceId}/vurderinger`}
-        className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5 text-sm font-medium transition-colors"
+        className="text-muted-foreground hover:text-foreground inline-flex min-h-9 items-center gap-1.5 text-sm font-medium transition-colors"
       >
-        ← Til vurderinger
+        ← <span className="sm:hidden">Tilbake</span>
+        <span className="hidden sm:inline">Til vurderinger</span>
       </Link>
       <AssessmentWizard assessmentId={assessmentId} />
     </div>

@@ -95,12 +95,12 @@ export function WorkspacePvvHub({
   }, [activeTab, initialOrgUnit, router, workspaceId]);
 
   return (
-    <div className="mx-auto max-w-5xl space-y-10 pb-12">
+    <div className="w-full min-w-0 space-y-8 pb-12 sm:space-y-10">
       <header className="min-w-0 space-y-2">
         <h1 className="font-heading text-3xl font-semibold tracking-tight text-foreground sm:text-[2rem]">
           {activeTab === "vurderinger" ? "Vurderinger" : "Prosesser"}
         </h1>
-        <p className="max-w-xl text-[15px] leading-relaxed text-muted-foreground">
+        <p className="max-w-2xl text-[15px] leading-relaxed text-muted-foreground">
           {activeTab === "prosesser"
             ? "Registeret for alt som skal vurderes, sikres og designes."
             : initialUtenRos

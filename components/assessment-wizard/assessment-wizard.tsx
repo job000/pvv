@@ -60,7 +60,13 @@ import { ASSESSMENT_COLLAB_ROLE_LABEL_NB } from "@/lib/role-labels-nb";
 import { clampLikert5, computeAllResults } from "@/lib/rpa-assessment/scoring";
 import { useMutation, useQuery } from "convex/react";
 import useEmblaCarousel from "embla-carousel-react";
-import { ChevronLeft, ChevronRight, History, Trash2 } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  History,
+  Trash2,
+} from "lucide-react";
 import { useParams, usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useStickyState } from "@/lib/use-sticky-state";
@@ -1039,7 +1045,7 @@ export function AssessmentWizard({ assessmentId }: Props) {
     draftConflict.updatedByUserId === access.userId;
 
   return (
-    <div className="space-y-4 pb-28 sm:pb-[7.5rem]">
+    <div className="space-y-2.5 pb-[calc(5.5rem+env(safe-area-inset-bottom))] sm:space-y-4 sm:pb-[7.5rem]">
       {isBehindServer ? (
         <Alert className="border-amber-500/35 bg-amber-500/[0.06]">
           <AlertTitle className="text-amber-950 dark:text-amber-100">
@@ -1071,8 +1077,8 @@ export function AssessmentWizard({ assessmentId }: Props) {
       ) : null}
 
       {/* Flat header: tittel + én stille meta-linje — ingen hero-kort. */}
-      <header className="space-y-1.5">
-        <div className="flex items-start justify-between gap-3">
+      <header className="space-y-0.5 sm:space-y-1.5">
+        <div className="flex items-start justify-between gap-2 sm:gap-3">
           <div className="min-w-0 flex-1">
             {canEdit ? (
               <Input
@@ -1083,41 +1089,46 @@ export function AssessmentWizard({ assessmentId }: Props) {
                 placeholder="F.eks. Fakturamottak — leverandør"
                 autoComplete="off"
                 title="Skilles fra prosessnavn under «Prosess»."
-                className="font-heading h-auto border-0 bg-transparent px-0 py-0 text-2xl font-semibold tracking-tight shadow-none focus-visible:ring-0 sm:text-3xl"
+                className="font-heading h-auto border-0 bg-transparent px-0 py-0 text-xl font-semibold tracking-tight shadow-none focus-visible:ring-0 sm:text-3xl"
               />
             ) : (
-              <h1 className="font-heading text-2xl font-semibold tracking-tight sm:text-3xl">
+              <h1 className="font-heading text-xl font-semibold tracking-tight sm:text-3xl">
                 {assessment.title}
               </h1>
             )}
             <p
-              className="text-sm text-muted-foreground"
+              className="text-muted-foreground text-xs sm:text-sm"
               title="Endringer lagres automatisk."
             >
-              {[
-                canEdit ? "Lagrer automatisk" : "Kun visning",
-                access?.shareWithWorkspace ? "Delt med arbeidsområdet" : null,
-                access?.collaboratorRole
-                  ? (ASSESSMENT_COLLAB_ROLE_LABEL_NB[access.collaboratorRole] ??
-                    access.collaboratorRole)
-                  : null,
-              ]
-                .filter(Boolean)
-                .join(" · ")}
+              <span>{canEdit ? "Lagrer automatisk" : "Kun visning"}</span>
+              <span className="hidden sm:inline">
+                {[
+                  access?.shareWithWorkspace ? "Delt med arbeidsområdet" : null,
+                  access?.collaboratorRole
+                    ? (ASSESSMENT_COLLAB_ROLE_LABEL_NB[
+                        access.collaboratorRole
+                      ] ?? access.collaboratorRole)
+                    : null,
+                ]
+                  .filter(Boolean)
+                  .map((part) => ` · ${part}`)
+                  .join("")}
+              </span>
             </p>
           </div>
           <Button
             type="button"
             variant="outline"
             size="sm"
-            className="mt-1 h-9 shrink-0 gap-1.5 rounded-full px-3"
+            className="mt-0.5 size-9 shrink-0 rounded-full p-0 sm:mt-1 sm:h-9 sm:w-auto sm:gap-1.5 sm:px-3"
             title="Se og gjenopprett milepæler"
+            aria-label="Versjoner"
             onClick={openVersionsDialog}
           >
             <History className="size-3.5" aria-hidden />
             <span className="hidden sm:inline">Versjoner</span>
             {milestoneCount > 0 ? (
-              <span className="text-muted-foreground tabular-nums">
+              <span className="text-muted-foreground hidden tabular-nums sm:inline">
                 {milestoneCount}
               </span>
             ) : null}
@@ -1160,10 +1171,8 @@ export function AssessmentWizard({ assessmentId }: Props) {
         />
       ) : null}
 
-      {/* Sekundær-info samlet i én lukket disclosure. Tidligere lå dette
-          alltid synlig som to tunge kort («MED I VURDERINGEN» + «Eksport og
-          deling»), som dyttet selve vurderingen langt ned på siden. */}
-      <details className="group overflow-hidden rounded-2xl bg-card/40 ring-1 ring-border/40">
+      {/* Sekundær-info — skjult på mobil (versjoner-knapp + steg «Valgfritt»). */}
+      <details className="group hidden overflow-hidden rounded-2xl bg-card/40 ring-1 ring-border/40 sm:block">
         <summary className="text-foreground flex cursor-pointer list-none items-center justify-between gap-2 rounded-2xl px-3 py-2 text-sm font-medium transition-colors hover:bg-muted/40 [&::-webkit-details-marker]:hidden sm:px-4">
           <span className="inline-flex items-center gap-2">
             Team, milepæler og deling
@@ -1224,22 +1233,66 @@ export function AssessmentWizard({ assessmentId }: Props) {
       </p>
 
       <section
-        className="overflow-hidden rounded-2xl bg-card shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.06]"
+        className="overflow-x-clip rounded-2xl bg-card shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.06]"
         aria-labelledby="wizard-step-heading"
       >
-        {/* Slim steg-strimmel: kun et progress-spor + diskret hjelpe-ikon.
-            Tidligere hadde vi en eyebrow («Vurdering · X steg»), en H2
-            («Steg X av Y: …»), en lang forklaringssetning og en separat
-            «Hopp til steg»-nedtrekksmeny. Alt er nå representert i selve
-            stegnavet (knappene under) + bunn-navigasjonen «Forrige/Neste»,
-            så vi kunne fjerne all duplisering. */}
-        <header className="border-border/40 bg-card/60 border-b px-3 py-2.5 backdrop-blur-sm sm:px-4 sm:py-3">
-          <div className="flex items-center gap-2">
-            <h2 id="wizard-step-heading" className="sr-only">
-              Steg {slide + 1} av {stepLabels.length}: {stepLabels[slide]}
-            </h2>
+        <header className="border-border/40 bg-card/60 border-b px-3 py-2 backdrop-blur-sm sm:px-4 sm:py-3">
+          <h2 id="wizard-step-heading" className="sr-only">
+            Steg {slide + 1} av {stepLabels.length}: {stepLabels[slide]}
+          </h2>
+
+          {/* Mobil: progress + stegvælger — ikke et 2-kolonners rutenett. */}
+          <div className="space-y-2 sm:hidden">
+            <div
+              className="flex gap-1"
+              role="progressbar"
+              aria-valuemin={1}
+              aria-valuemax={stepLabels.length}
+              aria-valuenow={slide + 1}
+              aria-label={`Steg ${slide + 1} av ${stepLabels.length}`}
+            >
+              {stepLabels.map((label, i) => (
+                <button
+                  key={label}
+                  type="button"
+                  aria-label={`Gå til steg ${i + 1}: ${label}`}
+                  aria-current={slide === i ? "step" : undefined}
+                  onClick={() => emblaApi?.scrollTo(i)}
+                  className={cn(
+                    "h-1.5 min-h-1.5 flex-1 rounded-full transition-colors",
+                    i <= slide ? "bg-foreground" : "bg-muted",
+                  )}
+                />
+              ))}
+            </div>
+            <label className="relative block">
+              <span className="sr-only">Hopp til steg</span>
+              <select
+                className="border-input bg-background focus-visible:ring-primary/30 h-11 w-full appearance-none rounded-xl border py-2 pr-10 pl-3 text-sm font-medium shadow-sm outline-none focus-visible:ring-2"
+                value={slide}
+                aria-label="Hopp til steg"
+                onChange={(e) => {
+                  const next = Number(e.target.value);
+                  if (Number.isFinite(next)) emblaApi?.scrollTo(next);
+                }}
+              >
+                {stepLabels.map((label, i) => (
+                  <option key={label} value={i}>
+                    Steg {i + 1}: {compactStepLabel(label)}
+                  </option>
+                ))}
+              </select>
+              <ChevronDown
+                className="text-muted-foreground pointer-events-none absolute top-1/2 right-3 size-4 -translate-y-1/2"
+                aria-hidden
+              />
+            </label>
+          </div>
+
+          {/* Desktop: alle steg synlige */}
+          <div className="hidden items-center gap-2 sm:flex">
             <nav
-              className="grid flex-1 grid-cols-2 gap-1.5 sm:flex sm:flex-wrap"
+              className="flex flex-1 flex-wrap gap-1.5"
               aria-label="Hovedsteg i vurderingen"
             >
               {stepLabels.map((label, i) => (
@@ -1250,15 +1303,13 @@ export function AssessmentWizard({ assessmentId }: Props) {
                   aria-current={slide === i ? "step" : undefined}
                   onClick={() => emblaApi?.scrollTo(i)}
                   className={cn(
-                    "flex w-full min-w-0 items-center gap-1.5 rounded-full px-2.5 py-1.5 text-left transition-colors sm:min-w-0 sm:flex-1 sm:basis-0",
-                    i === slide
-                      ? "bg-foreground"
-                      : "hover:bg-muted/60",
+                    "flex min-w-0 flex-1 basis-0 items-center gap-1.5 rounded-full px-2.5 py-1.5 text-left transition-colors",
+                    i === slide ? "bg-foreground" : "hover:bg-muted/60",
                   )}
                 >
                   <span
                     className={cn(
-                      "flex size-6 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold tabular-nums sm:size-7 sm:text-xs",
+                      "flex size-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold tabular-nums",
                       i === slide
                         ? "bg-background/20 text-background"
                         : i < slide
@@ -1270,15 +1321,7 @@ export function AssessmentWizard({ assessmentId }: Props) {
                   </span>
                   <span
                     className={cn(
-                      "min-w-0 text-xs font-medium leading-snug sm:hidden",
-                      i === slide ? "text-background" : "text-foreground",
-                    )}
-                  >
-                    {compactStepLabel(label)}
-                  </span>
-                  <span
-                    className={cn(
-                      "hidden min-w-0 text-xs font-medium leading-snug sm:inline",
+                      "min-w-0 truncate text-xs font-medium leading-snug",
                       i === slide ? "text-background" : "text-foreground",
                     )}
                   >
@@ -1287,7 +1330,7 @@ export function AssessmentWizard({ assessmentId }: Props) {
                 </button>
               ))}
             </nav>
-            <div className="hidden shrink-0 sm:block">
+            <div className="shrink-0">
               <AssessmentWizardSchemaHelp />
             </div>
           </div>
@@ -1302,14 +1345,15 @@ export function AssessmentWizard({ assessmentId }: Props) {
           <div className="flex items-start">
             <Slide>
               <div className="space-y-1">
-                <h2 className="text-foreground text-xl font-semibold sm:text-2xl">
+                <h2 className="text-foreground text-lg font-semibold sm:text-2xl">
                   Hva og hvor mye
                 </h2>
-                <p className="text-muted-foreground text-sm">
-                  Navn på jobben + omtrent hvor mye tid den tar i året. Grove anslag er nok.
+                <p className="text-muted-foreground text-sm text-pretty">
+                  Navn på jobben + omtrent hvor mye tid den tar i året. Grove
+                  anslag er nok.
                 </p>
               </div>
-              <div className="space-y-5">
+              <div className="space-y-4 sm:space-y-5">
                 <div className="space-y-2">
                   <Label htmlFor="quick-process-name" className="text-sm font-medium">
                     Kort navn på prosessen
@@ -1324,13 +1368,13 @@ export function AssessmentWizard({ assessmentId }: Props) {
                   />
                 </div>
 
-                <div className="space-y-4 rounded-2xl bg-muted/10 p-5 ring-1 ring-black/[0.04] dark:ring-white/[0.06]">
+                <div className="space-y-3 rounded-2xl bg-muted/10 p-3 ring-1 ring-black/[0.04] sm:space-y-4 sm:p-5 dark:ring-white/[0.06]">
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <div className="min-w-0 space-y-0.5">
                       <h3 className="text-foreground text-sm font-semibold">
                         Volum og tid i dag
                       </h3>
-                      <p className="text-muted-foreground text-xs">
+                      <p className="text-muted-foreground text-xs text-pretty">
                         Brukes til å regne timer manuelt arbeid per år.
                       </p>
                     </div>
@@ -2098,13 +2142,13 @@ export function AssessmentWizard({ assessmentId }: Props) {
         </DialogContent>
       </Dialog>
 
-      <div className="fixed bottom-0 left-0 right-0 z-30 border-t border-border/40 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
-        <div className="mx-auto flex max-w-3xl items-center justify-between gap-4 px-5 py-3">
+      <div className="fixed right-0 bottom-0 left-0 z-30 border-t border-border/40 bg-background/95 pb-[env(safe-area-inset-bottom)] backdrop-blur supports-[backdrop-filter]:bg-background/80">
+        <div className="mx-auto flex max-w-3xl items-center justify-between gap-3 px-3 py-2.5 sm:gap-4 sm:px-5 sm:py-3">
           <Button
             type="button"
             variant="ghost"
             size="sm"
-            className="gap-1.5 text-muted-foreground"
+            className="h-10 gap-1 text-muted-foreground sm:gap-1.5"
             onClick={() => emblaApi?.scrollPrev()}
             disabled={slide <= 0}
           >
@@ -2117,7 +2161,7 @@ export function AssessmentWizard({ assessmentId }: Props) {
           {slide >= stepLabels.length - 1 ? (
             <Button
               type="button"
-              className="h-10 gap-1.5 rounded-full bg-foreground px-5 text-sm font-semibold text-background transition-opacity hover:opacity-90"
+              className="h-11 min-w-[7.5rem] gap-1.5 rounded-full bg-foreground px-5 text-sm font-semibold text-background transition-opacity hover:opacity-90 sm:h-10"
               disabled={leavingBusy}
               onClick={() => void saveDraftAndMaybeOpenLeaveDialog()}
             >
@@ -2127,7 +2171,7 @@ export function AssessmentWizard({ assessmentId }: Props) {
           ) : (
             <Button
               type="button"
-              className="h-10 gap-1.5 rounded-full bg-foreground px-5 text-sm font-semibold text-background transition-opacity hover:opacity-90"
+              className="h-11 min-w-[7.5rem] gap-1.5 rounded-full bg-foreground px-5 text-sm font-semibold text-background transition-opacity hover:opacity-90 sm:h-10"
               onClick={() => emblaApi?.scrollNext()}
             >
               Neste
@@ -2148,11 +2192,11 @@ function Slide({
   bare?: boolean;
 }) {
   return (
-    <div className="min-w-0 shrink-0 grow-0 basis-[100%] self-start px-2 pb-10 sm:px-4">
+    <div className="min-w-0 shrink-0 grow-0 basis-[100%] self-start px-1 pb-6 sm:px-4 sm:pb-10">
       {bare ? (
         children
       ) : (
-        <div className="mx-auto max-w-3xl space-y-6 py-5 sm:py-6">
+        <div className="mx-auto max-w-3xl space-y-4 py-3 sm:space-y-6 sm:py-6">
           {children}
         </div>
       )}
