@@ -1,11 +1,16 @@
 "use client";
 
+import { ProductEmptyState } from "@/components/product";
+import { Button } from "@/components/ui/button";
 import { buttonVariants } from "@/components/ui/button-variants";
+import { FilterToolbar } from "@/components/ui/filter-toolbar";
 import { SearchInput } from "@/components/ui/search-input";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import {
+  PIPELINE_STATUSES,
   PIPELINE_STATUS_LABELS,
+  PIPELINE_STATUS_TONES,
   type PipelineStatus,
 } from "@/lib/assessment-pipeline";
 import {
@@ -13,11 +18,13 @@ import {
   SOFT_GAIN_LEADERSHIP,
 } from "@/lib/portfolio-benefit-copy";
 import { downloadPortfolioBenefitsPdf } from "@/lib/portfolio-benefits-pdf";
+import { useStickyState } from "@/lib/use-sticky-state";
 import { cn } from "@/lib/utils";
 import { useQuery } from "convex/react";
 import {
-  ArrowDownRight,
   ArrowUpRight,
+  ChartColumn,
+  ClipboardList,
   Clock3,
   Coins,
   Download,
@@ -29,7 +36,7 @@ import {
   Users,
 } from "lucide-react";
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Bar,
   BarChart,
@@ -46,6 +53,8 @@ import {
 
 type TabId = "oversikt" | "diagrammer" | "kvalitet" | "kandidater";
 type RealizationFilter = "all" | "potential" | "in_delivery" | "realized";
+type ChartMetric = "timer" | "kr";
+type CandidateSort = "money_desc" | "money_asc" | "hours_desc" | "updated";
 
 const TABS: Array<{ id: TabId; label: string }> = [
   { id: "oversikt", label: "Oversikt" },
@@ -62,6 +71,17 @@ const CHART_COLORS = [
   "oklch(0.45 0.05 30)",
   "oklch(0.4 0.04 300)",
 ];
+
+const selectClass = cn(
+  "border-input h-11 w-full appearance-none rounded-xl border border-border/60 bg-background bg-[length:1rem] bg-[right_0.85rem_center] bg-no-repeat px-3 pr-10 text-sm shadow-sm",
+  "transition-colors focus-visible:border-ring focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/35",
+  "sm:h-10 sm:w-auto sm:min-w-[9.5rem] dark:bg-input/30",
+);
+
+const selectChevronStyle = {
+  backgroundImage:
+    "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23888' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E\")",
+} as const;
 
 function formatHours(n: number): string {
   if (!Number.isFinite(n) || n === 0) return "0";
@@ -80,6 +100,18 @@ function formatMoney(n: number): string {
 function formatFte(n: number): string {
   if (!Number.isFinite(n) || n === 0) return "0";
   return n.toLocaleString("nb-NO", { maximumFractionDigits: 2 });
+}
+
+function isPipelineStatus(value: string): value is PipelineStatus {
+  return (PIPELINE_STATUSES as readonly string[]).includes(value);
+}
+
+function chartRowKey(entry: unknown): string | null {
+  if (!entry || typeof entry !== "object") return null;
+  const row = entry as { key?: unknown; payload?: { key?: unknown } };
+  if (typeof row.key === "string") return row.key;
+  if (typeof row.payload?.key === "string") return row.payload.key;
+  return null;
 }
 
 function HeroMetric({
@@ -108,6 +140,43 @@ function HeroMetric({
   );
 }
 
+function MetricToggle({
+  value,
+  onChange,
+}: {
+  value: ChartMetric;
+  onChange: (next: ChartMetric) => void;
+}) {
+  return (
+    <div
+      className="inline-flex rounded-full border border-border/50 bg-background p-0.5"
+      role="group"
+      aria-label="Vis timer eller kroner"
+    >
+      {(
+        [
+          ["timer", "Timer"],
+          ["kr", "Kroner"],
+        ] as const
+      ).map(([id, label]) => (
+        <button
+          key={id}
+          type="button"
+          onClick={() => onChange(id)}
+          className={cn(
+            "min-h-9 rounded-full px-3 text-xs font-medium touch-manipulation transition-colors",
+            value === id
+              ? "bg-foreground text-background"
+              : "text-muted-foreground hover:text-foreground",
+          )}
+        >
+          {label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 export function PortfolioBenefitsPage({
   workspaceId,
 }: {
@@ -117,17 +186,34 @@ export function PortfolioBenefitsPage({
     workspaceId,
   });
   const workspace = useQuery(api.workspaces.get, { workspaceId });
-  const [tab, setTab] = useState<TabId>("oversikt");
-  const [search, setSearch] = useState("");
-  const [pipelineFilter, setPipelineFilter] = useState<"all" | PipelineStatus>(
-    "all",
+
+  const [tab, setTab] = useStickyState<TabId>(
+    `gevinster:${workspaceId}:tab`,
+    "oversikt",
   );
+  const [search, setSearch] = useState("");
+  const [pipelineFilter, setPipelineFilter] = useStickyState<
+    "all" | PipelineStatus
+  >(`gevinster:${workspaceId}:pipeline`, "all");
   const [realizationFilter, setRealizationFilter] =
-    useState<RealizationFilter>("all");
-  const [onlyQuantified, setOnlyQuantified] = useState(false);
-  const [candidateSort, setCandidateSort] = useState<
-    "money_desc" | "money_asc" | "hours_desc" | "updated"
-  >("money_desc");
+    useStickyState<RealizationFilter>(
+      `gevinster:${workspaceId}:realization`,
+      "all",
+    );
+  const [onlyQuantified, setOnlyQuantified] = useStickyState(
+    `gevinster:${workspaceId}:onlyQuantified`,
+    false,
+  );
+  const [candidateSort, setCandidateSort] = useStickyState<CandidateSort>(
+    `gevinster:${workspaceId}:sort`,
+    "money_desc",
+  );
+  const [chartMetric, setChartMetric] = useStickyState<ChartMetric>(
+    `gevinster:${workspaceId}:chartMetric`,
+    "kr",
+  );
+  const [highlightId, setHighlightId] = useState<string | null>(null);
+  const highlightRef = useRef<HTMLLIElement | null>(null);
 
   const filteredItems = useMemo(() => {
     if (!data) return [];
@@ -176,6 +262,7 @@ export function PortfolioBenefitsPage({
       lowMoney: [] as NonNullable<typeof data>["items"],
       noNumbers: [] as NonNullable<typeof data>["items"],
       totalCurrency: 0,
+      withoutNumbers: 0,
     };
     if (!data) return empty;
     const totalCurrency = data.totals.currencySavedPerYear;
@@ -184,7 +271,6 @@ export function PortfolioBenefitsPage({
     );
     const withMoney = byMoney.filter((i) => i.currencySavedPerYear > 0);
     const topMoney = withMoney.slice(0, 5);
-    // Unngå å gjenta toppene når det er få kandidater
     const lowMoney = [...withMoney]
       .sort((a, b) => a.currencySavedPerYear - b.currencySavedPerYear)
       .filter(
@@ -195,14 +281,22 @@ export function PortfolioBenefitsPage({
     const noNumbers = data.items
       .filter((i) => !i.hasQuantifiedBenefit)
       .slice(0, 5);
-    return { topMoney, lowMoney, noNumbers, totalCurrency };
+    const withoutNumbers = data.items.filter(
+      (i) => !i.hasQuantifiedBenefit,
+    ).length;
+    return { topMoney, lowMoney, noNumbers, totalCurrency, withoutNumbers };
   }, [data]);
 
   const displayTotals = useMemo(() => {
     if (!data) {
       return { hours: 0, currency: 0, fte: 0, net: 0 };
     }
-    if (realizationFilter === "all" && pipelineFilter === "all" && !onlyQuantified && !search.trim()) {
+    if (
+      realizationFilter === "all" &&
+      pipelineFilter === "all" &&
+      !onlyQuantified &&
+      !search.trim()
+    ) {
       return {
         hours: data.totals.hoursSavedPerYear,
         currency: data.totals.currencySavedPerYear,
@@ -220,16 +314,25 @@ export function PortfolioBenefitsPage({
       },
       { hours: 0, currency: 0, fte: 0, net: 0 },
     );
-  }, [data, filteredItems, realizationFilter, pipelineFilter, onlyQuantified, search]);
+  }, [
+    data,
+    filteredItems,
+    realizationFilter,
+    pipelineFilter,
+    onlyQuantified,
+    search,
+  ]);
 
   const pipelineChartData = useMemo(() => {
     if (!data) return [];
     return data.byPipeline
       .filter((r) => r.count > 0)
       .map((r) => ({
+        key: r.status,
         name: PIPELINE_STATUS_LABELS[r.status as PipelineStatus] ?? r.status,
         timer: Math.round(r.hoursSavedPerYear),
         kr: Math.round(r.currencySavedPerYear),
+        count: r.count,
       }));
   }, [data]);
 
@@ -237,16 +340,19 @@ export function PortfolioBenefitsPage({
     if (!data) return [];
     return [
       {
+        key: "potential" as const,
         name: "Potensial",
         timer: Math.round(data.potentialTotals.hoursSavedPerYear),
         kr: Math.round(data.potentialTotals.currencySavedPerYear),
       },
       {
+        key: "in_delivery" as const,
         name: "Leveranse",
         timer: Math.round(data.inDeliveryTotals.hoursSavedPerYear),
         kr: Math.round(data.inDeliveryTotals.currencySavedPerYear),
       },
       {
+        key: "realized" as const,
         name: "I drift",
         timer: Math.round(data.realizedTotals.hoursSavedPerYear),
         kr: Math.round(data.realizedTotals.currencySavedPerYear),
@@ -254,11 +360,14 @@ export function PortfolioBenefitsPage({
     ];
   }, [data]);
 
-  const softChartData = useMemo(() => {
+  const softGains = useMemo(() => {
     if (!data) return [];
-    return data.softGainFrequency
-      .filter((g) => g.count > 0 && g.soft)
-      .map((g) => ({ name: g.label, count: g.count }));
+    const rows = data.softGainFrequency.filter((g) => g.soft && g.count > 0);
+    const max = Math.max(...rows.map((g) => g.count), 1);
+    return rows.map((g) => ({
+      ...g,
+      share: Math.round((g.count / max) * 100),
+    }));
   }, [data]);
 
   const phasePieData = useMemo(() => {
@@ -266,10 +375,52 @@ export function PortfolioBenefitsPage({
     return data.byPipeline
       .filter((r) => r.count > 0)
       .map((r) => ({
+        key: r.status,
         name: PIPELINE_STATUS_LABELS[r.status as PipelineStatus] ?? r.status,
         value: r.count,
       }));
   }, [data]);
+
+  useEffect(() => {
+    if (tab !== "kandidater" || !highlightId) return;
+    const node = highlightRef.current;
+    if (!node) return;
+    node.scrollIntoView({ behavior: "smooth", block: "center" });
+    const t = window.setTimeout(() => setHighlightId(null), 2800);
+    return () => window.clearTimeout(t);
+  }, [tab, highlightId, filteredItems]);
+
+  const openCandidate = (assessmentId: string) => {
+    setHighlightId(assessmentId);
+    setSearch("");
+    setTab("kandidater");
+  };
+
+  const openPipelineCandidates = (status: PipelineStatus) => {
+    setPipelineFilter(status);
+    setHighlightId(null);
+    setTab("kandidater");
+  };
+
+  const openRealizationCandidates = (bucket: Exclude<RealizationFilter, "all">) => {
+    setRealizationFilter(bucket);
+    setHighlightId(null);
+    setTab("kandidater");
+  };
+
+  const hasActiveFilters =
+    search.trim().length > 0 ||
+    pipelineFilter !== "all" ||
+    realizationFilter !== "all" ||
+    onlyQuantified;
+
+  const clearFilters = () => {
+    setSearch("");
+    setPipelineFilter("all");
+    setRealizationFilter("all");
+    setOnlyQuantified(false);
+    setHighlightId(null);
+  };
 
   const exportPdf = () => {
     if (!data) return;
@@ -302,11 +453,28 @@ export function PortfolioBenefitsPage({
 
   if (data === null) {
     return (
-      <p className="text-destructive text-sm">
-        Kunne ikke laste gevinster. Sjekk at du er innlogget.
-      </p>
+      <ProductEmptyState
+        icon={ChartColumn}
+        title="Kunne ikke laste gevinster"
+        description="Sjekk at du er innlogget og har tilgang til arbeidsområdet."
+      />
     );
   }
+
+  const verdictParts = [
+    `${formatMoney(data.totals.currencySavedPerYear)} potensial`,
+    `${formatMoney(data.realizedTotals.currencySavedPerYear)} i drift`,
+    benefitDrivers.withoutNumbers > 0
+      ? `${benefitDrivers.withoutNumbers} uten tall`
+      : "alle med tall",
+  ];
+
+  const chartValueFormatter = (value: unknown) => {
+    const n = typeof value === "number" ? value : Number(value);
+    return chartMetric === "kr"
+      ? [formatMoney(n), "Kroner"]
+      : [`${formatHours(n)} t`, "Timer"];
+  };
 
   return (
     <div className="mx-auto min-w-0 w-full max-w-none space-y-5 overflow-x-clip pb-[max(2.5rem,env(safe-area-inset-bottom))] sm:space-y-6">
@@ -360,347 +528,468 @@ export function PortfolioBenefitsPage({
 
       {tab === "oversikt" ? (
         <div className="space-y-6">
-          <section className="rounded-3xl border border-border/40 bg-card px-4 py-5 sm:px-8 sm:py-8">
-            <p className="text-muted-foreground text-xs font-medium tracking-[0.14em] uppercase">
-              Årlig potensial
-            </p>
-            <div className="mt-4 grid grid-cols-2 gap-4 sm:mt-5 sm:gap-8">
-              <HeroMetric
-                label="Besparelse"
-                value={formatMoney(displayTotals.currency)}
-              />
-              <HeroMetric
-                label="Timer frigjort"
-                value={formatHours(displayTotals.hours)}
-                unit="/ år"
-              />
-              <HeroMetric
-                label="Kapasitet"
-                value={formatFte(displayTotals.fte)}
-                unit="FTE"
-              />
-              <HeroMetric
-                label="Netto etter drift"
-                value={formatMoney(displayTotals.net)}
-              />
-            </div>
-          </section>
-
-          <section className="-mx-3 flex gap-2 overflow-x-auto overscroll-x-contain px-3 pb-0.5 [scrollbar-width:none] sm:mx-0 sm:grid sm:grid-cols-3 sm:overflow-visible sm:px-0 [&::-webkit-scrollbar]:hidden">
-            {(
-              [
-                ["potential", data.potentialTotals, Clock3],
-                ["in_delivery", data.inDeliveryTotals, Layers],
-                ["realized", data.realizedTotals, Sparkles],
-              ] as const
-            ).map(([key, t, Icon]) => {
-              const active = realizationFilter === key;
-              return (
-                <button
-                  key={key}
-                  type="button"
-                  onClick={() =>
-                    setRealizationFilter((prev) => (prev === key ? "all" : key))
-                  }
+          {data.assessmentCount === 0 ? (
+            <ProductEmptyState
+              icon={ClipboardList}
+              title="Ingen kandidater ennå"
+              description="Når vurderinger får tall for tid og kostnad, samles potensialet her."
+              action={
+                <Link
+                  href={`/w/${workspaceId}/vurderinger`}
                   className={cn(
-                    "min-w-[11.5rem] shrink-0 rounded-2xl border px-4 py-4 text-left touch-manipulation transition-colors sm:min-w-0",
-                    active
-                      ? "border-foreground/25 bg-foreground text-background"
-                      : "border-border/40 bg-muted/10 hover:bg-muted/25",
+                    buttonVariants({ variant: "default", size: "sm" }),
+                    "min-h-11 rounded-full touch-manipulation",
                   )}
                 >
-                  <div className="flex items-center justify-between gap-2">
-                    <p
+                  Gå til vurderinger
+                </Link>
+              }
+            />
+          ) : (
+            <>
+              <section className="rounded-3xl border border-border/40 bg-card px-4 py-5 sm:px-8 sm:py-8">
+                <p className="text-muted-foreground text-xs font-medium tracking-[0.14em] uppercase">
+                  Årlig potensial
+                </p>
+                <div className="mt-4 grid grid-cols-2 gap-4 sm:mt-5 sm:gap-8">
+                  <HeroMetric
+                    label="Besparelse"
+                    value={formatMoney(displayTotals.currency)}
+                  />
+                  <HeroMetric
+                    label="Timer frigjort"
+                    value={formatHours(displayTotals.hours)}
+                    unit="/ år"
+                  />
+                  <HeroMetric
+                    label="Kapasitet"
+                    value={formatFte(displayTotals.fte)}
+                    unit="FTE"
+                  />
+                  <HeroMetric
+                    label="Netto etter drift"
+                    value={formatMoney(displayTotals.net)}
+                  />
+                </div>
+                <p className="text-muted-foreground mt-5 text-sm leading-relaxed">
+                  {verdictParts.join(" · ")}
+                </p>
+              </section>
+
+              {realizationFilter !== "all" ? (
+                <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-border/50 bg-muted/20 px-3 py-2.5 text-sm">
+                  <span className="text-muted-foreground">Viser</span>
+                  <span className="font-medium">
+                    {REALIZATION_LABELS[realizationFilter]}
+                  </span>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="ml-auto h-9"
+                    onClick={() => setRealizationFilter("all")}
+                  >
+                    Nullstill fase
+                  </Button>
+                </div>
+              ) : null}
+
+              <section className="-mx-3 flex gap-2 overflow-x-auto overscroll-x-contain px-3 pb-0.5 [scrollbar-width:none] sm:mx-0 sm:grid sm:grid-cols-3 sm:overflow-visible sm:px-0 [&::-webkit-scrollbar]:hidden">
+                {(
+                  [
+                    ["potential", data.potentialTotals, Clock3],
+                    ["in_delivery", data.inDeliveryTotals, Layers],
+                    ["realized", data.realizedTotals, Sparkles],
+                  ] as const
+                ).map(([key, t, Icon]) => {
+                  const active = realizationFilter === key;
+                  return (
+                    <button
+                      key={key}
+                      type="button"
+                      onClick={() =>
+                        setRealizationFilter((prev) =>
+                          prev === key ? "all" : key,
+                        )
+                      }
                       className={cn(
-                        "text-[11px] font-medium",
-                        active ? "text-background/75" : "text-muted-foreground",
+                        "min-w-[11.5rem] shrink-0 rounded-2xl border px-4 py-4 text-left touch-manipulation transition-colors sm:min-w-0",
+                        active
+                          ? "border-foreground/25 bg-foreground text-background"
+                          : "border-border/40 bg-muted/10 hover:bg-muted/25",
                       )}
                     >
-                      {REALIZATION_LABELS[key]}
+                      <div className="flex items-center justify-between gap-2">
+                        <p
+                          className={cn(
+                            "text-[11px] font-medium",
+                            active
+                              ? "text-background/75"
+                              : "text-muted-foreground",
+                          )}
+                        >
+                          {REALIZATION_LABELS[key]}
+                        </p>
+                        <Icon
+                          className={cn(
+                            "size-3.5",
+                            active
+                              ? "text-background/70"
+                              : "text-muted-foreground",
+                          )}
+                          aria-hidden
+                        />
+                      </div>
+                      <p className="mt-2 text-lg font-semibold tabular-nums">
+                        {formatMoney(t.currencySavedPerYear)}
+                      </p>
+                    </button>
+                  );
+                })}
+              </section>
+
+              <section className="space-y-3">
+                <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between">
+                  <div className="min-w-0">
+                    <h2 className="font-heading text-base font-semibold">
+                      Hva driver tallene?
+                    </h2>
+                    <p className="text-muted-foreground mt-0.5 text-xs">
+                      Hvilke kandidater står bak besparelsen — og hvor det nesten
+                      ikke er tall.
                     </p>
-                    <Icon
-                      className={cn(
-                        "size-3.5",
-                        active ? "text-background/70" : "text-muted-foreground",
-                      )}
-                      aria-hidden
-                    />
                   </div>
-                  <p className="mt-2 text-lg font-semibold tabular-nums">
-                    {formatMoney(t.currencySavedPerYear)}
-                  </p>
-                </button>
-              );
-            })}
-          </section>
+                  <button
+                    type="button"
+                    className="min-h-10 self-start text-xs font-medium underline-offset-2 touch-manipulation hover:underline"
+                    onClick={() => {
+                      setCandidateSort("money_desc");
+                      setOnlyQuantified(true);
+                      setHighlightId(null);
+                      setTab("kandidater");
+                    }}
+                  >
+                    Se hele listen
+                  </button>
+                </div>
 
-          <section className="space-y-3">
-            <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between">
-              <div className="min-w-0">
-                <h2 className="font-heading text-base font-semibold">
-                  Hva driver tallene?
-                </h2>
-                <p className="text-muted-foreground mt-0.5 text-xs">
-                  Hvilke kandidater står bak besparelsen — og hvor det nesten ikke
-                  er tall.
-                </p>
-              </div>
-              <button
-                type="button"
-                className="min-h-10 self-start text-xs font-medium underline-offset-2 touch-manipulation hover:underline"
-                onClick={() => {
-                  setCandidateSort("money_desc");
-                  setOnlyQuantified(true);
-                  setTab("kandidater");
-                }}
-              >
-                Se hele listen
-              </button>
-            </div>
+                <div className="grid gap-3 lg:grid-cols-2">
+                  <div className="rounded-2xl border border-border/40 bg-card p-4">
+                    <p className="flex items-center gap-1.5 text-xs font-semibold text-emerald-800 dark:text-emerald-200">
+                      <TrendingUp className="size-3.5" aria-hidden />
+                      Største besparelse
+                    </p>
+                    {benefitDrivers.topMoney.length === 0 ? (
+                      <ProductEmptyState
+                        className="mt-3 border-0 bg-transparent py-6 ring-0"
+                        title="Ingen kroner-besparelse ennå"
+                        description="Fyll inn tid og kostnad i vurderinger for å se fordelingen her."
+                      />
+                    ) : (
+                      <ul className="mt-3 space-y-2">
+                        {benefitDrivers.topMoney.map((item, idx) => {
+                          const share =
+                            benefitDrivers.totalCurrency > 0
+                              ? Math.round(
+                                  (item.currencySavedPerYear /
+                                    benefitDrivers.totalCurrency) *
+                                    100,
+                                )
+                              : 0;
+                          return (
+                            <li key={item.assessmentId}>
+                              <button
+                                type="button"
+                                className="hover:bg-muted/30 w-full rounded-xl px-2 py-2 text-left transition-colors touch-manipulation"
+                                onClick={() => openCandidate(item.assessmentId)}
+                              >
+                                <div className="flex items-start justify-between gap-2">
+                                  <p className="min-w-0 text-sm font-medium leading-snug">
+                                    <span className="text-muted-foreground mr-1.5 tabular-nums">
+                                      {idx + 1}.
+                                    </span>
+                                    {item.title}
+                                  </p>
+                                  <p className="shrink-0 text-sm font-semibold tabular-nums">
+                                    {formatMoney(item.currencySavedPerYear)}
+                                  </p>
+                                </div>
+                                <div className="mt-1.5 flex items-center gap-2">
+                                  <div className="bg-muted h-1.5 min-w-0 flex-1 overflow-hidden rounded-full">
+                                    <div
+                                      className="h-full rounded-full bg-emerald-600/70"
+                                      style={{
+                                        width: `${Math.min(share, 100)}%`,
+                                      }}
+                                    />
+                                  </div>
+                                  <span className="text-muted-foreground w-10 shrink-0 text-right text-[11px] tabular-nums">
+                                    {share}%
+                                  </span>
+                                </div>
+                                <p className="text-muted-foreground mt-1 text-[11px]">
+                                  {formatHours(item.hoursSavedPerYear)} t/år ·{" "}
+                                  {PIPELINE_STATUS_LABELS[
+                                    item.pipelineStatus as PipelineStatus
+                                  ] ?? item.pipelineStatus}
+                                </p>
+                              </button>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    )}
+                  </div>
 
-            <div className="grid gap-3 lg:grid-cols-2">
-              <div className="rounded-2xl border border-border/40 bg-card p-4">
-                <p className="flex items-center gap-1.5 text-xs font-semibold text-emerald-800 dark:text-emerald-200">
-                  <TrendingUp className="size-3.5" aria-hidden />
-                  Største besparelse
-                </p>
-                {benefitDrivers.topMoney.length === 0 ? (
-                  <p className="text-muted-foreground mt-3 text-sm">
-                    Ingen kandidater med kroner-besparelse ennå.
-                  </p>
-                ) : (
-                  <ul className="mt-3 space-y-2">
-                    {benefitDrivers.topMoney.map((item, idx) => {
-                      const share =
-                        benefitDrivers.totalCurrency > 0
-                          ? Math.round(
-                              (item.currencySavedPerYear /
-                                benefitDrivers.totalCurrency) *
-                                100,
-                            )
-                          : 0;
-                      return (
-                        <li key={item.assessmentId}>
-                          <button
-                            type="button"
-                            className="hover:bg-muted/30 w-full rounded-xl px-2 py-2 text-left transition-colors"
-                            onClick={() => {
-                              setSearch(item.title);
-                              setCandidateSort("money_desc");
-                              setTab("kandidater");
-                            }}
-                          >
-                            <div className="flex items-start justify-between gap-2">
-                              <p className="min-w-0 text-sm font-medium leading-snug">
-                                <span className="text-muted-foreground mr-1.5 tabular-nums">
-                                  {idx + 1}.
-                                </span>
-                                {item.title}
-                              </p>
-                              <p className="shrink-0 text-sm font-semibold tabular-nums">
-                                {formatMoney(item.currencySavedPerYear)}
-                              </p>
-                            </div>
-                            <div className="mt-1.5 flex items-center gap-2">
-                              <div className="bg-muted h-1.5 min-w-0 flex-1 overflow-hidden rounded-full">
-                                <div
-                                  className="h-full rounded-full bg-emerald-600/70"
-                                  style={{ width: `${Math.min(share, 100)}%` }}
-                                />
+                  <div className="rounded-2xl border border-border/40 bg-card p-4">
+                    <p className="text-muted-foreground flex items-center gap-1.5 text-xs font-semibold">
+                      <TrendingDown className="size-3.5" aria-hidden />
+                      Lite eller ingen tall
+                    </p>
+                    {benefitDrivers.lowMoney.length === 0 &&
+                    benefitDrivers.noNumbers.length === 0 ? (
+                      <p className="text-muted-foreground mt-3 text-sm">
+                        Alle kandidater har tallfestet gevinst.
+                      </p>
+                    ) : (
+                      <ul className="mt-3 space-y-2">
+                        {benefitDrivers.lowMoney.map((item) => (
+                          <li key={item.assessmentId}>
+                            <button
+                              type="button"
+                              className="hover:bg-muted/30 w-full rounded-xl px-2 py-2 text-left transition-colors touch-manipulation"
+                              onClick={() => openCandidate(item.assessmentId)}
+                            >
+                              <div className="flex items-start justify-between gap-2">
+                                <p className="min-w-0 text-sm font-medium leading-snug">
+                                  {item.title}
+                                </p>
+                                <p className="text-muted-foreground shrink-0 text-sm tabular-nums">
+                                  {formatMoney(item.currencySavedPerYear)}
+                                </p>
                               </div>
-                              <span className="text-muted-foreground w-10 shrink-0 text-right text-[11px] tabular-nums">
-                                {share}%
-                              </span>
-                            </div>
-                            <p className="text-muted-foreground mt-1 text-[11px]">
-                              {formatHours(item.hoursSavedPerYear)} t/år ·{" "}
-                              {PIPELINE_STATUS_LABELS[
-                                item.pipelineStatus as PipelineStatus
-                              ] ?? item.pipelineStatus}
-                            </p>
-                          </button>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                )}
-              </div>
+                              <p className="text-muted-foreground mt-1 text-[11px]">
+                                Lav andel av totalen ·{" "}
+                                {formatHours(item.hoursSavedPerYear)} t/år
+                              </p>
+                            </button>
+                          </li>
+                        ))}
+                        {benefitDrivers.noNumbers.map((item) => (
+                          <li key={item.assessmentId}>
+                            <button
+                              type="button"
+                              className="hover:bg-muted/30 w-full rounded-xl px-2 py-2 text-left transition-colors touch-manipulation"
+                              onClick={() => {
+                                setOnlyQuantified(false);
+                                openCandidate(item.assessmentId);
+                              }}
+                            >
+                              <div className="flex items-start justify-between gap-2">
+                                <p className="min-w-0 text-sm font-medium leading-snug">
+                                  {item.title}
+                                </p>
+                                <span className="text-muted-foreground shrink-0 text-[11px] font-medium">
+                                  Uten tall
+                                </span>
+                              </div>
+                              <p className="text-muted-foreground mt-1 text-[11px]">
+                                Mangler kvantifisert besparelse i vurderingen
+                              </p>
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                </div>
+              </section>
 
-              <div className="rounded-2xl border border-border/40 bg-card p-4">
-                <p className="text-muted-foreground flex items-center gap-1.5 text-xs font-semibold">
-                  <TrendingDown className="size-3.5" aria-hidden />
-                  Lite eller ingen tall
-                </p>
-                {benefitDrivers.lowMoney.length === 0 &&
-                benefitDrivers.noNumbers.length === 0 ? (
-                  <p className="text-muted-foreground mt-3 text-sm">
-                    Alle kandidater har tallfestet gevinst.
-                  </p>
-                ) : (
-                  <ul className="mt-3 space-y-2">
-                    {benefitDrivers.lowMoney.map((item) => (
-                      <li key={item.assessmentId}>
-                        <button
-                          type="button"
-                          className="hover:bg-muted/30 w-full rounded-xl px-2 py-2 text-left transition-colors"
-                          onClick={() => {
-                            setSearch(item.title);
-                            setCandidateSort("money_asc");
-                            setOnlyQuantified(true);
-                            setTab("kandidater");
-                          }}
-                        >
-                          <div className="flex items-start justify-between gap-2">
-                            <p className="min-w-0 text-sm font-medium leading-snug">
-                              {item.title}
-                            </p>
-                            <p className="text-muted-foreground shrink-0 text-sm tabular-nums">
-                              {formatMoney(item.currencySavedPerYear)}
-                            </p>
-                          </div>
-                          <p className="text-muted-foreground mt-1 text-[11px]">
-                            Lav andel av totalen · {formatHours(item.hoursSavedPerYear)}{" "}
-                            t/år
-                          </p>
-                        </button>
-                      </li>
-                    ))}
-                    {benefitDrivers.noNumbers.map((item) => (
-                      <li key={item.assessmentId}>
-                        <button
-                          type="button"
-                          className="hover:bg-muted/30 w-full rounded-xl px-2 py-2 text-left transition-colors"
-                          onClick={() => {
-                            setSearch(item.title);
-                            setOnlyQuantified(false);
-                            setTab("kandidater");
-                          }}
-                        >
-                          <div className="flex items-start justify-between gap-2">
-                            <p className="min-w-0 text-sm font-medium leading-snug">
-                              {item.title}
-                            </p>
-                            <span className="text-muted-foreground shrink-0 text-[11px] font-medium">
-                              Uten tall
-                            </span>
-                          </div>
-                          <p className="text-muted-foreground mt-1 text-[11px]">
-                            Mangler kvantifisert besparelse i vurderingen
-                          </p>
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-            </div>
-          </section>
-
-          <p className="text-muted-foreground text-center text-xs leading-relaxed">
-            Trykk en fase eller en kandidat for å gå dypere. Diagrammer og kvalitet
-            ligger i fanene over.
-          </p>
+              <p className="text-muted-foreground text-center text-xs leading-relaxed">
+                Trykk en fase eller en kandidat for å gå dypere. Diagrammer og
+                kvalitet ligger i fanene over.
+              </p>
+            </>
+          )}
         </div>
       ) : null}
 
       {tab === "diagrammer" ? (
         <div className="space-y-4">
-          <section className="overflow-hidden rounded-2xl border border-border/40 bg-card p-3 sm:p-5">
-            <h2 className="font-heading text-base font-semibold">Per fase</h2>
-            <p className="text-muted-foreground mt-0.5 text-xs">
-              Timer og kroner fordelt på pipeline
-            </p>
-            <div className="mt-4 h-60 w-full min-w-0 sm:h-72">
-              {pipelineChartData.length === 0 ? (
-                <p className="text-muted-foreground flex h-full items-center justify-center text-sm">
-                  Ingen data ennå
-                </p>
-              ) : (
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart
-                    data={pipelineChartData}
-                    margin={{ left: 0, right: 4, top: 4, bottom: 0 }}
-                  >
-                    <CartesianGrid strokeDasharray="3 3" className="stroke-border/50" />
-                    <XAxis
-                      dataKey="name"
-                      tick={{ fontSize: 9 }}
-                      interval={0}
-                      angle={-28}
-                      textAnchor="end"
-                      height={56}
-                    />
-                    <YAxis tick={{ fontSize: 10 }} width={36} />
-                    <Tooltip
-                      formatter={(value, name) => {
-                        const n = typeof value === "number" ? value : Number(value);
-                        return name === "kr"
-                          ? [formatMoney(n), "Kroner"]
-                          : [`${formatHours(n)} t`, "Timer"];
-                      }}
-                    />
-                    <Legend wrapperStyle={{ fontSize: 11 }} />
-                    <Bar dataKey="timer" name="Timer" fill={CHART_COLORS[0]} radius={[4, 4, 0, 0]} />
-                    <Bar dataKey="kr" name="Kroner" fill={CHART_COLORS[1]} radius={[4, 4, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              )}
-            </div>
-          </section>
-
-          <div className="grid gap-4 md:grid-cols-2">
-            <section className="overflow-hidden rounded-2xl border border-border/40 bg-card p-3 sm:p-5">
-              <h2 className="font-heading text-base font-semibold">Realisering</h2>
-              <div className="mt-4 h-52 w-full min-w-0 sm:h-56">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={realizationChartData} margin={{ left: 0, right: 4 }}>
-                    <CartesianGrid strokeDasharray="3 3" className="stroke-border/50" />
-                    <XAxis dataKey="name" tick={{ fontSize: 10 }} />
-                    <YAxis tick={{ fontSize: 10 }} width={36} />
-                    <Tooltip
-                      formatter={(value, name) => {
-                        const n = typeof value === "number" ? value : Number(value);
-                        return name === "kr"
-                          ? [formatMoney(n), "Kroner"]
-                          : [`${formatHours(n)} t`, "Timer"];
-                      }}
-                    />
-                    <Bar dataKey="kr" name="Kroner" fill={CHART_COLORS[2]} radius={[4, 4, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            </section>
-
-            <section className="overflow-hidden rounded-2xl border border-border/40 bg-card p-3 sm:p-5">
-              <h2 className="font-heading text-base font-semibold">Antall</h2>
-              <div className="mt-4 h-52 w-full min-w-0 sm:h-56">
-                {phasePieData.length === 0 ? (
-                  <p className="text-muted-foreground flex h-full items-center justify-center text-sm">
-                    Ingen kandidater
-                  </p>
-                ) : (
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie
-                        data={phasePieData}
-                        dataKey="value"
-                        nameKey="name"
-                        innerRadius={40}
-                        outerRadius={68}
-                        paddingAngle={2}
+          {pipelineChartData.length === 0 && phasePieData.length === 0 ? (
+            <ProductEmptyState
+              icon={ChartColumn}
+              title="Ingen diagramdata ennå"
+              description="Når vurderinger er i pipeline, vises fordeling av timer og kroner her."
+              action={
+                <Link
+                  href={`/w/${workspaceId}/vurderinger`}
+                  className={cn(
+                    buttonVariants({ variant: "default", size: "sm" }),
+                    "min-h-11 rounded-full touch-manipulation",
+                  )}
+                >
+                  Gå til vurderinger
+                </Link>
+              }
+            />
+          ) : (
+            <>
+              <section className="overflow-hidden rounded-2xl border border-border/40 bg-card p-3 sm:p-5">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div className="min-w-0">
+                    <h2 className="font-heading text-base font-semibold">
+                      Per fase
+                    </h2>
+                    <p className="text-muted-foreground mt-0.5 text-xs">
+                      {chartMetric === "kr" ? "Kroner" : "Timer"} fordelt på
+                      pipeline — trykk en søyle for å se kandidater
+                    </p>
+                  </div>
+                  <MetricToggle value={chartMetric} onChange={setChartMetric} />
+                </div>
+                <div className="mt-4 h-60 w-full min-w-0 sm:h-72">
+                  {pipelineChartData.length === 0 ? (
+                    <p className="text-muted-foreground flex h-full items-center justify-center text-sm">
+                      Ingen data ennå
+                    </p>
+                  ) : (
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart
+                        data={pipelineChartData}
+                        margin={{ left: 0, right: 4, top: 4, bottom: 0 }}
                       >
-                        {phasePieData.map((_, i) => (
-                          <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
-                        ))}
-                      </Pie>
-                      <Tooltip />
-                      <Legend wrapperStyle={{ fontSize: 10 }} />
-                    </PieChart>
-                  </ResponsiveContainer>
-                )}
+                        <CartesianGrid
+                          strokeDasharray="3 3"
+                          className="stroke-border/50"
+                        />
+                        <XAxis
+                          dataKey="name"
+                          tick={{ fontSize: 9 }}
+                          interval={0}
+                          angle={-28}
+                          textAnchor="end"
+                          height={56}
+                        />
+                        <YAxis tick={{ fontSize: 10 }} width={44} />
+                        <Tooltip formatter={chartValueFormatter} />
+                        <Bar
+                          dataKey={chartMetric}
+                          name={chartMetric === "kr" ? "Kroner" : "Timer"}
+                          fill={CHART_COLORS[0]}
+                          radius={[4, 4, 0, 0]}
+                          cursor="pointer"
+                          onClick={(entry) => {
+                            const key = chartRowKey(entry);
+                            if (key && isPipelineStatus(key)) {
+                              openPipelineCandidates(key);
+                            }
+                          }}
+                        />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  )}
+                </div>
+              </section>
+
+              <div className="grid gap-4 md:grid-cols-2">
+                <section className="overflow-hidden rounded-2xl border border-border/40 bg-card p-3 sm:p-5">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                    <div className="min-w-0">
+                      <h2 className="font-heading text-base font-semibold">
+                        Realisering
+                      </h2>
+                      <p className="text-muted-foreground mt-0.5 text-xs">
+                        Trykk for å filtrere kandidater
+                      </p>
+                    </div>
+                    <MetricToggle
+                      value={chartMetric}
+                      onChange={setChartMetric}
+                    />
+                  </div>
+                  <div className="mt-4 h-52 w-full min-w-0 sm:h-56">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart
+                        data={realizationChartData}
+                        margin={{ left: 0, right: 4 }}
+                      >
+                        <CartesianGrid
+                          strokeDasharray="3 3"
+                          className="stroke-border/50"
+                        />
+                        <XAxis dataKey="name" tick={{ fontSize: 10 }} />
+                        <YAxis tick={{ fontSize: 10 }} width={44} />
+                        <Tooltip formatter={chartValueFormatter} />
+                        <Bar
+                          dataKey={chartMetric}
+                          name={chartMetric === "kr" ? "Kroner" : "Timer"}
+                          fill={CHART_COLORS[2]}
+                          radius={[4, 4, 0, 0]}
+                          cursor="pointer"
+                          onClick={(entry) => {
+                            const key = chartRowKey(entry);
+                            if (
+                              key === "potential" ||
+                              key === "in_delivery" ||
+                              key === "realized"
+                            ) {
+                              openRealizationCandidates(key);
+                            }
+                          }}
+                        />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </section>
+
+                <section className="overflow-hidden rounded-2xl border border-border/40 bg-card p-3 sm:p-5">
+                  <h2 className="font-heading text-base font-semibold">
+                    Antall
+                  </h2>
+                  <p className="text-muted-foreground mt-0.5 text-xs">
+                    Trykk et segment for å se kandidater i fasen
+                  </p>
+                  <div className="mt-4 h-52 w-full min-w-0 sm:h-56">
+                    {phasePieData.length === 0 ? (
+                      <p className="text-muted-foreground flex h-full items-center justify-center text-sm">
+                        Ingen kandidater
+                      </p>
+                    ) : (
+                      <ResponsiveContainer width="100%" height="100%">
+                        <PieChart>
+                          <Pie
+                            data={phasePieData}
+                            dataKey="value"
+                            nameKey="name"
+                            innerRadius={40}
+                            outerRadius={68}
+                            paddingAngle={2}
+                            cursor="pointer"
+                            onClick={(_, index) => {
+                              const row = phasePieData[index];
+                              if (row && isPipelineStatus(row.key)) {
+                                openPipelineCandidates(row.key);
+                              }
+                            }}
+                          >
+                            {phasePieData.map((_, i) => (
+                              <Cell
+                                key={i}
+                                fill={CHART_COLORS[i % CHART_COLORS.length]}
+                              />
+                            ))}
+                          </Pie>
+                          <Tooltip />
+                          <Legend wrapperStyle={{ fontSize: 10 }} />
+                        </PieChart>
+                      </ResponsiveContainer>
+                    )}
+                  </div>
+                </section>
               </div>
-            </section>
-          </div>
+            </>
+          )}
         </div>
       ) : null}
 
@@ -708,124 +997,144 @@ export function PortfolioBenefitsPage({
         <div className="space-y-4">
           <section className="rounded-3xl border border-border/40 bg-card px-5 py-6 sm:px-6">
             <div className="flex items-start gap-3">
-              <ShieldCheck className="text-muted-foreground mt-0.5 size-5 shrink-0" aria-hidden />
+              <ShieldCheck
+                className="text-muted-foreground mt-0.5 size-5 shrink-0"
+                aria-hidden
+              />
               <div>
                 <h2 className="font-heading text-lg font-semibold">
                   Det som ikke alltid kan prises
                 </h2>
                 <p className="text-muted-foreground mt-1 text-sm leading-relaxed">
-                  Kvalitet, sikkerhet og at arbeidet faktisk blir gjort — synlig uten å
-                  tvinges inn i én kroneverdi.
+                  Kvalitet, sikkerhet og at arbeidet faktisk blir gjort — synlig
+                  uten å tvinges inn i én kroneverdi.
                 </p>
               </div>
             </div>
           </section>
 
-          {softChartData.length > 0 ? (
-            <section className="overflow-hidden rounded-2xl border border-border/40 bg-card p-3 sm:p-5">
-              <div className="h-56 w-full min-w-0 sm:h-64">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart
-                    data={softChartData}
-                    layout="vertical"
-                    margin={{ left: 0, right: 8, top: 4, bottom: 4 }}
-                  >
-                    <CartesianGrid strokeDasharray="3 3" className="stroke-border/50" />
-                    <XAxis type="number" allowDecimals={false} tick={{ fontSize: 10 }} />
-                    <YAxis
-                      type="category"
-                      dataKey="name"
-                      width={88}
-                      tick={{ fontSize: 9 }}
-                    />
-                    <Tooltip />
-                    <Bar dataKey="count" name="Vurderinger" fill={CHART_COLORS[0]} radius={[0, 4, 4, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            </section>
+          {softGains.length === 0 ? (
+            <ProductEmptyState
+              icon={ShieldCheck}
+              title="Ingen kvalitets- eller sikkerhetstagger ennå"
+              description="Velg myke gevinster i vurderinger for å vise hva porteføljen også leverer utover kroner og timer."
+              action={
+                <Link
+                  href={`/w/${workspaceId}/vurderinger`}
+                  className={cn(
+                    buttonVariants({ variant: "default", size: "sm" }),
+                    "min-h-11 rounded-full touch-manipulation",
+                  )}
+                >
+                  Gå til vurderinger
+                </Link>
+              }
+            />
           ) : (
-            <p className="text-muted-foreground rounded-2xl border border-dashed border-border/50 px-4 py-8 text-center text-sm">
-              Ingen kvalitets- eller sikkerhetstagger valgt i vurderingene ennå.
-            </p>
-          )}
-
-          <ul className="space-y-3">
-            {data.softGainFrequency
-              .filter((g) => g.soft && g.count > 0)
-              .map((g) => {
+            <ul className="space-y-3">
+              {softGains.map((g) => {
                 const copy = SOFT_GAIN_LEADERSHIP[g.id];
                 return (
                   <li
                     key={g.id}
-                    className="rounded-2xl border border-border/40 px-4 py-3.5"
+                    className="rounded-2xl border border-border/40 bg-card px-4 py-3.5"
                   >
                     <div className="flex items-baseline justify-between gap-3">
                       <p className="font-medium text-foreground">
                         {copy?.label ?? g.label}
                       </p>
                       <p className="text-muted-foreground text-xs tabular-nums">
-                        {g.count}
+                        {g.count}{" "}
+                        {g.count === 1 ? "vurdering" : "vurderinger"}
                       </p>
                     </div>
-                    <p className="text-muted-foreground mt-1 text-sm leading-snug">
+                    <div className="bg-muted mt-2.5 h-1.5 overflow-hidden rounded-full">
+                      <div
+                        className="h-full rounded-full bg-foreground/55"
+                        style={{ width: `${Math.min(g.share, 100)}%` }}
+                      />
+                    </div>
+                    <p className="text-muted-foreground mt-2 text-sm leading-snug">
                       {copy?.why ??
                         "Viktig for porteføljen, vanskelig å prise direkte."}
                     </p>
                   </li>
                 );
               })}
-          </ul>
+            </ul>
+          )}
         </div>
       ) : null}
 
       {tab === "kandidater" ? (
         <div className="space-y-4">
-          <div className="grid grid-cols-1 gap-2 sm:flex sm:flex-wrap sm:items-center">
+          <FilterToolbar className="rounded-2xl border border-border/50 bg-card/30 p-3 sm:p-3.5">
             <SearchInput
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Søk …"
-              className="h-11 w-full rounded-full sm:h-10 sm:max-w-xs"
+              placeholder="Søk kandidat …"
               aria-label="Søk kandidat"
+              className="min-w-0 flex-1 sm:max-w-md"
+              inputClassName="h-11 min-h-11 rounded-xl border-border/60 md:h-10 md:min-h-10"
             />
-            <select
-              className="border-input bg-background h-11 w-full rounded-full border px-3 text-sm sm:h-10 sm:w-auto"
-              value={pipelineFilter}
-              onChange={(e) =>
-                setPipelineFilter(e.target.value as "all" | PipelineStatus)
-              }
-              aria-label="Filtrer fase"
-            >
-              <option value="all">Alle faser</option>
-              {(Object.keys(PIPELINE_STATUS_LABELS) as PipelineStatus[]).map(
-                (s) => (
-                  <option key={s} value={s}>
-                    {PIPELINE_STATUS_LABELS[s]}
-                  </option>
-                ),
-              )}
-            </select>
-            <select
-              className="border-input bg-background h-11 w-full rounded-full border px-3 text-sm sm:h-10 sm:w-auto"
-              value={candidateSort}
-              onChange={(e) =>
-                setCandidateSort(
-                  e.target.value as
-                    | "money_desc"
-                    | "money_asc"
-                    | "hours_desc"
-                    | "updated",
-                )
-              }
-              aria-label="Sorter kandidater"
-            >
-              <option value="money_desc">Mest kroner først</option>
-              <option value="money_asc">Minst kroner først</option>
-              <option value="hours_desc">Flest timer først</option>
-              <option value="updated">Sist oppdatert</option>
-            </select>
-            <label className="flex min-h-11 items-center gap-2 text-sm touch-manipulation sm:min-h-0">
+            <label className="flex min-w-0 flex-col gap-1 text-xs text-muted-foreground sm:w-auto">
+              <span className="px-0.5 font-medium">Fase</span>
+              <select
+                aria-label="Filtrer fase"
+                value={pipelineFilter}
+                onChange={(e) =>
+                  setPipelineFilter(e.target.value as "all" | PipelineStatus)
+                }
+                className={selectClass}
+                style={selectChevronStyle}
+              >
+                <option value="all">Alle faser</option>
+                {(Object.keys(PIPELINE_STATUS_LABELS) as PipelineStatus[]).map(
+                  (s) => (
+                    <option key={s} value={s}>
+                      {PIPELINE_STATUS_LABELS[s]}
+                    </option>
+                  ),
+                )}
+              </select>
+            </label>
+            <label className="flex min-w-0 flex-col gap-1 text-xs text-muted-foreground sm:w-auto">
+              <span className="px-0.5 font-medium">Realisering</span>
+              <select
+                aria-label="Filtrer realisering"
+                value={realizationFilter}
+                onChange={(e) =>
+                  setRealizationFilter(e.target.value as RealizationFilter)
+                }
+                className={selectClass}
+                style={selectChevronStyle}
+              >
+                <option value="all">Alle</option>
+                <option value="potential">{REALIZATION_LABELS.potential}</option>
+                <option value="in_delivery">
+                  {REALIZATION_LABELS.in_delivery}
+                </option>
+                <option value="realized">{REALIZATION_LABELS.realized}</option>
+              </select>
+            </label>
+            <label className="flex min-w-0 flex-col gap-1 text-xs text-muted-foreground sm:w-auto">
+              <span className="px-0.5 font-medium">Sorter</span>
+              <select
+                aria-label="Sorter kandidater"
+                value={candidateSort}
+                onChange={(e) =>
+                  setCandidateSort(e.target.value as CandidateSort)
+                }
+                className={selectClass}
+                style={selectChevronStyle}
+              >
+                <option value="money_desc">Mest kroner først</option>
+                <option value="money_asc">Minst kroner først</option>
+                <option value="hours_desc">Flest timer først</option>
+                <option value="updated">Sist oppdatert</option>
+              </select>
+            </label>
+            <label className="flex min-h-11 items-end gap-2 pb-1 text-sm touch-manipulation sm:min-h-10">
               <input
                 type="checkbox"
                 checked={onlyQuantified}
@@ -834,59 +1143,116 @@ export function PortfolioBenefitsPage({
               />
               Kun med tall
             </label>
-            <p className="text-muted-foreground text-xs tabular-nums sm:ml-auto">
-              {filteredItems.length} av {data.assessmentCount}
-            </p>
-          </div>
+            <div className="flex flex-wrap items-end justify-between gap-2 sm:ml-auto">
+              <p className="text-muted-foreground pb-1 text-xs tabular-nums">
+                {filteredItems.length} av {data.assessmentCount}
+              </p>
+              {hasActiveFilters ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-10"
+                  onClick={clearFilters}
+                >
+                  Nullstill filter
+                </Button>
+              ) : null}
+            </div>
+          </FilterToolbar>
 
           {filteredItems.length === 0 ? (
-            <p className="text-muted-foreground rounded-2xl border border-dashed border-border/50 px-4 py-10 text-center text-sm">
-              Ingen treff
-            </p>
+            <ProductEmptyState
+              icon={ClipboardList}
+              title={hasActiveFilters ? "Ingen treff" : "Ingen kandidater"}
+              description={
+                hasActiveFilters
+                  ? "Prøv et annet søk eller nullstill filtrene."
+                  : "Når vurderinger er klare, dukker de opp her med besparelse og timer."
+              }
+              action={
+                hasActiveFilters ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="min-h-11 rounded-full"
+                    onClick={clearFilters}
+                  >
+                    Nullstill filter
+                  </Button>
+                ) : (
+                  <Link
+                    href={`/w/${workspaceId}/vurderinger`}
+                    className={cn(
+                      buttonVariants({ variant: "default", size: "sm" }),
+                      "min-h-11 rounded-full touch-manipulation",
+                    )}
+                  >
+                    Gå til vurderinger
+                  </Link>
+                )
+              }
+            />
           ) : (
             <ul className="divide-y divide-border/40 overflow-hidden rounded-2xl border border-border/40 bg-card">
-              {filteredItems.map((item) => (
-                <li key={item.assessmentId}>
-                  <Link
-                    href={`/w/${workspaceId}/a/${item.assessmentId}`}
-                    className="hover:bg-muted/20 flex min-h-14 items-center gap-3 px-3 py-3.5 touch-manipulation transition-colors sm:px-4"
+              {filteredItems.map((item) => {
+                const status = item.pipelineStatus as PipelineStatus;
+                const tone = PIPELINE_STATUS_TONES[status];
+                const highlighted = highlightId === item.assessmentId;
+                return (
+                  <li
+                    key={item.assessmentId}
+                    ref={highlighted ? highlightRef : undefined}
+                    className={cn(
+                      highlighted && "bg-foreground/[0.06] ring-1 ring-inset ring-foreground/15",
+                    )}
                   >
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate font-medium">{item.title}</p>
-                      <p className="text-muted-foreground mt-0.5 text-xs">
-                        {PIPELINE_STATUS_LABELS[
-                          item.pipelineStatus as PipelineStatus
-                        ] ?? item.pipelineStatus}
-                        {" · "}
-                        {formatMoney(item.currencySavedPerYear)}
-                        {" · "}
-                        {formatHours(item.hoursSavedPerYear)} t
-                        {data.totals.currencySavedPerYear > 0 &&
-                        item.currencySavedPerYear > 0
-                          ? ` · ${Math.round(
-                              (item.currencySavedPerYear /
-                                data.totals.currencySavedPerYear) *
-                                100,
-                            )}% av kr`
-                          : !item.hasQuantifiedBenefit
-                            ? " · uten tall"
-                            : ""}
-                      </p>
-                    </div>
-                    {item.currencySavedPerYear > 0 ? (
+                    <Link
+                      href={`/w/${workspaceId}/a/${item.assessmentId}`}
+                      className="hover:bg-muted/20 flex min-h-14 items-center gap-3 px-3 py-3.5 touch-manipulation transition-colors sm:px-4"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate font-medium">{item.title}</p>
+                        <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                          <span
+                            className={cn(
+                              "inline-flex items-center rounded-md px-1.5 py-0.5 text-[11px] font-medium ring-1 ring-inset",
+                              tone?.pill ??
+                                "bg-muted text-muted-foreground ring-border/50",
+                            )}
+                          >
+                            {PIPELINE_STATUS_LABELS[status] ??
+                              item.pipelineStatus}
+                          </span>
+                          {!item.hasQuantifiedBenefit ? (
+                            <span className="bg-muted text-muted-foreground inline-flex items-center rounded-md px-1.5 py-0.5 text-[11px] font-medium ring-1 ring-inset ring-border/50">
+                              Uten tall
+                            </span>
+                          ) : null}
+                          <span className="text-muted-foreground text-xs tabular-nums">
+                            {formatMoney(item.currencySavedPerYear)}
+                            {" · "}
+                            {formatHours(item.hoursSavedPerYear)} t
+                            {data.totals.currencySavedPerYear > 0 &&
+                            item.currencySavedPerYear > 0
+                              ? ` · ${Math.round(
+                                  (item.currencySavedPerYear /
+                                    data.totals.currencySavedPerYear) *
+                                    100,
+                                )}%`
+                              : ""}
+                          </span>
+                        </div>
+                      </div>
                       <ArrowUpRight
                         className="text-muted-foreground size-4 shrink-0"
                         aria-hidden
                       />
-                    ) : (
-                      <ArrowDownRight
-                        className="text-muted-foreground size-4 shrink-0"
-                        aria-hidden
-                      />
-                    )}
-                  </Link>
-                </li>
-              ))}
+                    </Link>
+                  </li>
+                );
+              })}
             </ul>
           )}
 
