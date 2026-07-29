@@ -10,8 +10,10 @@ import {
   DEFAULT_WORKSPACE_AI_MODEL,
   WORKSPACE_AI_PROVIDERS,
   defaultModelForProvider,
+  isWorkspaceAiModelId,
   isWorkspaceAiProviderId,
   modelsForProvider,
+  type WorkspaceAiModelId,
   type WorkspaceAiProviderId,
 } from "@/lib/ros-ai-models";
 import { cn } from "@/lib/utils";
@@ -32,7 +34,9 @@ export function WorkspaceAiSettingsCard({ workspaceId }: Props) {
   const clearSettings = useMutation(api.workspaceAi.clearWorkspaceAiSettings);
 
   const [tokenInput, setTokenInput] = useState("");
-  const [model, setModel] = useState(DEFAULT_WORKSPACE_AI_MODEL);
+  const [model, setModel] = useState<WorkspaceAiModelId>(
+    DEFAULT_WORKSPACE_AI_MODEL,
+  );
   const [customModel, setCustomModel] = useState("");
   const [provider, setProvider] = useState<WorkspaceAiProviderId>("openai");
   const [baseUrl, setBaseUrl] = useState("");
@@ -45,19 +49,18 @@ export function WorkspaceAiSettingsCard({ workspaceId }: Props) {
     if (isWorkspaceAiProviderId(status.provider)) {
       setProvider(status.provider);
     }
-    const providerModels = modelsForProvider(
+    const list = modelsForProvider(
       isWorkspaceAiProviderId(status.provider) ? status.provider : "openai",
     );
     if (
       status.provider === "openai_compatible" ||
-      !providerModels.some((m) => m.id === status.model)
+      !isWorkspaceAiModelId(status.model)
     ) {
       setCustomModel(status.model);
-      setModel(
-        (providerModels[0]?.id as typeof model) ?? DEFAULT_WORKSPACE_AI_MODEL,
-      );
+      const fallback = list[0]?.id ?? DEFAULT_WORKSPACE_AI_MODEL;
+      setModel(fallback);
     } else {
-      setModel(status.model as typeof model);
+      setModel(status.model);
       setCustomModel("");
     }
     setBaseUrl(status.baseUrl ?? "");
@@ -76,7 +79,9 @@ export function WorkspaceAiSettingsCard({ workspaceId }: Props) {
   function onProviderChange(next: WorkspaceAiProviderId) {
     setProvider(next);
     const nextDefault = defaultModelForProvider(next);
-    setModel(nextDefault as typeof model);
+    if (isWorkspaceAiModelId(nextDefault)) {
+      setModel(nextDefault);
+    }
     if (next === "openai_compatible") {
       setCustomModel((prev) => prev || nextDefault);
     } else {
@@ -289,7 +294,10 @@ export function WorkspaceAiSettingsCard({ workspaceId }: Props) {
                   ? model
                   : (providerModels[0]?.id ?? "")
               }
-              onChange={(e) => setModel(e.target.value)}
+              onChange={(e) => {
+                const value = e.target.value;
+                if (isWorkspaceAiModelId(value)) setModel(value);
+              }}
             >
               {providerModels.map((m) => (
                 <option key={m.id} value={m.id}>
