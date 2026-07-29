@@ -12,6 +12,7 @@ import { useAuthActions } from "@convex-dev/auth/react";
 import { useMutation, useQuery } from "convex/react";
 import { ArrowLeft, LogOut } from "lucide-react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useEffect, useMemo } from "react";
 
 import { useWorkspaceChrome } from "./workspace-chrome-context";
@@ -77,6 +78,18 @@ export function WorkspaceShell({
   const workspace = useQuery(api.workspaces.get, { workspaceId });
   const { sidebarCollapsed, mobileOpen, setMobileOpen, syncWorkspace } =
     useWorkspaceChrome();
+  const pathname = usePathname();
+
+  /** Sider som trenger nesten full bredde på PC (tavle, prosessdesign, PDF). */
+  const isWideContentPage = useMemo(() => {
+    if (!pathname) return false;
+    return (
+      /\/(tavler|puls)\/[^/]+/.test(pathname) ||
+      pathname.includes("/prosessdesign") ||
+      pathname.includes("/pdf-forhandsvisning") ||
+      pathname.includes("/pdf-eksport")
+    );
+  }, [pathname]);
 
   const name = useMemo(() => {
     if (workspace === undefined) return "Laster …";
@@ -138,7 +151,21 @@ export function WorkspaceShell({
 
       <div
         data-workspace-scroll
-        className="mx-auto flex min-h-0 w-full min-w-0 max-w-[min(100%,var(--page-max-width))] flex-1 flex-col overflow-x-clip overflow-y-auto px-4 py-4 pb-[max(1rem,env(safe-area-inset-bottom))] [overflow-anchor:none] sm:px-8 sm:py-6 lg:px-10"
+        className={cn(
+          "mx-auto flex min-h-0 w-full min-w-0 flex-1 flex-col overflow-x-clip overflow-y-auto pb-[max(1rem,env(safe-area-inset-bottom))] [overflow-anchor:none]",
+          isWideContentPage
+            ? [
+                // Mobil + nettbrett: komfortabel padding, full bredde for tavler
+                "max-w-none px-3 py-3 sm:px-4 sm:py-4 md:px-5 md:py-5",
+                // PC: mer luft + myk maksbredde på ultrawide
+                "lg:px-6 lg:py-5 xl:mx-auto xl:max-w-[min(100%,var(--page-wide-max-width))] xl:px-8",
+              ].join(" ")
+            : [
+                "max-w-[min(100%,var(--page-max-width))] px-4 py-4",
+                "sm:px-6 sm:py-5 md:px-8 md:py-6",
+                "lg:px-10",
+              ].join(" "),
+        )}
       >
         {children}
       </div>

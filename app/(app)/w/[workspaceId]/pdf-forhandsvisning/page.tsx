@@ -427,13 +427,13 @@ export default function PdfForhandsvisningPage() {
     analyses === undefined
   ) {
     return (
-      <div className="mx-auto max-w-6xl space-y-6 pb-10" aria-busy="true">
+      <div className="mx-auto w-full max-w-none space-y-6 pb-10 md:max-w-3xl lg:max-w-none" aria-busy="true">
         <div className="space-y-2">
           <div className="bg-muted/40 h-8 w-44 animate-pulse rounded-lg" />
           <div className="bg-muted/30 h-4 w-72 max-w-full animate-pulse rounded-md" />
         </div>
         <div className="bg-muted/30 h-10 w-64 max-w-full animate-pulse rounded-full" />
-        <div className="grid gap-6 lg:grid-cols-[minmax(0,20rem)_minmax(0,1fr)]">
+        <div className="grid gap-4 sm:gap-5 lg:grid-cols-[minmax(0,18rem)_minmax(0,1fr)] lg:gap-6 xl:grid-cols-[minmax(0,22rem)_minmax(0,1fr)]">
           <div className="space-y-2">
             <div className="bg-muted/30 h-11 animate-pulse rounded-full" />
             <div className="bg-muted/25 h-64 animate-pulse rounded-2xl" />
@@ -515,7 +515,7 @@ export default function PdfForhandsvisningPage() {
     "h-[min(56rem,calc(100dvh-14rem))] min-h-[24rem]";
 
   return (
-    <div className="mx-auto max-w-6xl space-y-6 pb-28 lg:pb-10">
+    <div className="mx-auto w-full max-w-none space-y-6 pb-28 md:max-w-3xl lg:max-w-none lg:pb-10">
       <header className="space-y-1">
         <h1 className="font-heading text-2xl font-semibold tracking-tight sm:text-3xl">
           PDF-eksport
@@ -562,7 +562,7 @@ export default function PdfForhandsvisningPage() {
         })}
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,20rem)_minmax(0,1fr)]">
+      <div className="grid gap-4 sm:gap-5 lg:grid-cols-[minmax(0,18rem)_minmax(0,1fr)] lg:gap-6 xl:grid-cols-[minmax(0,22rem)_minmax(0,1fr)]">
         {/* Venstre: dokumentliste */}
         <aside className="min-w-0 space-y-3">
           {emptyForTab ? (
@@ -812,7 +812,7 @@ export default function PdfForhandsvisningPage() {
       {/* Mobil/nettbrett: handlingslinje nederst — alltid i tommelrekkevidde */}
       {!emptyForTab ? (
         <div className="border-border/60 bg-background/90 fixed inset-x-0 bottom-0 z-30 border-t backdrop-blur-xl lg:hidden">
-          <div className="mx-auto flex max-w-6xl items-center gap-2 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+          <div className="mx-auto flex w-full max-w-none items-center gap-2 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
             <Button
               type="button"
               variant="outline"

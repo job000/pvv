@@ -189,7 +189,7 @@ function ProcessDesignHubBody() {
   const withOrgCount = assessments.filter((a) => Boolean(a.orgUnitId)).length;
 
   return (
-    <div className="mx-auto max-w-5xl space-y-8 px-4 pb-12 sm:px-6 lg:px-0">
+    <div className="mx-auto w-full max-w-none space-y-6 pb-12 md:max-w-3xl lg:max-w-none">
       <header className="space-y-1">
         <h1 className="font-heading text-2xl font-semibold tracking-tight sm:text-3xl">
           Prosessdesign

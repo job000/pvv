@@ -2001,7 +2001,7 @@ export function ProcessDesignDocPage({
     "Uten tittel";
 
   return (
-    <div className="mx-auto max-w-3xl space-y-7 px-4 pb-28 sm:space-y-9 sm:px-6 lg:px-0 lg:pb-16">
+    <div className="mx-auto w-full max-w-none space-y-6 px-0 pb-28 sm:max-w-2xl sm:space-y-8 md:max-w-3xl lg:max-w-none lg:space-y-9 lg:pb-16">
       <Link
         href={`/w/${wid}/prosessdesign`}
         className="inline-flex touch-manipulation items-center gap-1.5 text-[13px] text-muted-foreground transition-colors hover:text-foreground"
