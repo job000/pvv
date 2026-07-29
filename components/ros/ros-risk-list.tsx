@@ -258,7 +258,10 @@ export function RosRiskList({
     api.workspaceAi.getWorkspaceAiSettingsStatus,
     workspaceId ? { workspaceId } : "skip",
   );
-  const canUseAi = Boolean(workspaceId && analysisId && !readOnly);
+  /** Vis KI kun når den er satt opp og slått på under Innstillinger. */
+  const showAi = Boolean(
+    workspaceId && analysisId && !readOnly && aiStatus?.available,
+  );
   const [saveLibraryOpen, setSaveLibraryOpen] = useState(false);
   const [saveRiskTitle, setSaveRiskTitle] = useState("");
   const [saveTiltak, setSaveTiltak] = useState("");
@@ -450,7 +453,7 @@ export function RosRiskList({
         </div>
         {!readOnly && (
           <div className="flex flex-wrap items-center gap-2">
-            {canUseAi ? (
+            {showAi ? (
               <Button
                 type="button"
                 variant="outline"
@@ -459,11 +462,6 @@ export function RosRiskList({
               >
                 <Sparkles className="size-3.5" aria-hidden />
                 AI-forslag
-                {aiStatus && !aiStatus.available ? (
-                  <span className="text-muted-foreground hidden font-normal sm:inline">
-                    (oppsett)
-                  </span>
-                ) : null}
               </Button>
             ) : null}
             {workspaceId ? (
@@ -499,13 +497,14 @@ export function RosRiskList({
               Ingen risikoer ennå
             </p>
             <p className="text-muted-foreground mt-1 max-w-xs text-xs leading-relaxed">
-              Skriv selv med fritekst, bruk AI-forslag fra vurdering og
-              prosessdesign, eller hent fra biblioteket.
+              {showAi
+                ? "Skriv selv med fritekst, bruk AI-forslag fra vurdering og prosessdesign, eller hent fra biblioteket."
+                : "Skriv selv med fritekst, eller hent fra biblioteket."}
             </p>
           </div>
           {!readOnly && (
             <div className="flex flex-wrap items-center justify-center gap-2">
-            {canUseAi ? (
+            {showAi ? (
               <Button
                 type="button"
                 variant="outline"
@@ -1340,7 +1339,7 @@ export function RosRiskList({
         </>
       ) : null}
 
-      {workspaceId && analysisId ? (
+      {showAi && workspaceId && analysisId ? (
         <RosAiSuggestDialog
           open={aiOpen}
           onOpenChange={setAiOpen}
