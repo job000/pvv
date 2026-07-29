@@ -9,7 +9,7 @@ import type { Id } from "@/convex/_generated/dataModel";
 import { toast } from "@/lib/app-toast";
 import { cn } from "@/lib/utils";
 import { useMutation, useQuery } from "convex/react";
-import { ArrowLeft, Settings2, Trash2, UserRoundCog } from "lucide-react";
+import { ArrowLeft, Trash2, UserRoundCog, Users } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -147,7 +147,7 @@ export function PulsBoardPage({
           {(
             [
               ["tavle", "Tavle", null],
-              ["medlemmer", "Medlemmer", Settings2],
+              ["medlemmer", "Medlemmer", Users],
               ["innstillinger", "Innstillinger", UserRoundCog],
             ] as const
           ).map(([id, label, Icon]) => (

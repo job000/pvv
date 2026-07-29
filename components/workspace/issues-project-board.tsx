@@ -62,6 +62,7 @@ import {
   Filter,
   Link2,
   ListTree,
+  Loader2,
   Maximize2,
   Minimize2,
   Plus,
@@ -1042,6 +1043,7 @@ function BoardColumn({
   column,
   cards,
   onOpenCard,
+  onAddCard,
   onRename,
   onRemove,
   canManage,
@@ -1051,6 +1053,8 @@ function BoardColumn({
   column: BoardColumnDoc;
   cards: BoardCard[];
   onOpenCard: (card: BoardCard) => void;
+  /** Åpne opprett-dialog med denne kolonnen forhåndsvalgt (GitHub-stil). */
+  onAddCard?: () => void;
   onRename?: (nextName: string) => void | Promise<void>;
   onRemove?: () => void;
   canManage?: boolean;
@@ -1183,12 +1187,25 @@ function BoardColumn({
             Vis {Math.min(COLUMN_PAGE_SIZE, remaining)} til · {remaining} skjult
           </button>
         ) : null}
-        {cards.length === 0 ? (
+        {cards.length === 0 && !onAddCard ? (
           <p className="text-muted-foreground px-1 py-6 text-center text-[11px]">
             Ingen kort her
           </p>
         ) : null}
       </div>
+      {onAddCard ? (
+        <div className="shrink-0 border-t border-border/40 bg-muted/30 p-1.5">
+          <button
+            type="button"
+            onClick={onAddCard}
+            aria-label={`Legg til kort i ${column.name}`}
+            className="text-muted-foreground hover:text-foreground hover:bg-background/80 flex min-h-9 w-full items-center gap-1.5 rounded-lg px-2.5 text-left text-xs font-medium touch-manipulation"
+          >
+            <Plus className="size-3.5 shrink-0 opacity-80" strokeWidth={2.25} aria-hidden />
+            Legg til kort
+          </button>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -1641,6 +1658,7 @@ export function IssuesProjectBoard({
   const [createFormId, setCreateFormId] = useState<Id<"intakeForms"> | "">("");
   const [createLinksOpen, setCreateLinksOpen] = useState(false);
   const [createDescription, setCreateDescription] = useState("");
+  const [createDescOpen, setCreateDescOpen] = useState(false);
   const [createIssueType, setCreateIssueType] = useState("Oppgave");
   const [createMoreOpen, setCreateMoreOpen] = useState(false);
   const [createFullscreen, setCreateFullscreen] = useState(false);
@@ -2231,6 +2249,7 @@ export function IssuesProjectBoard({
   const resetCreateForm = (parent?: BoardCard) => {
     setCreateTitle("");
     setCreateDescription("");
+    setCreateDescOpen(false);
     setCreateIssueType(parent?.issueType?.trim() || "Oppgave");
     setCreateMoreOpen(Boolean(parent));
     const hasInheritedLinks = Boolean(
@@ -2261,6 +2280,12 @@ export function IssuesProjectBoard({
   const openCreateAsSub = (parent: BoardCard) => {
     setCreateOpen(true);
     resetCreateForm(parent);
+  };
+
+  const openCreateInColumn = (columnId: Id<"pulsBoardColumns">) => {
+    resetCreateForm();
+    setCreateColumnId(columnId);
+    setCreateOpen(true);
   };
 
   const restoreChecklistPromoteIfNeeded = async () => {
@@ -3223,6 +3248,7 @@ export function IssuesProjectBoard({
                     column={col}
                     cards={list}
                     onOpenCard={openDetail}
+                    onAddCard={() => openCreateInColumn(col._id)}
                     canManage={canManageColumns}
                     showCardDescription={showCardDescription}
                     columnHeightPx={columnHeightPx}
@@ -3533,15 +3559,15 @@ export function IssuesProjectBoard({
         }}
       >
         <DialogContent
-          size={createFullscreen ? "5xl" : "lg"}
+          size={createFullscreen ? "5xl" : "md"}
           fillViewport={createFullscreen}
           titleId="create-issue-title"
           className={cn(
             !createFullscreen &&
-              "max-sm:h-[min(92dvh,42rem)] max-sm:max-h-[calc(100dvh-env(safe-area-inset-top,0px)-0.5rem)] max-sm:rounded-b-none",
+              "max-sm:h-[min(92dvh,36rem)] max-sm:max-h-[calc(100dvh-env(safe-area-inset-top,0px)-0.5rem)] max-sm:rounded-b-none",
           )}
         >
-          <DialogHeader className="max-sm:space-y-0 max-sm:pb-3">
+          <DialogHeader className="max-sm:space-y-0 max-sm:pb-2">
             {!createFullscreen ? (
               <div
                 className="mx-auto mb-2.5 h-1 w-10 rounded-full bg-border sm:hidden"
@@ -3549,20 +3575,34 @@ export function IssuesProjectBoard({
               />
             ) : null}
             <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
+              <div className="min-w-0 space-y-1.5">
                 <h2
                   id="create-issue-title"
-                  className="font-heading text-[1.35rem] font-semibold tracking-tight sm:text-lg"
+                  className="font-heading text-[1.25rem] font-semibold tracking-tight sm:text-lg"
                 >
                   {createParentId
                     ? pulsBoardCopy.createSubTitle
                     : pulsBoardCopy.createTitle}
                 </h2>
-                <p className="text-muted-foreground mt-1 text-sm leading-snug max-sm:line-clamp-2">
-                  {createParentId
-                    ? pulsBoardCopy.createHintSub
-                    : pulsBoardCopy.createHint}
-                </p>
+                {createParentId ? (
+                  <p className="text-muted-foreground text-sm leading-snug">
+                    {pulsBoardCopy.createHintSub}
+                  </p>
+                ) : createColumnId ? (
+                  <span className="bg-muted/60 text-muted-foreground inline-flex max-w-full items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium">
+                    <Columns3 className="size-3 shrink-0 opacity-70" aria-hidden />
+                    <span className="truncate">
+                      {pulsBoardCopy.createInColumn(
+                        columns.find((c) => c._id === createColumnId)?.name ??
+                          "kolonne",
+                      )}
+                    </span>
+                  </span>
+                ) : (
+                  <p className="text-muted-foreground text-sm leading-snug">
+                    {pulsBoardCopy.createHint}
+                  </p>
+                )}
               </div>
               <button
                 type="button"
@@ -3588,24 +3628,28 @@ export function IssuesProjectBoard({
               </button>
             </div>
           </DialogHeader>
-          <DialogBody className="space-y-5 max-sm:space-y-4 max-sm:pb-2">
-            <div className="space-y-1.5">
-              <Label htmlFor="create-title">Tittel</Label>
-              <Input
-                id="create-title"
-                value={createTitle}
-                onChange={(e) => setCreateTitle(e.target.value)}
-                placeholder="Hva skal gjøres?"
-                className="min-h-12 text-base sm:min-h-10 sm:text-sm"
-              />
-            </div>
+          <DialogBody className="space-y-4 max-sm:space-y-3.5 max-sm:pb-2">
+            <Input
+              id="create-title"
+              autoFocus
+              value={createTitle}
+              onChange={(e) => setCreateTitle(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.nativeEvent.isComposing) {
+                  e.preventDefault();
+                  if (createTitle.trim() && !busy) void submitCreate();
+                }
+              }}
+              placeholder="Hva skal gjøres?"
+              aria-label="Tittel"
+              className="border-border/40 bg-muted/20 h-12 rounded-xl border-0 px-3.5 text-base font-medium shadow-none ring-1 ring-border/50 placeholder:font-normal focus-visible:ring-sky-500/40 sm:h-11 sm:text-[15px]"
+            />
 
-            <div className="space-y-1.5">
-              <Label id="create-issue-type-label">Type</Label>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-3">
               <div
                 role="group"
-                aria-labelledby="create-issue-type-label"
-                className="grid grid-cols-2 gap-2 sm:hidden"
+                aria-label="Type"
+                className="flex flex-wrap gap-1.5"
               >
                 {ISSUE_TYPE_OPTIONS.map((t) => {
                   const active = createIssueType === t;
@@ -3616,10 +3660,10 @@ export function IssuesProjectBoard({
                       aria-pressed={active}
                       onClick={() => setCreateIssueType(t)}
                       className={cn(
-                        "min-h-11 rounded-xl border px-3 text-sm font-medium touch-manipulation transition-colors",
+                        "inline-flex h-8 items-center rounded-full px-3 text-xs font-medium touch-manipulation transition-colors",
                         active
-                          ? "border-foreground/25 bg-foreground text-background"
-                          : "border-border/60 bg-background text-foreground hover:bg-muted/50",
+                          ? "bg-foreground text-background"
+                          : "bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground",
                       )}
                     >
                       {t}
@@ -3627,57 +3671,88 @@ export function IssuesProjectBoard({
                   );
                 })}
               </div>
-              <div className="hidden sm:block sm:max-w-[10rem]">
+              <div className="min-w-0 sm:ml-auto sm:w-[11.5rem]">
                 <SearchableSelect
-                  id="create-issue-type"
-                  aria-label="Type"
-                  value={createIssueType}
-                  onChange={setCreateIssueType}
-                  options={optionsWithCurrent(
-                    ISSUE_TYPE_OPTIONS,
-                    createIssueType,
-                  ).map((t) => ({ value: t, label: t }))}
+                  id="create-column"
+                  aria-label="Kolonne"
+                  value={createColumnId}
+                  onChange={(v) =>
+                    setCreateColumnId(v as Id<"pulsBoardColumns"> | "")
+                  }
+                  options={columns.map((c) => ({
+                    value: c._id,
+                    label: c.isDone ? `${c.name} (fullført)` : c.name,
+                  }))}
                   allowClear={false}
-                  placeholder="Velg type"
+                  placeholder={
+                    columns.length === 0 ? "Ingen kolonner" : "Kolonne"
+                  }
                 />
               </div>
             </div>
 
-            <div className="space-y-1.5">
-              <Label>Beskrivelse</Label>
-              <CardDescriptionEditor
-                key={createOpen ? "create-open" : "create-closed"}
-                aria-label="Beskrivelse"
-                value={createDescription}
-                onChange={setCreateDescription}
-                startInEditMode
-                rows={createFullscreen ? 10 : 4}
-                placeholder="Valgfritt — hva skal gjøres, hvorfor, eller lenker."
-              />
+            <div className="space-y-2">
+              {createDescOpen || !isEmptyRichText(createDescription) ? (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <Label className="text-xs text-muted-foreground">
+                      Beskrivelse
+                    </Label>
+                    {isEmptyRichText(createDescription) ? (
+                      <button
+                        type="button"
+                        className="text-muted-foreground hover:text-foreground text-xs font-medium"
+                        onClick={() => setCreateDescOpen(false)}
+                      >
+                        {pulsBoardCopy.createHideDescription}
+                      </button>
+                    ) : null}
+                  </div>
+                  <CardDescriptionEditor
+                    key={createOpen ? "create-open" : "create-closed"}
+                    aria-label="Beskrivelse"
+                    value={createDescription}
+                    onChange={setCreateDescription}
+                    startInEditMode
+                    rows={createFullscreen ? 10 : 4}
+                    placeholder="Valgfritt — hva skal gjøres, hvorfor, eller lenker."
+                  />
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setCreateDescOpen(true)}
+                  className="text-muted-foreground hover:text-foreground hover:bg-muted/40 flex min-h-9 w-full items-center gap-1.5 rounded-xl px-2 text-left text-sm touch-manipulation"
+                >
+                  <Plus className="size-3.5 shrink-0 opacity-70" aria-hidden />
+                  {pulsBoardCopy.createAddDescription}
+                </button>
+              )}
             </div>
 
             <div className="space-y-2">
               <button
                 type="button"
-                className="hover:bg-muted/40 flex min-h-12 w-full items-center justify-between gap-2 rounded-2xl border border-border/50 px-3.5 text-left text-sm touch-manipulation sm:min-h-10 sm:rounded-xl sm:px-3"
+                className="text-muted-foreground hover:text-foreground hover:bg-muted/40 flex min-h-9 w-full items-center justify-between gap-2 rounded-xl px-2 text-left text-sm touch-manipulation"
                 onClick={() => setCreateLinksOpen((v) => !v)}
                 aria-expanded={createLinksOpen}
               >
-                <span className="min-w-0">
-                  <span className="text-foreground font-medium">
+                <span className="inline-flex min-w-0 items-center gap-1.5">
+                  <Link2 className="size-3.5 shrink-0 opacity-70" aria-hidden />
+                  <span className="font-medium text-foreground/90">
                     {createLinksOpen
                       ? pulsBoardCopy.createLinkHide
                       : pulsBoardCopy.createLinkShow}
                   </span>
                   {!createLinksOpen && createLinkSummary.length > 0 ? (
-                    <span className="text-muted-foreground ml-2 text-xs">
+                    <span className="text-muted-foreground text-xs tabular-nums">
                       ({createLinkSummary.length})
                     </span>
                   ) : null}
                 </span>
                 <ChevronDown
                   className={cn(
-                    "text-muted-foreground size-4 shrink-0 transition-transform",
+                    "size-3.5 shrink-0 transition-transform",
                     createLinksOpen && "rotate-180",
                   )}
                   aria-hidden
@@ -3685,30 +3760,30 @@ export function IssuesProjectBoard({
               </button>
 
               {!createLinksOpen && createLinkSummary.length > 0 ? (
-                <div className="flex flex-wrap gap-2 px-0.5">
+                <div className="flex flex-wrap gap-1.5 px-1">
                   {createLinkSummary.map((chip) => (
                     <button
                       key={chip.key}
                       type="button"
                       onClick={chip.onClear}
-                      className="bg-muted text-foreground inline-flex max-w-full items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium touch-manipulation"
+                      className="bg-muted text-foreground inline-flex max-w-full items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium touch-manipulation"
                       title="Fjern kobling"
                     >
                       <span className="truncate">{chip.label}</span>
-                      <X className="size-3.5 shrink-0 opacity-60" aria-hidden />
+                      <X className="size-3 shrink-0 opacity-60" aria-hidden />
                     </button>
                   ))}
                 </div>
               ) : null}
 
               {createLinksOpen ? (
-                <div className="space-y-3 rounded-2xl border border-border/60 bg-muted/15 p-3.5 sm:p-3">
-                  <p className="text-muted-foreground text-xs leading-snug sm:text-[11px]">
+                <div className="space-y-3 rounded-xl bg-muted/20 p-3">
+                  <p className="text-muted-foreground text-xs leading-snug">
                     {createLinkTargets === undefined
                       ? "Laster koblinger …"
                       : pulsBoardCopy.createLinkHint}
                   </p>
-                  <div className="grid gap-3.5 sm:grid-cols-2 sm:gap-3">
+                  <div className="grid gap-3 sm:grid-cols-2">
                     {(
                       [
                         {
@@ -3785,102 +3860,83 @@ export function IssuesProjectBoard({
               ) : null}
             </div>
 
-            <button
-              type="button"
-              className="text-muted-foreground hover:text-foreground flex min-h-12 w-full items-center justify-between gap-2 rounded-2xl border border-border/50 px-3.5 text-left text-sm touch-manipulation sm:min-h-9 sm:rounded-xl sm:px-3"
-              onClick={() => setCreateMoreOpen((v) => !v)}
-              aria-expanded={createMoreOpen}
-            >
-              <span>
-                {createMoreOpen
-                  ? pulsBoardCopy.createLess
-                  : pulsBoardCopy.createMore}
-              </span>
-              <ChevronDown
-                className={cn(
-                  "size-4 shrink-0 transition-transform",
-                  createMoreOpen && "rotate-180",
-                )}
-                aria-hidden
-              />
-            </button>
+            <div className="space-y-2">
+              <button
+                type="button"
+                className="text-muted-foreground hover:text-foreground hover:bg-muted/40 flex min-h-9 w-full items-center justify-between gap-2 rounded-xl px-2 text-left text-sm touch-manipulation"
+                onClick={() => setCreateMoreOpen((v) => !v)}
+                aria-expanded={createMoreOpen}
+              >
+                <span className="font-medium text-foreground/90">
+                  {createMoreOpen
+                    ? pulsBoardCopy.createLess
+                    : pulsBoardCopy.createMore}
+                </span>
+                <ChevronDown
+                  className={cn(
+                    "size-3.5 shrink-0 transition-transform",
+                    createMoreOpen && "rotate-180",
+                  )}
+                  aria-hidden
+                />
+              </button>
 
-            {createMoreOpen ? (
-              <div className="grid gap-3.5 sm:grid-cols-2 sm:gap-3">
-                <div className="space-y-1.5 sm:col-span-2 sm:space-y-1">
-                  <Label htmlFor="create-parent">
-                    {pulsBoardCopy.parentLabel}
-                  </Label>
-                  <SearchableSelect
-                    id="create-parent"
-                    aria-label={pulsBoardCopy.parentLabel}
-                    value={createParentId}
-                    onChange={(v) =>
-                      setCreateParentId(v as Id<"assessmentTasks"> | "")
-                    }
-                    options={createParentOptions.map((p) => ({
-                      value: p._id,
-                      label: pulsBoardCopy.parentUnder(parentOptionLabel(p)),
-                    }))}
-                    placeholder={pulsBoardCopy.parentNone}
-                    clearLabel={pulsBoardCopy.parentNone}
-                  />
-                </div>
-                <div className="space-y-1.5 sm:space-y-1">
-                  <Label htmlFor="create-column">Kolonne</Label>
-                  <SearchableSelect
-                    id="create-column"
-                    aria-label="Kolonne"
-                    value={createColumnId}
-                    onChange={(v) =>
-                      setCreateColumnId(v as Id<"pulsBoardColumns"> | "")
-                    }
-                    options={createColumnOptions.map((c) => ({
-                      value: c._id,
-                      label: c.name,
-                    }))}
-                    allowClear={false}
-                    placeholder={
-                      createColumnOptions.length === 0
-                        ? "Ingen kolonner"
-                        : "Velg kolonne"
-                    }
-                  />
-                </div>
-                <div className="grid grid-cols-2 gap-3 sm:contents">
-                  <div className="space-y-1.5 sm:space-y-1">
-                    <Label htmlFor="create-start">Startdato</Label>
-                    <Input
-                      id="create-start"
-                      type="date"
-                      value={createStart}
-                      onChange={(e) => setCreateStart(e.target.value)}
-                      className="min-h-12 text-base sm:min-h-10 sm:text-sm"
+              {createMoreOpen ? (
+                <div className="grid gap-3 rounded-xl bg-muted/20 p-3 sm:grid-cols-2">
+                  <div className="space-y-1 sm:col-span-2">
+                    <Label htmlFor="create-parent">
+                      {pulsBoardCopy.parentLabel}
+                    </Label>
+                    <SearchableSelect
+                      id="create-parent"
+                      aria-label={pulsBoardCopy.parentLabel}
+                      value={createParentId}
+                      onChange={(v) =>
+                        setCreateParentId(v as Id<"assessmentTasks"> | "")
+                      }
+                      options={createParentOptions.map((p) => ({
+                        value: p._id,
+                        label: pulsBoardCopy.parentUnder(parentOptionLabel(p)),
+                      }))}
+                      placeholder={pulsBoardCopy.parentNone}
+                      clearLabel={pulsBoardCopy.parentNone}
                     />
                   </div>
-                  <div className="space-y-1.5 sm:space-y-1">
-                    <Label htmlFor="create-due">Sluttdato</Label>
-                    <Input
-                      id="create-due"
-                      type="date"
-                      value={createDue}
-                      onChange={(e) => setCreateDue(e.target.value)}
-                      className="min-h-12 text-base sm:min-h-10 sm:text-sm"
+                  <div className="grid grid-cols-2 gap-3 sm:contents">
+                    <div className="space-y-1">
+                      <Label htmlFor="create-start">Startdato</Label>
+                      <Input
+                        id="create-start"
+                        type="date"
+                        value={createStart}
+                        onChange={(e) => setCreateStart(e.target.value)}
+                        className="min-h-10"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label htmlFor="create-due">Sluttdato</Label>
+                      <Input
+                        id="create-due"
+                        type="date"
+                        value={createDue}
+                        onChange={(e) => setCreateDue(e.target.value)}
+                        className="min-h-10"
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-1 sm:col-span-2">
+                    <Label>Tildelt</Label>
+                    <AssigneePicker
+                      selectedIds={createAssigneeIds}
+                      members={memberOptions}
+                      canEdit
+                      onChange={setCreateAssigneeIds}
+                      emptyLabel="Ingen tildelt ennå"
                     />
                   </div>
                 </div>
-                <div className="space-y-1.5 sm:col-span-2">
-                  <Label>Tildelt</Label>
-                  <AssigneePicker
-                    selectedIds={createAssigneeIds}
-                    members={memberOptions}
-                    canEdit
-                    onChange={setCreateAssigneeIds}
-                    emptyLabel="Ingen tildelt ennå"
-                  />
-                </div>
-              </div>
-            ) : null}
+              ) : null}
+            </div>
           </DialogBody>
           <DialogFooter className="max-sm:gap-2.5">
             <Button
@@ -3888,6 +3944,7 @@ export function IssuesProjectBoard({
               variant="outline"
               className="min-h-11 touch-manipulation sm:min-h-9 max-sm:w-full"
               onClick={closeCreateDialog}
+              disabled={busy}
             >
               Avbryt
             </Button>
@@ -3897,7 +3954,14 @@ export function IssuesProjectBoard({
               disabled={busy || !createTitle.trim()}
               onClick={() => void submitCreate()}
             >
-              Opprett
+              {busy ? (
+                <>
+                  <Loader2 className="size-4 animate-spin" aria-hidden />
+                  {pulsBoardCopy.createSubmitting}
+                </>
+              ) : (
+                pulsBoardCopy.createSubmit
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>
