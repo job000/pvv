@@ -19,6 +19,9 @@ type Props = {
   title?: string;
 };
 
+/** Ignorer breddeendringer under scrollbar-bredde (~12–17px) for å unngå zoom-loop. */
+const PAGE_WIDTH_HYSTERESIS_PX = 16;
+
 /**
  * Cross-platform PDF-forhåndsvisning.
  * iOS Safari/iframe viser ofte bare første side — derfor renderer vi alle sider med PDF.js.
@@ -29,18 +32,24 @@ export function PdfBlobViewer({
   showOpenInTab = true,
   title = "PDF-forhåndsvisning",
 }: Props) {
-  const containerRef = useRef<HTMLDivElement>(null);
+  /** Måles utenfor scroll-containeren — ellers oscillerer bredde når scrollbar dukker opp/forsvinner (Windows). */
+  const measureRef = useRef<HTMLDivElement>(null);
   const [numPages, setNumPages] = useState(0);
   const [pageWidth, setPageWidth] = useState(640);
   const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
-    const el = containerRef.current;
+    const el = measureRef.current;
     if (!el) return;
 
     const update = () => {
-      const next = Math.floor(el.clientWidth - 8);
-      if (next > 0) setPageWidth(next);
+      // px-1/sm:px-2 + litt margin så canvas ikke tvinger horisontal overflow
+      const next = Math.floor(el.clientWidth - 16);
+      if (next <= 0) return;
+      setPageWidth((prev) => {
+        if (Math.abs(prev - next) < PAGE_WIDTH_HYSTERESIS_PX) return prev;
+        return next;
+      });
     };
     update();
 
@@ -83,77 +92,78 @@ export function PdfBlobViewer({
         ) : null}
       </div>
 
-      <div
-        ref={containerRef}
-        className="min-h-0 flex-1 overflow-y-auto overscroll-contain bg-muted/30 [-webkit-overflow-scrolling:touch]"
-        style={{ touchAction: "pan-y" }}
-      >
-        {loadError ? (
-          <div className="flex h-full min-h-[16rem] flex-col items-center justify-center gap-3 px-4 text-center">
-            <p className="text-sm text-destructive">{loadError}</p>
-            <a
-              href={url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-sm font-medium text-foreground underline-offset-2 hover:underline"
-            >
-              Åpne PDF i ny fane i stedet
-            </a>
-          </div>
-        ) : (
-          <Document
-            file={url}
-            loading={
-              <div className="flex h-[min(50vh,24rem)] items-center justify-center gap-2 text-sm text-muted-foreground">
-                <Loader2 className="size-4 animate-spin" aria-hidden />
-                Laster PDF…
-              </div>
-            }
-            error={
-              <div className="flex h-[min(50vh,24rem)] items-center justify-center px-4 text-center text-sm text-destructive">
-                Kunne ikke lese PDF-filen.
-              </div>
-            }
-            onLoadSuccess={(pdf) => {
-              setNumPages(pdf.numPages);
-              setLoadError(null);
-            }}
-            onLoadError={(err) => {
-              console.error("[pdf-viewer]", err);
-              setLoadError(
-                "Forhåndsvisning feilet i denne nettleseren. Åpne i ny fane eller last ned.",
-              );
-            }}
-          >
-            <div className="flex flex-col items-center gap-3 px-1 py-3 sm:gap-4 sm:px-2 sm:py-4">
-              {Array.from({ length: numPages }, (_, index) => {
-                const pageNumber = index + 1;
-                return (
-                  <div
-                    key={`${url}-${pageNumber}`}
-                    className="w-full max-w-full overflow-hidden rounded-md bg-white shadow-sm ring-1 ring-black/10"
-                  >
-                    <p className="border-b border-black/5 bg-neutral-50 px-2 py-1 text-center text-[10px] font-medium tabular-nums text-neutral-500">
-                      Side {pageNumber} / {numPages || "…"}
-                    </p>
-                    <Page
-                      pageNumber={pageNumber}
-                      width={Math.max(260, pageWidth)}
-                      renderTextLayer={false}
-                      renderAnnotationLayer={false}
-                      loading={
-                        <div className="flex h-40 items-center justify-center text-xs text-muted-foreground">
-                          Side {pageNumber}…
-                        </div>
-                      }
-                      aria-label={`${title}, side ${pageNumber}`}
-                    />
-                  </div>
-                );
-              })}
+      <div ref={measureRef} className="min-h-0 min-w-0 flex-1">
+        <div
+          className="h-full overflow-y-auto overscroll-contain bg-muted/30 [scrollbar-gutter:stable] [-webkit-overflow-scrolling:touch]"
+          style={{ touchAction: "pan-y" }}
+        >
+          {loadError ? (
+            <div className="flex h-full min-h-[16rem] flex-col items-center justify-center gap-3 px-4 text-center">
+              <p className="text-sm text-destructive">{loadError}</p>
+              <a
+                href={url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-sm font-medium text-foreground underline-offset-2 hover:underline"
+              >
+                Åpne PDF i ny fane i stedet
+              </a>
             </div>
-          </Document>
-        )}
+          ) : (
+            <Document
+              file={url}
+              loading={
+                <div className="flex h-[min(50vh,24rem)] items-center justify-center gap-2 text-sm text-muted-foreground">
+                  <Loader2 className="size-4 animate-spin" aria-hidden />
+                  Laster PDF…
+                </div>
+              }
+              error={
+                <div className="flex h-[min(50vh,24rem)] items-center justify-center px-4 text-center text-sm text-destructive">
+                  Kunne ikke lese PDF-filen.
+                </div>
+              }
+              onLoadSuccess={(pdf) => {
+                setNumPages(pdf.numPages);
+                setLoadError(null);
+              }}
+              onLoadError={(err) => {
+                console.error("[pdf-viewer]", err);
+                setLoadError(
+                  "Forhåndsvisning feilet i denne nettleseren. Åpne i ny fane eller last ned.",
+                );
+              }}
+            >
+              <div className="flex flex-col items-center gap-3 px-1 py-3 sm:gap-4 sm:px-2 sm:py-4">
+                {Array.from({ length: numPages }, (_, index) => {
+                  const pageNumber = index + 1;
+                  return (
+                    <div
+                      key={`${url}-${pageNumber}`}
+                      className="w-full max-w-full overflow-hidden rounded-md bg-white shadow-sm ring-1 ring-black/10"
+                    >
+                      <p className="border-b border-black/5 bg-neutral-50 px-2 py-1 text-center text-[10px] font-medium tabular-nums text-neutral-500">
+                        Side {pageNumber} / {numPages || "…"}
+                      </p>
+                      <Page
+                        pageNumber={pageNumber}
+                        width={Math.max(260, pageWidth)}
+                        renderTextLayer={false}
+                        renderAnnotationLayer={false}
+                        loading={
+                          <div className="flex h-40 items-center justify-center text-xs text-muted-foreground">
+                            Side {pageNumber}…
+                          </div>
+                        }
+                        aria-label={`${title}, side ${pageNumber}`}
+                      />
+                    </div>
+                  );
+                })}
+              </div>
+            </Document>
+          )}
+        </div>
       </div>
     </div>
   );

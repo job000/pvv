@@ -672,6 +672,37 @@ export default defineSchema({
     updatedByUserId: v.id("users"),
   }).index("by_workspace", ["workspaceId"]),
 
+  /**
+   * AI-leverandørnøkkel + modell per arbeidsområde (ROS-forslag m.m.).
+   * Token leses kun av actions — aldri eksponert i klient-queries.
+   */
+  workspaceAiSecrets: defineTable({
+    workspaceId: v.id("workspaces"),
+    /** API-nøkkel (f.eks. OpenAI sk-…) */
+    token: v.string(),
+    /** Modell-id, f.eks. gpt-4o-mini */
+    model: v.string(),
+    /**
+     * Leverandør.
+     * openai | anthropic | google | openai_compatible (valgfri baseUrl).
+     */
+    provider: v.union(
+      v.literal("openai"),
+      v.literal("anthropic"),
+      v.literal("google"),
+      v.literal("openai_compatible"),
+    ),
+    /** Kun når provider er openai_compatible — f.eks. https://openrouter.ai/api/v1 */
+    baseUrl: v.optional(v.string()),
+    /**
+     * Av/på for KI-funksjoner i arbeidsområdet.
+     * Mangler felt → behandles som på (bakoverkompatibelt).
+     */
+    enabled: v.optional(v.boolean()),
+    updatedAt: v.number(),
+    updatedByUserId: v.id("users"),
+  }).index("by_workspace", ["workspaceId"]),
+
   /** Brukerpreferanser (f.eks. standard arbeidsområde etter innlogging) */
   userSettings: defineTable({
     userId: v.id("users"),

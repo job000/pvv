@@ -2818,6 +2818,7 @@ export function RosAnalysisEditor({
             <div className="p-5 sm:p-6">
               <RosRiskList
                 workspaceId={workspaceId}
+                analysisId={analysisId}
                 rowLabels={data.rowLabels}
                 colLabels={data.colLabels}
                 rowAxisTitle={data.rowAxisTitle}
@@ -2832,6 +2833,10 @@ export function RosAnalysisEditor({
                 onUpdateRisk={onUpdateRisk}
                 onDeleteRisk={onDeleteRisk}
                 highlightCell={highlightCell}
+                onHighlightCell={(row, col) => {
+                  setHighlightCell([row, col]);
+                  setJumpRequest({ row, col, nonce: Date.now() });
+                }}
                 rosTasks={tasks ?? undefined}
                 onGoToTasks={() => setRosSection(1)}
                 saveStatus={{ saving, dirty, lastSavedAt }}

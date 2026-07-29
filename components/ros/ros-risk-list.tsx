@@ -28,6 +28,7 @@ import {
 import { cellRiskClass } from "@/lib/ros-risk-colors";
 import { cn } from "@/lib/utils";
 import { useMutation, useQuery } from "convex/react";
+import { RosAiSuggestDialog } from "@/components/ros/ros-ai-suggest-dialog";
 import {
   AlertTriangle,
   ArrowDown,
@@ -41,6 +42,7 @@ import {
   ListTodo,
   Loader2,
   Plus,
+  Sparkles,
   SquareArrowOutUpRight,
   Trash2,
 } from "lucide-react";
@@ -79,9 +81,13 @@ type Props = {
   onDeleteRisk: (riskId: string, beforeRow: number, beforeCol: number) => void;
   /** Highlighted cell from matrix click — [row, col] */
   highlightCell?: [number, number] | null;
+  /** Etter AI-godkjenning: hopp til celle i matrisen */
+  onHighlightCell?: (row: number, col: number) => void;
   readOnly?: boolean;
   /** Når satt: vis «Fra bibliotek» og «Lagre til bibliotek» for gjenbruk i arbeidsområdet */
   workspaceId?: Id<"workspaces">;
+  /** Når satt sammen med workspaceId: AI-forslag basert på vurdering/PDD */
+  analysisId?: Id<"rosAnalyses">;
   /** Oppgaver for denne analysen (for å vise koblinger til dette risikopunktet) */
   rosTasks?: Array<{
     _id: Id<"rosTasks">;
@@ -237,14 +243,22 @@ export function RosRiskList({
   onUpdateRisk,
   onDeleteRisk,
   highlightCell,
+  onHighlightCell,
   readOnly,
   workspaceId,
+  analysisId,
   rosTasks,
   onGoToTasks,
   saveStatus,
 }: Props) {
   const [expandedId, setExpandedId] = useStickyState<string | null>(`ros-risk-list:${workspaceId}:expanded`, null);
   const [libraryOpen, setLibraryOpen] = useState(false);
+  const [aiOpen, setAiOpen] = useState(false);
+  const aiStatus = useQuery(
+    api.workspaceAi.getWorkspaceAiSettingsStatus,
+    workspaceId ? { workspaceId } : "skip",
+  );
+  const canUseAi = Boolean(workspaceId && analysisId && !readOnly);
   const [saveLibraryOpen, setSaveLibraryOpen] = useState(false);
   const [saveRiskTitle, setSaveRiskTitle] = useState("");
   const [saveTiltak, setSaveTiltak] = useState("");
@@ -435,7 +449,23 @@ export function RosRiskList({
           </h3>
         </div>
         {!readOnly && (
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            {canUseAi ? (
+              <Button
+                type="button"
+                variant="outline"
+                className="h-9 gap-1.5 rounded-xl text-xs"
+                onClick={() => setAiOpen(true)}
+              >
+                <Sparkles className="size-3.5" aria-hidden />
+                AI-forslag
+                {aiStatus && !aiStatus.available ? (
+                  <span className="text-muted-foreground hidden font-normal sm:inline">
+                    (oppsett)
+                  </span>
+                ) : null}
+              </Button>
+            ) : null}
             {workspaceId ? (
               <Button
                 type="button"
@@ -469,12 +499,23 @@ export function RosRiskList({
               Ingen risikoer ennå
             </p>
             <p className="text-muted-foreground mt-1 max-w-xs text-xs leading-relaxed">
-              Legg til risikoer for å bygge risikomatrisen. Velg «Bibliotek» for å
-              gjenbruke lagrede risikoer og tiltak.
+              Skriv selv med fritekst, bruk AI-forslag fra vurdering og
+              prosessdesign, eller hent fra biblioteket.
             </p>
           </div>
           {!readOnly && (
             <div className="flex flex-wrap items-center justify-center gap-2">
+            {canUseAi ? (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setAiOpen(true)}
+                className="mt-1 h-10 gap-2 rounded-xl px-5 text-sm font-semibold"
+              >
+                <Sparkles className="size-3.5" aria-hidden />
+                AI-forslag
+              </Button>
+            ) : null}
             {workspaceId ? (
               <Button
                 type="button"
@@ -492,7 +533,7 @@ export function RosRiskList({
               className="mt-1 h-10 gap-2 rounded-xl px-6 text-sm font-semibold shadow-sm"
             >
               <Plus className="size-4" aria-hidden />
-              Legg til risiko
+              Skriv selv
             </Button>
             </div>
           )}
@@ -1297,6 +1338,22 @@ export function RosRiskList({
             </DialogContent>
           </Dialog>
         </>
+      ) : null}
+
+      {workspaceId && analysisId ? (
+        <RosAiSuggestDialog
+          open={aiOpen}
+          onOpenChange={setAiOpen}
+          workspaceId={workspaceId}
+          analysisId={analysisId}
+          rowCount={rowLabels.length}
+          colCount={colLabels.length}
+          onAddRisk={onAddRisk}
+          onAccepted={({ firstRiskId, beforeRow, beforeCol }) => {
+            setExpandedId(firstRiskId);
+            onHighlightCell?.(beforeRow, beforeCol);
+          }}
+        />
       ) : null}
     </div>
   );

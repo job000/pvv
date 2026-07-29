@@ -111,6 +111,7 @@ import { prosessRegisterCopy } from "@/lib/prosess-register-copy";
 import { WORKSPACE_ROLE_LABEL_NB } from "@/lib/role-labels-nb";
 import { GithubIssueStartCard } from "@/components/github/github-issue-start-card";
 import { WorkspaceCandidateRow } from "./workspace-candidate-row";
+import { WorkspaceAiSettingsCard } from "./workspace-ai-settings-card";
 import { WorkspaceGithubIntegrationCard } from "./workspace-github-integration-card";
 import { ProcessCoverageOverview } from "./process-coverage-overview";
 import { ProsessregisterHubLead } from "./prosessregister-hub-lead";
@@ -763,6 +764,8 @@ export function WorkspaceSettingsPanel({
         </Button>
       </div>
     </section>
+
+    <WorkspaceAiSettingsCard workspaceId={workspaceId} />
 
     <WorkspaceGithubIntegrationCard workspaceId={workspaceId} workspace={workspace} />
 
