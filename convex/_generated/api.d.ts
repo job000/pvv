@@ -78,6 +78,7 @@ import type * as users from "../users.js";
 import type * as weeklyDigestInternal from "../weeklyDigestInternal.js";
 import type * as weeklyDraftDigest from "../weeklyDraftDigest.js";
 import type * as workspaceAi from "../workspaceAi.js";
+import type * as workspaceAiActions from "../workspaceAiActions.js";
 import type * as workspaceSearch from "../workspaceSearch.js";
 import type * as workspaceTasks from "../workspaceTasks.js";
 import type * as workspaceViewPrefs from "../workspaceViewPrefs.js";
@@ -160,6 +161,7 @@ declare const fullApi: ApiFromModules<{
   weeklyDigestInternal: typeof weeklyDigestInternal;
   weeklyDraftDigest: typeof weeklyDraftDigest;
   workspaceAi: typeof workspaceAi;
+  workspaceAiActions: typeof workspaceAiActions;
   workspaceSearch: typeof workspaceSearch;
   workspaceTasks: typeof workspaceTasks;
   workspaceViewPrefs: typeof workspaceViewPrefs;

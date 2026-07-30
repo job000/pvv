@@ -8,6 +8,7 @@ import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import {
   DEFAULT_WORKSPACE_AI_MODEL,
+  WORKSPACE_AI_CUSTOM_MODEL_VALUE,
   WORKSPACE_AI_PROVIDERS,
   defaultModelForProvider,
   isWorkspaceAiModelId,
@@ -17,8 +18,14 @@ import {
   type WorkspaceAiProviderId,
 } from "@/lib/ros-ai-models";
 import { cn } from "@/lib/utils";
-import { useMutation, useQuery } from "convex/react";
-import { Check, ChevronRight, Loader2, Sparkles } from "lucide-react";
+import { useAction, useMutation, useQuery } from "convex/react";
+import {
+  Check,
+  ChevronRight,
+  Loader2,
+  PlugZap,
+  Sparkles,
+} from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 type Props = {
@@ -32,17 +39,25 @@ export function WorkspaceAiSettingsCard({ workspaceId }: Props) {
   const setSettings = useMutation(api.workspaceAi.setWorkspaceAiSettings);
   const setEnabled = useMutation(api.workspaceAi.setWorkspaceAiEnabled);
   const clearSettings = useMutation(api.workspaceAi.clearWorkspaceAiSettings);
+  const testConnection = useAction(
+    api.workspaceAiActions.testWorkspaceAiConnectionAction,
+  );
 
   const [tokenInput, setTokenInput] = useState("");
   const [model, setModel] = useState<WorkspaceAiModelId>(
     DEFAULT_WORKSPACE_AI_MODEL,
   );
   const [customModel, setCustomModel] = useState("");
+  const [useCustomModel, setUseCustomModel] = useState(false);
   const [provider, setProvider] = useState<WorkspaceAiProviderId>("openai");
   const [baseUrl, setBaseUrl] = useState("");
   const [message, setMessage] = useState<string | null>(null);
+  const [messageTone, setMessageTone] = useState<"ok" | "error" | "neutral">(
+    "neutral",
+  );
   const [busy, setBusy] = useState(false);
   const [toggleBusy, setToggleBusy] = useState(false);
+  const [testBusy, setTestBusy] = useState(false);
 
   useEffect(() => {
     if (!status) return;
@@ -52,14 +67,18 @@ export function WorkspaceAiSettingsCard({ workspaceId }: Props) {
     const list = modelsForProvider(
       isWorkspaceAiProviderId(status.provider) ? status.provider : "openai",
     );
-    if (
-      status.provider === "openai_compatible" ||
-      !isWorkspaceAiModelId(status.model)
-    ) {
+    const known =
+      status.provider !== "openai_compatible" &&
+      isWorkspaceAiModelId(status.model) &&
+      list.some((m) => m.id === status.model);
+
+    if (status.provider === "openai_compatible" || !known) {
+      setUseCustomModel(status.provider !== "openai_compatible" ? true : false);
       setCustomModel(status.model);
       const fallback = list[0]?.id ?? DEFAULT_WORKSPACE_AI_MODEL;
       setModel(fallback);
     } else {
+      setUseCustomModel(false);
       setModel(status.model);
       setCustomModel("");
     }
@@ -76,12 +95,25 @@ export function WorkspaceAiSettingsCard({ workspaceId }: Props) {
   const enabled = status?.enabled ?? false;
   const available = status?.available ?? false;
 
+  const resolvedModel = useMemo(() => {
+    if (provider === "openai_compatible" || useCustomModel) {
+      return customModel.trim();
+    }
+    return model;
+  }, [provider, useCustomModel, customModel, model]);
+
+  function showMessage(text: string, tone: "ok" | "error" | "neutral") {
+    setMessage(text);
+    setMessageTone(tone);
+  }
+
   function onProviderChange(next: WorkspaceAiProviderId) {
     setProvider(next);
     const nextDefault = defaultModelForProvider(next);
     if (isWorkspaceAiModelId(nextDefault)) {
       setModel(nextDefault);
     }
+    setUseCustomModel(false);
     if (next === "openai_compatible") {
       setCustomModel((prev) => prev || nextDefault);
     } else {
@@ -91,13 +123,12 @@ export function WorkspaceAiSettingsCard({ workspaceId }: Props) {
   }
 
   async function save() {
-    setMessage(null);
+    showMessage("", "neutral");
     setBusy(true);
     try {
-      const resolvedModel =
-        provider === "openai_compatible"
-          ? customModel.trim() || model
-          : model;
+      if (!resolvedModel) {
+        throw new Error("Modell må oppgis.");
+      }
       await setSettings({
         workspaceId,
         token: tokenInput.trim() || undefined,
@@ -108,38 +139,83 @@ export function WorkspaceAiSettingsCard({ workspaceId }: Props) {
         enabled: configured ? enabled : true,
       });
       setTokenInput("");
-      setMessage("KI-innstillinger er lagret.");
+      showMessage("KI-innstillinger er lagret.", "ok");
     } catch (e) {
-      setMessage(e instanceof Error ? e.message : "Kunne ikke lagre.");
+      showMessage(
+        e instanceof Error ? e.message : "Kunne ikke lagre.",
+        "error",
+      );
     } finally {
       setBusy(false);
     }
   }
 
   async function toggleEnabled(next: boolean) {
-    setMessage(null);
+    showMessage("", "neutral");
     setToggleBusy(true);
     try {
       await setEnabled({ workspaceId, enabled: next });
-      setMessage(next ? "KI er slått på." : "KI er slått av.");
+      showMessage(next ? "KI er slått på." : "KI er slått av.", "ok");
     } catch (e) {
-      setMessage(e instanceof Error ? e.message : "Kunne ikke oppdatere.");
+      showMessage(
+        e instanceof Error ? e.message : "Kunne ikke oppdatere.",
+        "error",
+      );
     } finally {
       setToggleBusy(false);
     }
   }
 
   async function clear() {
-    setMessage(null);
+    showMessage("", "neutral");
     setBusy(true);
     try {
       await clearSettings({ workspaceId });
       setTokenInput("");
-      setMessage("API-nøkkel fjernet.");
+      showMessage("API-nøkkel fjernet.", "ok");
     } catch (e) {
-      setMessage(e instanceof Error ? e.message : "Kunne ikke fjerne.");
+      showMessage(
+        e instanceof Error ? e.message : "Kunne ikke fjerne.",
+        "error",
+      );
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function runTest() {
+    showMessage("", "neutral");
+    if (!resolvedModel) {
+      showMessage("Velg eller skriv inn en modell først.", "error");
+      return;
+    }
+    if (!tokenInput.trim() && !configured) {
+      showMessage("Lim inn API-nøkkel før du tester.", "error");
+      return;
+    }
+    if (provider === "openai_compatible" && !baseUrl.trim()) {
+      showMessage("Base-URL kreves for kompatibel leverandør.", "error");
+      return;
+    }
+
+    setTestBusy(true);
+    try {
+      const result = await testConnection({
+        workspaceId,
+        provider,
+        model: resolvedModel,
+        baseUrl:
+          provider === "openai_compatible" ? baseUrl.trim() : undefined,
+        token: tokenInput.trim() || undefined,
+      });
+      showMessage(result.message, result.ok ? "ok" : "error");
+    } catch (e) {
+      showMessage(
+        e instanceof Error ? e.message : "Tilkoblingstest feilet.",
+        "error",
+      );
+    } finally {
+      setTestBusy(false);
     }
   }
 
@@ -148,6 +224,11 @@ export function WorkspaceAiSettingsCard({ workspaceId }: Props) {
     : available
       ? `På · ${status?.model ?? ""}`
       : `Av · ${status?.model ?? ""}`;
+
+  const canTest =
+    Boolean(resolvedModel) &&
+    (Boolean(tokenInput.trim()) || configured) &&
+    (provider !== "openai_compatible" || Boolean(baseUrl.trim()));
 
   return (
     <details
@@ -184,9 +265,8 @@ export function WorkspaceAiSettingsCard({ workspaceId }: Props) {
       <CardContent className="space-y-6 border-t border-border/40 pt-6">
         <p className="text-muted-foreground text-sm leading-relaxed">
           Velg leverandør (OpenAI, Claude, Gemini eller kompatibel), modell og
-          API-nøkkel. Brukes til ROS-forslag basert på vurdering og
-          prosessdesign. Nøkkelen lagres i backend og returneres aldri til
-          klienten.
+          API-nøkkel. Test tilkoblingen før du lagrer. Nøkkelen lagres i backend
+          og returneres aldri til klienten.
         </p>
 
         <section className="flex flex-col gap-3 rounded-xl border border-border/50 bg-muted/15 p-4 sm:flex-row sm:items-center sm:justify-between">
@@ -286,25 +366,53 @@ export function WorkspaceAiSettingsCard({ workspaceId }: Props) {
               autoComplete="off"
             />
           ) : (
-            <select
-              id="ai-model"
-              className="border-input bg-background h-11 w-full rounded-lg border px-3 text-sm"
-              value={
-                providerModels.some((m) => m.id === model)
-                  ? model
-                  : (providerModels[0]?.id ?? "")
-              }
-              onChange={(e) => {
-                const value = e.target.value;
-                if (isWorkspaceAiModelId(value)) setModel(value);
-              }}
-            >
-              {providerModels.map((m) => (
-                <option key={m.id} value={m.id}>
-                  {m.label} — {m.hint}
+            <>
+              <select
+                id="ai-model"
+                className="border-input bg-background h-11 w-full rounded-lg border px-3 text-sm"
+                value={
+                  useCustomModel
+                    ? WORKSPACE_AI_CUSTOM_MODEL_VALUE
+                    : providerModels.some((m) => m.id === model)
+                      ? model
+                      : (providerModels[0]?.id ?? "")
+                }
+                onChange={(e) => {
+                  const value = e.target.value;
+                  if (value === WORKSPACE_AI_CUSTOM_MODEL_VALUE) {
+                    setUseCustomModel(true);
+                    setCustomModel((prev) => prev || model);
+                    return;
+                  }
+                  setUseCustomModel(false);
+                  if (isWorkspaceAiModelId(value)) setModel(value);
+                }}
+              >
+                {providerModels.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.label} — {m.hint}
+                  </option>
+                ))}
+                <option value={WORKSPACE_AI_CUSTOM_MODEL_VALUE}>
+                  Annen modell-ID …
                 </option>
-              ))}
-            </select>
+              </select>
+              {useCustomModel ? (
+                <Input
+                  id="ai-model-custom"
+                  value={customModel}
+                  onChange={(e) => setCustomModel(e.target.value)}
+                  placeholder="Lim inn modell-ID fra leverandøren"
+                  className="h-11 font-mono text-sm"
+                  autoComplete="off"
+                  aria-label="Egendefinert modell-ID"
+                />
+              ) : null}
+              <p className="text-muted-foreground text-xs">
+                {providerModels.length} modeller i listen — eller skriv egen
+                modell-ID hvis den ikke finnes ennå.
+              </p>
+            </>
           )}
         </section>
 
@@ -323,23 +431,45 @@ export function WorkspaceAiSettingsCard({ workspaceId }: Props) {
             }
             className="h-11 font-mono text-sm"
           />
-          {status?.updatedAt ? (
-            <p className="text-muted-foreground text-xs" role="status">
-              Sist oppdatert{" "}
-              {new Date(status.updatedAt).toLocaleString("nb-NO")}
-            </p>
-          ) : null}
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            {status?.updatedAt ? (
+              <p className="text-muted-foreground text-xs" role="status">
+                Sist oppdatert{" "}
+                {new Date(status.updatedAt).toLocaleString("nb-NO")}
+              </p>
+            ) : (
+              <span />
+            )}
+            <Button
+              type="button"
+              variant="outline"
+              className="h-10 gap-2 sm:ml-auto"
+              disabled={testBusy || busy || !canTest}
+              onClick={() => void runTest()}
+            >
+              {testBusy ? (
+                <Loader2 className="size-4 shrink-0 animate-spin" aria-hidden />
+              ) : (
+                <PlugZap className="size-4 shrink-0" aria-hidden />
+              )}
+              Test tilkobling
+            </Button>
+          </div>
+          <p className="text-muted-foreground text-xs">
+            Tester nøkkel og modell med et lite kall. Bruker midlertidig nøkkel
+            fra feltet, eller lagret nøkkel hvis feltet er tomt.
+          </p>
         </section>
 
         {message ? (
           <p
             className={cn(
-              "text-sm",
-              message.includes("lagret") ||
-                message.includes("fjernet") ||
-                message.includes("slått")
-                ? "text-muted-foreground"
-                : "text-destructive",
+              "rounded-xl px-3 py-2.5 text-sm",
+              messageTone === "ok" &&
+                "bg-emerald-500/10 text-emerald-800 dark:text-emerald-200",
+              messageTone === "error" && "bg-destructive/10 text-destructive",
+              messageTone === "neutral" &&
+                "bg-muted/40 text-muted-foreground",
             )}
             role="status"
           >
@@ -353,7 +483,7 @@ export function WorkspaceAiSettingsCard({ workspaceId }: Props) {
           type="button"
           variant="outline"
           className="h-11"
-          disabled={!configured || busy}
+          disabled={!configured || busy || testBusy}
           onClick={() => void clear()}
         >
           Fjern nøkkel
@@ -361,7 +491,7 @@ export function WorkspaceAiSettingsCard({ workspaceId }: Props) {
         <Button
           type="button"
           className="h-11 gap-2"
-          disabled={busy || status === undefined}
+          disabled={busy || testBusy || status === undefined}
           onClick={() => void save()}
         >
           {busy ? (

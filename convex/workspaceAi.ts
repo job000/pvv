@@ -243,3 +243,34 @@ export const clearWorkspaceAiSettings = mutation({
     return null;
   },
 });
+
+/** Brukes fra test-action — sjekker admin uten å lekke detaljer. */
+export const requireAdminForAiTest = internalQuery({
+  args: {
+    workspaceId: v.id("workspaces"),
+    userId: v.id("users"),
+  },
+  returns: v.object({
+    ok: v.boolean(),
+    message: v.string(),
+  }),
+  handler: async (ctx, args) => {
+    try {
+      await requireWorkspaceMember(
+        ctx,
+        args.workspaceId,
+        args.userId,
+        "admin",
+      );
+      return { ok: true, message: "" };
+    } catch (e) {
+      return {
+        ok: false,
+        message:
+          e instanceof Error
+            ? e.message
+            : "Kun administratorer kan teste KI-tilkobling.",
+      };
+    }
+  },
+});

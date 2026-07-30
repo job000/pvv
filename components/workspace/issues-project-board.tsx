@@ -55,6 +55,7 @@ import {
   ChevronLeft,
   ChevronRight,
   AlignStartHorizontal,
+  Check,
   ChevronDown,
   Circle,
   Columns3,
@@ -65,6 +66,7 @@ import {
   Loader2,
   Maximize2,
   Minimize2,
+  Pencil,
   Plus,
   Search,
   Shield,
@@ -1337,6 +1339,9 @@ export function IssuesProjectBoard({
     "",
   );
   const [viewMenuOpen, setViewMenuOpen] = useState(false);
+  const viewMenuRef = useRef<HTMLDivElement>(null);
+  const viewMenuTriggerRef = useRef<HTMLButtonElement>(null);
+  const [viewMenuPos, setViewMenuPos] = useState({ top: 0, left: 0 });
   const [createViewOpen, setCreateViewOpen] = useState(false);
   const [createViewName, setCreateViewName] = useState("");
   const [createViewLayout, setCreateViewLayout] =
@@ -1556,6 +1561,52 @@ export function IssuesProjectBoard({
     setRenameViewName(view.name);
     setRenamingViewId(view._id);
   };
+
+  useEffect(() => {
+    if (!viewMenuOpen) return;
+
+    const placeMenu = () => {
+      const trigger = viewMenuTriggerRef.current;
+      if (!trigger) return;
+      const rect = trigger.getBoundingClientRect();
+      const menuWidth = 224; // w-56
+      const left = Math.min(
+        Math.max(8, rect.left),
+        window.innerWidth - menuWidth - 8,
+      );
+      setViewMenuPos({ top: rect.bottom + 6, left });
+    };
+    placeMenu();
+
+    const onPointerDown = (e: PointerEvent) => {
+      const target = e.target as Node;
+      if (
+        viewMenuRef.current?.contains(target) ||
+        viewMenuTriggerRef.current?.contains(target)
+      ) {
+        return;
+      }
+      setViewMenuOpen(false);
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        setViewMenuOpen(false);
+      }
+    };
+    const onReposition = () => placeMenu();
+
+    document.addEventListener("pointerdown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    window.addEventListener("resize", onReposition);
+    window.addEventListener("scroll", onReposition, true);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("resize", onReposition);
+      window.removeEventListener("scroll", onReposition, true);
+    };
+  }, [viewMenuOpen]);
 
   const commitInlineRename = () => {
     if (renameCancelRef.current) {
@@ -2785,13 +2836,24 @@ export function IssuesProjectBoard({
               )}
               {active && canEditViews && !editing ? (
                 <button
+                  ref={viewMenuTriggerRef}
                   type="button"
                   aria-label="View-meny"
+                  aria-haspopup="menu"
                   aria-expanded={viewMenuOpen}
                   onClick={() => setViewMenuOpen((o) => !o)}
-                  className="text-muted-foreground hover:text-foreground -ml-1 inline-flex size-8 items-center justify-center rounded-md"
+                  className={cn(
+                    "text-muted-foreground hover:text-foreground -ml-1 inline-flex size-8 items-center justify-center rounded-md touch-manipulation",
+                    viewMenuOpen && "bg-muted text-foreground",
+                  )}
                 >
-                  <ChevronDown className="size-3.5" aria-hidden />
+                  <ChevronDown
+                    className={cn(
+                      "size-3.5 transition-transform",
+                      viewMenuOpen && "rotate-180",
+                    )}
+                    aria-hidden
+                  />
                 </button>
               ) : null}
             </div>
@@ -2812,81 +2874,128 @@ export function IssuesProjectBoard({
           </button>
         ) : null}
       </div>
+
       {viewMenuOpen && activeView && canEditViews ? (
-        <div className="bg-popover text-popover-foreground absolute z-20 mt-0.5 w-56 rounded-lg border border-border/60 p-1 shadow-md">
+        <>
           <button
             type="button"
-            className="hover:bg-muted flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-sm"
-            onClick={() => {
-              setRenameViewName(activeView.name);
-              setRenameViewOpen(true);
-              setViewMenuOpen(false);
-            }}
+            tabIndex={-1}
+            aria-label="Lukk view-meny"
+            className="fixed inset-0 z-40 cursor-default bg-transparent"
+            onClick={() => setViewMenuOpen(false)}
+          />
+          <div
+            ref={viewMenuRef}
+            role="menu"
+            aria-label="View-innstillinger"
+            style={{ top: viewMenuPos.top, left: viewMenuPos.left }}
+            className="bg-popover text-popover-foreground fixed z-50 w-56 rounded-xl border border-border/60 p-1.5 shadow-lg"
           >
-            Gi nytt navn
-          </button>
-          <div className="text-muted-foreground px-2.5 py-1.5 text-[11px] font-medium">
-            Layout
-          </div>
-          {(
-            [
-              ["board", "Tavle"],
-              ["table", "Tabell"],
-              ["roadmap", "Roadmap"],
-            ] as const
-          ).map(([layout, label]) => (
             <button
-              key={layout}
               type="button"
-              className={cn(
-                "hover:bg-muted flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-sm",
-                activeView.layout === layout && "bg-muted",
-              )}
+              role="menuitem"
+              className="hover:bg-muted flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-sm touch-manipulation"
               onClick={() => {
-                void updateViewMut({ viewId: activeView._id, layout })
+                setRenameViewName(activeView.name);
+                setRenameViewOpen(true);
+                setViewMenuOpen(false);
+              }}
+            >
+              <Pencil className="size-3.5 shrink-0 opacity-70" aria-hidden />
+              Gi nytt navn
+            </button>
+            <div role="separator" className="bg-border/60 my-1.5 h-px" />
+            <p className="text-muted-foreground px-2.5 pb-1 pt-0.5 text-[11px] font-medium tracking-wide">
+              Layout
+            </p>
+            {(
+              [
+                ["board", "Tavle", Columns3],
+                ["table", "Tabell", Table2],
+                ["roadmap", "Roadmap", CalendarRange],
+              ] as const
+            ).map(([layout, label, LayoutIcon]) => {
+              const selected = activeView.layout === layout;
+              return (
+                <button
+                  key={layout}
+                  type="button"
+                  role="menuitemradio"
+                  aria-checked={selected}
+                  className={cn(
+                    "hover:bg-muted flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-sm touch-manipulation",
+                    selected && "bg-muted/80",
+                  )}
+                  onClick={() => {
+                    if (selected) {
+                      setViewMenuOpen(false);
+                      return;
+                    }
+                    void updateViewMut({
+                      viewId: activeView._id,
+                      layout,
+                    })
+                      .then(() => {
+                        setViewLayout(layout);
+                        setViewMenuOpen(false);
+                        toast.success("Layout oppdatert");
+                      })
+                      .catch((err: unknown) =>
+                        toast.error(
+                          err instanceof Error
+                            ? err.message
+                            : "Kunne ikke oppdatere",
+                        ),
+                      );
+                  }}
+                >
+                  <LayoutIcon
+                    className="size-3.5 shrink-0 opacity-70"
+                    aria-hidden
+                  />
+                  <span className="min-w-0 flex-1">{label}</span>
+                  {selected ? (
+                    <Check
+                      className="size-3.5 shrink-0 text-sky-600 dark:text-sky-400"
+                      aria-hidden
+                    />
+                  ) : null}
+                </button>
+              );
+            })}
+            <div role="separator" className="bg-border/60 my-1.5 h-px" />
+            <button
+              type="button"
+              role="menuitem"
+              className="text-destructive hover:bg-destructive/10 flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-sm touch-manipulation"
+              onClick={() => {
+                if (
+                  !window.confirm(
+                    `Slette viewen «${activeView.name}»? Kortene slettes ikke.`,
+                  )
+                ) {
+                  return;
+                }
+                void removeViewMut({ viewId: activeView._id })
                   .then(() => {
-                    setViewLayout(layout);
                     setViewMenuOpen(false);
-                    toast.success("Layout oppdatert");
+                    setViewsHydrated(false);
+                    toast.success("View slettet");
                   })
                   .catch((err: unknown) =>
                     toast.error(
-                      err instanceof Error ? err.message : "Kunne ikke oppdatere",
+                      err instanceof Error
+                        ? err.message
+                        : "Kunne ikke slette",
                     ),
                   );
               }}
             >
-              {label}
+              <Trash2 className="size-3.5 shrink-0" aria-hidden />
+              Slett view
             </button>
-          ))}
-          <button
-            type="button"
-            className="text-destructive hover:bg-muted flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-sm"
-            onClick={() => {
-              if (
-                !window.confirm(
-                  `Slette viewen «${activeView.name}»? Kortene slettes ikke.`,
-                )
-              ) {
-                return;
-              }
-              void removeViewMut({ viewId: activeView._id })
-                .then(() => {
-                  setViewMenuOpen(false);
-                  setViewsHydrated(false);
-                  toast.success("View slettet");
-                })
-                .catch((err: unknown) =>
-                  toast.error(
-                    err instanceof Error ? err.message : "Kunne ikke slette",
-                  ),
-                );
-            }}
-          >
-            <Trash2 className="size-3.5" aria-hidden />
-            Slett view
-          </button>
-        </div>
+          </div>
+        </>
       ) : null}
 
       {/* Én ren verktøylinje */}

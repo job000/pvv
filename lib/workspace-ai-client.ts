@@ -155,6 +155,116 @@ async function callGoogleGemini(opts: {
   );
 }
 
+/**
+ * Lett ping mot valgt leverandør/modell for å validere API-nøkkel.
+ * Bruker et minimalt chat-kall (ikke bare /models) så modell-ID også sjekkes.
+ */
+export async function testWorkspaceAiConnection(opts: {
+  provider: WorkspaceAiProviderId;
+  token: string;
+  model: string;
+  baseUrl?: string;
+}): Promise<{ ok: true; latencyMs: number; detail: string }> {
+  const started = Date.now();
+  const pingUser = "Reply with the single word OK.";
+
+  if (opts.provider === "anthropic") {
+    const response = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "x-api-key": opts.token,
+        "anthropic-version": "2023-06-01",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: opts.model,
+        max_tokens: 16,
+        messages: [{ role: "user", content: pingUser }],
+      }),
+    });
+    if (!response.ok) {
+      const errText = await response.text();
+      throw new Error(formatProviderError("Claude", response.status, errText));
+    }
+    return {
+      ok: true,
+      latencyMs: Date.now() - started,
+      detail: `Claude svarte · modell ${opts.model}`,
+    };
+  }
+
+  if (opts.provider === "google") {
+    const url =
+      `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(opts.model)}:generateContent` +
+      `?key=${encodeURIComponent(opts.token)}`;
+    const response = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [{ role: "user", parts: [{ text: pingUser }] }],
+        generationConfig: { maxOutputTokens: 16, temperature: 0 },
+      }),
+    });
+    if (!response.ok) {
+      const errText = await response.text();
+      throw new Error(formatProviderError("Gemini", response.status, errText));
+    }
+    return {
+      ok: true,
+      latencyMs: Date.now() - started,
+      detail: `Gemini svarte · modell ${opts.model}`,
+    };
+  }
+
+  const baseUrl =
+    opts.provider === "openai_compatible" && opts.baseUrl
+      ? opts.baseUrl.replace(/\/$/, "")
+      : "https://api.openai.com/v1";
+  const response = await fetch(`${baseUrl}/chat/completions`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${opts.token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: opts.model,
+      temperature: 0,
+      max_tokens: 16,
+      messages: [{ role: "user", content: pingUser }],
+    }),
+  });
+  if (!response.ok) {
+    const errText = await response.text();
+    throw new Error(
+      formatProviderError(
+        opts.provider === "openai_compatible" ? "OpenAI-kompatibel" : "OpenAI",
+        response.status,
+        errText,
+      ),
+    );
+  }
+  return {
+    ok: true,
+    latencyMs: Date.now() - started,
+    detail: `${opts.provider === "openai_compatible" ? "Endepunkt" : "OpenAI"} svarte · modell ${opts.model}`,
+  };
+}
+
+function formatProviderError(
+  label: string,
+  status: number,
+  errText: string,
+): string {
+  const snippet = errText.replace(/\s+/g, " ").trim().slice(0, 220);
+  if (status === 401 || status === 403) {
+    return `${label}: ugyldig eller manglende API-nøkkel (${status}).`;
+  }
+  if (status === 404) {
+    return `${label}: modell eller endepunkt finnes ikke (${status}). Sjekk modell-ID${snippet ? ` — ${snippet}` : "."}`;
+  }
+  return `${label} feilet (${status})${snippet ? `: ${snippet}` : "."}`;
+}
+
 export async function workspaceAiChatJson(opts: {
   provider: WorkspaceAiProviderId;
   token: string;
